@@ -1,0 +1,153 @@
+import React, { useEffect, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+import {
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/plus-jakarta-sans';
+import {
+  Nunito_500Medium,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
+  Nunito_800ExtraBold,
+} from '@expo-google-fonts/nunito';
+import {
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  Poppins_800ExtraBold,
+} from '@expo-google-fonts/poppins';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+import { initI18n } from '@/i18n';
+import { colors } from '@/theme';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+const queryClient = new QueryClient();
+
+export default function RootLayout() {
+  const [ready, setReady] = useState(false);
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+    Nunito_500Medium,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+    Nunito_800ExtraBold,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    Poppins_800ExtraBold,
+  });
+
+  useEffect(() => {
+    initI18n()
+      .catch(() => {})
+      .finally(() => setReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (ready && fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [ready, fontsLoaded]);
+
+  if (!ready || !fontsLoaded) {
+    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+  }
+
+  return (
+    <GestureHandlerRootView style={styles.root}>
+      <QueryClientProvider client={queryClient}>
+        <StatusBar style="dark" />
+        <View style={styles.frame}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.background },
+              animation: 'fade',
+            }}
+          >
+          <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal' }} />
+          <Stack.Screen name="log-glucose" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="log-insulin" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="calendar" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="bolus" options={{ presentation: 'modal' }} />
+          <Stack.Screen
+            name="activity-status"
+            options={{
+              presentation: 'transparentModal',
+              animation: 'fade',
+              contentStyle: { backgroundColor: 'transparent' },
+            }}
+          />
+          <Stack.Screen
+            name="add-menu"
+            options={{
+              presentation: 'transparentModal',
+              animation: 'fade',
+              contentStyle: { backgroundColor: 'transparent' },
+            }}
+          />
+            <Stack.Screen name="nutrition" />
+            <Stack.Screen name="glucose" />
+            <Stack.Screen name="insulin" />
+            <Stack.Screen name="foods" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="report" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="rappels" options={{ presentation: 'modal' }} />
+            <Stack.Screen
+              name="ai-journal"
+              options={{ presentation: 'modal' }}
+            />
+            <Stack.Screen
+              name="insight-detail"
+              options={{ presentation: 'modal' }}
+            />
+            <Stack.Screen
+              name="barcode"
+              options={{ presentation: 'fullScreenModal' }}
+            />
+            <Stack.Screen name="menu-scan" options={{ presentation: 'modal' }} />
+            <Stack.Screen
+              name="integrations"
+              options={{ presentation: 'modal' }}
+            />
+            <Stack.Screen
+              name="emergency"
+              options={{ presentation: 'fullScreenModal' }}
+            />
+          </Stack>
+        </View>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: Platform.OS === 'web' ? '#E4E4E9' : colors.background,
+  },
+  // On web, frame the app like a phone: centered column, phone width.
+  frame: {
+    flex: 1,
+    width: '100%',
+    alignSelf: 'center',
+    backgroundColor: colors.background,
+    ...(Platform.OS === 'web'
+      ? {
+          maxWidth: 480,
+          boxShadow: '0 0 60px rgba(20,20,30,0.16)',
+        }
+      : null),
+  },
+});
