@@ -14,9 +14,13 @@ export default function Root({ children }: PropsWithChildren) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+        {/* initial-scale < 1 renders the whole app slightly smaller (more CSS
+            px across the screen) so the oversized design feels native-sized.
+            A STATIC initial-scale is honored by iOS Safari (unlike JS changes
+            to it) and reflows content to fill the width. */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
+          content="width=device-width, initial-scale=0.86, viewport-fit=cover"
         />
         <meta name="theme-color" content="#19c37d" />
 
@@ -36,19 +40,17 @@ export default function Root({ children }: PropsWithChildren) {
         {/* Reset ScrollView so vertical content scrolls on web. */}
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
-        <script dangerouslySetInnerHTML={{ __html: viewportScale }} />
       </head>
       <body>{children}</body>
     </html>
   );
 }
 
-// Full-height layout + honor the device safe areas (notch, browser bars).
-// The app was designed at a 390px reference width. We render it inside a
-// fixed 390px column and scale that column with CSS transform to exactly
-// fill the device width — so on any phone the UI keeps its intended size
-// and proportions instead of stretching oversized on wider screens.
-const DESIGN_W = 390;
+// The app's UI was drawn at oversized proportions; on a real phone it looks
+// too large. CSS `zoom` shrinks every element AND reflows the layout, so the
+// content still fills the full screen width — just at a smaller, native-
+// feeling size. Supported on iOS Safari 16+ and Chrome; older engines simply
+// ignore it and fall back to full size (no breakage).
 const responsiveBackground = `
 html, body { margin: 0; padding: 0; }
 html { height: 100%; }
@@ -59,20 +61,12 @@ body {
   overflow: hidden;
 }
 #root {
-  position: fixed;
-  top: 0;
-  left: 50%;
-  width: ${DESIGN_W}px;
-  height: 100vh;
-  height: 100dvh;
-  /* Scale set by JS; origin top-center so the column stays centered and
-     pinned to the top. */
-  transform-origin: top center;
-  will-change: transform;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
-  /* Safe-area padding lives here so it scales with the app. */
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  /* Safe-area padding so nothing hides behind the notch / browser bars. */
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   box-sizing: border-box;
@@ -80,32 +74,4 @@ body {
 @media (prefers-color-scheme: dark) {
   body { background-color: #f9fafe; }
 }
-`;
-
-// Scale the fixed 390px root to the viewport width, but NEVER above 1x —
-// so the app renders at its designed size (or smaller on tiny screens) and
-// never zooms up to look oversized on wide phones. Height is counter-scaled
-// so the scaled column still covers the full visual viewport.
-const viewportScale = `
-(function () {
-  var DESIGN = ${DESIGN_W};
-  function apply() {
-    var root = document.getElementById('root');
-    if (!root) return;
-    var vw = window.innerWidth || document.documentElement.clientWidth;
-    var vh = window.innerHeight || document.documentElement.clientHeight;
-    var scale = Math.min(vw / DESIGN, 1);
-    root.style.height = (vh / scale) + 'px';
-    root.style.transform = 'translateX(-50%) scale(' + scale + ')';
-  }
-  apply();
-  window.addEventListener('resize', apply);
-  window.addEventListener('orientationchange', apply);
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', apply);
-  }
-  // Re-apply after fonts/layout settle.
-  setTimeout(apply, 60);
-  setTimeout(apply, 300);
-})();
 `;
