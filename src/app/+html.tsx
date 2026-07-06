@@ -66,9 +66,11 @@ body {
   width: 100%;
   height: 100vh;
   height: 100dvh;
-  /* Safe-area padding so nothing hides behind the notch / browser bars. */
+  /* Safe-area padding so nothing hides behind the notch / browser bars.
+     Cap the bottom inset so it doesn't leave a big empty gap under the
+     content — the home-indicator area only needs a few px. */
   padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: min(env(safe-area-inset-bottom, 0px), 8px);
   box-sizing: border-box;
 }
 @media (prefers-color-scheme: dark) {
