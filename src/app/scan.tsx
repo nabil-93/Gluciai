@@ -58,7 +58,9 @@ export default function ScanScreen() {
     if (!cameraRef.current || analyzing) return;
     const photo = await cameraRef.current.takePictureAsync({
       base64: true,
-      quality: 0.6,
+      // Higher quality → the vision model keeps fine detail (e.g. fried
+      // chicken hidden under a light sauce). 0.6 was dropping ingredients.
+      quality: 0.85,
     });
     if (photo?.base64) {
       await analyze(photo.base64, photo.uri);
@@ -69,7 +71,9 @@ export default function ScanScreen() {
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       base64: true,
-      quality: 0.6,
+      // Higher quality → the vision model keeps fine detail (e.g. fried
+      // chicken hidden under a light sauce). 0.6 was dropping ingredients.
+      quality: 0.85,
     });
     const asset = picked.assets?.[0];
     if (asset?.base64) {

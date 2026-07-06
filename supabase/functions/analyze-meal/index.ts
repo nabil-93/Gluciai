@@ -49,7 +49,12 @@ Return this exact structure:
 }
 
 Rules:
-- Detect every visible ingredient separately. Never merge foods together.
+- Detect EVERY distinct ingredient separately, even small ones. Never merge
+  foods together. Aim to list all components, not just the most obvious one.
+- Look CAREFULLY for foods partly hidden under sauce, cheese, toppings or
+  other foods (e.g. fried chicken under a creamy sauce, rice under a stew).
+  A sauce or dressing on top does NOT replace the food beneath it — report
+  both. Bowls and mixed plates usually contain 3-6 components.
 - Estimate realistic grams. Never overestimate portion sizes. If unsure, lower confidence.
 - confidence is an integer 0-100.
 - is_main_food: true for the main dish/protein/centerpiece (steak, chicken,
