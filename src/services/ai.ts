@@ -22,32 +22,85 @@ interface VisionDetection extends DetectedFood {
   per100g?: Per100g;
 }
 
-/** Demo detections: exercises every branch of the provider chain. */
+/** Demo detections: exercises every branch of the provider chain.
+ *  Includes search_name + bounding_box so the result UI can be tested
+ *  offline exactly as it renders with real Gemini output. */
 const DEMO_PLATES: VisionDetection[][] = [
   [
-    { name: 'couscous au poulet', portion_grams: 380, confidence: 0.93 },
-    { name: 'salade marocaine', portion_grams: 150, confidence: 0.88 },
+    {
+      name: 'Couscous au poulet',
+      search_name: 'couscous',
+      category: 'Protein',
+      portion_grams: 380,
+      confidence: 0.93,
+      bounding_box: { x: 90, y: 120, width: 300, height: 260 },
+      is_main_food: true,
+    },
+    {
+      name: 'Salade marocaine',
+      search_name: 'salade marocaine',
+      category: 'Vegetable',
+      portion_grams: 150,
+      confidence: 0.62, // low → triggers the "Did you mean?" sheet
+      bounding_box: { x: 400, y: 300, width: 180, height: 150 },
+      is_estimated: true,
+      alternatives: ['tomato salad', 'cucumber salad', 'coleslaw'],
+    },
   ],
   [
-    { name: 'tajine de poulet aux olives', portion_grams: 340, confidence: 0.91 },
-    { name: 'khobz', portion_grams: 70, confidence: 0.86 },
+    {
+      name: 'Tajine de poulet aux olives',
+      search_name: 'chicken tagine',
+      category: 'Protein',
+      portion_grams: 340,
+      confidence: 0.91,
+      bounding_box: { x: 110, y: 90, width: 340, height: 300 },
+    },
+    {
+      name: 'Khobz',
+      search_name: 'bread',
+      category: 'Bread',
+      portion_grams: 70,
+      confidence: 0.86,
+      bounding_box: { x: 470, y: 260, width: 140, height: 130 },
+    },
   ],
   [
-    { name: 'harira', portion_grams: 300, confidence: 0.9 },
-    { name: 'dattes', portion_grams: 40, confidence: 0.84 },
+    {
+      name: 'Harira',
+      search_name: 'harira',
+      category: 'Soup',
+      portion_grams: 300,
+      confidence: 0.9,
+      bounding_box: { x: 150, y: 130, width: 280, height: 240 },
+    },
+    {
+      name: 'Dattes',
+      search_name: 'dates',
+      category: 'Fruit',
+      portion_grams: 40,
+      confidence: 0.84,
+      bounding_box: { x: 450, y: 340, width: 130, height: 110 },
+    },
   ],
   [
     // Generic dish → falls through Moroccan DB to USDA (or AI offline)
     {
-      name: 'grilled chicken breast',
+      name: 'Grilled Chicken Breast',
+      search_name: 'chicken breast',
+      category: 'Protein',
       portion_grams: 180,
       confidence: 0.87,
+      bounding_box: { x: 120, y: 150, width: 220, height: 180 },
       per100g: { calories: 165, carbs: 0, sugar: 0, protein: 31, fat: 3.6, fiber: 0, sodium: 74 },
     },
     {
-      name: 'white rice cooked',
+      name: 'White Rice',
+      search_name: 'white rice',
+      category: 'Rice',
       portion_grams: 200,
       confidence: 0.82,
+      bounding_box: { x: 360, y: 180, width: 210, height: 200 },
       per100g: { calories: 130, carbs: 28, sugar: 0, protein: 2.7, fat: 0.3, fiber: 0.4, sodium: 1, glycemic_index: 73 },
     },
   ],
@@ -99,23 +152,52 @@ async function detectFoods(
 }
 
 /**
+ * Ordered stages of the scan pipeline — surfaced to the UI for a
+ * progressive "✓ Detecting foods → ✓ Searching databases…" experience.
+ */
+export type ScanStage =
+  | 'detecting'
+  | 'portions'
+  | 'searching'
+  | 'calculating'
+  | 'scoring'
+  | 'finalizing';
+
+export const SCAN_STAGES: ScanStage[] = [
+  'detecting',
+  'portions',
+  'searching',
+  'calculating',
+  'scoring',
+  'finalizing',
+];
+
+/**
  * Full pipeline. Returns null when no food can be identified
  * confidently — the UI must suggest another picture, never invent.
+ *
+ * `onStage` (optional) reports real pipeline progress so the scanner can
+ * show step-by-step loading instead of a single spinner.
  */
 export async function analyzeMealImage(
   imageBase64: string,
-  language: string
+  language: string,
+  onStage?: (stage: ScanStage) => void
 ): Promise<NutritionResult | null> {
+  onStage?.('detecting');
   const raw = await detectFoods(imageBase64, language);
   if (raw.length === 0) return null;
 
   // Learning layer: apply the user's own portion habits before scaling
+  onStage?.('portions');
   const { detections, adjusted } = applyPortionLearning(raw);
 
+  onStage?.('searching');
   const result = await analyzePlate(
     detections,
     detections.map((d) => d.per100g)
   );
+  onStage?.('finalizing');
   if (result && adjusted.length > 0) {
     result.warnings.push(
       `Portions ajustées selon vos habitudes : ${adjusted.join(', ')}.`

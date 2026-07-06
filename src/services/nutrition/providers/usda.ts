@@ -28,6 +28,7 @@ interface FdcNutrient {
   unitName?: string;
 }
 interface FdcFood {
+  fdcId?: number;
   description: string;
   foodNutrients: FdcNutrient[];
 }
@@ -66,6 +67,7 @@ export const usdaProvider: NutritionProvider = {
 
       return {
         matchedName: food.description,
+        foodId: food.fdcId !== undefined ? String(food.fdcId) : undefined,
         per100g: {
           calories,
           carbs: pick(food.foodNutrients, NUTRIENTS.carbs),

@@ -14,8 +14,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppButton } from '@/components/ui';
-import { analyzeMealImage } from '@/services/ai';
+import { AppButton, ScanProgress } from '@/components/ui';
+import { analyzeMealImage, type ScanStage } from '@/services/ai';
 import { setPendingScan } from '@/services/scanSession';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -26,16 +26,18 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [stage, setStage] = useState<ScanStage>('detecting');
   const [error, setError] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
 
   const isWeb = Platform.OS === 'web';
 
   const analyze = async (base64: string, uri?: string) => {
+    setStage('detecting');
     setAnalyzing(true);
     setError(null);
     try {
-      const result = await analyzeMealImage(base64, i18n.language);
+      const result = await analyzeMealImage(base64, i18n.language, setStage);
       if (!result) {
         // Never invent food — ask for a better picture.
         setError(
@@ -89,7 +91,7 @@ export default function ScanScreen() {
         </Pressable>
 
         {analyzing ? (
-          <AnalyzingOverlay label={t('scanner.analyzing')} />
+          <AnalyzingOverlay stage={stage} />
         ) : (
           <View style={styles.uploadWrap}>
             <View style={styles.uploadIcon}>
@@ -152,7 +154,7 @@ export default function ScanScreen() {
       </Pressable>
 
       {analyzing ? (
-        <AnalyzingOverlay label={t('scanner.analyzing')} />
+        <AnalyzingOverlay stage={stage} />
       ) : (
         <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.xl }]}>
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -177,12 +179,13 @@ export default function ScanScreen() {
   );
 }
 
-function AnalyzingOverlay({ label }: { label: string }) {
+function AnalyzingOverlay({ stage }: { stage: ScanStage }) {
+  const { t } = useTranslation();
   return (
     <View style={[StyleSheet.absoluteFill, styles.analyzing]}>
       <View style={styles.analyzingCard}>
-        <ActivityIndicator size="large" color={colors.ai} />
-        <Text style={styles.analyzingText}>{label}</Text>
+        <Text style={styles.analyzingTitle}>{t('scanner.analyzing')}</Text>
+        <ScanProgress stage={stage} />
       </View>
     </View>
   );
@@ -274,11 +277,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   analyzingCard: {
-    alignItems: 'center',
-    gap: spacing.lg,
+    alignItems: 'stretch',
+    gap: spacing.xl,
     padding: spacing.xxl,
+    maxWidth: 360,
+    width: '100%',
   },
-  analyzingText: { ...typography.bodyMedium, color: colors.ai },
+  analyzingTitle: {
+    ...typography.bodyMedium,
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '700',
+  },
   uploadWrap: {
     alignItems: 'center',
     gap: spacing.lg,

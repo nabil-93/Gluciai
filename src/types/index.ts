@@ -25,11 +25,54 @@ export type NutritionSource =
   | 'moroccan_db'
   | 'usda'
   | 'openfoodfacts'
+  | 'fatsecret'
+  | 'edamam'
   | 'ai_estimate';
+
+/**
+ * High-level food category from the vision model. Used for grouping,
+ * meal-composition highlights ("balanced_meal") and icons — NOT nutrition.
+ */
+export type FoodCategory =
+  | 'Protein'
+  | 'Vegetable'
+  | 'Fruit'
+  | 'Rice'
+  | 'Bread'
+  | 'Pasta'
+  | 'Soup'
+  | 'Sauce'
+  | 'Dessert'
+  | 'Drink'
+  | 'Snack'
+  | 'Fast Food'
+  | 'Seafood'
+  | 'Legumes'
+  | 'Dairy'
+  | 'Egg'
+  | 'Unknown';
+
+/**
+ * Where a detected food sits in the photo (pixels, origin top-left).
+ * Lets the UI draw a tappable box over the ingredient — like Cal AI /
+ * SnapCalorie. Coordinates are in the ORIGINAL image's pixel space; the
+ * UI scales them to the rendered image size.
+ */
+export interface BoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 /** One food detected on the plate, resolved against a nutrition database. */
 export interface FoodItemResult {
+  /** Human-friendly label shown to the user (e.g. "Grilled Salmon") */
   name: string;
+  /** Generic query used to search the databases (e.g. "salmon") */
+  search_name?: string;
+  /** Vision model's food category (Protein, Vegetable, Rice…) — never nutrition */
+  category?: FoodCategory;
   portion_grams: number;
   calories: number;
   carbohydrates: number;
@@ -40,11 +83,42 @@ export interface FoodItemResult {
   sodium?: number;
   glycemic_index?: number;
   source: NutritionSource;
+  /** Which database actually produced the values (provenance) */
+  matched_database?: NutritionSource;
+  /** The record name that matched inside that database */
+  matched_food?: string;
+  /** The matched record's id in that database (for corrections/debugging) */
+  food_id?: string;
+  /** Fuzzy similarity between search_name and matched_food (0..100) */
+  match_score?: number;
+  /** Where the food is in the photo, if the vision model returned it */
+  bounding_box?: BoundingBox;
+  /** True when this is the plate's main dish (vs a side/garnish/drink) */
+  is_main_food?: boolean;
+  /** True when the vision model was unsure about the gram estimate */
+  is_estimated?: boolean;
+  /** Other foods this could be (generic search names) for low-confidence UX */
+  alternatives?: string[];
   /** How sure the vision model is that this food is on the plate (0..1) */
   detection_confidence: number;
   /** How reliable the nutrition values are (0..1, DB > AI) */
   nutrition_confidence: number;
 }
+
+/** Stable, translatable meal-quality highlight keys. */
+export type MealHighlight =
+  | 'high_protein'
+  | 'high_fiber'
+  | 'balanced_meal'
+  | 'low_glycemic_load'
+  | 'low_sugar'
+  | 'vegetable_rich'
+  | 'high_sugar'
+  | 'high_glycemic_load'
+  | 'carb_heavy'
+  | 'low_protein'
+  | 'low_fiber'
+  | 'high_sodium';
 
 export interface NutritionResult {
   food_name: string;
@@ -64,6 +138,17 @@ export interface NutritionResult {
   source?: NutritionSource;
   /** Per-food breakdown when the plate contains multiple foods */
   items?: FoodItemResult[];
+  /** Meal quality 0..100 for a diabetic patient (from mealScore.ts) */
+  meal_score?: number;
+  /** Estimated glycemic load bucket for the whole plate */
+  glycemic_load?: 'Low' | 'Medium' | 'High';
+  /**
+   * Rule-based coaching as STABLE KEYS (e.g. "high_protein", "high_fiber",
+   * "balanced_meal", "low_glycemic_load"). Computed locally from the
+   * database-sourced totals — never from Gemini. The UI localizes each key
+   * via t(`insights.highlights.${key}`), so persisted scans re-translate.
+   */
+  highlights?: MealHighlight[];
   warnings: string[];
 }
 
@@ -151,7 +236,7 @@ export interface FoodCorrection {
   id: string;
   /** Normalized food name the correction applies to */
   food_key: string;
-  field: 'portion' | 'name' | 'carbs' | 'calories';
+  field: 'portion' | 'name' | 'carbs' | 'calories' | 'identity' | 'search_name';
   ai_value: string;
   user_value: string;
   created_at: string;

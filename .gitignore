@@ -51,3 +51,7 @@ example
 skills-lock.json
 CLAUDE.md
 AGENTS.md
+
+# Supabase CLI local link state (per-machine, not for the repo)
+supabase/.temp/
+supabase/.branches/

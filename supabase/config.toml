@@ -1,0 +1,51 @@
+# GlucoAI — Supabase project configuration.
+# `project_id` is the local slug (must match the folder / app slug).
+# Link to the hosted project with:  supabase link --project-ref <your-ref>
+project_id = "glucoai"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+# Local dev URL the app redirects back to after auth.
+site_url = "http://localhost:8081"
+additional_redirect_urls = ["glucoai://", "http://localhost:8081"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[storage]
+enabled = true
+# Meal photos can be a few MB at quality 0.6 — allow up to 10 MB.
+file_size_limit = "10MiB"
+
+# ── Edge Functions ─────────────────────────────────────────────────────
+# JWT verification stays ON (default) so only authenticated users can call
+# them. The app invokes them with the user's session token.
+[functions.analyze-meal]
+verify_jwt = true
+
+[functions.nutrition-search]
+verify_jwt = true
+
+[functions.ai-chat]
+verify_jwt = true

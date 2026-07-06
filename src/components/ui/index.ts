@@ -16,6 +16,10 @@ export { DetailScreen, GradientHero } from './DetailScreen';
 export { PremiumEmptyState } from './PremiumEmptyState';
 export { RotaryDial } from './RotaryDial';
 export { AnimatedRobot } from './AnimatedRobot';
+export { ScanProgress } from './ScanProgress';
+export { ScanStepper } from './ScanStepper';
+export { BoundingBoxOverlay } from './BoundingBoxOverlay';
+export { DidYouMeanSheet } from './DidYouMeanSheet';
 export { SneakerIcon } from './SneakerIcon';
 export {
   FadeInView,
