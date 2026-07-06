@@ -20,7 +20,7 @@ export default function Root({ children }: PropsWithChildren) {
             to it) and reflows content to fill the width. */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=0.86, viewport-fit=cover"
+          content="width=device-width, initial-scale=0.94, viewport-fit=cover"
         />
         <meta name="theme-color" content="#19c37d" />
 
@@ -63,6 +63,7 @@ body {
 #root {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   width: 100%;
   height: 100vh;
   height: 100dvh;
@@ -72,6 +73,12 @@ body {
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: min(env(safe-area-inset-bottom, 0px), 8px);
   box-sizing: border-box;
+}
+/* Make sure the app's top-level views fill the full width (no centered
+   column leaving grey gaps on the sides). */
+#root > * {
+  width: 100%;
+  flex: 1 1 auto;
 }
 @media (prefers-color-scheme: dark) {
   body { background-color: #f9fafe; }
