@@ -24,6 +24,7 @@ import {
 } from '@expo-google-fonts/poppins';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { initI18n } from '@/i18n';
 import { colors } from '@/theme';
@@ -67,6 +68,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <StatusBar style="dark" />
         <View style={styles.frame}>
@@ -128,6 +130,7 @@ export default function RootLayout() {
           </Stack>
         </View>
       </QueryClientProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
