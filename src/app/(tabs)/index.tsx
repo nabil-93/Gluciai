@@ -1105,7 +1105,7 @@ export default function HomeScreen() {
         onScroll={onScroll}
         contentContainerStyle={{
           paddingTop: insets.top + 16,
-          paddingHorizontal: 26,
+          paddingHorizontal: 18,
           paddingBottom: 140,
         }}
       >

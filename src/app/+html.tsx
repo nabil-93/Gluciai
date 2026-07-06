@@ -20,7 +20,7 @@ export default function Root({ children }: PropsWithChildren) {
             to it) and reflows content to fill the width. */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=0.94, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
         <meta name="theme-color" content="#19c37d" />
 
