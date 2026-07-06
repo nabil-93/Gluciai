@@ -1695,18 +1695,18 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', gap: 10 },
   chipWrap: { flex: 1, minWidth: 0 },
   chipCard: {
-    height: 54,
+    height: 60,
     backgroundColor: '#ffffff',
     borderRadius: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
-    paddingHorizontal: 12,
+    gap: 10,
+    paddingHorizontal: 13,
     ...CARD_SHADOW,
   },
-  chipTitle: { fontFamily: F700, fontSize: 13.5, color: '#111827' },
-  chipStatus: { fontFamily: F700, fontSize: 12.5, color: '#19c37d', marginTop: 1 },
-  chipSub: { fontFamily: F500, fontSize: 11, color: '#6b7280', marginTop: 1 },
+  chipTitle: { fontFamily: F700, fontSize: 14.5, color: '#111827' },
+  chipStatus: { fontFamily: F700, fontSize: 13.5, color: '#19c37d', marginTop: 1 },
+  chipSub: { fontFamily: F500, fontSize: 12, color: '#6b7280', marginTop: 1 },
 
   /* Alert */
   alert: {
@@ -1925,13 +1925,13 @@ const styles = StyleSheet.create({
   },
   ringLabel: {
     fontFamily: F800,
-    fontSize: 13.5,
+    fontSize: 14.5,
     color: '#111827',
     marginTop: 8,
   },
   ringSub: {
     fontFamily: F600,
-    fontSize: 11,
+    fontSize: 12,
     color: '#8b93a7',
     marginTop: 3,
   },
