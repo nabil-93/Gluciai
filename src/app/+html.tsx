@@ -16,7 +16,7 @@ export default function Root({ children }: PropsWithChildren) {
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
         <meta name="theme-color" content="#19c37d" />
 
@@ -44,61 +44,68 @@ export default function Root({ children }: PropsWithChildren) {
 }
 
 // Full-height layout + honor the device safe areas (notch, browser bars).
-// Uses 100dvh (dynamic viewport height) so the app fills exactly the space
-// left by iOS Safari's collapsing address/tool bars — 100vh over-reports
-// and pushes content behind them.
+// The app was designed at a 390px reference width. We render it inside a
+// fixed 390px column and scale that column with CSS transform to exactly
+// fill the device width — so on any phone the UI keeps its intended size
+// and proportions instead of stretching oversized on wider screens.
+const DESIGN_W = 390;
 const responsiveBackground = `
 html, body { margin: 0; padding: 0; }
 html { height: 100%; }
 body {
   min-height: 100vh;
   min-height: 100dvh;
-  background-color: #E4E4E9;
+  background-color: #f9fafe;
   overflow: hidden;
 }
 #root {
-  display: flex;
-  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 50%;
+  width: ${DESIGN_W}px;
   height: 100vh;
   height: 100dvh;
-  /* Pad by the device safe-area insets so nothing hides behind the
-     notch or the browser's top/bottom chrome. */
+  /* Scale set by JS; origin top-center so the column stays centered and
+     pinned to the top. */
+  transform-origin: top center;
+  will-change: transform;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  /* Safe-area padding lives here so it scales with the app. */
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   box-sizing: border-box;
 }
 @media (prefers-color-scheme: dark) {
-  body { background-color: #E4E4E9; }
+  body { background-color: #f9fafe; }
 }
 `;
 
-// Lock the layout to a fixed design width (390px) and let the browser
-// scale it to fill the device. This way the UI keeps its intended
-// proportions on any phone instead of stretching bigger on wide screens
-// — but only up to the design width, so it never zooms IN on desktop.
+// Scale the fixed 390px root to the viewport width, but NEVER above 1x —
+// so the app renders at its designed size (or smaller on tiny screens) and
+// never zooms up to look oversized on wide phones. Height is counter-scaled
+// so the scaled column still covers the full visual viewport.
 const viewportScale = `
 (function () {
-  var DESIGN = 375;
-  var meta = document.querySelector('meta[name="viewport"]');
+  var DESIGN = ${DESIGN_W};
   function apply() {
-    var w = window.innerWidth || document.documentElement.clientWidth;
-    if (w <= DESIGN) {
-      // Narrow phone: render at device width (no downscaling of small screens).
-      meta.setAttribute(
-        'content',
-        'width=device-width, initial-scale=1, viewport-fit=cover'
-      );
-    } else {
-      // Wider phone/tablet: render at the design width and scale to fit,
-      // so everything stays the size it was designed at.
-      meta.setAttribute(
-        'content',
-        'width=' + DESIGN + ', initial-scale=' + (w / DESIGN) + ', viewport-fit=cover'
-      );
-    }
+    var root = document.getElementById('root');
+    if (!root) return;
+    var vw = window.innerWidth || document.documentElement.clientWidth;
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var scale = Math.min(vw / DESIGN, 1);
+    root.style.height = (vh / scale) + 'px';
+    root.style.transform = 'translateX(-50%) scale(' + scale + ')';
   }
   apply();
   window.addEventListener('resize', apply);
   window.addEventListener('orientationchange', apply);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', apply);
+  }
+  // Re-apply after fonts/layout settle.
+  setTimeout(apply, 60);
+  setTimeout(apply, 300);
 })();
 `;

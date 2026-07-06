@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -138,21 +138,13 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Platform.OS === 'web' ? '#E4E4E9' : colors.background,
+    backgroundColor: colors.background,
   },
-  // On web, frame the app like a phone: centered column, phone width.
-  // Cap at 420px — the design's reference width — so on wider phones the
-  // UI doesn't stretch and everything blow up in size.
+  // The web root (#root, styled in +html.tsx) is a fixed 390px column
+  // scaled to the device, so here the frame just fills it.
   frame: {
     flex: 1,
     width: '100%',
-    alignSelf: 'center',
     backgroundColor: colors.background,
-    ...(Platform.OS === 'web'
-      ? {
-          maxWidth: 420,
-          boxShadow: '0 0 60px rgba(20,20,30,0.16)',
-        }
-      : null),
   },
 });
