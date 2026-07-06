@@ -208,7 +208,9 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
       pointerEvents="box-none"
       style={[
         styles.wrap,
-        { paddingBottom: Math.max(insets.bottom, 8) + 10 },
+        // Sit close to the bottom edge. Only add a little of the home-
+        // indicator inset (capped) so the bar doesn't float up the screen.
+        { paddingBottom: Math.min(insets.bottom, 6) + 6 },
       ]}
     >
       <View style={styles.row}>
