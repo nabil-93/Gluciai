@@ -141,6 +141,8 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === 'web' ? '#E4E4E9' : colors.background,
   },
   // On web, frame the app like a phone: centered column, phone width.
+  // Cap at 420px — the design's reference width — so on wider phones the
+  // UI doesn't stretch and everything blow up in size.
   frame: {
     flex: 1,
     width: '100%',
@@ -148,7 +150,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     ...(Platform.OS === 'web'
       ? {
-          maxWidth: 480,
+          maxWidth: 420,
           boxShadow: '0 0 60px rgba(20,20,30,0.16)',
         }
       : null),

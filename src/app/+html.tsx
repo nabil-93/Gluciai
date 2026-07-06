@@ -36,6 +36,7 @@ export default function Root({ children }: PropsWithChildren) {
         {/* Reset ScrollView so vertical content scrolls on web. */}
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
+        <script dangerouslySetInnerHTML={{ __html: viewportScale }} />
       </head>
       <body>{children}</body>
     </html>
@@ -69,4 +70,35 @@ body {
 @media (prefers-color-scheme: dark) {
   body { background-color: #E4E4E9; }
 }
+`;
+
+// Lock the layout to a fixed design width (390px) and let the browser
+// scale it to fill the device. This way the UI keeps its intended
+// proportions on any phone instead of stretching bigger on wide screens
+// — but only up to the design width, so it never zooms IN on desktop.
+const viewportScale = `
+(function () {
+  var DESIGN = 375;
+  var meta = document.querySelector('meta[name="viewport"]');
+  function apply() {
+    var w = window.innerWidth || document.documentElement.clientWidth;
+    if (w <= DESIGN) {
+      // Narrow phone: render at device width (no downscaling of small screens).
+      meta.setAttribute(
+        'content',
+        'width=device-width, initial-scale=1, viewport-fit=cover'
+      );
+    } else {
+      // Wider phone/tablet: render at the design width and scale to fit,
+      // so everything stays the size it was designed at.
+      meta.setAttribute(
+        'content',
+        'width=' + DESIGN + ', initial-scale=' + (w / DESIGN) + ', viewport-fit=cover'
+      );
+    }
+  }
+  apply();
+  window.addEventListener('resize', apply);
+  window.addEventListener('orientationchange', apply);
+})();
 `;
