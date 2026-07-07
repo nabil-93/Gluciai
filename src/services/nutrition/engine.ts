@@ -50,6 +50,14 @@ export const SOURCE_LABEL: Record<NutritionSource, string> = {
 /** Below this detection confidence a food is discarded — never invented. */
 const MIN_DETECTION_CONFIDENCE = 0.4;
 
+/**
+ * Below this fuzzy match score a database hit is treated as a MISS — a 15%
+ * "match" is a different food entirely and produces garbage nutrition
+ * (e.g. "oignons frits" matching a random OFF product). Better to keep
+ * searching, or surface the item as unmatched, than to show junk values.
+ */
+const MIN_MATCH_SCORE = 35;
+
 function scale(per100g: Per100g, grams: number) {
   const f = grams / 100;
   const r = (v: number) => Math.round(v * f * 10) / 10;
@@ -78,10 +86,22 @@ function scale(per100g: Per100g, grams: number) {
  */
 export async function resolveFood(
   detected: DetectedFood,
-  aiPer100g?: Per100g
+  aiPer100g?: Per100g,
+  opts?: {
+    /**
+     * When true (plate analysis), a food that matches NOTHING is returned
+     * as a visible zero-nutrition placeholder instead of null — a detected
+     * food must never silently disappear from the plate. Callers that want
+     * a strict miss (menu scan, manual add) leave this false.
+     */
+    keepUnmatched?: boolean;
+  }
 ): Promise<FoodItemResult | null> {
-  const query =
-    detected.search_name?.trim() || normalizeSearchName(detected.name);
+  // Normalize even model-provided search names (cooking words, synonyms,
+  // French→English tokens) — the nutrition databases are English-first.
+  const query = normalizeSearchName(
+    detected.search_name?.trim() || detected.name
+  );
 
   // Search every database, then keep the highest-scoring match — we never
   // stop at the first hit, so a weak USDA result can be beaten by a strong
@@ -102,6 +122,8 @@ export async function resolveFood(
       const hit = await provider.search(query);
       if (!hit) continue;
       const score = hit.matchScore ?? matchScore(query, hit.matchedName);
+      // A hit that barely resembles the query is a WRONG food — skip it.
+      if (score < MIN_MATCH_SCORE) continue;
       if (!best || score > best.score) best = { hit, score };
       // A near-perfect match on an official/internal DB is good enough — stop
       // early to save network round-trips down the rest of the chain.
@@ -157,6 +179,33 @@ export async function resolveFood(
       nutrition_confidence: 0.55,
     };
   }
+
+  // 7 — Every database missed. On a plate analysis, KEEP the food visible
+  // with unknown (zero) nutrition instead of silently dropping it — the
+  // user sees it, gets a warning, and can re-identify or adjust it.
+  // We still never invent values.
+  if (opts?.keepUnmatched) {
+    return {
+      name: detected.name,
+      search_name: query,
+      category: detected.category,
+      portion_grams: detected.portion_grams,
+      calories: 0,
+      carbohydrates: 0,
+      sugar: 0,
+      protein: 0,
+      fat: 0,
+      fiber: 0,
+      source: 'ai_estimate',
+      match_score: 0,
+      bounding_box: detected.bounding_box,
+      is_main_food: detected.is_main_food,
+      is_estimated: true,
+      alternatives: detected.alternatives,
+      detection_confidence: detected.confidence,
+      nutrition_confidence: 0,
+    };
+  }
   return null;
 }
 
@@ -176,7 +225,11 @@ export async function analyzePlate(
   if (confident.length === 0) return null;
 
   const resolved = (
-    await Promise.all(confident.map(({ d, ai }) => resolveFood(d, ai)))
+    await Promise.all(
+      // keepUnmatched: a food detected on the plate must never silently
+      // disappear just because no database knows it yet.
+      confident.map(({ d, ai }) => resolveFood(d, ai, { keepUnmatched: true }))
+    )
   ).filter((r): r is FoodItemResult => r !== null);
 
   if (resolved.length === 0) return null;
@@ -293,7 +346,19 @@ export function aggregateItems(resolved: FoodItemResult[]): NutritionResult {
       `${Math.round(total.sugar)} g de sucre — impact glycémique important.`
     );
   }
-  if (resolved.some((it) => it.source === 'ai_estimate')) {
+  const unmatched = resolved.filter((it) => it.nutrition_confidence === 0);
+  if (unmatched.length > 0) {
+    warnings.push(
+      `Sans valeurs nutritionnelles (introuvable dans les bases) : ${unmatched
+        .map((u) => u.name)
+        .join(', ')} — touchez « Modifier l'aliment » pour corriger.`
+    );
+  }
+  if (
+    resolved.some(
+      (it) => it.source === 'ai_estimate' && it.nutrition_confidence > 0
+    )
+  ) {
     warnings.push(
       'Certaines valeurs sont estimées par IA (aliment absent des bases officielles).'
     );

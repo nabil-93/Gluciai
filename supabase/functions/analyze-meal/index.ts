@@ -66,11 +66,13 @@ Rules:
   as generic search names (e.g. for salmon: ["tuna", "trout"]). Provide them
   especially when confidence is below 70. Omit or leave [] when you are sure.
 - display_name is a short human label (e.g. "Grilled Salmon", "Cherry Tomatoes").
-- search_name is a GENERIC food name usable to search a nutrition database
-  (lowercase, no cooking adjectives): "Grilled Salmon" -> "salmon",
-  "Roasted Chicken Breast" -> "chicken breast", "Cherry Tomatoes" -> "tomato",
-  "Brown Rice" -> "brown rice", "Greek Yogurt" -> "yogurt",
-  "French Fries" -> "french fries", "Moroccan Chicken Tagine" -> "chicken tagine".
+- search_name MUST ALWAYS BE IN ENGLISH, even when display_name is in another
+  language — it is a database query and the nutrition databases are English.
+  A GENERIC lowercase English food name, no cooking adjectives:
+  "Poulet frit" -> "fried chicken", "Maïs en grains" -> "corn",
+  "Salade de chou" -> "coleslaw", "Graines de sésame" -> "sesame seeds",
+  "Grilled Salmon" -> "salmon", "Roasted Chicken Breast" -> "chicken breast",
+  "Cherry Tomatoes" -> "tomato", "Moroccan Chicken Tagine" -> "chicken tagine".
 - category MUST be exactly one of: Protein, Vegetable, Fruit, Rice, Bread,
   Pasta, Soup, Sauce, Dessert, Drink, Snack, Fast Food, Seafood, Legumes,
   Dairy, Egg, Unknown. Use "Unknown" only when nothing else fits.
@@ -153,7 +155,11 @@ async function callGemini(
       {
         role: 'user',
         parts: [
-          { text: `${prompt}\n\nWrite display_name in language: ${language}.` },
+          {
+            text:
+              `${prompt}\n\nWrite display_name in the user's language: ${language}. ` +
+              `search_name and alternatives MUST stay in English.`,
+          },
           {
             inline_data: {
               mime_type: 'image/jpeg',

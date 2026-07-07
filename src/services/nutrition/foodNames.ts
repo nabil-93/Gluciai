@@ -27,6 +27,10 @@ export const COOKING_WORDS = new Set([
   // Cut / form qualifiers (a "salmon fillet" is nutritionally just "salmon")
   'fillet', 'fillets', 'filet', 'filets', 'boneless', 'skinless', 'chopped',
   'diced', 'sliced', 'minced', 'shredded', 'whole', 'half', 'mini',
+  // French qualifiers (accent-stripped — tokenize removes accents first)
+  'frit', 'frite', 'frits', 'croustillant', 'croustillante', 'croustillants',
+  'cremeux', 'cremeuse', 'epice', 'epicee', 'noir', 'noire', 'noires',
+  'blanc', 'blanche',
 ]);
 
 /** Country / regional qualifiers that don't change the food's nutrition. */
@@ -45,6 +49,7 @@ export const FILLER_WORDS = new Set([
   'with', 'and', 'the', 'a', 'an', 'of', 'in', 'on', 'plate', 'dish',
   'portion', 'serving', 'piece', 'pieces', 'slice', 'slices', 'bowl',
   'au', 'aux', 'de', 'des', 'du', 'à', 'la', 'le', 'les', 'et', 'avec',
+  'en', 'poudre', 'grain', 'grains', 'morceau', 'morceaux',
   'mit', 'und', 'der', 'die', 'das', 'von',
 ]);
 
@@ -97,6 +102,11 @@ export const PHRASE_SYNONYMS: Record<string, string> = {
   'greek yoghurt': 'yogurt',
   'french fries': 'french fries',
   'french fry': 'french fries',
+  // French composites (keys are cleaned: lowercase, accent-stripped)
+  'salade de chou': 'coleslaw',
+  'graines de sesame': 'sesame seeds',
+  'oignons frits': 'fried onions',
+  'poudre de chili': 'chili powder',
 };
 
 /* ─────────────────────────── Synonyms ─────────────────────────── */
@@ -131,6 +141,17 @@ export const SYNONYMS: Record<string, string> = {
   fromage: 'cheese',
   pomme: 'apple',
   frites: 'french fries',
+  mais: 'corn',
+  oignon: 'onion',
+  salade: 'salad',
+  chou: 'cabbage',
+  poivron: 'pepper',
+  tomate: 'tomato',
+  carotte: 'carrot',
+  concombre: 'cucumber',
+  champignon: 'mushroom',
+  crevette: 'shrimp',
+  graine: 'seed',
 };
 
 /* ─────────────────────── Singularization ─────────────────────── */
