@@ -43,7 +43,7 @@ const ICONS = {
 function HeartIcon({ active }: { active: boolean }) {
   const color = active ? colors.primary : 'rgba(17,24,39,0.5)';
   return (
-    <Svg width={23} height={23} viewBox="0 0 24 24">
+    <Svg width={18} height={18} viewBox="0 0 24 24">
       <Path
         d="M12 20.5S3.6 15 3.6 8.9C3.6 6 5.8 4 8.3 4c1.6 0 3 .9 3.7 2.1C12.7 4.9 14.1 4 15.7 4c2.5 0 4.7 2 4.7 4.9 0 6.1-8.4 11.6-8.4 11.6z"
         fill={active ? color : 'none'}
@@ -191,7 +191,7 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
       <Animated.View
         style={[styles.addButton, { transform: [{ scale: fabScale }] }]}
       >
-        <Svg width={25} height={25} viewBox="0 0 24 24">
+        <Svg width={20} height={20} viewBox="0 0 24 24">
           <Path
             d="M12 5v14M5 12h14"
             stroke="#ffffff"
@@ -332,18 +332,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    paddingVertical: 9,
-    paddingHorizontal: 6,
+    borderRadius: 22,
+    paddingVertical: 6,
+    paddingHorizontal: 5,
     position: 'relative',
     ...shadows.floating,
   },
   indicator: {
     position: 'absolute',
-    top: 6,
-    bottom: 6,
+    top: 4,
+    bottom: 4,
     left: 0,
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: 'rgba(25,195,125,0.12)',
     borderWidth: 1.5,
     borderColor: 'rgba(25,195,125,0.35)',
@@ -351,9 +351,9 @@ const styles = StyleSheet.create({
   compactPill: {
     position: 'absolute',
     left: 0,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -365,17 +365,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  compactIcon: { width: 24, height: 24 },
+  compactIcon: { width: 19, height: 19 },
   tab: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     paddingVertical: 2,
     minWidth: 0,
   },
-  tabIcon: { width: 23, height: 23 },
+  tabIcon: { width: 18, height: 18 },
   label: {
-    fontSize: 11.5,
+    fontSize: 10,
     fontWeight: '600',
     color: 'rgba(17,24,39,0.5)',
   },
@@ -384,9 +384,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   addButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
