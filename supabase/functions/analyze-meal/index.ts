@@ -108,6 +108,12 @@ Deno.serve(async (req) => {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
     }
 
+    // Diagnostic (shows in Supabase logs): size of the image we received —
+    // lets us verify the app really sends the full, healthy picture.
+    console.log(
+      `analyze-meal: mode=${mode} lang=${language} image≈${Math.round(image_base64.length / 1024)}KB(b64)`
+    );
+
     const prompt = mode === 'menu' ? MENU_PROMPT : DETECT_PROMPT;
     const raw = await callGemini(prompt, image_base64, language);
     const parsed = parseJson(raw);
@@ -168,11 +174,24 @@ async function callGemini(
     },
   };
 
-  const res = await fetch(url, {
+  // A transient 429 (rate limit) is retried ONCE after a short wait — the
+  // API tells us how long via retryDelay. Any other error fails fast.
+  let res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+
+  if (res.status === 429) {
+    const detail = await res.text();
+    const wait = parseRetryDelayMs(detail);
+    await new Promise((r) => setTimeout(r, Math.min(wait, 8000)));
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
 
   if (!res.ok) {
     const detail = await res.text();
@@ -180,6 +199,10 @@ async function callGemini(
   }
 
   const data = await res.json();
+
+console.log("GEMINI RAW RESPONSE:");
+console.log(JSON.stringify(data, null, 2));
+
   const text = data?.candidates?.[0]?.content?.parts
     ?.map((p: { text?: string }) => p.text ?? '')
     .join('')
@@ -189,6 +212,12 @@ async function callGemini(
 }
 
 /* ─────────────────────────────── HELPERS ────────────────────────────── */
+
+/** Pull the retryDelay ("11s") out of a Gemini 429 body → ms (default 5s). */
+function parseRetryDelayMs(body: string): number {
+  const m = body.match(/"retryDelay"\s*:\s*"(\d+)(?:\.\d+)?s"/);
+  return m ? (parseInt(m[1], 10) + 1) * 1000 : 5000;
+}
 
 const CATEGORIES = new Set([
   'Protein', 'Vegetable', 'Fruit', 'Rice', 'Bread', 'Pasta', 'Soup', 'Sauce',

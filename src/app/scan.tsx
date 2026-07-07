@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -32,7 +33,11 @@ export default function ScanScreen() {
 
   const isWeb = Platform.OS === 'web';
 
-  const analyze = async (base64: string, uri?: string) => {
+  const analyze = async (
+    base64: string,
+    uri?: string,
+    imageSize?: { width: number; height: number }
+  ) => {
     setStage('detecting');
     setAnalyzing(true);
     setError(null);
@@ -46,23 +51,70 @@ export default function ScanScreen() {
         setAnalyzing(false);
         return;
       }
-      setPendingScan(result, uri);
+      // imageSize = dimensions of the image the model actually analyzed —
+      // the coordinate space of its bounding boxes.
+      setPendingScan(result, uri, imageSize);
       router.replace('/scan-result');
-    } catch {
-      setError(t('common.error'));
+    } catch (e) {
+      // Distinguish a temporary AI rate-limit (quota) from other failures,
+      // so the user knows to simply retry rather than think it's broken.
+      const msg = String((e as Error)?.message ?? e);
+      const rateLimited = /429|quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(msg);
+      setError(
+        rateLimited ? t('scanner.rateLimited') : t('scanner.scanFailed')
+      );
       setAnalyzing(false);
+    }
+  };
+
+  /**
+   * Normalize any captured/picked image before sending it to the vision
+   * model: resize to 1024px wide (height auto → ASPECT RATIO PRESERVED,
+   * never stretched/cropped), re-encode as JPEG 0.8. This guarantees the
+   * model always receives the FULL frame at a consistent, detail-rich size
+   * — regardless of the phone's raw resolution or the picker's re-encoding
+   * quirks. Returns the base64 plus the exact sent dimensions, which are
+   * the reference frame for the bounding boxes Gemini sends back.
+   */
+  const prepareImage = async (
+    uri: string
+  ): Promise<{ base64: string; width: number; height: number } | null> => {
+    try {
+      const ctx = ImageManipulator.manipulate(uri);
+      ctx.resize({ width: 1024 }); // height omitted → ratio preserved
+      const ref = await ctx.renderAsync();
+      const out = await ref.saveAsync({
+        base64: true,
+        compress: 0.8,
+        format: SaveFormat.JPEG,
+      });
+      if (!out.base64) return null;
+      // Visible in DevTools — lets us verify exactly what is sent.
+      console.log(
+        `[scan] sending ${out.width}x${out.height} JPEG, ~${Math.round(out.base64.length / 1024)}KB (b64)`
+      );
+      return { base64: out.base64, width: out.width, height: out.height };
+    } catch (e) {
+      console.warn('[scan] prepareImage failed, falling back to raw picker image', e);
+      return null; // caller falls back to the picker's own base64 (full image)
     }
   };
 
   const capture = async () => {
     if (!cameraRef.current || analyzing) return;
+    // quality 1: never degrade at capture — prepareImage does the sizing.
     const photo = await cameraRef.current.takePictureAsync({
       base64: true,
-      // Higher quality → the vision model keeps fine detail (e.g. fried
-      // chicken hidden under a light sauce). 0.6 was dropping ingredients.
-      quality: 0.85,
+      quality: 1,
     });
-    if (photo?.base64) {
+    if (!photo?.uri) return;
+    const prepared = await prepareImage(photo.uri);
+    if (prepared) {
+      await analyze(prepared.base64, photo.uri, {
+        width: prepared.width,
+        height: prepared.height,
+      });
+    } else if (photo.base64) {
       await analyze(photo.base64, photo.uri);
     }
   };
@@ -70,13 +122,20 @@ export default function ScanScreen() {
   const pickImage = async () => {
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
+      // quality 1 + base64: the picker returns the ORIGINAL file untouched
+      // (fallback path); prepareImage produces the normalized copy we send.
       base64: true,
-      // Higher quality → the vision model keeps fine detail (e.g. fried
-      // chicken hidden under a light sauce). 0.6 was dropping ingredients.
-      quality: 0.85,
+      quality: 1,
     });
     const asset = picked.assets?.[0];
-    if (asset?.base64) {
+    if (!asset?.uri) return;
+    const prepared = await prepareImage(asset.uri);
+    if (prepared) {
+      await analyze(prepared.base64, asset.uri, {
+        width: prepared.width,
+        height: prepared.height,
+      });
+    } else if (asset.base64) {
       await analyze(asset.base64, asset.uri);
     }
   };

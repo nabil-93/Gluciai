@@ -334,7 +334,9 @@
       "calculating": "Calculating nutrition",
       "scoring": "Computing meal score",
       "finalizing": "Finalizing analysis"
-    }
+    },
+    "rateLimited": "The AI hit its momentary limit. Please try again shortly.",
+    "scanFailed": "Analysis unavailable right now. Check your connection and try again."
   },
   "result": {
     "title": "Meal analysis",

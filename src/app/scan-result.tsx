@@ -122,8 +122,12 @@ export default function ScanResultScreen() {
   const cardY = useRef<Record<number, number>>({}); // each card's Y within it
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null);
   const highlightFade = useRef(new Animated.Value(0)).current;
-  // Original image intrinsic + on-screen sizes, for scaling the boxes.
-  const [imgNatural, setImgNatural] = useState<{ width: number; height: number } | null>(null);
+  // Reference frame for the bounding boxes: the size of the image the
+  // vision model actually analyzed (set by the scanner after resize).
+  // Falls back to the displayed image's intrinsic size for older scans.
+  const [imgNatural, setImgNatural] = useState<{ width: number; height: number } | null>(
+    () => pending?.imageSize ?? null
+  );
   const [heroLayout, setHeroLayout] = useState<{ width: number; height: number } | null>(null);
 
   // ── Low-confidence "Did you mean?" queue ──
@@ -387,6 +391,10 @@ export default function ScanResultScreen() {
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           onLoad={(e) => {
+            // Only a fallback: when the scanner provided the sent-image
+            // size (the boxes' true frame), never override it with the
+            // display image's intrinsic size.
+            if (imgNatural) return;
             const src = (e as any)?.source;
             if (src?.width && src?.height) {
               setImgNatural({ width: src.width, height: src.height });

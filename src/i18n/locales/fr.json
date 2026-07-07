@@ -334,7 +334,9 @@
       "calculating": "Calcul de la nutrition",
       "scoring": "Évaluation du repas",
       "finalizing": "Finalisation de l’analyse"
-    }
+    },
+    "rateLimited": "L'IA a atteint sa limite momentanée. Réessayez dans quelques instants.",
+    "scanFailed": "Analyse impossible pour le moment. Vérifiez votre connexion et réessayez."
   },
   "result": {
     "title": "Analyse du repas",

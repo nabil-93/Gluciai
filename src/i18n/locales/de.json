@@ -334,7 +334,9 @@
       "calculating": "Nährwerte berechnen",
       "scoring": "Mahlzeit bewerten",
       "finalizing": "Analyse abschließen"
-    }
+    },
+    "rateLimited": "Die KI hat ihr momentanes Limit erreicht. Versuche es in Kürze erneut.",
+    "scanFailed": "Analyse momentan nicht möglich. Prüfe deine Verbindung und versuche es erneut."
   },
   "result": {
     "title": "Mahlzeiten-Analyse",
