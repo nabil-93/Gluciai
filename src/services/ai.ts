@@ -22,6 +22,19 @@ interface VisionDetection extends DetectedFood {
   per100g?: Per100g;
 }
 
+/** Raw detection as returned by the edge function (before per100g mapping). */
+interface RawDetection extends DetectedFood {
+  nutrition_per_100g?: {
+    calories: number;
+    carbs: number;
+    sugar: number;
+    protein: number;
+    fat: number;
+    fiber: number;
+    sodium?: number;
+  };
+}
+
 /** Demo detections: exercises every branch of the provider chain.
  *  Includes search_name + bounding_box so the result UI can be tested
  *  offline exactly as it renders with real Gemini output. */
@@ -33,7 +46,7 @@ const DEMO_PLATES: VisionDetection[][] = [
       category: 'Protein',
       portion_grams: 380,
       confidence: 0.93,
-      bounding_box: { x: 90, y: 120, width: 300, height: 260 },
+      bounding_box: { x: 0.141, y: 0.250, width: 0.469, height: 0.542 },
       is_main_food: true,
     },
     {
@@ -42,7 +55,7 @@ const DEMO_PLATES: VisionDetection[][] = [
       category: 'Vegetable',
       portion_grams: 150,
       confidence: 0.62, // low → triggers the "Did you mean?" sheet
-      bounding_box: { x: 400, y: 300, width: 180, height: 150 },
+      bounding_box: { x: 0.625, y: 0.625, width: 0.281, height: 0.313 },
       is_estimated: true,
       alternatives: ['tomato salad', 'cucumber salad', 'coleslaw'],
     },
@@ -54,7 +67,7 @@ const DEMO_PLATES: VisionDetection[][] = [
       category: 'Protein',
       portion_grams: 340,
       confidence: 0.91,
-      bounding_box: { x: 110, y: 90, width: 340, height: 300 },
+      bounding_box: { x: 0.172, y: 0.188, width: 0.531, height: 0.625 },
     },
     {
       name: 'Khobz',
@@ -62,7 +75,7 @@ const DEMO_PLATES: VisionDetection[][] = [
       category: 'Bread',
       portion_grams: 70,
       confidence: 0.86,
-      bounding_box: { x: 470, y: 260, width: 140, height: 130 },
+      bounding_box: { x: 0.734, y: 0.542, width: 0.219, height: 0.271 },
     },
   ],
   [
@@ -72,7 +85,7 @@ const DEMO_PLATES: VisionDetection[][] = [
       category: 'Soup',
       portion_grams: 300,
       confidence: 0.9,
-      bounding_box: { x: 150, y: 130, width: 280, height: 240 },
+      bounding_box: { x: 0.234, y: 0.271, width: 0.438, height: 0.500 },
     },
     {
       name: 'Dattes',
@@ -80,7 +93,7 @@ const DEMO_PLATES: VisionDetection[][] = [
       category: 'Fruit',
       portion_grams: 40,
       confidence: 0.84,
-      bounding_box: { x: 450, y: 340, width: 130, height: 110 },
+      bounding_box: { x: 0.703, y: 0.708, width: 0.203, height: 0.229 },
     },
   ],
   [
@@ -91,7 +104,7 @@ const DEMO_PLATES: VisionDetection[][] = [
       category: 'Protein',
       portion_grams: 180,
       confidence: 0.87,
-      bounding_box: { x: 120, y: 150, width: 220, height: 180 },
+      bounding_box: { x: 0.188, y: 0.313, width: 0.344, height: 0.375 },
       per100g: { calories: 165, carbs: 0, sugar: 0, protein: 31, fat: 3.6, fiber: 0, sodium: 74 },
     },
     {
@@ -100,7 +113,7 @@ const DEMO_PLATES: VisionDetection[][] = [
       category: 'Rice',
       portion_grams: 200,
       confidence: 0.82,
-      bounding_box: { x: 360, y: 180, width: 210, height: 200 },
+      bounding_box: { x: 0.563, y: 0.375, width: 0.328, height: 0.417 },
       per100g: { calories: 130, carbs: 28, sugar: 0, protein: 2.7, fat: 0.3, fiber: 0.4, sodium: 1, glycemic_index: 73 },
     },
   ],
@@ -121,9 +134,26 @@ async function detectFoods(
   if (error) throw error;
   if (data.error) throw new Error(data.error);
 
-  // New contract: { detections: [{ name, portion_grams, confidence, per100g? }] }
+  // New contract: { detections: [{ name, portion_grams, confidence, ... }] }
   if (Array.isArray(data.detections)) {
-    return data.detections as VisionDetection[];
+    return (data.detections as RawDetection[]).map((d) => {
+      // Map the model's per-100g nutrition estimate onto `per100g`, the
+      // field the engine uses ONLY as a fallback when every database misses
+      // (so sauces/spices/regional foods get AI-estimated values, not 0).
+      const n = d.nutrition_per_100g;
+      const per100g = n
+        ? {
+            calories: n.calories,
+            carbs: n.carbs,
+            sugar: n.sugar,
+            protein: n.protein,
+            fat: n.fat,
+            fiber: n.fiber,
+            sodium: n.sodium,
+          }
+        : undefined;
+      return { ...d, per100g } as VisionDetection;
+    });
   }
 
   // Legacy contract: { result: NutritionResult } → wrap as one detection

@@ -53,10 +53,11 @@ export type FoodCategory =
   | 'Unknown';
 
 /**
- * Where a detected food sits in the photo (pixels, origin top-left).
- * Lets the UI draw a tappable box over the ingredient — like Cal AI /
- * SnapCalorie. Coordinates are in the ORIGINAL image's pixel space; the
- * UI scales them to the rendered image size.
+ * Where a detected food sits in the photo, as 0-1 FRACTIONS of the image
+ * (origin top-left): x=0.5 is the horizontal middle, width=0.25 is a
+ * quarter of the image wide. Resolution-independent, so the overlay scales
+ * them onto whatever size the photo is displayed at — like Cal AI /
+ * SnapCalorie.
  */
 export interface BoundingBox {
   x: number;

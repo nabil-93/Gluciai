@@ -19,6 +19,7 @@ export function BoundingBoxOverlay({
   layout,
   selectedIndex,
   onSelect,
+  fit = 'cover',
 }: {
   items: FoodItemResult[];
   /** Intrinsic image size in px (from expo-image onLoad). */
@@ -27,20 +28,24 @@ export function BoundingBoxOverlay({
   layout: { width: number; height: number } | null;
   selectedIndex: number | null;
   onSelect: (index: number) => void;
+  /** Must match the Image's contentFit so boxes land on the pixels. */
+  fit?: 'cover' | 'contain';
 }) {
   if (!natural || !layout || natural.width <= 0 || natural.height <= 0) {
     return null;
   }
 
-  // The photo is rendered with contentFit="cover": it fills the frame and
-  // is center-cropped. Reproduce that transform so boxes land correctly.
-  const scale = Math.max(
+  // Boxes are 0-1 FRACTIONS of the original image. Reproduce the Image's
+  // contentFit transform so each fraction lands on the right pixels:
+  //  • cover   → fills frame, center-cropped (scale = max)
+  //  • contain → whole image fits, letterboxed (scale = min)
+  const scale = (fit === 'contain' ? Math.min : Math.max)(
     layout.width / natural.width,
     layout.height / natural.height
   );
-  const dispW = natural.width * scale;
+  const dispW = natural.width * scale; // displayed image size (may exceed frame)
   const dispH = natural.height * scale;
-  const offsetX = (layout.width - dispW) / 2;
+  const offsetX = (layout.width - dispW) / 2; // negative = cropped sides
   const offsetY = (layout.height - dispH) / 2;
 
   return (
@@ -48,10 +53,11 @@ export function BoundingBoxOverlay({
       {items.map((it, i) => {
         const b = it.bounding_box;
         if (!b) return null;
-        const left = offsetX + b.x * scale;
-        const top = offsetY + b.y * scale;
-        const width = b.width * scale;
-        const height = b.height * scale;
+        // fraction → pixels on the displayed image → shift by crop offset
+        const left = offsetX + b.x * dispW;
+        const top = offsetY + b.y * dispH;
+        const width = b.width * dispW;
+        const height = b.height * dispH;
 
         // Skip boxes that fall entirely outside the visible (cropped) frame.
         if (

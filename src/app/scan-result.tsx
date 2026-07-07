@@ -375,9 +375,9 @@ export default function ScanResultScreen() {
 
   // Photo hero with detection boxes. `showMeta` adds the name + confidence
   // overlay (used on the detection step).
-  const heroBlock = (showMeta: boolean) => (
+  const heroBlock = (showMeta: boolean, fit: 'cover' | 'contain' = 'cover') => (
     <View
-      style={styles.hero}
+      style={[styles.hero, fit === 'contain' && styles.heroContain]}
       onLayout={(e: LayoutChangeEvent) =>
         setHeroLayout({
           width: e.nativeEvent.layout.width,
@@ -389,7 +389,7 @@ export default function ScanResultScreen() {
         <Image
           source={{ uri: imageUri }}
           style={StyleSheet.absoluteFill}
-          contentFit="cover"
+          contentFit={fit}
           onLoad={(e) => {
             // Only a fallback: when the scanner provided the sent-image
             // size (the boxes' true frame), never override it with the
@@ -410,6 +410,7 @@ export default function ScanResultScreen() {
         items={items}
         natural={imgNatural}
         layout={heroLayout}
+        fit={fit}
         selectedIndex={highlightIndex}
         onSelect={focusCard}
       />
@@ -1034,7 +1035,7 @@ export default function ScanResultScreen() {
         {/* Step 3 — detection boxes on the photo */}
         {step === 'detected' ? (
           <>
-            {heroBlock(true)}
+            {heroBlock(true, 'contain')}
             <View style={styles.body}>
               <Text style={styles.tapHint}>{t('result.tapBoxHint')}</Text>
               {foodsBlock}
@@ -1198,6 +1199,12 @@ const styles = StyleSheet.create({
     height: 340,
     backgroundColor: '#DADAE0',
     overflow: 'hidden',
+  },
+  // Detection step: taller + dark letterbox so the WHOLE photo shows
+  // (contain), nothing cropped, every bounding box visible.
+  heroContain: {
+    height: 420,
+    backgroundColor: '#0A0A0E',
   },
   heroFallback: {
     alignItems: 'center',

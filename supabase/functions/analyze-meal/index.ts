@@ -43,7 +43,11 @@ Return this exact structure:
       "bounding_box": { "x": 0, "y": 0, "width": 0, "height": 0 },
       "is_main_food": true,
       "is_estimated": false,
-      "alternatives": ["", ""]
+      "alternatives": ["", ""],
+      "nutrition_per_100g": {
+        "calories": 0, "protein": 0, "carbs": 0, "fat": 0,
+        "sugar": 0, "fiber": 0, "sodium": 0
+      }
     }
   ]
 }
@@ -65,6 +69,12 @@ Rules:
 - alternatives: 2-3 OTHER foods this could plausibly be, most-likely first,
   as generic search names (e.g. for salmon: ["tuna", "trout"]). Provide them
   especially when confidence is below 70. Omit or leave [] when you are sure.
+- nutrition_per_100g: your best nutrition estimate PER 100 GRAMS of this
+  food (calories in kcal; protein/carbs/fat/sugar/fiber in grams; sodium in
+  mg). This is a FALLBACK only — the app prefers official databases and uses
+  your estimate solely when no database has the food (sauces, fried onions,
+  sesame, spices, regional dishes…). Always fill it with realistic values;
+  never leave it at 0 for a real food.
 - display_name is a short human label (e.g. "Grilled Salmon", "Cherry Tomatoes").
 - search_name MUST ALWAYS BE IN ENGLISH, even when display_name is in another
   language — it is a database query and the nutrition databases are English.
@@ -76,9 +86,12 @@ Rules:
 - category MUST be exactly one of: Protein, Vegetable, Fruit, Rice, Bread,
   Pasta, Soup, Sauce, Dessert, Drink, Snack, Fast Food, Seafood, Legumes,
   Dairy, Egg, Unknown. Use "Unknown" only when nothing else fits.
-- bounding_box locates the food IN PIXELS of THIS image (origin = top-left).
-  Return the actual pixel coordinates for the image you were given. If you
-  cannot localize a food, omit its bounding_box.
+- bounding_box locates the food using NORMALIZED coordinates from 0 to 1000
+  (origin = top-left), where x,y is the top-left corner and width,height the
+  size, all on the 0-1000 scale (so x+width ≤ 1000, y+height ≤ 1000). Draw a
+  TIGHT box around ONLY that food — never a box covering the whole plate or
+  several foods. If you cannot localize a food precisely, omit its
+  bounding_box rather than returning a loose one.
 - Recognize international & traditional dishes (Moroccan: couscous, tagine,
   harira, rfissa, bastilla, msemen, zaalouk...; Arabic: shawarma, falafel,
   hummus, kabsa, mansaf...; Italian, Asian, Mexican, Indian...).
@@ -237,10 +250,20 @@ interface Detection {
   category: string;
   portion_grams: number;
   confidence: number; // 0..1 for the client
+  // (nutrition_per_100g declared below is emitted straight to the client)
   bounding_box?: { x: number; y: number; width: number; height: number };
   is_main_food?: boolean;
   is_estimated?: boolean;
   alternatives?: string[];
+  nutrition_per_100g?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    sugar: number;
+    fiber: number;
+    sodium?: number;
+  };
 }
 
 /** Coerce one raw model food into the strict client contract, or null. */
@@ -285,24 +308,62 @@ function normalizeDetection(raw: unknown): Detection | null {
 
   const box = normalizeBox(f.bounding_box);
   if (box) det.bounding_box = box;
+
+  const nut = normalizeNutrition(f.nutrition_per_100g);
+  if (nut) det.nutrition_per_100g = nut;
+
   return det;
 }
 
+/**
+ * Convert the model's 0-1000 normalized box into 0-1 FRACTIONS of the
+ * image, clamped to bounds. Rejects boxes that cover almost the whole image
+ * (> 92% of a side) — those are "I'm not sure where" boxes that would just
+ * blanket the photo. Fractions are resolution-independent, so the overlay
+ * scales them to whatever size the image is displayed at.
+ */
 function normalizeBox(raw: unknown): Detection['bounding_box'] | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const b = raw as Record<string, unknown>;
-  const x = Number(b.x);
-  const y = Number(b.y);
-  const width = Number(b.width);
-  const height = Number(b.height);
-  if (
-    ![x, y, width, height].every(Number.isFinite) ||
-    width <= 0 ||
-    height <= 0
-  ) {
+  let x = Number(b.x);
+  let y = Number(b.y);
+  let width = Number(b.width);
+  let height = Number(b.height);
+  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
     return undefined;
   }
+  // 0-1000 → 0-1 fractions.
+  x /= 1000;
+  y /= 1000;
+  width /= 1000;
+  height /= 1000;
+  // Clamp into the frame.
+  x = Math.max(0, Math.min(1, x));
+  y = Math.max(0, Math.min(1, y));
+  width = Math.min(width, 1 - x);
+  height = Math.min(height, 1 - y);
+  if (width <= 0.01 || height <= 0.01) return undefined;
+  // Reject near-full-frame boxes (not a useful localization).
+  if (width > 0.92 && height > 0.92) return undefined;
   return { x, y, width, height };
+}
+
+/** Coerce the model's per-100g nutrition estimate, or null if implausible. */
+function normalizeNutrition(raw: unknown): Detection['nutrition_per_100g'] | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const n = raw as Record<string, unknown>;
+  const calories = clampNumber(n.calories, 0, 900, 0);
+  // A real food per 100g has some calories; 0 means the model didn't fill it.
+  if (calories <= 0) return undefined;
+  return {
+    calories,
+    protein: clampNumber(n.protein, 0, 100, 0),
+    carbs: clampNumber(n.carbs, 0, 100, 0),
+    fat: clampNumber(n.fat, 0, 100, 0),
+    sugar: clampNumber(n.sugar, 0, 100, 0),
+    fiber: clampNumber(n.fiber, 0, 100, 0),
+    sodium: clampNumber(n.sodium, 0, 40000, 0),
+  };
 }
 
 function clampNumber(v: unknown, min: number, max: number, fallback: number) {
