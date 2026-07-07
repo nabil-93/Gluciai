@@ -127,6 +127,7 @@ export default function RootLayout() {
               name="emergency"
               options={{ presentation: 'fullScreenModal' }}
             />
+            <Stack.Screen name="profile" options={{ presentation: 'modal' }} />
           </Stack>
         </View>
       </QueryClientProvider>

@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   AnimatedRobot,
+  Avatar,
   FadeInView,
   PressableScale,
   RotaryDial,
@@ -1111,6 +1112,18 @@ export default function HomeScreen() {
       >
         {/* ── Greeting ── */}
         <View style={styles.greetingRow}>
+          <PressableScale
+            onPress={() => router.push('/profile' as any)}
+            accessibilityLabel={t('profile.openTitle')}
+            style={styles.avatarBtn}
+          >
+            <Avatar
+              name={profile?.name}
+              uri={profile?.avatar_url}
+              size={46}
+              ring
+            />
+          </PressableScale>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.greeting} numberOfLines={1}>
               {firstName
@@ -1645,9 +1658,13 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 14,
   },
+  avatarBtn: {
+    // Small tap target left of the greeting → opens the profile screen.
+    alignSelf: 'center',
+  },
   greeting: {
     fontFamily: F800,
-    fontSize: 27,
+    fontSize: 24,
     letterSpacing: -0.3,
     color: '#111827',
   },

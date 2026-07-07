@@ -219,9 +219,6 @@ async function callGemini(
 
   const data = await res.json();
 
-console.log("GEMINI RAW RESPONSE:");
-console.log(JSON.stringify(data, null, 2));
-
   const text = data?.candidates?.[0]?.content?.parts
     ?.map((p: { text?: string }) => p.text ?? '')
     .join('')
@@ -352,7 +349,9 @@ function normalizeBox(raw: unknown): Detection['bounding_box'] | undefined {
 function normalizeNutrition(raw: unknown): Detection['nutrition_per_100g'] | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const n = raw as Record<string, unknown>;
-  const calories = clampNumber(n.calories, 0, 900, 0);
+  // Pure fats/oils reach ~900 kcal/100g; allow headroom so we don't discard
+  // a valid rich-food estimate (mayonnaise ~680, oil ~884).
+  const calories = clampNumber(n.calories, 0, 950, 0);
   // A real food per 100g has some calories; 0 means the model didn't fill it.
   if (calories <= 0) return undefined;
   return {

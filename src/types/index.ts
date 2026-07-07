@@ -4,6 +4,8 @@ export type InsulinType = 'rapid' | 'long' | 'mixed';
 export interface Profile {
   user_id: string;
   name: string;
+  /** Public URL of the avatar in the profile-images storage bucket */
+  avatar_url?: string;
   birth_date?: string;
   gender?: 'male' | 'female' | 'other';
   height?: number;
