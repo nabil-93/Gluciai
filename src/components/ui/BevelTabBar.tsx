@@ -37,10 +37,12 @@ import { useTabBarScroll } from './TabBarVisibility';
 //   shadow     = soft, blurRadius ~12
 // A faint cool cast keeps it from reading pure white. The heavy lifting is
 // the real backdrop blur + saturation, not opacity.
-const GLASS_TINT = 'rgba(247,249,255,0.09)'; // ~9% cool white — barely there
-const PILL_BG = 'rgba(255,255,255,0.15)'; // active glass capsule (0x26)
-const PILL_BORDER = 'rgba(255,255,255,0.32)';
-const BAR_BORDER = 'rgba(255,255,255,0.28)'; // 0x1C
+// Heavier blur reads as neutral grey-white (Instagram-style), not a tinted
+// window onto vivid colors — the blur itself does almost all the work here.
+const GLASS_TINT = 'rgba(245,246,250,0.38)'; // stronger neutral wash
+const PILL_BG = 'rgba(255,255,255,0.55)'; // near-opaque glass capsule
+const PILL_BORDER = 'rgba(255,255,255,0.7)';
+const BAR_BORDER = 'rgba(255,255,255,0.5)';
 const ICON_ACTIVE = '#1B1C1F';
 const ICON_IDLE = 'rgba(27,28,31,0.80)';
 /** Punch-through color for the journal book's text lines (reads as bar bg). */
@@ -185,8 +187,8 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
             stays clear — the tiny cool overlay below is the only extra
             color, exactly like the liquid_glass reference (~8.6% tint). */}
         <BlurView
-          intensity={15}
-          tint="systemUltraThinMaterialLight"
+          intensity={80}
+          tint="light"
           style={styles.blur}
         >
         {/* Thin cool tint overlay (blue-grey) — this is the glass color. */}
@@ -199,7 +201,7 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
         {/* Glare: bright diagonal sweep from top-left (glareAngle -45°). */}
         <LinearGradient
           pointerEvents="none"
-          colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']}
+          colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0)']}
           locations={[0, 0.28, 0.6]}
           start={{ x: 0, y: 0 }}
           end={{ x: 0.7, y: 1 }}
@@ -208,7 +210,7 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
         {/* Fresnel: bright top rim → the lit edge of the lens. */}
         <LinearGradient
           pointerEvents="none"
-          colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
+          colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']}
           locations={[0, 0.4]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
@@ -217,7 +219,7 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
         {/* Bottom shade: a hint of depth on the lower half of the lens. */}
         <LinearGradient
           pointerEvents="none"
-          colors={['rgba(0,0,0,0)', 'rgba(20,22,30,0.08)']}
+          colors={['rgba(0,0,0,0)', 'rgba(20,22,30,0.05)']}
           locations={[0.55, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
@@ -311,8 +313,8 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
-        backdropFilter: 'blur(28px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+        backdropFilter: 'blur(55px) saturate(120%)',
+        WebkitBackdropFilter: 'blur(55px) saturate(120%)',
       },
       default: {
         shadowColor: '#000000',
