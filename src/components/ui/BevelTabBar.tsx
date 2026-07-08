@@ -1,59 +1,41 @@
 import React, { useRef } from 'react';
 import {
   Animated,
-  Image,
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Line, Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import * as Haptics from 'expo-haptics';
 
 import { isRTL } from '@/i18n';
-import { colors, shadows } from '@/theme';
+import { colors } from '@/theme';
 import { useTabBarScroll } from './TabBarVisibility';
 
 /**
- * Official bottom navigation — icons come straight from the design
- * system (assets/icons/*-active.png / *-inactive.png), never redrawn.
- * Active = green #19C37D, inactive = #111827 @ 50%, add = green disc.
+ * Floating dark pill navigation — from the "barriere / Bottom Nav Bar"
+ * design (Instagram-style). One near-black rounded pill holds the 4 tabs
+ * AND the green + button as a 5th column; a translucent white pill slides
+ * behind the active tab.
+ *
+ * Scroll behavior: instead of collapsing to a lone circle, the WHOLE bar
+ * settles — it shrinks slightly and the labels fade out, leaving icons
+ * only (exactly like Instagram); scrolling back up restores full size
+ * with labels.
  */
 
-const ICONS = {
-  index: {
-    active: require('../../assets/design/icons/home-active.png'),
-    inactive: require('../../assets/design/icons/home-inactive.png'),
-  },
-  journal: {
-    active: require('../../assets/design/icons/journal-active.png'),
-    inactive: require('../../assets/design/icons/journal-inactive.png'),
-  },
-  activity: {
-    active: require('../../assets/design/icons/activity-active.png'),
-    inactive: require('../../assets/design/icons/activity-inactive.png'),
-  },
-} as const;
-
-/** Heart drawn as SVG — the biology PNG was clipped at the top. */
-function HeartIcon({ active }: { active: boolean }) {
-  const color = active ? colors.primary : 'rgba(17,24,39,0.5)';
-  return (
-    <Svg width={20.5} height={20.5} viewBox="0 0 24 24">
-      <Path
-        d="M12 20.5S3.6 15 3.6 8.9C3.6 6 5.8 4 8.3 4c1.6 0 3 .9 3.7 2.1C12.7 4.9 14.1 4 15.7 4c2.5 0 4.7 2 4.7 4.9 0 6.1-8.4 11.6-8.4 11.6z"
-        fill={active ? color : 'none'}
-        stroke={color}
-        strokeWidth={active ? 0 : 1.9}
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
+const BAR_BG = 'rgba(31,34,38,0.97)';
+const PILL_BG = 'rgba(255,255,255,0.16)';
+const ICON_ACTIVE = '#FFFFFF';
+const ICON_IDLE = 'rgba(255,255,255,0.80)';
+/** Punch-through color for the journal book's text lines (matches bar bg). */
+const LINE_COL = '#1F2226';
+/** 4 tabs + the + button = 5 equal columns, like the design's grid. */
+const COLS = 5;
 
 const TABS = [
   { name: 'index', labelKey: 'tabs.home' },
@@ -61,6 +43,38 @@ const TABS = [
   { name: 'activity', labelKey: 'tabs.activity' },
   { name: 'biology', labelKey: 'tabs.biology' },
 ] as const;
+
+/** Exact glyphs from the barriere design file (filled, 24×24). */
+function TabIcon({ name, color }: { name: string; color: string }) {
+  switch (name) {
+    case 'index':
+      return (
+        <Svg width={24} height={24} viewBox="0 0 24 24" fill={color}>
+          <Path d="M11.35 2.7 a1 1 0 0 1 1.3 0 L21 9.9 a1 1 0 0 1 0.35 0.76 V20 a1.6 1.6 0 0 1 -1.6 1.6 H14.9 v-5.7 a2.9 2.9 0 0 0 -5.8 0 v5.7 H4.25 A1.6 1.6 0 0 1 2.65 20 V10.66 A1 1 0 0 1 3 9.9 Z" />
+        </Svg>
+      );
+    case 'journal':
+      return (
+        <Svg width={24} height={24} viewBox="0 0 24 24" fill={color}>
+          <Path d="M7 2 H18 a2.2 2.2 0 0 1 2.2 2.2 V16 a2 2 0 0 1 -2 2 H7.1 a1.35 1.35 0 0 0 0 2.7 H19.2 a0.9 0.9 0 0 1 0 1.8 H7.1 A3.6 3.6 0 0 1 3.5 18.9 V5.5 A3.5 3.5 0 0 1 7 2 Z" />
+          <Line x1={8.3} y1={7} x2={15.5} y2={7} stroke={LINE_COL} strokeWidth={1.6} strokeLinecap="round" />
+          <Line x1={8.3} y1={10.6} x2={15.5} y2={10.6} stroke={LINE_COL} strokeWidth={1.6} strokeLinecap="round" />
+        </Svg>
+      );
+    case 'activity':
+      return (
+        <Svg width={24} height={24} viewBox="0 0 24 24" fill={color}>
+          <Path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.89 19.38l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z" />
+        </Svg>
+      );
+    default: // biology — heart
+      return (
+        <Svg width={24} height={24} viewBox="0 0 24 24" fill={color}>
+          <Path d="M12 21 C12 21 3 15.6 3 9.3 A4.9 4.9 0 0 1 12 6.2 A4.9 4.9 0 0 1 21 9.3 C21 15.6 12 21 12 21 Z" />
+        </Svg>
+      );
+  }
+}
 
 interface TabRoute {
   key: string;
@@ -79,21 +93,15 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
   const rtl = isRTL(i18n.language);
   const { visible, expand } = useTabBarScroll();
 
-  // Track expanded/compact so the hidden full capsule stops catching taps
-  const [expanded, setExpanded] = React.useState(true);
-  React.useEffect(() => {
-    const id = visible.addListener(({ value }) => setExpanded(value > 0.5));
-    return () => visible.removeListener(id);
-  }, [visible]);
-
   const routeNames = state.routes.map((r) => r.name);
+  const activeName = state.routes[state.index]?.name;
+  const activeIndex = Math.max(0, TABS.findIndex((tb) => tb.name === activeName));
 
   const onPressTab = (key: string) => {
     const targetIndex = state.routes.findIndex((r) => r.name === key);
-    if (targetIndex === -1) return; // route not registered yet
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (targetIndex === -1) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    expand(); // tapping while settled restores the full bar
     const route = state.routes[targetIndex];
     const focused = state.index === targetIndex;
     const event = navigation.emit({
@@ -101,212 +109,126 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
       target: route.key,
       canPreventDefault: true,
     });
-    if (!focused && !event.defaultPrevented) {
-      navigation.navigate(key);
-    }
+    if (!focused && !event.defaultPrevented) navigation.navigate(key);
   };
 
-  // FAB press spring
   const fabScale = useRef(new Animated.Value(1)).current;
-
   const onPressAdd = () => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/add-menu');
   };
 
-  const activeName = state.routes[state.index]?.name;
-  const activeTab =
-    TABS.find((t) => t.name === activeName) ?? TABS[0];
-  const activeIcon =
-    activeTab.name !== 'biology'
-      ? ICONS[activeTab.name as keyof typeof ICONS]
-      : null;
-  const activeIndex = Math.max(
-    0,
-    TABS.findIndex((t) => t.name === activeName)
-  );
-
-  // Sliding green indicator: measure the tabs area, then spring the
-  // highlight from one tab column to the next when the tab changes.
-  const CAPSULE_PADDING = 6;
-  const [tabsWidth, setTabsWidth] = React.useState(0);
-  const colWidth = tabsWidth > 0 ? tabsWidth / TABS.length : 0;
-  const indicatorX = useRef(new Animated.Value(0)).current;
+  // ── Sliding active pill (translucent white, like the design) ──
+  const INNER_PAD = 8;
+  const [innerWidth, setInnerWidth] = React.useState(0);
+  const colWidth = innerWidth > 0 ? innerWidth / COLS : 0;
+  const pillX = useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
     if (colWidth === 0) return;
-    // In RTL the flex row lays the tabs out right-to-left, so the active
-    // column's visual slot (measured from the capsule's left edge) is
-    // mirrored: home (index 0) sits in the right-most slot.
-    const visualIndex = rtl ? TABS.length - 1 - activeIndex : activeIndex;
-    Animated.spring(indicatorX, {
-      // + 4px so the narrower pill is centred inside the column
-      toValue: CAPSULE_PADDING + 4 + visualIndex * colWidth,
+    // In RTL the row is mirrored: tab i sits in visual column (COLS-1-i),
+    // with the + button occupying the left-most slot.
+    const visualIndex = rtl ? COLS - 1 - activeIndex : activeIndex;
+    Animated.spring(pillX, {
+      toValue: INNER_PAD + visualIndex * colWidth,
       useNativeDriver: true,
-      speed: 16,
-      bounciness: 9,
+      speed: 15,
+      bounciness: 8,
     }).start();
-  }, [activeIndex, colWidth, indicatorX, rtl]);
+  }, [activeIndex, colWidth, pillX, rtl]);
 
-  // visible: 1 = full bar, 0 = compact (only active tab + add).
-  // Full capsule fades/shrinks out, compact pill fades in — cross-fade.
-  const fullOpacity = visible;
-  const compactOpacity = visible.interpolate({
-    inputRange: [0, 0.7, 1],
-    outputRange: [1, 0, 0],
+  // ── Settle-on-scroll: the whole bar shrinks a touch and the labels
+  //    fade away (icons only, Instagram-style). visible: 1 = full. ──
+  const barScale = visible.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] });
+  const barShift = visible.interpolate({ inputRange: [0, 1], outputRange: [10, 0] });
+  const labelOpacity = visible.interpolate({
+    inputRange: [0, 0.6, 1],
+    outputRange: [0, 0, 1],
   });
-  const fullScale = visible.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.96, 1],
-  });
-  const compactScale = visible.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0.9],
-  });
-
-  const renderFab = () => (
-    <Pressable
-      onPress={onPressAdd}
-      onPressIn={() =>
-        Animated.spring(fabScale, {
-          toValue: 0.88,
-          useNativeDriver: true,
-          speed: 40,
-          bounciness: 8,
-        }).start()
-      }
-      onPressOut={() =>
-        Animated.spring(fabScale, {
-          toValue: 1,
-          useNativeDriver: true,
-          speed: 40,
-          bounciness: 8,
-        }).start()
-      }
-      accessibilityRole="button"
-      accessibilityLabel={t('tabs.add')}
-    >
-      <Animated.View
-        style={[styles.addButton, { transform: [{ scale: fabScale }] }]}
-      >
-        <Svg width={22.5} height={22.5} viewBox="0 0 24 24">
-          <Path
-            d="M12 5v14M5 12h14"
-            stroke="#ffffff"
-            strokeWidth={2.6}
-            strokeLinecap="round"
-          />
-        </Svg>
-      </Animated.View>
-    </Pressable>
-  );
+  // `visible` runs on the native driver, so layout props (height) are off
+  // limits — collapse the label visually with a scaleY transform instead.
+  const labelScaleY = visible.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] });
 
   return (
     <View
       pointerEvents="box-none"
-      style={[
-        styles.wrap,
-        // Sit close to the bottom edge. Only add a little of the home-
-        // indicator inset (capped) so the bar doesn't float up the screen.
-        { paddingBottom: Math.min(insets.bottom, 6) + 6 },
-      ]}
+      style={[styles.wrap, { paddingBottom: Math.min(insets.bottom, 10) + 10 }]}
     >
-      <View style={styles.row}>
-        {/* Left side stacks the full capsule over the compact pill */}
-        <View style={styles.leftStack}>
-          {/* FULL capsule — 4 tabs */}
-          <Animated.View
-            pointerEvents={expanded ? 'auto' : 'none'}
-            onLayout={(e) => setTabsWidth(e.nativeEvent.layout.width - CAPSULE_PADDING * 2)}
-            style={[
-              styles.capsule,
-              { opacity: fullOpacity, transform: [{ scale: fullScale }] },
-            ]}
-          >
-            {/* Sliding green highlight behind the active tab */}
-            {colWidth > 0 ? (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.indicator,
-                  {
-                    width: colWidth - 8,
-                    transform: [{ translateX: indicatorX }],
-                  },
-                ]}
-              />
-            ) : null}
-            {TABS.map(({ name, labelKey }) => {
-              const focused = activeName === name;
-              const disabled = !routeNames.includes(name);
-              const icon = ICONS[name as keyof typeof ICONS];
-              const label = t(labelKey);
-              return (
-                <Pressable
-                  key={name}
-                  onPress={() => onPressTab(name)}
-                  style={styles.tab}
-                  disabled={disabled}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: focused }}
-                  accessibilityLabel={label}
+      <Animated.View
+        style={[
+          styles.bar,
+          { transform: [{ translateY: barShift }, { scale: barScale }] },
+        ]}
+      >
+        <View
+          style={styles.inner}
+          onLayout={(e) => setInnerWidth(e.nativeEvent.layout.width - INNER_PAD * 2)}
+        >
+          {/* Sliding translucent pill behind the active tab */}
+          {colWidth > 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.activePill,
+                { width: colWidth, transform: [{ translateX: pillX }] },
+              ]}
+            />
+          ) : null}
+
+          {TABS.map((tab) => {
+            const focused = activeName === tab.name;
+            const disabled = !routeNames.includes(tab.name);
+            const color = focused ? ICON_ACTIVE : ICON_IDLE;
+            return (
+              <Pressable
+                key={tab.name}
+                onPress={() => onPressTab(tab.name)}
+                style={styles.tab}
+                disabled={disabled}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: focused }}
+                accessibilityLabel={t(tab.labelKey)}
+              >
+                <TabIcon name={tab.name} color={color} />
+                <Animated.Text
+                  numberOfLines={1}
+                  style={[
+                    styles.label,
+                    {
+                      color,
+                      opacity: labelOpacity,
+                      transform: [{ scaleY: labelScaleY }],
+                    },
+                  ]}
                 >
-                  {name === 'biology' ? (
-                    <View style={styles.tabIcon}>
-                      <HeartIcon active={focused} />
-                    </View>
-                  ) : (
-                    <Image
-                      source={focused ? icon!.active : icon!.inactive}
-                      style={styles.tabIcon}
-                      resizeMode="contain"
-                    />
-                  )}
-                  <Text
-                    style={[styles.label, focused && styles.labelActive]}
-                    numberOfLines={1}
-                  >
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </Animated.View>
+                  {t(tab.labelKey)}
+                </Animated.Text>
+              </Pressable>
+            );
+          })}
 
-          {/* COMPACT pill — only the active tab's icon in a round disc.
-              Tapping it expands the bar back to full. */}
-          <Animated.View
-            pointerEvents={expanded ? 'none' : 'auto'}
-            style={[
-              styles.compactPill,
-              rtl ? { left: undefined, right: 0 } : null,
-              { opacity: compactOpacity, transform: [{ scale: compactScale }] },
-            ]}
-          >
+          {/* Green + button — 5th column, inside the bar like the design */}
+          <View style={styles.fabSlot}>
             <Pressable
-              onPress={expand}
-              style={styles.compactInner}
+              onPress={onPressAdd}
+              onPressIn={() =>
+                Animated.spring(fabScale, { toValue: 0.9, useNativeDriver: true, speed: 40, bounciness: 8 }).start()
+              }
+              onPressOut={() =>
+                Animated.spring(fabScale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 8 }).start()
+              }
               accessibilityRole="button"
-              accessibilityLabel={t(activeTab.labelKey)}
+              accessibilityLabel={t('tabs.add')}
             >
-              {activeTab.name === 'biology' ? (
-                <HeartIcon active />
-              ) : activeIcon ? (
-                <Image
-                  source={activeIcon.active}
-                  style={styles.compactIcon}
-                  resizeMode="contain"
-                />
-              ) : null}
+              <Animated.View style={[styles.fab, { transform: [{ scale: fabScale }] }]}>
+                <Svg width={20} height={20} viewBox="0 0 24 24">
+                  <Path d="M12 5v14M5 12h14" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" />
+                </Svg>
+              </Animated.View>
             </Pressable>
-          </Animated.View>
+          </View>
         </View>
-
-        {/* Green + button (always visible) */}
-        {renderFab()}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -317,83 +239,71 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 14,
+    paddingHorizontal: 18,
   },
-  row: {
+  bar: {
+    borderRadius: 999,
+    backgroundColor: BAR_BG,
+    ...Platform.select({
+      web: {
+        boxShadow:
+          '0 18px 40px rgba(10,12,16,0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(14px)',
+      },
+      default: {
+        shadowColor: '#0A0C10',
+        shadowOffset: { width: 0, height: 14 },
+        shadowOpacity: 0.4,
+        shadowRadius: 26,
+        elevation: 16,
+      },
+    }),
+  },
+  inner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
-  leftStack: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  capsule: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 25,
-    paddingVertical: 7.5,
-    paddingHorizontal: 5.5,
+    padding: 8,
     position: 'relative',
-    ...shadows.floating,
   },
-  indicator: {
+  activePill: {
     position: 'absolute',
-    top: 5,
-    bottom: 5,
+    top: 8,
+    bottom: 8,
     left: 0,
-    borderRadius: 18,
-    backgroundColor: 'rgba(25,195,125,0.12)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(25,195,125,0.35)',
+    borderRadius: 999,
+    backgroundColor: PILL_BG,
   },
-  compactPill: {
-    position: 'absolute',
-    left: 0,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.floating,
-  },
-  compactInner: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  compactIcon: { width: 21.5, height: 21.5 },
   tab: {
     flex: 1,
     alignItems: 'center',
-    gap: 3.5,
-    paddingVertical: 2,
+    justifyContent: 'center',
+    paddingVertical: 7,
+    gap: 2,
     minWidth: 0,
+    zIndex: 1,
   },
-  tabIcon: { width: 20.5, height: 20.5 },
   label: {
-    fontSize: 10.75,
-    fontWeight: '600',
-    color: 'rgba(17,24,39,0.5)',
+    fontSize: 10.5,
+    fontWeight: '700',
+    overflow: 'hidden',
   },
-  labelActive: {
-    color: colors.primary,
-    fontWeight: '800',
+  fabSlot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
-  addButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  fab: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.45,
     shadowRadius: 14,
-    elevation: 8,
+    elevation: 10,
   },
 });
