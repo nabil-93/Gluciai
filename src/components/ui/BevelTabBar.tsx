@@ -29,14 +29,17 @@ import { useTabBarScroll } from './TabBarVisibility';
  * with labels.
  */
 
-// Frosted light glass, like Instagram's bar: a VERY thin translucent white
-// tint (~14% opacity) that lets a real backdrop blur do all the work — the
-// content behind the bar stays clearly visible but softly blurred. Icons
-// are near-black.
-const BAR_BG = 'rgba(255,255,255,0.14)';
-const PILL_BG = 'rgba(120,120,128,0.22)';
-const ICON_ACTIVE = '#17181A';
-const ICON_IDLE = 'rgba(23,24,26,0.85)';
+// True iOS-26 frosted glass. The look comes from a REAL backdrop blur of
+// the content behind the bar, plus a thin COOL tint (slightly blue-grey,
+// not pure white), a hairline white border and a very soft shadow. The
+// active tab is glass-in-glass (a second translucent capsule), never a
+// flat grey fill.
+const GLASS_TINT = 'rgba(244,247,255,0.18)'; // cool, low-opacity
+const PILL_BG = 'rgba(255,255,255,0.20)'; // glass capsule on the active tab
+const PILL_BORDER = 'rgba(255,255,255,0.35)';
+const BAR_BORDER = 'rgba(255,255,255,0.28)';
+const ICON_ACTIVE = '#1B1C1F';
+const ICON_IDLE = 'rgba(27,28,31,0.82)';
 /** Punch-through color for the journal book's text lines (reads as bar bg). */
 const LINE_COL = '#EDEDF0';
 /** 4 tabs + the + button = 5 equal columns, like the design's grid. */
@@ -174,7 +177,16 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
           { transform: [{ translateY: barShift }, { scale: barScale }] },
         ]}
       >
-        <BlurView intensity={70} tint="light" style={styles.blur}>
+        {/* Real backdrop blur of the content behind the bar. Intensity is
+            deliberately LOW so it doesn't add a heavy white wash — the blur
+            does the work, the cool tint below adds the glass color. */}
+        <BlurView
+          intensity={22}
+          tint="systemUltraThinMaterialLight"
+          style={styles.blur}
+        >
+        {/* Thin cool tint overlay (blue-grey) — this is the glass color. */}
+        <View pointerEvents="none" style={styles.tint} />
         <View
           style={styles.inner}
           onLayout={(e) => setInnerWidth(e.nativeEvent.layout.width - INNER_PAD * 2)}
@@ -256,31 +268,39 @@ const styles = StyleSheet.create({
   },
   bar: {
     borderRadius: 999,
-    // Translucent fallback under the blur — the glass tint itself.
-    backgroundColor: BAR_BG,
+    // No opaque fill — the BlurView is the glass. Just a VERY soft shadow
+    // for depth (point 5), plus a real web backdrop-filter with saturation
+    // so the blurred content stays vivid (point 1 & 3).
     ...Platform.select({
       web: {
-        boxShadow:
-          '0 12px 32px rgba(20,20,30,0.18), inset 0 1px 0 rgba(255,255,255,0.55)',
-        // Real backdrop blur (with -webkit- prefix for Safari/iOS): the
-        // content behind the bar is blurred, not just tinted.
-        backdropFilter: 'blur(30px) saturate(185%)',
-        WebkitBackdropFilter: 'blur(30px) saturate(185%)',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+        backdropFilter: 'blur(28px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(28px) saturate(180%)',
       },
       default: {
-        shadowColor: '#141420',
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.2,
-        shadowRadius: 24,
-        elevation: 14,
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 30,
+        elevation: 12,
       },
     }),
   },
   blur: {
     borderRadius: 999,
     overflow: 'hidden',
+    // Hairline white border — the glass rim (point 4).
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderColor: BAR_BORDER,
+  },
+  // Thin cool blue-grey tint over the blur — the glass color (point 2).
+  tint: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: GLASS_TINT,
   },
   inner: {
     flexDirection: 'row',
@@ -293,9 +313,12 @@ const styles = StyleSheet.create({
     top: 6,
     bottom: 6,
     left: 0,
-    // Less rounded than a full circle — a soft rounded-rect, like the ref.
-    borderRadius: 20,
+    // Glass-in-glass: a second translucent white capsule with its own faint
+    // white rim, not a flat grey fill (point 6).
+    borderRadius: 21,
     backgroundColor: PILL_BG,
+    borderWidth: 1,
+    borderColor: PILL_BORDER,
   },
   tab: {
     flex: 1,
