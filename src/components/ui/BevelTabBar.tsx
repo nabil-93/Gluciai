@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import Svg, { Line, Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -190,6 +191,39 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
         >
         {/* Thin cool tint overlay (blue-grey) — this is the glass color. */}
         <View pointerEvents="none" style={styles.tint} />
+
+        {/* ── Liquid-glass light layers (values from liquid-glass-studio) ──
+            All non-interactive overlays that fake refraction with light:
+            a diagonal glare at -45°, a top fresnel edge highlight, and a
+            faint bottom shade so the glass reads as a curved lens. */}
+        {/* Glare: bright diagonal sweep from top-left (glareAngle -45°). */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']}
+          locations={[0, 0.28, 0.6]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.7, y: 1 }}
+          style={styles.glare}
+        />
+        {/* Fresnel: bright top rim → the lit edge of the lens. */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
+          locations={[0, 0.4]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.fresnelTop}
+        />
+        {/* Bottom shade: a hint of depth on the lower half of the lens. */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(0,0,0,0)', 'rgba(20,22,30,0.08)']}
+          locations={[0.55, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.fresnelBottom}
+        />
+
         <View
           style={styles.inner}
           onLayout={(e) => setInnerWidth(e.nativeEvent.layout.width - INNER_PAD * 2)}
@@ -304,6 +338,30 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: GLASS_TINT,
+  },
+  // Diagonal glare sweep (glareAngle -45°, glareFactor 90%).
+  glare: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  // Fresnel top edge highlight (the lit rim of the lens).
+  fresnelTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 22,
+  },
+  // Soft depth shade on the lower half.
+  fresnelBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 26,
   },
   inner: {
     flexDirection: 'row',
