@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Line, Path } from 'react-native-svg';
+import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -28,12 +29,14 @@ import { useTabBarScroll } from './TabBarVisibility';
  * with labels.
  */
 
-const BAR_BG = 'rgba(31,34,38,0.97)';
-const PILL_BG = 'rgba(255,255,255,0.16)';
-const ICON_ACTIVE = '#FFFFFF';
-const ICON_IDLE = 'rgba(255,255,255,0.80)';
-/** Punch-through color for the journal book's text lines (matches bar bg). */
-const LINE_COL = '#1F2226';
+// Frosted light glass, like Instagram's bar: translucent white that blurs
+// the content behind it, with near-black icons.
+const BAR_BG = 'rgba(248,248,250,0.70)';
+const PILL_BG = 'rgba(120,120,128,0.20)';
+const ICON_ACTIVE = '#17181A';
+const ICON_IDLE = 'rgba(23,24,26,0.85)';
+/** Punch-through color for the journal book's text lines (reads as bar bg). */
+const LINE_COL = '#EDEDF0';
 /** 4 tabs + the + button = 5 equal columns, like the design's grid. */
 const COLS = 5;
 
@@ -160,6 +163,7 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
           { transform: [{ translateY: barShift }, { scale: barScale }] },
         ]}
       >
+        <BlurView intensity={45} tint="light" style={styles.blur}>
         <View
           style={styles.inner}
           onLayout={(e) => setInnerWidth(e.nativeEvent.layout.width - INNER_PAD * 2)}
@@ -228,6 +232,7 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
             </Pressable>
           </View>
         </View>
+        </BlurView>
       </Animated.View>
     </View>
   );
@@ -243,21 +248,28 @@ const styles = StyleSheet.create({
   },
   bar: {
     borderRadius: 999,
+    // Translucent fallback under the blur — the glass tint itself.
     backgroundColor: BAR_BG,
     ...Platform.select({
       web: {
         boxShadow:
-          '0 18px 40px rgba(10,12,16,0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
-        backdropFilter: 'blur(14px)',
+          '0 12px 32px rgba(20,20,30,0.18), inset 0 1px 0 rgba(255,255,255,0.55)',
+        backdropFilter: 'blur(18px)',
       },
       default: {
-        shadowColor: '#0A0C10',
-        shadowOffset: { width: 0, height: 14 },
-        shadowOpacity: 0.4,
-        shadowRadius: 26,
-        elevation: 16,
+        shadowColor: '#141420',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.2,
+        shadowRadius: 24,
+        elevation: 14,
       },
     }),
+  },
+  blur: {
+    borderRadius: 999,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
   },
   inner: {
     flexDirection: 'row',
