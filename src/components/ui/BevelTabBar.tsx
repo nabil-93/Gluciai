@@ -37,12 +37,14 @@ import { useTabBarScroll } from './TabBarVisibility';
 //   shadow     = soft, blurRadius ~12
 // A faint cool cast keeps it from reading pure white. The heavy lifting is
 // the real backdrop blur + saturation, not opacity.
-// Heavier blur reads as neutral grey-white (Instagram-style), not a tinted
-// window onto vivid colors — the blur itself does almost all the work here.
-const GLASS_TINT = 'rgba(245,246,250,0.38)'; // stronger neutral wash
-const PILL_BG = 'rgba(255,255,255,0.55)'; // near-opaque glass capsule
-const PILL_BORDER = 'rgba(255,255,255,0.7)';
-const BAR_BORDER = 'rgba(255,255,255,0.5)';
+// The heavier blur (below) already does the work of dissolving colors into
+// a soft wash — keep the tint itself LOW so the bar stays a transparent
+// window, not a painted white box. Too much tint here is what made 7b41643
+// look opaque/foggy instead of glassy.
+const GLASS_TINT = 'rgba(245,246,250,0.14)'; // thin neutral wash
+const PILL_BG = 'rgba(255,255,255,0.3)'; // glass-in-glass capsule
+const PILL_BORDER = 'rgba(255,255,255,0.45)';
+const BAR_BORDER = 'rgba(255,255,255,0.35)';
 const ICON_ACTIVE = '#1B1C1F';
 const ICON_IDLE = 'rgba(27,28,31,0.80)';
 /** Punch-through color for the journal book's text lines (reads as bar bg). */
@@ -187,8 +189,8 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
             stays clear — the tiny cool overlay below is the only extra
             color, exactly like the liquid_glass reference (~8.6% tint). */}
         <BlurView
-          intensity={80}
-          tint="light"
+          intensity={30}
+          tint="systemUltraThinMaterialLight"
           style={styles.blur}
         >
         {/* Thin cool tint overlay (blue-grey) — this is the glass color. */}
