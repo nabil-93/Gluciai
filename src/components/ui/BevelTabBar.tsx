@@ -29,17 +29,19 @@ import { useTabBarScroll } from './TabBarVisibility';
  * with labels.
  */
 
-// True iOS-26 frosted glass. The look comes from a REAL backdrop blur of
-// the content behind the bar, plus a thin COOL tint (slightly blue-grey,
-// not pure white), a hairline white border and a very soft shadow. The
-// active tab is glass-in-glass (a second translucent capsule), never a
-// flat grey fill.
-const GLASS_TINT = 'rgba(244,247,255,0.18)'; // cool, low-opacity
-const PILL_BG = 'rgba(255,255,255,0.20)'; // glass capsule on the active tab
-const PILL_BORDER = 'rgba(255,255,255,0.35)';
-const BAR_BORDER = 'rgba(255,255,255,0.28)';
+// True iOS-26 liquid glass — values mirror the `liquid_glass_easy` package:
+//   bar tint   = 0x16FFFFFF  → white @ ~8.6% (VERY thin; the blur does it all)
+//   pill tint  = 0x26FFFFFF  → white @ ~15%  (glass-in-glass capsule)
+//   border     = 0x1CFFFFFF  → white @ ~28%  (hairline glass rim)
+//   shadow     = soft, blurRadius ~12
+// A faint cool cast keeps it from reading pure white. The heavy lifting is
+// the real backdrop blur + saturation, not opacity.
+const GLASS_TINT = 'rgba(247,249,255,0.09)'; // ~9% cool white — barely there
+const PILL_BG = 'rgba(255,255,255,0.15)'; // active glass capsule (0x26)
+const PILL_BORDER = 'rgba(255,255,255,0.32)';
+const BAR_BORDER = 'rgba(255,255,255,0.28)'; // 0x1C
 const ICON_ACTIVE = '#1B1C1F';
-const ICON_IDLE = 'rgba(27,28,31,0.82)';
+const ICON_IDLE = 'rgba(27,28,31,0.80)';
 /** Punch-through color for the journal book's text lines (reads as bar bg). */
 const LINE_COL = '#EDEDF0';
 /** 4 tabs + the + button = 5 equal columns, like the design's grid. */
@@ -178,10 +180,11 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
         ]}
       >
         {/* Real backdrop blur of the content behind the bar. Intensity is
-            deliberately LOW so it doesn't add a heavy white wash — the blur
-            does the work, the cool tint below adds the glass color. */}
+            kept LOW (its own tint ≈ 15/100×0.44 ≈ 6.6% white) so the glass
+            stays clear — the tiny cool overlay below is the only extra
+            color, exactly like the liquid_glass reference (~8.6% tint). */}
         <BlurView
-          intensity={22}
+          intensity={15}
           tint="systemUltraThinMaterialLight"
           style={styles.blur}
         >
