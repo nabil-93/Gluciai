@@ -29,9 +29,10 @@ import { useTabBarScroll } from './TabBarVisibility';
  * with labels.
  */
 
-// Frosted light glass, like Instagram's bar: translucent white that blurs
-// the content behind it, with near-black icons.
-const BAR_BG = 'rgba(248,248,250,0.70)';
+// Frosted light glass, like Instagram's bar: a THIN translucent white tint
+// (~22% opacity) that lets a real backdrop blur do the work — the content
+// behind the bar stays visible but softly blurred. Icons are near-black.
+const BAR_BG = 'rgba(255,255,255,0.22)';
 const PILL_BG = 'rgba(120,120,128,0.20)';
 const ICON_ACTIVE = '#17181A';
 const ICON_IDLE = 'rgba(23,24,26,0.85)';
@@ -163,7 +164,7 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
           { transform: [{ translateY: barShift }, { scale: barScale }] },
         ]}
       >
-        <BlurView intensity={45} tint="light" style={styles.blur}>
+        <BlurView intensity={70} tint="light" style={styles.blur}>
         <View
           style={styles.inner}
           onLayout={(e) => setInnerWidth(e.nativeEvent.layout.width - INNER_PAD * 2)}
@@ -254,7 +255,10 @@ const styles = StyleSheet.create({
       web: {
         boxShadow:
           '0 12px 32px rgba(20,20,30,0.18), inset 0 1px 0 rgba(255,255,255,0.55)',
-        backdropFilter: 'blur(18px)',
+        // Real backdrop blur (with -webkit- prefix for Safari/iOS): the
+        // content behind the bar is blurred, not just tinted.
+        backdropFilter: 'blur(26px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(26px) saturate(180%)',
       },
       default: {
         shadowColor: '#141420',
