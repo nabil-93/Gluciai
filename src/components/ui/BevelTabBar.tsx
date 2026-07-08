@@ -29,11 +29,12 @@ import { useTabBarScroll } from './TabBarVisibility';
  * with labels.
  */
 
-// Frosted light glass, like Instagram's bar: a THIN translucent white tint
-// (~22% opacity) that lets a real backdrop blur do the work — the content
-// behind the bar stays visible but softly blurred. Icons are near-black.
-const BAR_BG = 'rgba(255,255,255,0.22)';
-const PILL_BG = 'rgba(120,120,128,0.20)';
+// Frosted light glass, like Instagram's bar: a VERY thin translucent white
+// tint (~14% opacity) that lets a real backdrop blur do all the work — the
+// content behind the bar stays clearly visible but softly blurred. Icons
+// are near-black.
+const BAR_BG = 'rgba(255,255,255,0.14)';
+const PILL_BG = 'rgba(120,120,128,0.22)';
 const ICON_ACTIVE = '#17181A';
 const ICON_IDLE = 'rgba(23,24,26,0.85)';
 /** Punch-through color for the journal book's text lines (reads as bar bg). */
@@ -101,6 +102,15 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
   const activeName = state.routes[state.index]?.name;
   const activeIndex = Math.max(0, TABS.findIndex((tb) => tb.name === activeName));
 
+  // `settled` = the bar has shrunk (scrolled down): labels are REMOVED from
+  // layout so the bar is physically shorter (icons only). It flips back the
+  // moment the user scrolls up, so the labels reappear as the bar grows.
+  const [settled, setSettled] = React.useState(false);
+  React.useEffect(() => {
+    const id = visible.addListener(({ value }) => setSettled(value < 0.5));
+    return () => visible.removeListener(id);
+  }, [visible]);
+
   const onPressTab = (key: string) => {
     const targetIndex = state.routes.findIndex((r) => r.name === key);
     if (targetIndex === -1) return;
@@ -122,8 +132,9 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
     router.push('/add-menu');
   };
 
-  // ── Sliding active pill (translucent white, like the design) ──
-  const INNER_PAD = 8;
+  // ── Sliding active pill (translucent grey, like the design) ──
+  // Must match styles.inner padding so the pill lines up with each column.
+  const INNER_PAD = 6;
   const [innerWidth, setInnerWidth] = React.useState(0);
   const colWidth = innerWidth > 0 ? innerWidth / COLS : 0;
   const pillX = useRef(new Animated.Value(0)).current;
@@ -141,17 +152,16 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
     }).start();
   }, [activeIndex, colWidth, pillX, rtl]);
 
-  // ── Settle-on-scroll: the whole bar shrinks a touch and the labels
-  //    fade away (icons only, Instagram-style). visible: 1 = full. ──
-  const barScale = visible.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] });
-  const barShift = visible.interpolate({ inputRange: [0, 1], outputRange: [10, 0] });
+  // ── Settle-on-scroll: on scroll-down the bar shrinks and sinks toward the
+  //    edge (native-driver spring, buttery). The labels are removed from
+  //    layout via `settled` (below) so the bar also gets physically shorter.
+  const barScale = visible.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] });
+  const barShift = visible.interpolate({ inputRange: [0, 1], outputRange: [14, 0] });
+  // Labels fade out slightly ahead of unmounting for a soft transition.
   const labelOpacity = visible.interpolate({
-    inputRange: [0, 0.6, 1],
+    inputRange: [0, 0.7, 1],
     outputRange: [0, 0, 1],
   });
-  // `visible` runs on the native driver, so layout props (height) are off
-  // limits — collapse the label visually with a scaleY transform instead.
-  const labelScaleY = visible.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] });
 
   return (
     <View
@@ -195,19 +205,16 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
                 accessibilityLabel={t(tab.labelKey)}
               >
                 <TabIcon name={tab.name} color={color} />
-                <Animated.Text
-                  numberOfLines={1}
-                  style={[
-                    styles.label,
-                    {
-                      color,
-                      opacity: labelOpacity,
-                      transform: [{ scaleY: labelScaleY }],
-                    },
-                  ]}
-                >
-                  {t(tab.labelKey)}
-                </Animated.Text>
+                {/* Labels are unmounted while settled so the bar physically
+                    shrinks to icons-only, and reappear as it grows back. */}
+                {!settled ? (
+                  <Animated.Text
+                    numberOfLines={1}
+                    style={[styles.label, { color, opacity: labelOpacity }]}
+                  >
+                    {t(tab.labelKey)}
+                  </Animated.Text>
+                ) : null}
               </Pressable>
             );
           })}
@@ -257,8 +264,8 @@ const styles = StyleSheet.create({
           '0 12px 32px rgba(20,20,30,0.18), inset 0 1px 0 rgba(255,255,255,0.55)',
         // Real backdrop blur (with -webkit- prefix for Safari/iOS): the
         // content behind the bar is blurred, not just tinted.
-        backdropFilter: 'blur(26px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(26px) saturate(180%)',
+        backdropFilter: 'blur(30px) saturate(185%)',
+        WebkitBackdropFilter: 'blur(30px) saturate(185%)',
       },
       default: {
         shadowColor: '#141420',
@@ -278,28 +285,29 @@ const styles = StyleSheet.create({
   inner: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
+    padding: 6,
     position: 'relative',
   },
   activePill: {
     position: 'absolute',
-    top: 8,
-    bottom: 8,
+    top: 6,
+    bottom: 6,
     left: 0,
-    borderRadius: 999,
+    // Less rounded than a full circle — a soft rounded-rect, like the ref.
+    borderRadius: 20,
     backgroundColor: PILL_BG,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 7,
+    paddingVertical: 6,
     gap: 2,
     minWidth: 0,
     zIndex: 1,
   },
   label: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: '700',
     overflow: 'hidden',
   },
