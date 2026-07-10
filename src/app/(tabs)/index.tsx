@@ -1323,10 +1323,14 @@ export default function HomeScreen() {
     setMetricPage(clamped);
     metricScrollRef.current?.scrollTo({ x: clamped * glyW, animated: true });
   };
+  // Update the active page live as the carousel scrolls (not only on
+  // momentum end) so the header title + dots always track the visible
+  // page — even on a fast flick or a partial drag.
   const onMetricScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (glyW <= 0) return;
     const i = Math.round(e.nativeEvent.contentOffset.x / glyW);
-    if (i !== metricPage) setMetricPage(i);
+    const clamped = Math.max(0, Math.min(2, i));
+    if (clamped !== metricPage) setMetricPage(clamped);
   };
 
   const carbBars = useMemo(
@@ -1709,7 +1713,11 @@ export default function HomeScreen() {
               ref={metricScrollRef}
               horizontal
               pagingEnabled
+              snapToInterval={glyW}
+              snapToAlignment="start"
+              disableIntervalMomentum
               showsHorizontalScrollIndicator={false}
+              onScroll={onMetricScroll}
               onMomentumScrollEnd={onMetricScroll}
               scrollEventThrottle={16}
               style={{ width: glyW, marginHorizontal: -20 }}
