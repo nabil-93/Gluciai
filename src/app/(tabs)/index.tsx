@@ -3,6 +3,8 @@ import {
   Animated,
   Easing,
   Image,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -70,6 +72,7 @@ const TYPE_KEY: Record<InsulinType, string> = {
 };
 
 const CARB_GOAL = 250;
+const INSULIN_GOAL = 40;
 
 function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
@@ -956,6 +959,293 @@ function GlyDayChart({
   );
 }
 
+/**
+ * Progress ring for the Glucides / Insuline pages — same skeuomorphic
+ * look as the glucose ring (degradé band + white face + reflection) but
+ * a single-hue fill that sweeps from 0% (top) clockwise to `frac`, with
+ * the rest of the band left faint grey.
+ */
+function ProgressRing({
+  value,
+  unit,
+  pale,
+  strong,
+  color,
+  label,
+  frac,
+  width = 216,
+  emptyText,
+  hasData,
+}: {
+  value: string;
+  unit: string;
+  pale: string;
+  strong: string;
+  color: string;
+  /** Pill label under the value (e.g. "62%") */
+  label: string;
+  /** 0..1 fill fraction */
+  frac: number;
+  width?: number;
+  emptyText?: string;
+  hasData: boolean;
+}) {
+  const VB = 280;
+  const H = 330;
+  const s = width / VB;
+  const cx = 140;
+  const cy = 140;
+  const R_RING = 128.5;
+  const RING_W = 23;
+  const pt = (deg: number, r: number) => ({
+    x: cx + r * Math.sin((deg * Math.PI) / 180),
+    y: cy - r * Math.cos((deg * Math.PI) / 180),
+  });
+  const SEGS = 72;
+  const STEP = 360 / SEGS;
+  const filledSegs = Math.round(frac * SEGS);
+  const segs = Array.from({ length: SEGS }, (_, i) => {
+    const a0 = i * STEP;
+    const p0 = pt(a0, R_RING);
+    const p1 = pt(a0 + STEP + 0.8, R_RING);
+    const on = i < filledSegs;
+    // Fill degradé: pale near the start, strong toward the end.
+    const t = filledSegs > 1 ? i / (filledSegs - 1) : 1;
+    return {
+      d: `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${R_RING} ${R_RING} 0 0 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`,
+      color: on ? mixHex(pale, strong, t) : '#e9edf2',
+    };
+  });
+  const knobDeg = Math.min(359, 360 * frac);
+  const knob = pt(knobDeg, R_RING);
+
+  return (
+    <View style={{ width, height: Math.round(H * s) }}>
+      <Svg width={width} height={Math.round(H * s)} viewBox={`0 0 ${VB} ${H}`}>
+        <Defs>
+          <RadialGradient id="pringFace" cx="50%" cy="35%" r="75%">
+            <Stop offset="0" stopColor="#ffffff" />
+            <Stop offset="1" stopColor="#f5faf6" />
+          </RadialGradient>
+          <RadialGradient id="pringFaceShadow" cx="50%" cy="50%" r="50%">
+            <Stop offset="0.82" stopColor="#28503a" stopOpacity="0.26" />
+            <Stop offset="1" stopColor="#28503a" stopOpacity="0" />
+          </RadialGradient>
+          <RadialGradient id="pringReflect" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={strong} stopOpacity="0.3" />
+            <Stop offset="0.72" stopColor={strong} stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        {segs.map((g, i) => (
+          <Path key={i} d={g.d} stroke={g.color} strokeWidth={RING_W} fill="none" />
+        ))}
+        <Circle cx={cx} cy={cy + 8} r={119} fill="url(#pringFaceShadow)" />
+        <Circle cx={cx} cy={cy} r={120} fill="url(#pringFace)" />
+        <Ellipse cx={cx} cy={287} rx={120} ry={19} fill="url(#pringReflect)" />
+        <Path
+          d={`M ${cx - 98} 288 A 98 15 0 0 1 ${cx + 98} 288`}
+          stroke="rgba(255,255,255,0.85)"
+          strokeWidth={2}
+          fill="none"
+        />
+        {hasData ? (
+          <>
+            <Circle cx={knob.x} cy={knob.y + 2} r={13.5} fill="rgba(0,0,0,0.14)" />
+            <Circle cx={knob.x} cy={knob.y} r={13} fill="#ffffff" />
+            <Circle cx={knob.x} cy={knob.y} r={6.5} fill={color} />
+          </>
+        ) : null}
+      </Svg>
+      <View
+        style={{
+          position: 'absolute',
+          left: 20 * s,
+          top: 20 * s,
+          width: 240 * s,
+          height: 240 * s,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {hasData ? (
+          <>
+            <Text style={[styles.gringValue, { fontSize: 58 * s, lineHeight: 62 * s }]}>
+              {value}
+            </Text>
+            <Text style={[styles.gringUnit, { fontSize: 20 * s }]}>{unit}</Text>
+            <View style={[styles.gringPill, { backgroundColor: color }]}>
+              <Text style={styles.gringPillText}>{label}</Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.gringDash} />
+            <Text style={[styles.gringUnit, { fontSize: 20 * s }]}>{unit}</Text>
+            {emptyText ? <Text style={styles.gringEmpty}>{emptyText}</Text> : null}
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Simple bar-chart body for the Glucides / Insuline pages: one bar per
+ * entry (meals or injections through the day), scaled to the day's max,
+ * in the metric's color. Empty → a faint "no data" line.
+ */
+function MetricBars({
+  bars,
+  color,
+  emptyText,
+}: {
+  bars: number[];
+  color: string;
+  emptyText: string;
+}) {
+  const max = bars.length ? Math.max(...bars, 1) : 1;
+  return (
+    <View style={styles.mBarsBox}>
+      {bars.length === 0 ? (
+        <Text style={styles.mBarsEmpty}>{emptyText}</Text>
+      ) : (
+        <View style={styles.mBarsRow}>
+          {bars.map((b, i) => (
+            <View key={i} style={styles.mBarSlot}>
+              <View
+                style={{
+                  width: '70%',
+                  maxWidth: 22,
+                  height: `${Math.max(6, (b / max) * 100)}%`,
+                  borderRadius: 6,
+                  backgroundColor: color,
+                }}
+              />
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Shared page body for the Glucides / Insuline carousel pages: ring +
+ * bar chart + status alert + a single-color progress slider (0 → goal,
+ * with a % bubble) + an add button. Same chrome as the glucose page.
+ */
+function MetricPageBody({
+  onPress,
+  onAdd,
+  ring,
+  bars,
+  alertColor,
+  alertBg,
+  alertIcon,
+  alertTitle,
+  alertDesc,
+  sliderColors,
+  frac,
+  leftLabel,
+  rightLabel,
+  addLabel,
+  hasData,
+}: {
+  onPress: () => void;
+  onAdd: () => void;
+  ring: React.ReactNode;
+  bars: React.ReactNode;
+  alertColor: string;
+  alertBg: string;
+  alertIcon: string;
+  alertTitle: string;
+  alertDesc: string;
+  sliderColors: [string, string, string];
+  frac: number;
+  leftLabel: string;
+  rightLabel: string;
+  addLabel: string;
+  hasData: boolean;
+}) {
+  return (
+    <Pressable onPress={onPress}>
+      <View style={styles.gringWrap}>{ring}</View>
+      {bars}
+      <View style={[styles.glyAlert, { backgroundColor: alertBg }]}>
+        <View style={[styles.glyAlertIcon, { backgroundColor: alertColor }]}>
+          <Text style={styles.glyAlertIconText}>{alertIcon}</Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.glyAlertTitle}>{alertTitle}</Text>
+          <Text style={styles.glyAlertDesc} numberOfLines={2}>
+            {alertDesc}
+          </Text>
+        </View>
+        <Text style={[styles.glyAlertChev, { color: alertColor }]}>›</Text>
+      </View>
+      <View style={[styles.glySliderCard, { paddingTop: hasData ? 46 : 18 }]}>
+        <View style={styles.glySliderRow}>
+          <Text style={[styles.glySliderEnd, { color: '#8aa693' }]}>
+            {leftLabel}
+          </Text>
+          <View style={styles.glySliderTrackWrap}>
+            <LinearGradient
+              colors={sliderColors}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.glySliderTrack}
+            />
+            {hasData ? (
+              <>
+                <View
+                  pointerEvents="none"
+                  style={[styles.glyBubbleWrap, { left: `${frac * 100}%` }]}
+                >
+                  <View style={[styles.glyBubble, { backgroundColor: alertColor }]}>
+                    <Text style={styles.glyBubbleText}>
+                      {Math.round(frac * 100)}%
+                    </Text>
+                  </View>
+                  <View
+                    style={[styles.glyBubbleArrow, { borderTopColor: alertColor }]}
+                  />
+                </View>
+                <View style={[styles.glySliderKnob, { left: `${frac * 100}%` }]}>
+                  <View
+                    style={[styles.glySliderKnobDot, { backgroundColor: alertColor }]}
+                  />
+                </View>
+              </>
+            ) : null}
+          </View>
+          <Text style={[styles.glySliderEnd, { color: '#8aa693' }]}>
+            {rightLabel}
+          </Text>
+        </View>
+        <View style={styles.glyScaleRow}>
+          {['0%', '25%', '50%', '75%', '100%'].map((l) => (
+            <Text key={l} style={styles.glyScaleLabel}>
+              {l}
+            </Text>
+          ))}
+        </View>
+      </View>
+      <Pressable style={styles.glyAddBtn} onPress={onAdd}>
+        <Svg width={13} height={13} viewBox="0 0 24 24">
+          <Path
+            d="M12 5v14M5 12h14"
+            stroke="#17a56d"
+            strokeWidth={2.6}
+            strokeLinecap="round"
+            fill="none"
+          />
+        </Svg>
+        <Text style={styles.glyAddText}>{addLabel}</Text>
+      </Pressable>
+    </Pressable>
+  );
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -1022,6 +1312,33 @@ export default function HomeScreen() {
       }),
     [todayGlucose]
   );
+
+  // ── Metric carousel (Glycémie · Glucides · Insuline) ──
+  // Swipeable pages inside the card; dots + arrows in the header let the
+  // user know there's more and jump between them.
+  const [metricPage, setMetricPage] = React.useState(0);
+  const metricScrollRef = useRef<ScrollView>(null);
+  const goToMetric = (i: number) => {
+    const clamped = Math.max(0, Math.min(2, i));
+    setMetricPage(clamped);
+    metricScrollRef.current?.scrollTo({ x: clamped * glyW, animated: true });
+  };
+  const onMetricScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (glyW <= 0) return;
+    const i = Math.round(e.nativeEvent.contentOffset.x / glyW);
+    if (i !== metricPage) setMetricPage(i);
+  };
+
+  const carbBars = useMemo(
+    () => todayMeals.map((m) => Math.max(0, m.result.carbohydrates)),
+    [todayMeals]
+  );
+  const insulinBars = useMemo(
+    () => todayInsulin.map((l) => Math.max(0, l.dose)),
+    [todayInsulin]
+  );
+  const carbFrac = Math.min(1, totalCarbs / CARB_GOAL);
+  const insulinFrac = Math.min(1, totalInsulin / INSULIN_GOAL);
 
   // Meals section: which day is shown, and whether the calendar popup is open.
   const [selectedDate, setSelectedDate] = React.useState(() => new Date());
@@ -1340,132 +1657,263 @@ export default function HomeScreen() {
           </Pressable>
         ) : null}
 
-        {/* ── Glycémie card ── */}
-        <Pressable
+        {/* ── Metric carousel card (Glycémie · Glucides · Insuline) ── */}
+        <View
           style={styles.glyCard}
-          onPress={() => router.push('/glucose')}
+          onLayout={(e) => setGlyW(e.nativeEvent.layout.width)}
         >
+          {/* Header: title of the active page + dots + prev/next arrows */}
           <View style={styles.glyHead}>
-            <Text style={styles.glyTitle}>{t('home.glycemia')}</Text>
-            <View style={styles.glyDetailsBtn}>
-              <Text style={styles.glyDetailsText}>{t('home.moreDetails')}</Text>
-              <View style={styles.glyDetailsChev}>
-                <Text style={styles.glyDetailsChevText}>›</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* ── Degradé ring gauge (gluci mockup) ── */}
-          <View
-            style={styles.gringWrap}
-            onLayout={(e) => setGlyW(e.nativeEvent.layout.width)}
-          >
-            <GlucoseRing
-              value={lastGlucose ? lastGlucose.value : null}
-              zone={glyZone}
-              zoneLabel={glyZone ? t(glyZone.labelKey) : ''}
-              frac={glySliderFrac}
-              width={glyRingW}
-              emptyText={t('home.noMeasureToday')}
-            />
-          </View>
-
-          {/* ── Day curve (00:00 → 24:00) ── */}
-          <GlyDayChart readings={dayReadings} low={low} high={high} />
-
-          {/* ── Alert row, tinted to the current zone ── */}
-          {glyZone ? (
-            <View style={[styles.glyAlert, { backgroundColor: glyZone.alertBg }]}>
-              <View style={[styles.glyAlertIcon, { backgroundColor: glyZone.color }]}>
-                <Text style={styles.glyAlertIconText}>{glyZone.icon}</Text>
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.glyAlertTitle}>{t(glyZone.alertTitleKey)}</Text>
-                <Text style={styles.glyAlertDesc} numberOfLines={2}>
-                  {t(glyZone.alertDescKey)}
-                </Text>
-              </View>
-              <Text style={[styles.glyAlertChev, { color: glyZone.color }]}>›</Text>
-            </View>
-          ) : null}
-
-          {/* ── Bas ↔ Haut gradient slider, % bubble riding the knob ── */}
-          <View
-            style={[styles.glySliderCard, { paddingTop: lastGlucose ? 46 : 18 }]}
-          >
-            <View style={styles.glySliderRow}>
-              <Text style={[styles.glySliderEnd, { color: '#3b82f6' }]}>
-                {t('home.glyLow')}
-              </Text>
-              <View style={styles.glySliderTrackWrap}>
-                <LinearGradient
-                  colors={['#3b82f6', '#2fb463', '#8fce5a', '#f4c534', '#f59e2b', '#ef4444']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.glySliderTrack}
-                />
-                {lastGlucose && glyZone ? (
-                  <>
+            <Text style={styles.glyTitle}>
+              {metricPage === 0
+                ? t('home.glycemia')
+                : metricPage === 1
+                  ? t('home.ringCarbs')
+                  : t('home.ringInsulin')}
+            </Text>
+            <View style={styles.metricNav}>
+              <Pressable
+                onPress={() => goToMetric(metricPage - 1)}
+                disabled={metricPage === 0}
+                hitSlop={8}
+                style={[styles.metricArrow, metricPage === 0 && styles.metricArrowOff]}
+              >
+                <Text style={styles.metricArrowText}>‹</Text>
+              </Pressable>
+              <View style={styles.metricDots}>
+                {[0, 1, 2].map((i) => (
+                  <Pressable key={i} onPress={() => goToMetric(i)} hitSlop={6}>
                     <View
-                      pointerEvents="none"
                       style={[
-                        styles.glyBubbleWrap,
-                        { left: `${glySliderFrac * 100}%` },
+                        styles.metricDot,
+                        i === metricPage && styles.metricDotOn,
                       ]}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable
+                onPress={() => goToMetric(metricPage + 1)}
+                disabled={metricPage === 2}
+                hitSlop={8}
+                style={[styles.metricArrow, metricPage === 2 && styles.metricArrowOff]}
+              >
+                <Text style={styles.metricArrowText}>›</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Swipeable pages — width matches the measured card */}
+          {glyW > 0 ? (
+            <ScrollView
+              ref={metricScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={onMetricScroll}
+              scrollEventThrottle={16}
+              style={{ width: glyW, marginHorizontal: -20 }}
+              contentContainerStyle={{ paddingHorizontal: 0 }}
+              decelerationRate="fast"
+            >
+              {/* PAGE 1 — Glycémie */}
+              <View style={{ width: glyW, paddingHorizontal: 20 }}>
+                <Pressable onPress={() => router.push('/glucose')}>
+                  <View style={styles.gringWrap}>
+                    <GlucoseRing
+                      value={lastGlucose ? lastGlucose.value : null}
+                      zone={glyZone}
+                      zoneLabel={glyZone ? t(glyZone.labelKey) : ''}
+                      frac={glySliderFrac}
+                      width={glyRingW}
+                      emptyText={t('home.noMeasureToday')}
+                    />
+                  </View>
+                  <GlyDayChart readings={dayReadings} low={low} high={high} />
+                  {glyZone ? (
+                    <View
+                      style={[styles.glyAlert, { backgroundColor: glyZone.alertBg }]}
                     >
                       <View
-                        style={[styles.glyBubble, { backgroundColor: glyZone.color }]}
+                        style={[styles.glyAlertIcon, { backgroundColor: glyZone.color }]}
                       >
-                        <Text style={styles.glyBubbleText}>
-                          {Math.round(glySliderFrac * 100)}%
+                        <Text style={styles.glyAlertIconText}>{glyZone.icon}</Text>
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.glyAlertTitle}>
+                          {t(glyZone.alertTitleKey)}
+                        </Text>
+                        <Text style={styles.glyAlertDesc} numberOfLines={2}>
+                          {t(glyZone.alertDescKey)}
                         </Text>
                       </View>
-                      <View
-                        style={[
-                          styles.glyBubbleArrow,
-                          { borderTopColor: glyZone.color },
-                        ]}
-                      />
+                      <Text style={[styles.glyAlertChev, { color: glyZone.color }]}>
+                        ›
+                      </Text>
                     </View>
-                    <View
-                      style={[
-                        styles.glySliderKnob,
-                        { left: `${glySliderFrac * 100}%` },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.glySliderKnobDot,
-                          { backgroundColor: glyZone.color },
-                        ]}
-                      />
+                  ) : null}
+                  <View
+                    style={[
+                      styles.glySliderCard,
+                      { paddingTop: lastGlucose ? 46 : 18 },
+                    ]}
+                  >
+                    <View style={styles.glySliderRow}>
+                      <Text style={[styles.glySliderEnd, { color: '#3b82f6' }]}>
+                        {t('home.glyLow')}
+                      </Text>
+                      <View style={styles.glySliderTrackWrap}>
+                        <LinearGradient
+                          colors={['#3b82f6', '#2fb463', '#8fce5a', '#f4c534', '#f59e2b', '#ef4444']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.glySliderTrack}
+                        />
+                        {lastGlucose && glyZone ? (
+                          <>
+                            <View
+                              pointerEvents="none"
+                              style={[
+                                styles.glyBubbleWrap,
+                                { left: `${glySliderFrac * 100}%` },
+                              ]}
+                            >
+                              <View
+                                style={[
+                                  styles.glyBubble,
+                                  { backgroundColor: glyZone.color },
+                                ]}
+                              >
+                                <Text style={styles.glyBubbleText}>
+                                  {Math.round(glySliderFrac * 100)}%
+                                </Text>
+                              </View>
+                              <View
+                                style={[
+                                  styles.glyBubbleArrow,
+                                  { borderTopColor: glyZone.color },
+                                ]}
+                              />
+                            </View>
+                            <View
+                              style={[
+                                styles.glySliderKnob,
+                                { left: `${glySliderFrac * 100}%` },
+                              ]}
+                            >
+                              <View
+                                style={[
+                                  styles.glySliderKnobDot,
+                                  { backgroundColor: glyZone.color },
+                                ]}
+                              />
+                            </View>
+                          </>
+                        ) : null}
+                      </View>
+                      <Text style={[styles.glySliderEnd, { color: '#ef4444' }]}>
+                        {t('home.glyHigh')}
+                      </Text>
                     </View>
-                  </>
-                ) : null}
+                    <View style={styles.glyScaleRow}>
+                      {['0%', '25%', '50%', '75%', '100%'].map((l) => (
+                        <Text key={l} style={styles.glyScaleLabel}>
+                          {l}
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.glyAddBtn}>
+                    <Svg width={13} height={13} viewBox="0 0 24 24">
+                      <Path d="M12 5v14M5 12h14" stroke="#17a56d" strokeWidth={2.6} strokeLinecap="round" fill="none" />
+                    </Svg>
+                    <Text style={styles.glyAddText}>{t('home.addMeasure')}</Text>
+                  </View>
+                </Pressable>
               </View>
-              <Text style={[styles.glySliderEnd, { color: '#ef4444' }]}>
-                {t('home.glyHigh')}
-              </Text>
-            </View>
-            <View style={styles.glyScaleRow}>
-              {['0%', '25%', '50%', '75%', '100%'].map((l) => (
-                <Text key={l} style={styles.glyScaleLabel}>
-                  {l}
-                </Text>
-              ))}
-            </View>
-          </View>
 
-          <Pressable
-            style={styles.glyAddBtn}
-            onPress={() => router.push('/log-glucose')}
-          >
-            <Svg width={13} height={13} viewBox="0 0 24 24">
-              <Path d="M12 5v14M5 12h14" stroke="#17a56d" strokeWidth={2.6} strokeLinecap="round" fill="none" />
-            </Svg>
-            <Text style={styles.glyAddText}>{t('home.addMeasure')}</Text>
-          </Pressable>
-        </Pressable>
+              {/* PAGE 2 — Glucides */}
+              <View style={{ width: glyW, paddingHorizontal: 20 }}>
+                <MetricPageBody
+                  onPress={() => router.push('/nutrition')}
+                  onAdd={() => router.push('/scan')}
+                  ring={
+                    <ProgressRing
+                      value={`${Math.round(totalCarbs)}`}
+                      unit="g"
+                      pale="#cdeed9"
+                      strong="#3fc873"
+                      color="#22b95e"
+                      label={`${Math.round(carbFrac * 100)}%`}
+                      frac={carbFrac}
+                      width={glyRingW}
+                      hasData={totalCarbs > 0}
+                      emptyText={t('home.noCarbsToday')}
+                    />
+                  }
+                  bars={
+                    <MetricBars
+                      bars={carbBars}
+                      color="#22b95e"
+                      emptyText={t('home.noCarbsToday')}
+                    />
+                  }
+                  alertColor="#22b95e"
+                  alertBg="rgba(63,200,115,0.14)"
+                  alertIcon={totalCarbs > 0 ? '✓' : 'i'}
+                  alertTitle={`${Math.round(totalCarbs)} g / ${CARB_GOAL} g`}
+                  alertDesc={t('home.carbsAlertDesc')}
+                  sliderColors={['#cdeed9', '#3fc873', '#22b95e']}
+                  frac={carbFrac}
+                  leftLabel="0"
+                  rightLabel={`${CARB_GOAL}`}
+                  addLabel={t('home.addMeal')}
+                  hasData={totalCarbs > 0}
+                />
+              </View>
+
+              {/* PAGE 3 — Insuline */}
+              <View style={{ width: glyW, paddingHorizontal: 20 }}>
+                <MetricPageBody
+                  onPress={() => router.push('/insulin')}
+                  onAdd={() => router.push('/log-insulin')}
+                  ring={
+                    <ProgressRing
+                      value={`${totalInsulin}`}
+                      unit="U"
+                      pale="#e6dcfb"
+                      strong="#9333ea"
+                      color="#8b3ff0"
+                      label={`${Math.round(insulinFrac * 100)}%`}
+                      frac={insulinFrac}
+                      width={glyRingW}
+                      hasData={totalInsulin > 0}
+                      emptyText={t('home.noInjectionToday')}
+                    />
+                  }
+                  bars={
+                    <MetricBars
+                      bars={insulinBars}
+                      color="#8b3ff0"
+                      emptyText={t('home.noInjectionToday')}
+                    />
+                  }
+                  alertColor="#8b3ff0"
+                  alertBg="rgba(139,63,240,0.12)"
+                  alertIcon={totalInsulin > 0 ? '✓' : 'i'}
+                  alertTitle={`${totalInsulin} U / ${INSULIN_GOAL} U`}
+                  alertDesc={t('home.insulinAlertDesc')}
+                  sliderColors={['#e6dcfb', '#a855f7', '#8b3ff0']}
+                  frac={insulinFrac}
+                  leftLabel="0"
+                  rightLabel={`${INSULIN_GOAL}`}
+                  addLabel={t('home.addInjection')}
+                  hasData={totalInsulin > 0}
+                />
+              </View>
+            </ScrollView>
+          ) : null}
+        </View>
 
         {/* ── Rings row (3 separate cards) ── */}
         <View style={styles.ringsRow}>
@@ -1936,6 +2384,59 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#3f6b4d',
     marginTop: -1,
+  },
+
+  /* Carousel nav (dots + arrows) */
+  metricNav: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  metricArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(120,190,140,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricArrowOff: { opacity: 0.35 },
+  metricArrowText: {
+    fontFamily: F700,
+    fontSize: 18,
+    lineHeight: 20,
+    color: '#3f6b4d',
+    marginTop: -2,
+  },
+  metricDots: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  metricDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#cfe0d4',
+  },
+  metricDotOn: {
+    width: 20,
+    backgroundColor: '#22b95e',
+  },
+
+  /* Metric bar chart (carbs / insulin pages) */
+  mBarsBox: { height: 90, justifyContent: 'flex-end', marginVertical: 4 },
+  mBarsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: '100%',
+    gap: 6,
+    paddingHorizontal: 2,
+  },
+  mBarSlot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: '100%',
+  },
+  mBarsEmpty: {
+    fontFamily: F600,
+    fontSize: 12.5,
+    color: '#a9bdb0',
+    textAlign: 'center',
+    paddingVertical: 34,
   },
   glyAddBtn: {
     marginTop: 4,
