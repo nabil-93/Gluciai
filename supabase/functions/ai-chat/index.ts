@@ -50,7 +50,9 @@ Deno.serve(async (req) => {
 - Use short paragraphs; simple bullet lists are OK.`;
 
     const systemPrompt = `You are GlucoAI, a diabetes education assistant.
-Answer ONLY in ${langName}.
+CRITICAL: Always answer in ${langName} — it is the language the patient
+chose in the app. Even if the user writes or speaks in another language,
+reply in ${langName} only.
 ${profileContext}
 Rules:
 - Never diagnose disease.
@@ -81,7 +83,10 @@ Rules:
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents,
           generationConfig: {
-            maxOutputTokens: mode === 'voice' ? 300 : 900,
+            // gemini-2.5-flash spends "thinking" tokens from the same
+            // budget — disable thinking so answers never get truncated.
+            thinkingConfig: { thinkingBudget: 0 },
+            maxOutputTokens: mode === 'voice' ? 500 : 1500,
             temperature: 0.6,
           },
         }),
