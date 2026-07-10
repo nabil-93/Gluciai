@@ -310,7 +310,9 @@ const DEMO_REPLIES: Record<string, string> = {
 export async function sendChatMessage(
   messages: { role: 'user' | 'assistant'; content: string }[],
   language: string,
-  profile: Profile | null
+  profile: Profile | null,
+  /** 'voice' asks Gemini for short spoken sentences (live call mode). */
+  mode: 'chat' | 'voice' = 'chat'
 ): Promise<string> {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
 
@@ -343,7 +345,7 @@ export async function sendChatMessage(
   }
 
   const { data, error } = await supabase.functions.invoke('ai-chat', {
-    body: { messages, language, profile },
+    body: { messages, language, profile, mode },
   });
   if (error) throw error;
   if (data.error) throw new Error(data.error);

@@ -1,11 +1,11 @@
-// Supabase Edge Function: diabetes education chat assistant.
+// Supabase Edge Function: diabetes education chat assistant (Gemini).
 // Deploy: supabase functions deploy ai-chat
-// Secrets: supabase secrets set OPENAI_API_KEY=sk-...
+// Secrets: supabase secrets set GEMINI_API_KEY=... (shared with analyze-meal)
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') ?? '';
-const MODEL = Deno.env.get('OPENAI_CHAT_MODEL') ?? 'gpt-4o-mini';
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
+const MODEL = Deno.env.get('GEMINI_CHAT_MODEL') ?? 'gemini-2.5-flash';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,15 +25,29 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { messages = [], language = 'en', profile = null } = await req.json();
-    if (!OPENAI_API_KEY) {
-      return json({ error: 'AI is not configured (missing OPENAI_API_KEY)' }, 500);
+    const {
+      messages = [],
+      language = 'en',
+      profile = null,
+      mode = 'chat',
+    } = await req.json();
+    if (!GEMINI_API_KEY) {
+      return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
     }
 
     const langName = LANGUAGE_NAMES[language] ?? 'English';
     const profileContext = profile
       ? `User context: diabetes type ${profile.diabetes_type}; target glucose ${profile.target_low}-${profile.target_high} mg/dL; carb ratio ${profile.carb_ratio ?? 'unknown'}; correction factor ${profile.correction_factor ?? 'unknown'}.`
       : 'No profile data available.';
+
+    // Voice calls need short, natural answers that text-to-speech can read.
+    const voiceRules =
+      mode === 'voice'
+        ? `
+- This is a live VOICE call: answer in 2-3 short spoken sentences maximum.
+- No markdown, no bullet lists, no emojis, no headings — plain speech only.`
+        : `
+- Use short paragraphs; simple bullet lists are OK.`;
 
     const systemPrompt = `You are GlucoAI, a diabetes education assistant.
 Answer ONLY in ${langName}.
@@ -43,23 +57,36 @@ Rules:
 - Never prescribe medication or insulin doses.
 - Explain uncertainty when data is estimated.
 - Recommend consulting healthcare professionals when appropriate.
-- Be warm, clear and concise. Use short paragraphs.`;
+- Be warm, clear and concise.${voiceRules}`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages.slice(-20),
-        ],
-        max_tokens: 800,
-      }),
-    });
+    // Map to Gemini roles; the conversation must start with a user turn.
+    const contents = (messages as { role: string; content: string }[])
+      .slice(-20)
+      .filter((m) => typeof m.content === 'string' && m.content.trim())
+      .map((m) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
+    while (contents.length && contents[0].role === 'model') contents.shift();
+    if (contents.length === 0) {
+      return json({ error: 'Empty conversation' }, 400);
+    }
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          generationConfig: {
+            maxOutputTokens: mode === 'voice' ? 300 : 900,
+            temperature: 0.6,
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
       const detail = await response.text();
@@ -67,7 +94,14 @@ Rules:
     }
 
     const data = await response.json();
-    return json({ reply: data.choices[0].message.content });
+    const reply = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((p: { text?: string }) => p.text ?? '')
+      .join('')
+      .trim();
+    if (!reply) {
+      return json({ error: 'Empty AI reply' }, 502);
+    }
+    return json({ reply });
   } catch (error) {
     return json({ error: String(error) }, 500);
   }

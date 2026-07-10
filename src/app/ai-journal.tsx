@@ -134,6 +134,34 @@ export default function AiJournalScreen() {
           </View>
         </View>
 
+        {/* ── Talk to the AI: chat + voice call ── */}
+        <View style={styles.aiActionsRow}>
+          <Pressable
+            style={styles.aiActionCard}
+            onPress={() => router.push('/ai-chat' as any)}
+          >
+            <View style={[styles.aiActionIcon, { backgroundColor: '#f3f0ff' }]}>
+              <Text style={{ fontSize: 17 }}>💬</Text>
+            </View>
+            <Text style={styles.aiActionTitle}>{t('notifications.chatCard')}</Text>
+            <Text style={styles.aiActionSub} numberOfLines={1}>
+              {t('notifications.chatCardSub')}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={styles.aiActionCard}
+            onPress={() => router.push('/ai-call' as any)}
+          >
+            <View style={[styles.aiActionIcon, { backgroundColor: '#e8f1fe' }]}>
+              <Text style={{ fontSize: 17 }}>📞</Text>
+            </View>
+            <Text style={styles.aiActionTitle}>{t('notifications.callCard')}</Text>
+            <Text style={styles.aiActionSub} numberOfLines={1}>
+              {t('notifications.callCardSub')}
+            </Text>
+          </Pressable>
+        </View>
+
         {/* Reminders due today — actionable, shown above the coach log */}
         {dueReminders.length > 0 ? (
           <View style={{ marginTop: 18 }}>
@@ -310,6 +338,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   statText: { fontFamily: F700, fontSize: 10.5 },
+
+  /* Chat / voice-call action cards */
+  aiActionsRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  aiActionCard: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    ...shadows.card,
+  },
+  aiActionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  aiActionTitle: { fontFamily: F700, fontSize: 13.5, color: '#111827' },
+  aiActionSub: { fontFamily: F500, fontSize: 11, color: '#8b93a7', marginTop: 2 },
 
   dayLabel: {
     fontFamily: F800,

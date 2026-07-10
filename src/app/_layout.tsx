@@ -110,6 +110,11 @@ export default function RootLayout() {
               name="ai-journal"
               options={{ presentation: 'modal' }}
             />
+            <Stack.Screen name="ai-chat" options={{ presentation: 'modal' }} />
+            <Stack.Screen
+              name="ai-call"
+              options={{ presentation: 'fullScreenModal' }}
+            />
             <Stack.Screen
               name="insight-detail"
               options={{ presentation: 'modal' }}
