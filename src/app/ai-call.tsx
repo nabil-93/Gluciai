@@ -15,7 +15,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft } from '@/components/ui';
 import { isRTL } from '@/i18n';
-import { sendChatMessage } from '@/services/ai';
+import { buildHealthContext, sendChatMessage } from '@/services/ai';
+import {
+  GeminiLiveSession,
+  LIVE_LANG_TAGS,
+  LIVE_MODELS,
+  MicStreamer,
+  PcmPlayer,
+  getLiveToken,
+} from '@/services/geminiLive';
 import { useAppStore } from '@/store/useAppStore';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -23,15 +31,28 @@ const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
-/* BCP-47 tags for speech recognition / synthesis per app language */
-const LANG_TAGS: Record<string, string> = {
+/* Classic fallback (SpeechRecognition) language tags */
+const SR_LANG_TAGS: Record<string, string> = {
   fr: 'fr-FR',
   de: 'de-DE',
   en: 'en-US',
   ar: 'ar-MA',
 };
 
-type CallStatus = 'listening' | 'thinking' | 'speaking' | 'muted' | 'unsupported';
+const LANGUAGE_NAMES: Record<string, string> = {
+  ar: 'Arabic',
+  fr: 'French',
+  de: 'German',
+  en: 'English',
+};
+
+type CallStatus =
+  | 'connecting'
+  | 'listening'
+  | 'thinking'
+  | 'speaking'
+  | 'muted'
+  | 'unsupported';
 
 /* ── Small SVG icons ── */
 function MicIcon({ off = false, color = '#3b4657' }: { off?: boolean; color?: string }) {
@@ -63,7 +84,6 @@ function PhoneDownIcon() {
       <Path
         d="M3.5 14.5c5-4.5 12-4.5 17 0l-2 3c-.6.9-1.8 1.2-2.8.7l-2-1a2 2 0 01-1.1-1.8v-1.2a13 13 0 00-5.2 0v1.2a2 2 0 01-1.1 1.8l-2 1c-1 .5-2.2.2-2.8-.7l-2-3z"
         fill="#ffffff"
-        transform="rotate(0 12 12)"
       />
     </Svg>
   );
@@ -142,7 +162,6 @@ function Waveform({ active }: { active: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // Center-heavy silhouette like the mockup
   const base = (i: number) => {
     const d = Math.abs(i - (N - 1) / 2) / ((N - 1) / 2);
     return 8 + (1 - d * d) * 22;
@@ -154,10 +173,7 @@ function Waveform({ active }: { active: boolean }) {
           key={i}
           style={[
             styles.waveBar,
-            {
-              height: base(i),
-              transform: [{ scaleY: vals[i % 5] }],
-            },
+            { height: base(i), transform: [{ scaleY: vals[i % 5] }] },
           ]}
         />
       ))}
@@ -172,31 +188,39 @@ export default function AiCallScreen() {
   const rtl = isRTL(i18n.language);
   const profile = useAppStore((s) => s.profile);
 
-  const [status, setStatus] = useState<CallStatus>('listening');
+  const [status, setStatus] = useState<CallStatus>('connecting');
   const [advice, setAdvice] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [micOn, setMicOn] = useState(true);
   const [speakerOn, setSpeakerOn] = useState(true);
 
-  const statusRef = useRef<CallStatus>('listening');
+  const statusRef = useRef<CallStatus>('connecting');
   const micOnRef = useRef(true);
   const speakerOnRef = useRef(true);
+  const endedRef = useRef(false);
+  const engineRef = useRef<'live' | 'classic' | null>(null);
+
+  // Live engine
+  const liveRef = useRef<GeminiLiveSession | null>(null);
+  const micRef = useRef<MicStreamer | null>(null);
+  const playerRef = useRef<PcmPlayer | null>(null);
+
+  // Classic engine (SpeechRecognition + TTS fallback)
   const recRef = useRef<any>(null);
   const historyRef = useRef<{ role: 'user' | 'assistant'; content: string }[]>([]);
-  const endedRef = useRef(false);
 
   const setStatusSafe = (s: CallStatus) => {
     statusRef.current = s;
     setStatus(s);
   };
 
-  const langTag = LANG_TAGS[i18n.language] ?? 'en-US';
-  const SR =
+  const langTag = SR_LANG_TAGS[i18n.language] ?? 'en-US';
+  const SRClass =
     Platform.OS === 'web' && typeof window !== 'undefined'
       ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
       : null;
-  const canVoice =
-    !!SR && typeof window !== 'undefined' && !!(window as any).speechSynthesis;
+  const canClassic =
+    !!SRClass && typeof window !== 'undefined' && !!(window as any).speechSynthesis;
 
   /* ── Call timer ── */
   useEffect(() => {
@@ -206,30 +230,125 @@ export default function AiCallScreen() {
   const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
   const ss = String(seconds % 60).padStart(2, '0');
 
-  /* ── Speech: listen → Gemini → speak → listen again ── */
-  const startListening = () => {
-    if (endedRef.current || !canVoice || !micOnRef.current) return;
+  /** System instruction shared by both engines: the patient's language +
+   *  full health snapshot + phone-call speaking style. */
+  const buildInstruction = () => {
+    const langName = LANGUAGE_NAMES[i18n.language] ?? 'English';
+    return `You are GlucoAI, the patient's personal diabetes assistant, on a LIVE PHONE CALL.
+LANGUAGE: always speak ${langName} (the app language). The patient may speak any
+language or dialect — French, German, English, Arabic or Moroccan Darija — you
+understand them all; never say you don't understand, never ask to switch language.
+STYLE: natural, warm, short spoken sentences (1-3 per turn), like a caring human
+on the phone. No lists, no markdown. It's OK to ask short follow-up questions.
+SAFETY: never diagnose or prescribe doses; suggest a professional when needed.
+PATIENT DATA (live from the app — use it to answer questions about meals,
+glucose, insulin, parameters):
+${buildHealthContext()}`;
+  };
+
+  /* ────────────── LIVE ENGINE (Gemini Live API) ────────────── */
+  const startLive = async (): Promise<boolean> => {
+    if (Platform.OS !== 'web') return false;
+    const token = await getLiveToken();
+    if (!token || endedRef.current) return false;
+
+    const player = new PcmPlayer();
+    playerRef.current = player;
+    player.onDrain = () => {
+      if (!endedRef.current && statusRef.current === 'speaking') {
+        setStatusSafe(micOnRef.current ? 'listening' : 'muted');
+      }
+    };
+
+    const session = new GeminiLiveSession({
+      onAudio: (chunk) => {
+        if (endedRef.current) return;
+        player.play(chunk);
+        if (statusRef.current !== 'speaking') setStatusSafe('speaking');
+      },
+      onText: (text) => setAdvice(text),
+      onInterrupted: () => {
+        player.clear();
+        if (!endedRef.current) {
+          setStatusSafe(micOnRef.current ? 'listening' : 'muted');
+        }
+      },
+      onTurnComplete: () => {
+        // Status flips back on player drain; nothing to do here.
+      },
+      onClose: () => {
+        // Connection dropped mid-call → seamlessly fall back to classic.
+        if (!endedRef.current && engineRef.current === 'live') {
+          cleanupLive();
+          if (canClassic) {
+            engineRef.current = 'classic';
+            startClassicLoop();
+          } else {
+            setStatusSafe('unsupported');
+          }
+        }
+      },
+    });
+    liveRef.current = session;
+
+    const instruction = buildInstruction();
+    const liveLang = LIVE_LANG_TAGS[i18n.language] ?? 'en-US';
+    for (const model of LIVE_MODELS) {
+      if (endedRef.current) return false;
+      try {
+        await session.connect(token, model, instruction, liveLang);
+        // Connected — start streaming the mic.
+        const mic = new MicStreamer();
+        micRef.current = mic;
+        await mic.start((b64) => session.sendAudio(b64));
+        mic.setMuted(!micOnRef.current);
+        if (!endedRef.current) {
+          setStatusSafe(micOnRef.current ? 'listening' : 'muted');
+        }
+        return true;
+      } catch {
+        // try the next model with the same token
+      }
+    }
+    cleanupLive();
+    return false;
+  };
+
+  const cleanupLive = () => {
+    try {
+      liveRef.current?.close();
+    } catch {}
+    try {
+      micRef.current?.stop();
+    } catch {}
+    try {
+      playerRef.current?.close();
+    } catch {}
+    liveRef.current = null;
+    micRef.current = null;
+    playerRef.current = null;
+  };
+
+  /* ────────────── CLASSIC ENGINE (STT → Gemini → TTS) ────────────── */
+  const startClassicListening = () => {
+    if (endedRef.current || !canClassic || !micOnRef.current) return;
     setStatusSafe('listening');
     try {
       if (!recRef.current) {
-        const rec = new SR();
+        const rec = new SRClass();
         rec.lang = langTag;
         rec.continuous = false;
         rec.interimResults = false;
         rec.onresult = (e: any) => {
           const text = e.results?.[0]?.[0]?.transcript?.trim();
-          if (text) handleUserSpeech(text);
+          if (text) handleClassicSpeech(text);
         };
         rec.onend = () => {
-          // Browsers stop after a silence — keep the mic open while the
-          // call is in listening state.
           if (!endedRef.current && statusRef.current === 'listening' && micOnRef.current) {
             setTimeout(() => {
               try {
                 recRef.current?.start();
-              } catch {
-                /* already started */
-              }
+              } catch {}
             }, 250);
           }
         };
@@ -237,21 +356,19 @@ export default function AiCallScreen() {
         recRef.current = rec;
       }
       recRef.current.start();
-    } catch {
-      /* start() throws if already running — fine */
-    }
+    } catch {}
   };
 
-  const stopListening = () => {
+  const stopClassicListening = () => {
     try {
       recRef.current?.stop();
     } catch {}
   };
 
-  const speak = (text: string) => {
+  const speakClassic = (text: string) => {
     if (endedRef.current) return;
-    if (!speakerOnRef.current || !canVoice) {
-      startListening();
+    if (!speakerOnRef.current || !canClassic) {
+      startClassicListening();
       return;
     }
     setStatusSafe('speaking');
@@ -261,16 +378,16 @@ export default function AiCallScreen() {
     u.lang = langTag;
     u.rate = 1;
     u.onend = () => {
-      if (!endedRef.current) startListening();
+      if (!endedRef.current) startClassicListening();
     };
     u.onerror = () => {
-      if (!endedRef.current) startListening();
+      if (!endedRef.current) startClassicListening();
     };
     synth.speak(u);
   };
 
-  const handleUserSpeech = async (text: string) => {
-    stopListening();
+  const handleClassicSpeech = async (text: string) => {
+    stopClassicListening();
     setStatusSafe('thinking');
     historyRef.current = [...historyRef.current, { role: 'user', content: text }];
     try {
@@ -285,59 +402,19 @@ export default function AiCallScreen() {
         { role: 'assistant', content: reply },
       ];
       setAdvice(reply);
-      speak(reply);
+      speakClassic(reply);
     } catch {
       setAdvice(t('common.error'));
-      startListening();
+      startClassicListening();
     }
   };
 
-  /* Start / cleanup */
-  useEffect(() => {
-    if (!canVoice) {
-      setStatusSafe('unsupported');
-      return;
-    }
-    startListening();
-    return () => {
-      endedRef.current = true;
-      try {
-        recRef.current?.abort?.();
-        recRef.current?.stop?.();
-      } catch {}
-      try {
-        (window as any).speechSynthesis?.cancel();
-      } catch {}
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const toggleMic = () => {
-    const next = !micOnRef.current;
-    micOnRef.current = next;
-    setMicOn(next);
-    if (!next) {
-      stopListening();
-      if (statusRef.current === 'listening') setStatusSafe('muted');
-    } else if (statusRef.current === 'muted') {
-      startListening();
-    }
+  const startClassicLoop = () => {
+    if (canClassic) startClassicListening();
+    else setStatusSafe('unsupported');
   };
 
-  const toggleSpeaker = () => {
-    const next = !speakerOnRef.current;
-    speakerOnRef.current = next;
-    setSpeakerOn(next);
-    if (!next && statusRef.current === 'speaking') {
-      try {
-        (window as any).speechSynthesis?.cancel();
-      } catch {}
-      startListening();
-    }
-  };
-
-  const endCall = () => {
-    endedRef.current = true;
+  const cleanupClassic = () => {
     try {
       recRef.current?.abort?.();
       recRef.current?.stop?.();
@@ -345,25 +422,107 @@ export default function AiCallScreen() {
     try {
       (window as any).speechSynthesis?.cancel();
     } catch {}
+    recRef.current = null;
+  };
+
+  /* ────────────── Boot: Live first, classic as fallback ────────────── */
+  useEffect(() => {
+    (async () => {
+      if (Platform.OS !== 'web') {
+        setStatusSafe('unsupported');
+        return;
+      }
+      setStatusSafe('connecting');
+      const liveOk = await startLive();
+      if (endedRef.current) return;
+      if (liveOk) {
+        engineRef.current = 'live';
+      } else if (canClassic) {
+        engineRef.current = 'classic';
+        startClassicLoop();
+      } else {
+        setStatusSafe('unsupported');
+      }
+    })();
+    return () => {
+      endedRef.current = true;
+      cleanupLive();
+      cleanupClassic();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ────────────── Controls ────────────── */
+  const toggleMic = () => {
+    const next = !micOnRef.current;
+    micOnRef.current = next;
+    setMicOn(next);
+    // iOS unlocks audio contexts on a user gesture — piggyback on the tap.
+    micRef.current?.resume();
+    playerRef.current?.resume();
+    if (engineRef.current === 'live') {
+      micRef.current?.setMuted(!next);
+      if (statusRef.current === 'listening' || statusRef.current === 'muted') {
+        setStatusSafe(next ? 'listening' : 'muted');
+      }
+    } else {
+      if (!next) {
+        stopClassicListening();
+        if (statusRef.current === 'listening') setStatusSafe('muted');
+      } else if (statusRef.current === 'muted') {
+        startClassicListening();
+      }
+    }
+  };
+
+  const toggleSpeaker = () => {
+    const next = !speakerOnRef.current;
+    speakerOnRef.current = next;
+    setSpeakerOn(next);
+    micRef.current?.resume();
+    playerRef.current?.resume();
+    if (engineRef.current === 'live') {
+      playerRef.current?.setMuted(!next);
+    } else if (!next && statusRef.current === 'speaking') {
+      try {
+        (window as any).speechSynthesis?.cancel();
+      } catch {}
+      startClassicListening();
+    }
+  };
+
+  const endCall = () => {
+    endedRef.current = true;
+    cleanupLive();
+    cleanupClassic();
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
   };
 
   const statusText =
-    status === 'listening'
-      ? t('call.listening')
-      : status === 'thinking'
-        ? t('call.thinking')
-        : status === 'speaking'
-          ? t('call.speaking')
-          : status === 'muted'
-            ? t('call.muted')
-            : t('call.unsupported');
+    status === 'connecting'
+      ? t('call.connecting')
+      : status === 'listening'
+        ? t('call.listening')
+        : status === 'thinking'
+          ? t('call.thinking')
+          : status === 'speaking'
+            ? t('call.speaking')
+            : status === 'muted'
+              ? t('call.muted')
+              : t('call.unsupported');
 
   const active = status === 'listening' || status === 'speaking';
 
   return (
-    <View style={styles.root}>
+    <View
+      style={styles.root}
+      // First touch anywhere unlocks the audio contexts on iOS Safari.
+      onTouchStart={() => {
+        micRef.current?.resume();
+        playerRef.current?.resume();
+      }}
+    >
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <Pressable onPress={endCall} style={styles.backBtn} hitSlop={8}>

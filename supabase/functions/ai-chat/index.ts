@@ -30,6 +30,7 @@ Deno.serve(async (req) => {
       language = 'en',
       profile = null,
       mode = 'chat',
+      healthData = '',
     } = await req.json();
     if (!GEMINI_API_KEY) {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
@@ -49,14 +50,26 @@ Deno.serve(async (req) => {
         : `
 - Use short paragraphs; simple bullet lists are OK.`;
 
-    const systemPrompt = `You are GlucoAI, a diabetes education assistant.
-CRITICAL: Always answer in ${langName} — it is the language the patient
-chose in the app. Even if the user writes or speaks in another language,
-reply in ${langName} only.
-${profileContext}
+    const systemPrompt = `You are GlucoAI, the patient's personal diabetes assistant inside the GlucoAI app.
+
+LANGUAGE RULES (critical):
+- The patient chose ${langName} in the app: ALWAYS answer in ${langName}.
+- The patient may write or speak in ANY language or dialect — French,
+  German, English, Arabic, or MOROCCAN DARIJA (often written in Latin
+  letters with numbers, e.g. "chno ban lik", "3lach", "wach", "dyali",
+  "bghit", "makla"). You understand ALL of them perfectly. NEVER say you
+  don't understand the language and NEVER ask them to reformulate in
+  another language — interpret it and answer in ${langName}.
+
+PATIENT DATA (live from the app — use it to personalize EVERY answer;
+when the patient asks "what did I eat", "how is my glucose", "how much
+insulin did I take", answer precisely from this data):
+${healthData || profileContext}
+
 Rules:
 - Never diagnose disease.
-- Never prescribe medication or insulin doses.
+- Never prescribe medication or insulin doses (you may recall what the
+  app's data shows was logged).
 - Explain uncertainty when data is estimated.
 - Recommend consulting healthcare professionals when appropriate.
 - Be warm, clear and concise.${voiceRules}`;

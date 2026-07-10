@@ -482,7 +482,8 @@
     "mute": "Mikro stumm",
     "end": "Anruf beenden",
     "speaker": "Lautsprecher",
-    "safety": "Dieser Anruf ist sicher und vertraulich. Die KI kann Fehler machen — konsultiere immer eine Fachperson."
+    "safety": "Dieser Anruf ist sicher und vertraulich. Die KI kann Fehler machen — konsultiere immer eine Fachperson.",
+    "connecting": "Verbindung…"
   },
   "history": {
     "title": "Verlauf",

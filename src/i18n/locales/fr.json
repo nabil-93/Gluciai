@@ -482,7 +482,8 @@
     "mute": "Couper le micro",
     "end": "Terminer l'appel",
     "speaker": "Haut-parleur",
-    "safety": "Cet appel est sécurisé et confidentiel. L'IA peut faire des erreurs, consultez toujours un professionnel."
+    "safety": "Cet appel est sécurisé et confidentiel. L'IA peut faire des erreurs, consultez toujours un professionnel.",
+    "connecting": "Connexion…"
   },
   "history": {
     "title": "Historique",

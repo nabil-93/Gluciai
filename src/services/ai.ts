@@ -1,5 +1,6 @@
 import { searchMoroccanFood } from '@/data/moroccanFoods';
 import { isDemoMode, supabase } from '@/lib/supabase';
+import { useAppStore } from '@/store/useAppStore';
 import type { FoodItemResult, NutritionResult, Profile } from '@/types';
 
 import { analyzePlate, resolveFood } from './nutrition/engine';
@@ -295,6 +296,138 @@ export async function analyzeMenu(
 
 /* ──────────────────────── AI CHAT ──────────────────────── */
 
+/**
+ * Snapshot of EVERYTHING the app knows about the patient, formatted for
+ * the assistant's system prompt: profile & therapy parameters, today's
+ * glucose readings, insulin doses, scanned meals, activity, and 7-day
+ * stats. Built from the local store so chat AND voice calls can
+ * personalize every answer ("what did I eat?", "how much insulin left?").
+ */
+export function buildHealthContext(): string {
+  const s = useAppStore.getState();
+  const { profile, glucoseLogs, insulinLogs, meals, activityLogs } = s;
+  const now = new Date();
+  const isToday = (iso: string) =>
+    new Date(iso).toDateString() === now.toDateString();
+  const time = (iso: string) =>
+    new Date(iso).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  const lines: string[] = [];
+
+  lines.push(`Now: ${now.toISOString()} (local ${now.toLocaleString('fr-FR')})`);
+
+  if (profile) {
+    const p = profile;
+    lines.push(
+      `Profile: name ${p.name || '?'}; diabetes ${p.diabetes_type}; ` +
+        `insulin types [${(p.insulin_types ?? []).join(', ') || 'none'}]; ` +
+        `target ${p.target_low}-${p.target_high} mg/dL; ` +
+        `carb ratio ${p.carb_ratio ?? '?'} g/U; correction ${p.correction_factor ?? '?'} mg/dL per U; ` +
+        `height ${p.height ?? '?'} cm; weight ${p.weight ?? '?'} kg; gender ${p.gender ?? '?'}.`
+    );
+  } else {
+    lines.push('Profile: not filled in yet.');
+  }
+
+  // Today's glucose readings
+  const todayG = glucoseLogs
+    .filter((g) => isToday(g.created_at))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  lines.push(
+    todayG.length
+      ? `Glucose today (${todayG.length}): ` +
+          todayG.map((g) => `${time(g.created_at)}→${g.value} mg/dL`).join(', ') +
+          `. Latest: ${todayG[todayG.length - 1].value} mg/dL.`
+      : 'Glucose today: no readings yet.'
+  );
+
+  // 7-day glucose stats
+  const weekAgo = now.getTime() - 7 * 24 * 3600 * 1000;
+  const weekG = glucoseLogs.filter(
+    (g) => new Date(g.created_at).getTime() >= weekAgo
+  );
+  if (weekG.length && profile) {
+    const vals = weekG.map((g) => g.value);
+    const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+    const inRange = weekG.filter(
+      (g) => g.value >= profile.target_low && g.value <= profile.target_high
+    ).length;
+    lines.push(
+      `Glucose 7 days: ${weekG.length} readings, avg ${avg} mg/dL, min ${Math.min(...vals)}, max ${Math.max(...vals)}, ${Math.round((inRange / weekG.length) * 100)}% in target.`
+    );
+  }
+
+  // Today's insulin
+  const todayI = insulinLogs
+    .filter((l) => isToday(l.created_at))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  lines.push(
+    todayI.length
+      ? `Insulin today (total ${todayI.reduce((s2, l) => s2 + l.dose, 0)} U): ` +
+          todayI
+            .map((l) => `${time(l.created_at)}→${l.dose} U ${l.insulin_type}`)
+            .join(', ') +
+          '.'
+      : 'Insulin today: no injections logged.'
+  );
+
+  // Today's meals (from the scanner)
+  const todayM = meals
+    .filter((m) => isToday(m.created_at))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  if (todayM.length) {
+    const total = todayM.reduce(
+      (acc, m) => ({
+        carbs: acc.carbs + m.result.carbohydrates,
+        kcal: acc.kcal + m.result.calories,
+      }),
+      { carbs: 0, kcal: 0 }
+    );
+    lines.push(
+      `Meals today (${todayM.length}, total ${Math.round(total.carbs)} g carbs / ${Math.round(total.kcal)} kcal): ` +
+        todayM
+          .map((m) => {
+            const foods = (m.result.items ?? [])
+              .map((f) => f.name)
+              .slice(0, 4)
+              .join(' + ');
+            return `${time(m.created_at)}→${foods || 'meal'} (${Math.round(m.result.carbohydrates)} g carbs, ${Math.round(m.result.calories)} kcal)`;
+          })
+          .join('; ') +
+        '.'
+    );
+  } else {
+    lines.push('Meals today: none scanned yet.');
+  }
+
+  // Recent meals (context for eating habits)
+  const recentM = meals
+    .filter((m) => !isToday(m.created_at))
+    .slice(0, 5)
+    .map((m) => {
+      const d = new Date(m.created_at);
+      const foods = (m.result.items ?? []).map((f) => f.name).slice(0, 3).join(' + ');
+      return `${d.toLocaleDateString('fr-FR')} ${foods || 'meal'} (${Math.round(m.result.carbohydrates)} g)`;
+    });
+  if (recentM.length) lines.push(`Previous meals: ${recentM.join('; ')}.`);
+
+  // Today's activity
+  const todayA = activityLogs.filter((a) => isToday(a.created_at));
+  lines.push(
+    todayA.length
+      ? `Activity today: ` +
+          todayA
+            .map((a) => `${a.kind} ${a.duration_min} min (${a.intensity})`)
+            .join(', ') +
+          '.'
+      : 'Activity today: none logged.'
+  );
+
+  return lines.join('\n');
+}
+
 const DEMO_REPLIES: Record<string, string> = {
   ar: 'هذا رد تجريبي. اربط Supabase ومفتاح الذكاء الاصطناعي للحصول على إجابات حقيقية مخصصة لك. تذكر دائمًا استشارة طبيبك في القرارات العلاجية.',
   fr: "Ceci est une réponse de démonstration. Connectez Supabase et la clé IA pour obtenir de vraies réponses personnalisées. Pensez toujours à consulter votre médecin pour les décisions médicales.",
@@ -345,7 +478,7 @@ export async function sendChatMessage(
   }
 
   const { data, error } = await supabase.functions.invoke('ai-chat', {
-    body: { messages, language, profile, mode },
+    body: { messages, language, profile, mode, healthData: buildHealthContext() },
   });
   if (error) throw error;
   if (data.error) throw new Error(data.error);
