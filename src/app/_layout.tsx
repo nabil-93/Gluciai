@@ -112,6 +112,10 @@ export default function RootLayout() {
             />
             <Stack.Screen name="ai-chat" options={{ presentation: 'modal' }} />
             <Stack.Screen
+              name="consent-detail"
+              options={{ presentation: 'modal' }}
+            />
+            <Stack.Screen
               name="ai-call"
               options={{ presentation: 'fullScreenModal' }}
             />

@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Image,
   Pressable,
   ScrollView,
@@ -16,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FadeInView } from '@/components/ui';
+import { CONSENT_IDS, CONSENT_META } from '@/data/consent';
 import { isRTL } from '@/i18n';
 import { saveProfile } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
@@ -37,6 +39,7 @@ const STEPS = [
   'target',
   'emergency',
   'doctor',
+  'consent',
   'finish',
 ] as const;
 
@@ -50,8 +53,10 @@ const HEROES: Record<(typeof STEPS)[number], any> = {
   target: require('../assets/nfss/il_s6.png'),
   emergency: require('../assets/nfss/il_s7.png'),
   doctor: require('../assets/nfss/il_s8.png'),
+  consent: require('../assets/nfss/il_s7.png'),
   finish: require('../assets/nfss/il_s9.png'),
 };
+
 
 /* ── Small green icons for input fields ── */
 function IconTile({ children }: { children: React.ReactNode }) {
@@ -204,6 +209,87 @@ function InfoBox({
   );
 }
 
+/* ── Consent card: icon + text + animated checkbox + "more details" ── */
+function ConsentCard({
+  icon,
+  bg,
+  accent,
+  title,
+  desc,
+  checked,
+  onToggle,
+  onDetails,
+  detailsLabel,
+}: {
+  icon: string;
+  bg: string;
+  accent: string;
+  title: string;
+  desc: string;
+  checked: boolean;
+  onToggle: () => void;
+  onDetails: () => void;
+  detailsLabel: string;
+}) {
+  const pop = useRef(new Animated.Value(checked ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.spring(pop, {
+      toValue: checked ? 1 : 0,
+      friction: 5,
+      tension: 220,
+      useNativeDriver: true,
+    }).start();
+  }, [checked, pop]);
+
+  return (
+    <Pressable
+      onPress={onToggle}
+      style={[styles.consentCard, checked && styles.consentCardOn]}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+    >
+      <View style={styles.consentTop}>
+        <View style={[styles.consentIcon, { backgroundColor: bg }]}>
+          <Text style={{ fontSize: 19 }}>{icon}</Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.consentTitle}>{title}</Text>
+          <Text style={styles.consentDesc}>{desc}</Text>
+        </View>
+        <View style={[styles.consentBox, checked && styles.consentBoxOn]}>
+          <Animated.View style={{ transform: [{ scale: pop }] }}>
+            <Svg width={15} height={15} viewBox="0 0 24 24">
+              <Path
+                d="M4 12.5l5 5L20 6.5"
+                stroke="#ffffff"
+                strokeWidth={3.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </Svg>
+          </Animated.View>
+        </View>
+      </View>
+      <Pressable onPress={onDetails} hitSlop={8} style={styles.consentMore}>
+        <Text style={[styles.consentMoreText, { color: accent }]}>
+          {detailsLabel}
+        </Text>
+        <Svg width={12} height={12} viewBox="0 0 24 24">
+          <Path
+            d="M9 6l6 6-6 6"
+            stroke={accent}
+            strokeWidth={2.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </Svg>
+      </Pressable>
+    </Pressable>
+  );
+}
+
 export default function WizardScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -212,6 +298,7 @@ export default function WizardScreen() {
   // Scale the hero to the viewport so title + fields + CTA stay visible.
   const heroH = Math.min(150, Math.round(winH * 0.17));
   const setWizardDone = useAppStore((s) => s.setWizardDone);
+  const setConsentAccepted = useAppStore((s) => s.setConsentAccepted);
 
   const [step, setStep] = useState(0);
   const [gender, setGender] = useState<'male' | 'female' | 'other'>();
@@ -226,10 +313,12 @@ export default function WizardScreen() {
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [doctorName, setDoctorName] = useState('');
+  const [consents, setConsents] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
 
   const key = STEPS[step];
   const usesInsulin = insulinTypes.length > 0;
+  const allConsented = CONSENT_IDS.every((id) => consents[id]);
 
   const canContinue = useMemo(() => {
     switch (key) {
@@ -237,10 +326,12 @@ export default function WizardScreen() {
         return !!diabetesType;
       case 'target':
         return Number(targetLow) > 0 && Number(targetHigh) > Number(targetLow);
+      case 'consent':
+        return allConsented;
       default:
         return true;
     }
-  }, [key, diabetesType, targetLow, targetHigh]);
+  }, [key, diabetesType, targetLow, targetHigh, allConsented]);
 
   const toggleInsulin = (type: InsulinType) => {
     setInsulinTypes((prev) =>
@@ -281,6 +372,7 @@ export default function WizardScreen() {
       await saveProfile(profile);
     } finally {
       setSaving(false);
+      setConsentAccepted(); // records the timestamp of the accepted terms
       setWizardDone();
       router.replace('/(tabs)');
     }
@@ -309,6 +401,7 @@ export default function WizardScreen() {
     target: { title: t('wizard.targetTitle'), sub: t('wizard.targetSub') },
     emergency: { title: t('wizard.emergencyTitle'), sub: t('wizard.emergencySub') },
     doctor: { title: t('wizard.doctorTitle'), sub: t('wizard.doctorSub') },
+    consent: { title: t('consent.stepTitle'), sub: t('consent.stepSub') },
     finish: { title: t('wizard.finishTitle'), sub: t('wizard.finishDesc') },
   };
 
@@ -604,6 +697,36 @@ export default function WizardScreen() {
             </>
           ) : null}
 
+          {/* ── CONSENT (GDPR-style, must all be ticked) ── */}
+          {key === 'consent' ? (
+            <View style={{ gap: 11, marginTop: 12 }}>
+              {CONSENT_IDS.map((id) => (
+                <ConsentCard
+                  key={id}
+                  icon={CONSENT_META[id].icon}
+                  bg={CONSENT_META[id].bg}
+                  accent={CONSENT_META[id].accent}
+                  title={t(`consent.${id}Title`)}
+                  desc={t(`consent.${id}Desc`)}
+                  checked={!!consents[id]}
+                  onToggle={() =>
+                    setConsents((c) => ({ ...c, [id]: !c[id] }))
+                  }
+                  onDetails={() =>
+                    router.push(`/consent-detail?id=${id}` as any)
+                  }
+                  detailsLabel={t('consent.moreDetails')}
+                />
+              ))}
+              <View style={styles.consentFooter}>
+                <ShieldCheck size={15} color="#1f9c6a" />
+                <Text style={styles.consentFooterText}>
+                  {t('consent.footer')}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
           <View style={{ height: 8 }} />
         </FadeInView>
       </ScrollView>
@@ -881,4 +1004,72 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   backText: { fontFamily: N700, fontSize: 14.5, color: '#7b8494' },
+
+  /* Consent step */
+  consentCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderRadius: 18,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    shadowColor: 'rgba(20,28,45,1)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  consentCardOn: { borderColor: '#1fbc78' },
+  consentTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
+  consentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  consentTitle: { fontFamily: N800, fontSize: 14.5, color: '#101a2b' },
+  consentDesc: {
+    fontFamily: N500,
+    fontSize: 12.5,
+    lineHeight: 17.5,
+    color: '#5f6b7a',
+    marginTop: 3,
+  },
+  consentBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#cfd5de',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  consentBoxOn: { backgroundColor: '#1fbc78', borderColor: '#1fbc78' },
+  consentMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginTop: 9,
+    marginLeft: 51,
+  },
+  consentMoreText: { fontFamily: N700, fontSize: 12.5 },
+  consentFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 6,
+    paddingHorizontal: 10,
+  },
+  consentFooterText: {
+    flex: 1,
+    fontFamily: N500,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: '#8a93a3',
+  },
 });

@@ -20,6 +20,8 @@ interface AppState {
   languageChosen: boolean;
   onboardingDone: boolean;
   wizardDone: boolean;
+  /** ISO timestamp the user accepted the terms/consent (account creation) */
+  consentAcceptedAt: string | null;
   // User
   profile: Profile | null;
   activityStatus: ActivityStatus;
@@ -40,6 +42,7 @@ interface AppState {
   setLanguageChosen: () => void;
   setOnboardingDone: () => void;
   setWizardDone: () => void;
+  setConsentAccepted: () => void;
   setProfile: (profile: Profile) => void;
   setActivityStatus: (status: ActivityStatus) => void;
 
@@ -67,6 +70,7 @@ const initialData = {
   languageChosen: false,
   onboardingDone: false,
   wizardDone: false,
+  consentAcceptedAt: null as string | null,
   profile: null,
   activityStatus: 'active' as ActivityStatus,
   glucoseLogs: [] as GlucoseLog[],
@@ -87,6 +91,8 @@ export const useAppStore = create<AppState>()(
       setLanguageChosen: () => set({ languageChosen: true }),
       setOnboardingDone: () => set({ onboardingDone: true }),
       setWizardDone: () => set({ wizardDone: true }),
+      setConsentAccepted: () =>
+        set({ consentAcceptedAt: new Date().toISOString() }),
       setProfile: (profile) => set({ profile }),
       setActivityStatus: (activityStatus) => set({ activityStatus }),
 
