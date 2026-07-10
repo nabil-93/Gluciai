@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -35,7 +35,6 @@ import type { ActivityStatus, InsulinType, MealScan } from '@/types';
 /* Official Claude Design assets — reused exactly, never redrawn */
 const CIRC_ACTIVITY = require('../../assets/claude/circ-activity.png');
 const CIRC_BOLUS = require('../../assets/claude/circ-bolus.png');
-const CHART_EMPTY = require('../../assets/claude/chart.png');
 const SPARK_STAR = require('../../assets/claude/spark-star.png');
 const CHIP_BRAIN = require('../../assets/claude/chip-brain.png');
 const SCAN_IMG = require('../../assets/claude/scanimg.png');
@@ -352,176 +351,6 @@ function AssistantCard({
   );
 }
 
-/**
- * Glucose chart as vertical "balcony" bars: one bar per reading, height
- * scaled to its value, colored green when in-range and red when not —
- * plus a left-hand mg/dL scale (200/150/100/50).
- */
-function GlucoseChart({
-  points,
-  axis,
-  low,
-  high,
-}: {
-  /** x01 = position 0..1 across the range */
-  points: { x01: number; value: number }[];
-  axis: string[];
-  low: number;
-  high: number;
-}) {
-  const H = 78;
-  const sorted = points.slice().sort((a, b) => a.x01 - b.x01);
-
-  // Scale the axis to the data itself — NOT the target range — so bars
-  // always use the full height. A single 80 mg/dL reading should fill
-  // most of the chart, not sit tiny against a scale stretched to 250
-  // just because the target range goes that high.
-  const values = sorted.map((p) => p.value);
-  const dataMax = values.length ? Math.max(...values) : 100;
-  const dataMin = values.length ? Math.min(...values) : 70;
-  const rawMax = dataMax * 1.15;
-  const rawMin = dataMin * 0.7;
-  // Pick a "nice" step (10/25/50/…) so we always land on ~4 gridlines,
-  // however wide or narrow the data's own range turns out to be.
-  const NICE_STEPS = [10, 25, 50, 100, 150, 200];
-  const span = Math.max(1, rawMax - rawMin);
-  const STEP =
-    NICE_STEPS.find((s) => span / s <= 4) ?? NICE_STEPS[NICE_STEPS.length - 1];
-  const SCALE_MAX = Math.ceil(rawMax / STEP) * STEP;
-  const SCALE_MIN = Math.max(0, Math.floor(rawMin / STEP) * STEP);
-  const SCALE_STEPS: number[] = [];
-  for (let s = SCALE_MAX; s > SCALE_MIN; s -= STEP) SCALE_STEPS.push(s);
-
-  const barH = (v: number) => {
-    const c = Math.max(SCALE_MIN, Math.min(SCALE_MAX, v));
-    return ((c - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * H;
-  };
-
-  return (
-    <View style={{ flex: 1 }}>
-      <View style={styles.glyChartRow}>
-        {/* Left mg/dL scale */}
-        <View style={styles.glyScale}>
-          {SCALE_STEPS.map((s) => (
-            <Text key={s} style={styles.glyScaleText}>
-              {s}
-            </Text>
-          ))}
-        </View>
-
-        {/* Bars */}
-        <View style={styles.glyBars}>
-          {/* Faint gridlines behind the bars, aligned with the scale */}
-          {SCALE_STEPS.map((s) => (
-            <View
-              key={s}
-              pointerEvents="none"
-              style={[
-                styles.glyGridline,
-                { bottom: barH(s) },
-              ]}
-            />
-          ))}
-          {sorted.map((p, i) => {
-            const inRange = p.value >= low && p.value <= high;
-            return (
-              <View key={i} style={styles.glyBarSlot}>
-                <View
-                  style={[
-                    styles.glyBar,
-                    {
-                      height: Math.max(4, barH(p.value)),
-                      backgroundColor: inRange ? '#19c37d' : '#ef4444',
-                    },
-                  ]}
-                />
-              </View>
-            );
-          })}
-        </View>
-      </View>
-      <View style={styles.glyAxis}>
-        {axis.map((t, i) => (
-          <Text key={`${t}-${i}`} style={styles.glyAxisText}>
-            {t}
-          </Text>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/**
- * Risk meter — a horizontal bar of ticks that fill green → yellow → red
- * with the glucose risk level, a bolt icon tinted to the current risk,
- * and the percentage. Same color logic as the rotary dials.
- */
-const RISK_TICKS = 42;
-/** Green (0) → amber → red (1) along the risk fraction. */
-function riskColor(f: number) {
-  // hue 140 (green) → 45 (amber) → 4 (red)
-  const hue = f < 0.5 ? 140 - (140 - 45) * (f / 0.5) : 45 - (45 - 4) * ((f - 0.5) / 0.5);
-  const sat = 78;
-  const lig = 46;
-  // reuse a compact HSL→rgb
-  const s = sat / 100;
-  const l = lig / 100;
-  const k = (n: number) => (n + hue / 30) % 12;
-  const a = s * Math.min(l, 1 - l);
-  const ch = (n: number) => {
-    const c = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-    return Math.round(255 * c);
-  };
-  return `rgb(${ch(0)}, ${ch(8)}, ${ch(4)})`;
-}
-
-function RiskBar({
-  risk,
-  avg,
-  label,
-}: {
-  /** 0..1 risk fraction */
-  risk: number;
-  /** average glucose (for the a11y label) */
-  avg: number;
-  label: string;
-}) {
-  const pct = Math.round(risk * 100);
-  const filled = Math.round(risk * RISK_TICKS);
-  const tint = riskColor(risk);
-  return (
-    <View
-      style={styles.riskBar}
-      accessibilityLabel={`${label}: ${pct}% · ${avg} mg/dL`}
-    >
-      {/* Bolt icon tinted to the risk level */}
-      <Svg width={18} height={18} viewBox="0 0 24 24">
-        <Path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill={tint} />
-      </Svg>
-      {/* Ticks */}
-      <View style={styles.riskTicks}>
-        {Array.from({ length: RISK_TICKS }).map((_, i) => {
-          const on = i < filled;
-          // Each lit tick uses the color at ITS position, so the bar itself
-          // shows the green→red gradient as it fills.
-          const c = on ? riskColor((i + 1) / RISK_TICKS) : '#e6e8ef';
-          return (
-            <View
-              key={i}
-              style={[
-                styles.riskTick,
-                { backgroundColor: c, opacity: on ? 1 : 0.7 },
-              ]}
-            />
-          );
-        })}
-      </View>
-      {/* Percentage */}
-      <Text style={[styles.riskPct, { color: tint }]}>{pct}%</Text>
-    </View>
-  );
-}
-
 /** One metric card: wide white card + Rotary Dial + labels. */
 function RingCard({
   progress,
@@ -760,6 +589,181 @@ function CalendarPopup({
   );
 }
 
+/* ── Glucose zones (mockup: Bas · Normal · Modéré · Très élevé) ──
+ * Anchored to the user's own target range (low/high) so the gauge stays
+ * consistent with the rest of the app. mg/dL throughout. */
+type GlyZone = {
+  key: 'low' | 'normal' | 'moderate' | 'high';
+  color: string;
+  labelKey: string;
+  tint: string;
+  alertBg: string;
+  icon: string;
+  alertTitleKey: string;
+  alertDescKey: string;
+};
+const GLY_ZONES: GlyZone[] = [
+  {
+    key: 'low',
+    color: '#3b82f6',
+    labelKey: 'home.glyLow',
+    tint: 'rgba(59,130,246,0.28)',
+    alertBg: 'rgba(211,229,255,0.55)',
+    icon: '!',
+    alertTitleKey: 'home.glyLowTitle',
+    alertDescKey: 'home.glyLowDesc',
+  },
+  {
+    key: 'normal',
+    color: '#22b95e',
+    labelKey: 'home.glyNormal',
+    tint: 'rgba(63,200,115,0.28)',
+    alertBg: 'rgba(63,200,115,0.14)',
+    icon: '✓',
+    alertTitleKey: 'home.glyNormalTitle',
+    alertDescKey: 'home.glyNormalDesc',
+  },
+  {
+    key: 'moderate',
+    color: '#f5b60a',
+    labelKey: 'home.glyModerate',
+    tint: 'rgba(246,188,28,0.3)',
+    alertBg: 'rgba(250,235,190,0.5)',
+    icon: '!',
+    alertTitleKey: 'home.glyModerateTitle',
+    alertDescKey: 'home.glyModerateDesc',
+  },
+  {
+    key: 'high',
+    color: '#ef4444',
+    labelKey: 'home.glyHighTitle',
+    tint: 'rgba(240,86,86,0.3)',
+    alertBg: 'rgba(252,215,215,0.55)',
+    icon: '!',
+    alertTitleKey: 'home.glyHighTitle',
+    alertDescKey: 'home.glyHighDesc',
+  },
+];
+
+/** Map a reading to its zone, using the user's target range. */
+function zoneFor(value: number, low: number, high: number): GlyZone {
+  if (value < low) return GLY_ZONES[0];
+  if (value <= high) return GLY_ZONES[1];
+  if (value <= high * 1.4) return GLY_ZONES[2];
+  return GLY_ZONES[3];
+}
+
+/**
+ * 0..1 position of a reading along the Bas→Haut slider. The target range
+ * (low..high) is centred in the green middle third; below low compresses
+ * toward 0 (Bas), above high stretches toward 1 (Haut, red).
+ */
+function sliderFrac(value: number, low: number, high: number): number {
+  const lo = low * 0.55; // 0% anchor (deep hypo)
+  const hi = high * 1.6; // 100% anchor (deep hyper)
+  return Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
+}
+
+/**
+ * Speedometer gauge — a 240° arc that fills grey→zone-color up to the
+ * reading, with the value + unit + status pill in the centre and a knob
+ * riding the arc at the reading's position. Faithful to the gluci mockup
+ * (circular degradé ring + knob), redrawn as an RN-SVG arc.
+ */
+function GlucoseGauge({
+  value,
+  zone,
+  zoneLabel,
+  frac,
+  size = 220,
+}: {
+  value: number | null;
+  zone: GlyZone | null;
+  /** Localized status label shown in the centre pill */
+  zoneLabel: string;
+  /** 0..1 fill fraction along the arc */
+  frac: number;
+  size?: number;
+}) {
+  const stroke = 18;
+  const r = (size - stroke) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const START = 150; // degrees — arc opens at the bottom
+  const SWEEP = 240;
+  const rad = (deg: number) => ((deg - 180) * Math.PI) / 180;
+  const pt = (deg: number) => ({
+    x: cx + r * Math.cos(rad(deg)),
+    y: cy + r * Math.sin(rad(deg)),
+  });
+  const arcPath = (fromDeg: number, toDeg: number) => {
+    const p1 = pt(fromDeg);
+    const p2 = pt(toDeg);
+    const large = toDeg - fromDeg > 180 ? 1 : 0;
+    return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  };
+  const endDeg = START + SWEEP * frac;
+  const knob = pt(endDeg);
+  const color = zone?.color ?? '#c7d0dc';
+
+  return (
+    <View style={{ width: size, height: size * 0.82, alignItems: 'center' }}>
+      <Svg width={size} height={size} style={{ position: 'absolute' }}>
+        <Defs>
+          <SvgGradient id="glyArc" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={color} stopOpacity={0.55} />
+            <Stop offset="1" stopColor={color} stopOpacity={1} />
+          </SvgGradient>
+        </Defs>
+        {/* Track */}
+        <Path
+          d={arcPath(START, START + SWEEP)}
+          stroke="#eef1f5"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          fill="none"
+        />
+        {/* Fill up to the reading */}
+        {value != null && frac > 0 ? (
+          <Path
+            d={arcPath(START, endDeg)}
+            stroke="url(#glyArc)"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            fill="none"
+          />
+        ) : null}
+        {/* Knob */}
+        {value != null ? (
+          <>
+            <Circle cx={knob.x} cy={knob.y} r={13} fill="#ffffff" />
+            <Circle cx={knob.x} cy={knob.y} r={6.5} fill={color} />
+          </>
+        ) : null}
+      </Svg>
+      {/* Centre readout */}
+      <View style={styles.gaugeCenter}>
+        {value != null ? (
+          <>
+            <Text style={styles.gaugeValue}>{value}</Text>
+            <Text style={styles.gaugeUnit}>mg/dL</Text>
+            {zone ? (
+              <View style={[styles.gaugePill, { backgroundColor: zone.color }]}>
+                <Text style={styles.gaugePillText}>{zoneLabel}</Text>
+              </View>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <View style={styles.gaugeDash} />
+            <Text style={styles.gaugeUnit}>mg/dL</Text>
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -816,82 +820,15 @@ export default function HomeScreen() {
         : { label: t('home.inRange'), color: '#16955f', bg: '#e9fbf2' }
     : null;
 
-  // ── Chart range: 1h (minutes) / day / 7 days ──
-  const [range, setRange] = React.useState<'1h' | 'day' | 'week'>('day');
+  // Gauge zone + slider position for the latest reading (gluci mockup).
+  const glyZone = lastGlucose ? zoneFor(lastGlucose.value, low, high) : null;
+  const glySliderFrac = lastGlucose ? sliderFrac(lastGlucose.value, low, high) : 0;
+  // The 240° arc fills proportionally to the same Bas→Haut scale.
+  const glyGaugeFrac = glySliderFrac;
 
   // Meals section: which day is shown, and whether the calendar popup is open.
   const [selectedDate, setSelectedDate] = React.useState(() => new Date());
   const [calendarOpen, setCalendarOpen] = React.useState(false);
-
-  const chart = useMemo(() => {
-    const now = Date.now();
-    if (range === '1h') {
-      const start = now - 3600 * 1000;
-      const pts = glucoseLogs
-        .filter((g) => new Date(g.created_at).getTime() >= start)
-        .map((g) => ({
-          x01: (new Date(g.created_at).getTime() - start) / 3600000,
-          value: g.value,
-        }));
-      // Axis: real clock times every 15 minutes
-      const axis = [0, 15, 30, 45, 60].map((m) =>
-        new Date(start + m * 60000).toLocaleTimeString('fr-FR', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      );
-      return { pts, axis };
-    }
-    if (range === 'week') {
-      const start = now - 7 * 24 * 3600 * 1000;
-      const pts = glucoseLogs
-        .filter((g) => new Date(g.created_at).getTime() >= start)
-        .map((g) => ({
-          x01: (new Date(g.created_at).getTime() - start) / (7 * 24 * 3600000),
-          value: g.value,
-        }));
-      const axis = [6, 4, 2, 0].map((d) => {
-        const dt = new Date(now - d * 24 * 3600 * 1000);
-        return dt.toLocaleDateString('fr-FR', { weekday: 'short' });
-      });
-      return { pts, axis };
-    }
-    // day (00:00 → 24:00)
-    const pts = todayGlucose.map((g) => {
-      const d = new Date(g.created_at);
-      return { x01: (d.getHours() * 60 + d.getMinutes()) / 1440, value: g.value };
-    });
-    return { pts, axis: ['00:00', '06:00', '12:00', '18:00', '24:00'] };
-  }, [range, glucoseLogs, todayGlucose]);
-
-  // Trend over the selected range (first vs last reading)
-  const trend = useMemo(() => {
-    if (chart.pts.length < 2) return null;
-    const sorted = chart.pts.slice().sort((a, b) => a.x01 - b.x01);
-    const delta = Math.round(
-      sorted[sorted.length - 1].value - sorted[0].value
-    );
-    if (Math.abs(delta) < 5) return { label: t('home.trendStable'), color: '#6b7280' };
-    return delta > 0
-      ? { label: `+${delta} mg/dL`, color: '#19c37d' }
-      : { label: `${delta} mg/dL`, color: '#19c37d' };
-  }, [chart.pts, t]);
-
-  // Risk gauge for the selected range: the AVERAGE glucose mapped to a
-  // 0..1 risk level. 0 = dead-centre of the target range (safest), rising
-  // as the mean drifts toward hypo/hyper. Recomputed when the range chip
-  // changes, so 1h / day / 7-day each show their own risk.
-  const glucoseRisk = useMemo(() => {
-    // No readings yet → show an empty bar (0%) rather than hiding it.
-    if (chart.pts.length === 0) return { avg: 0, risk: 0 };
-    const avg =
-      chart.pts.reduce((s, p) => s + p.value, 0) / chart.pts.length;
-    const mid = (low + high) / 2;
-    // Distance from the mid-target, normalized: reaching ~110 mg/dL away
-    // (e.g. mean of 235 with a 70–180 target) counts as full risk.
-    const risk = Math.max(0, Math.min(1, Math.abs(avg - mid) / 110));
-    return { avg: Math.round(avg), risk };
-  }, [chart.pts, low, high]);
 
   const insight = useMemo(
     () =>
@@ -1235,86 +1172,72 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Range selector + trend */}
-          <View style={styles.glyRangeRow}>
-            {(
-              [
-                { key: '1h', label: t('home.rangeHour') },
-                { key: 'day', label: t('home.rangeDay') },
-                { key: 'week', label: t('home.rangeWeek') },
-              ] as const
-            ).map((r) => (
-              <Pressable
-                key={r.key}
-                onPress={() => setRange(r.key)}
-                style={[
-                  styles.glyRangeChip,
-                  range === r.key && styles.glyRangeChipOn,
-                ]}
-                hitSlop={4}
-              >
-                <Text
-                  style={[
-                    styles.glyRangeText,
-                    range === r.key && styles.glyRangeTextOn,
-                  ]}
-                >
-                  {r.label}
-                </Text>
-              </Pressable>
-            ))}
-            {trend ? (
-              <Text style={[styles.glyTrend, { color: trend.color }]}>
-                {trend.label}
-              </Text>
-            ) : null}
+          {/* ── Speedometer gauge (gluci mockup) ── */}
+          <View style={styles.gaugeWrap}>
+            <GlucoseGauge
+              value={lastGlucose ? lastGlucose.value : null}
+              zone={glyZone}
+              zoneLabel={glyZone ? t(glyZone.labelKey) : ''}
+              frac={glyGaugeFrac}
+              size={210}
+            />
           </View>
+          {!lastGlucose ? (
+            <Text style={styles.gaugeEmptyText}>
+              {t('home.noMeasureToday')}
+            </Text>
+          ) : null}
 
-          <View style={styles.glyBody}>
-            <View style={styles.glyLeft}>
-              {lastGlucose ? (
-                <>
-                  <Text style={styles.glyValue}>{lastGlucose.value}</Text>
-                  <Text style={styles.glyUnit}>mg/dL</Text>
-                </>
-              ) : (
-                <>
-                  <View style={styles.glyUnitRow}>
-                    <View style={styles.glyDash} />
-                    <Text style={styles.glyUnit}>mg/dL</Text>
-                  </View>
-                  <Text style={styles.glyEmptyText}>
-                    {t('home.noMeasureToday')}
-                  </Text>
-                </>
-              )}
-            </View>
-            {chart.pts.length > 0 ? (
-              <GlucoseChart
-                points={chart.pts}
-                axis={chart.axis}
-                low={low}
-                high={high}
-              />
-            ) : todayGlucose.length === 0 && range === 'day' ? (
-              <Image source={CHART_EMPTY} style={styles.glyChartImg} resizeMode="contain" />
-            ) : (
-              <View style={styles.glyNoData}>
-                <Text style={styles.glyNoDataText}>
-                  {t('home.noMeasurePeriod')}
+          {/* ── Alert row, tinted to the current zone ── */}
+          {glyZone ? (
+            <View style={[styles.glyAlert, { backgroundColor: glyZone.alertBg }]}>
+              <View style={[styles.glyAlertIcon, { backgroundColor: glyZone.color }]}>
+                <Text style={styles.glyAlertIconText}>{glyZone.icon}</Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.glyAlertTitle}>{t(glyZone.alertTitleKey)}</Text>
+                <Text style={styles.glyAlertDesc} numberOfLines={2}>
+                  {t(glyZone.alertDescKey)}
                 </Text>
               </View>
-            )}
-          </View>
-
-          {/* Risk meter for the selected range's average glucose */}
-          {glucoseRisk ? (
-            <RiskBar
-              risk={glucoseRisk.risk}
-              avg={glucoseRisk.avg}
-              label={t('home.riskLabel')}
-            />
+              <ChevRight size={16} color={glyZone.color} />
+            </View>
           ) : null}
+
+          {/* ── Bas ↔ Haut gradient slider ── */}
+          <View style={styles.glySliderCard}>
+            <View style={styles.glySliderRow}>
+              <Text style={[styles.glySliderEnd, { color: '#3b82f6' }]}>
+                {t('home.glyLow')}
+              </Text>
+              <View style={styles.glySliderTrackWrap}>
+                <LinearGradient
+                  colors={['#3b82f6', '#2fb463', '#8fce5a', '#f4c534', '#f59e2b', '#ef4444']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.glySliderTrack}
+                />
+                {lastGlucose ? (
+                  <View
+                    style={[
+                      styles.glySliderKnob,
+                      { left: `${glySliderFrac * 100}%` },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.glySliderKnobDot,
+                        { backgroundColor: glyZone?.color ?? '#111827' },
+                      ]}
+                    />
+                  </View>
+                ) : null}
+              </View>
+              <Text style={[styles.glySliderEnd, { color: '#ef4444' }]}>
+                {t('home.glyHigh')}
+              </Text>
+            </View>
+          </View>
 
           <Pressable
             style={styles.glyAddBtn}
@@ -1782,110 +1705,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   glyBadgeText: { fontFamily: F600, fontSize: 11.5, color: '#6b7280' },
-  glyBody: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    minHeight: 98,
-  },
-  glyLeft: { width: 116 },
-  glyValue: {
-    fontFamily: F800,
-    fontSize: 34,
-    letterSpacing: -0.5,
-    color: '#111827',
-  },
-  glyUnitRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  glyDash: {
-    width: 30,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#111827',
-  },
-  glyUnit: { fontFamily: F600, fontSize: 12.5, color: '#6b7280' },
-  glyEmptyText: {
-    fontFamily: F600,
-    fontSize: 13.5,
-    color: '#6b7280',
-    lineHeight: 19.5,
-    marginTop: 10,
-  },
-  glyChart: { flex: 1 },
-  glyChartImg: { flex: 1, height: 98 },
-  glyChartRow: { flexDirection: 'row', height: 78 },
-  glyScale: {
-    justifyContent: 'space-between',
-    paddingRight: 6,
-    paddingBottom: 1,
-  },
-  glyScaleText: {
-    fontFamily: F600,
-    fontSize: 8.5,
-    color: '#9CA3AF',
-    fontVariant: ['tabular-nums'],
-  },
-  glyBars: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-evenly',
-    gap: 3,
-  },
-  glyGridline: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: '#eef0f5',
-  },
-  glyBarSlot: {
-    flex: 1,
-    maxWidth: 14,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    height: '100%',
-  },
-  glyBar: {
-    width: '100%',
-    borderRadius: 4,
-  },
-  glyAxis: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 5,
-    paddingRight: 2,
-  },
-  glyAxisText: { fontFamily: F600, fontSize: 9.5, color: '#9CA3AF' },
-  glyRangeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 10,
-  },
-  glyRangeChip: {
-    borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    backgroundColor: '#f1f2f8',
-  },
-  glyRangeChipOn: { backgroundColor: '#19c37d' },
-  glyRangeText: { fontFamily: F700, fontSize: 11, color: '#6b7280' },
-  glyRangeTextOn: { color: '#ffffff' },
-  glyTrend: {
-    fontFamily: F800,
-    fontSize: 12,
-    marginLeft: 'auto',
-  },
-  glyNoData: {
-    flex: 1,
-    height: 78,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glyNoDataText: { fontFamily: F600, fontSize: 11.5, color: '#9CA3AF' },
   glyAddBtn: {
-    marginTop: 10,
-    height: 32,
+    marginTop: 4,
+    height: 44,
     backgroundColor: '#e8f8f0',
     borderRadius: 16,
     flexDirection: 'row',
@@ -1893,40 +1715,106 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 9,
   },
-  glyAddText: { fontFamily: F700, fontSize: 13, color: '#17a56d' },
+  glyAddText: { fontFamily: F700, fontSize: 14, color: '#17a56d' },
 
-  /* Risk meter bar */
-  riskBar: {
-    marginTop: 12,
-    height: 44,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    flexDirection: 'row',
+  /* Speedometer gauge */
+  gaugeWrap: { alignItems: 'center', marginTop: 10, marginBottom: 2 },
+  gaugeCenter: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#f0f1f6',
+    justifyContent: 'center',
   },
-  riskTicks: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    height: 22,
-  },
-  riskTick: {
-    flex: 1,
-    height: '100%',
-    borderRadius: 1.5,
-  },
-  riskPct: {
+  gaugeValue: {
     fontFamily: F800,
-    fontSize: 15,
-    minWidth: 34,
-    textAlign: 'right',
-    fontVariant: ['tabular-nums'],
+    fontSize: 52,
+    lineHeight: 54,
+    letterSpacing: -1,
+    color: '#111827',
   },
+  gaugeUnit: { fontFamily: F600, fontSize: 15, color: '#8b93a7', marginTop: 2 },
+  gaugeDash: {
+    width: 34,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#c7d0dc',
+    marginBottom: 6,
+  },
+  gaugePill: {
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+  },
+  gaugePillText: { fontFamily: F700, fontSize: 13, color: '#ffffff' },
+  gaugeEmptyText: {
+    fontFamily: F600,
+    fontSize: 13,
+    color: '#8b93a7',
+    textAlign: 'center',
+    marginTop: -6,
+    marginBottom: 6,
+  },
+
+  /* Alert row */
+  glyAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    borderRadius: 18,
+    padding: 13,
+    marginTop: 8,
+  },
+  glyAlertIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glyAlertIconText: { fontFamily: F800, fontSize: 18, color: '#ffffff' },
+  glyAlertTitle: { fontFamily: F700, fontSize: 15, color: '#1c3326' },
+  glyAlertDesc: {
+    fontFamily: F500,
+    fontSize: 12.5,
+    color: '#6f8a78',
+    marginTop: 2,
+    lineHeight: 17,
+  },
+
+  /* Bas ↔ Haut gradient slider */
+  glySliderCard: {
+    backgroundColor: '#f7f9fb',
+    borderRadius: 18,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    marginTop: 10,
+  },
+  glySliderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  glySliderEnd: { fontFamily: F700, fontSize: 14 },
+  glySliderTrackWrap: { flex: 1, height: 14, justifyContent: 'center' },
+  glySliderTrack: { height: 10, borderRadius: 5 },
+  glySliderKnob: {
+    position: 'absolute',
+    top: '50%',
+    width: 22,
+    height: 22,
+    marginLeft: -11,
+    marginTop: -11,
+    borderRadius: 11,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: 'rgba(0,0,0,0.25)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  glySliderKnobDot: { width: 11, height: 11, borderRadius: 6 },
 
   /* Rings */
   ringsRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
