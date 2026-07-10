@@ -24,7 +24,7 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -1252,18 +1252,62 @@ export default function HomeScreen() {
   // user know there's more and jump between them.
   const [metricPage, setMetricPage] = React.useState(0);
   const metricScrollRef = useRef<ScrollView>(null);
+  // Live mirrors for the restore callbacks below — state values would go
+  // stale inside useFocusEffect closures.
+  const metricPageRef = useRef(0);
+  const glyWRef = useRef(0);
+  // Accept scroll events only while the screen is focused AND the offset
+  // has been restored. A screen hidden behind a pushed route (display:none
+  // on web) silently resets scrollLeft to 0; that phantom position must
+  // never clobber the active page.
+  const metricFocusedRef = useRef(false);
+
+  /** Re-apply the active page's scroll offset (no-op if width unknown). */
+  const snapMetric = React.useCallback((animated: boolean) => {
+    if (glyWRef.current > 0) {
+      metricScrollRef.current?.scrollTo({
+        x: metricPageRef.current * glyWRef.current,
+        animated,
+      });
+    }
+  }, []);
+
+  // THE FIX for "added an entry but the card still shows another page":
+  // navigating to a log screen hides this screen; on web the hidden
+  // ScrollView loses its scrollLeft (browser resets it to 0 without any
+  // scroll event). Coming back, the carousel displayed page 1 while the
+  // header/dots still said page 3. Restore the offset on every focus.
+  useFocusEffect(
+    React.useCallback(() => {
+      let raf2 = 0;
+      const raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => {
+          snapMetric(false);
+          metricFocusedRef.current = true;
+        });
+      });
+      return () => {
+        metricFocusedRef.current = false;
+        cancelAnimationFrame(raf1);
+        cancelAnimationFrame(raf2);
+      };
+    }, [snapMetric])
+  );
+
   const goToMetric = (i: number) => {
     const clamped = Math.max(0, Math.min(2, i));
     setMetricPage(clamped);
+    metricPageRef.current = clamped;
     metricScrollRef.current?.scrollTo({ x: clamped * glyW, animated: true });
   };
   // Update the active page live as the carousel scrolls (not only on
   // momentum end) so the header title + dots always track the visible
   // page — even on a fast flick or a partial drag.
   const onMetricScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (glyW <= 0) return;
+    if (!metricFocusedRef.current || glyW <= 0) return;
     const i = Math.round(e.nativeEvent.contentOffset.x / glyW);
     const clamped = Math.max(0, Math.min(2, i));
+    metricPageRef.current = clamped;
     if (clamped !== metricPage) setMetricPage(clamped);
   };
 
@@ -1626,7 +1670,14 @@ export default function HomeScreen() {
         {/* ── Metric carousel card (Glycémie · Glucides · Insuline) ── */}
         <View
           style={styles.glyCard}
-          onLayout={(e) => setGlyW(e.nativeEvent.layout.width)}
+          onLayout={(e) => {
+            const w = e.nativeEvent.layout.width;
+            glyWRef.current = w;
+            setGlyW(w);
+            // Re-measured (e.g. shown again after being hidden): re-apply
+            // the active page's offset once the new width is committed.
+            requestAnimationFrame(() => snapMetric(false));
+          }}
         >
           {/* Header: title of the active page + dots + prev/next arrows */}
           <View style={styles.glyHead}>
@@ -1681,6 +1732,7 @@ export default function HomeScreen() {
               showsHorizontalScrollIndicator={false}
               onScroll={onMetricScroll}
               onMomentumScrollEnd={onMetricScroll}
+              onContentSizeChange={() => snapMetric(false)}
               scrollEventThrottle={16}
               style={{ width: glyW, marginHorizontal: -20 }}
               contentContainerStyle={{ paddingHorizontal: 0 }}
