@@ -1,8 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  Alert,
   Image,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -68,30 +66,6 @@ function EyeIcon() {
     </Svg>
   );
 }
-function GoogleIcon() {
-  return (
-    <Svg width={22} height={22} viewBox="0 0 48 48">
-      <Path fill="#4285F4" d="M45 24c0-1.5-.1-3-.4-4.4H24v8.4h11.8c-.5 2.7-2 5-4.4 6.6v5.5h7.1C42.7 36.3 45 30.7 45 24z" />
-      <Path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-7.1-5.5c-2 1.3-4.5 2.1-7.4 2.1-5.7 0-10.5-3.8-12.2-9H4.5v5.7C8.1 41.1 15.5 46 24 46z" />
-      <Path fill="#FBBC05" d="M11.8 28.3c-.4-1.3-.7-2.7-.7-4.3s.3-3 .7-4.3v-5.7H4.5C3 17 2 20.4 2 24s1 7 2.5 10z" />
-      <Path fill="#EA4335" d="M24 10.8c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4.1 29.9 2 24 2 15.5 2 8.1 6.9 4.5 14l7.3 5.7c1.7-5.2 6.5-8.9 12.2-8.9z" />
-    </Svg>
-  );
-}
-function AppleIcon() {
-  return (
-    <Svg width={22} height={22} viewBox="0 0 24 24">
-      <Path
-        fill="#0b0b0d"
-        d="M17.05 12.5c0-2 1.6-3 1.7-3-.9-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.3 2-1.4 2.4-.4 6 1 8 .7 1 1.5 2.1 2.5 2 1-.04 1.4-.6 2.6-.6s1.5.6 2.6.6c1.1-.02 1.8-1 2.5-2 .5-.7.8-1.4 1-1.6-.02-.01-1.9-.7-1.9-2.9z"
-      />
-      <Path
-        fill="#0b0b0d"
-        d="M15.3 6.2c.5-.7.9-1.6.8-2.5-.8.03-1.8.5-2.4 1.2-.5.6-1 1.5-.8 2.4.9.07 1.8-.4 2.4-1.1z"
-      />
-    </Svg>
-  );
-}
 function ShieldIcon({ color = '#5fbf8f', size = 15 }: { color?: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -120,21 +94,6 @@ export default function AuthScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const isRegister = mode === 'register';
-
-  // OAuth (Google/Apple) on web redirects away and back to this screen with
-  // a session in the URL. Once Supabase has picked it up, a signed-in user
-  // has already onboarded → send them straight to the dashboard.
-  useEffect(() => {
-    if (isDemoMode || !supabase || Platform.OS !== 'web') return;
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setWizardDone();
-        router.replace('/(tabs)');
-      }
-    });
-    return () => sub.subscription.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // New sign-ups fill their medical profile first; returning users who log
   // in already have one, so they skip straight to the dashboard.
@@ -176,32 +135,6 @@ export default function AuthScreen() {
       setError(e.message ?? t('common.error'));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const social = async (provider: 'google' | 'apple') => {
-    setError(null);
-    // Demo mode (no backend): continue directly so the flow stays usable.
-    if (isDemoMode || !supabase) {
-      goAfterAuth(!isRegister);
-      return;
-    }
-    try {
-      if (Platform.OS === 'web') {
-        // OAuth on web redirects the browser to the provider and back to
-        // the app URL, where detectSessionInUrl picks up the session.
-        const { error: err } = await supabase.auth.signInWithOAuth({
-          provider,
-          options: { redirectTo: window.location.origin },
-        });
-        if (err) throw err;
-      } else {
-        // Native OAuth needs the expo-auth-session / deep-link setup; until
-        // that's wired, tell the user instead of silently doing nothing.
-        Alert.alert(t('auth.comingSoon'));
-      }
-    } catch (e: any) {
-      setError(e.message ?? t('common.error'));
     }
   };
 
@@ -302,25 +235,6 @@ export default function AuthScreen() {
           </LinearGradient>
         </Pressable>
 
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>{t('auth.orDivider')}</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* Social */}
-        <View style={{ gap: 11 }}>
-          <Pressable style={styles.socialBtn} onPress={() => social('google')}>
-            <GoogleIcon />
-            <Text style={styles.socialText}>{t('auth.continueWithGoogle')}</Text>
-          </Pressable>
-          <Pressable style={styles.socialBtn} onPress={() => social('apple')}>
-            <AppleIcon />
-            <Text style={styles.socialText}>{t('auth.continueWithApple')}</Text>
-          </Pressable>
-        </View>
-
         {/* Switch mode */}
         <Pressable
           onPress={() => setMode(isRegister ? 'login' : 'register')}
@@ -417,29 +331,6 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   ctaText: { fontFamily: N700, fontSize: 17, color: '#ffffff' },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginVertical: 14,
-  },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#dfe3ea' },
-  dividerText: { fontFamily: N600, fontSize: 14, color: '#98a1af' },
-  socialBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    height: 52,
-    backgroundColor: '#ffffff',
-    borderRadius: 15,
-    shadowColor: 'rgba(20,28,45,1)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 2,
-  },
-  socialText: { fontFamily: N700, fontSize: 15.5, color: '#2b3442' },
   switchText: {
     fontFamily: N600,
     fontSize: 14.5,
