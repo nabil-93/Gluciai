@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useRouter } from 'expo-router';
@@ -79,8 +80,13 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
   const setOnboardingDone = useAppStore((s) => s.setOnboardingDone);
   const [index, setIndex] = useState(0);
+
+  // Scale the hero to the real viewport so the whole slide (hero + title
+  // + features + CTA) fits without clipping, even with browser chrome.
+  const heroH = Math.min(280, Math.round(winH * 0.3));
 
   const last = index === SLIDE_COUNT - 1;
 
@@ -118,7 +124,7 @@ export default function OnboardingScreen() {
             {/* Full-bleed hero */}
             <Image
               source={HERO_MAIN}
-              style={styles.heroMain}
+              style={[styles.heroMain, { height: heroH }]}
               resizeMode="contain"
             />
             {/* Badge */}
@@ -184,15 +190,15 @@ export default function OnboardingScreen() {
       {/* CTA */}
       <View
         style={{
-          paddingHorizontal: 26,
-          paddingBottom: Math.max(insets.bottom, 12) + 8,
+          paddingHorizontal: 24,
+          paddingBottom: Math.max(insets.bottom, 8) + 2,
         }}
       >
         <Pressable onPress={next} style={styles.cta}>
           <Text style={styles.ctaText}>
             {last ? t('onboarding.getStarted') : t('common.next')}
           </Text>
-          <Svg width={26} height={26} viewBox="0 0 24 24" style={styles.ctaArrow}>
+          <Svg width={22} height={22} viewBox="0 0 24 24" style={styles.ctaArrow}>
             <Path
               d="M4 12h15M13 6l6 6-6 6"
               stroke="#fff"
@@ -218,70 +224,70 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f7f9fd' },
   topBar: {
-    height: 48,
+    height: 38,
     justifyContent: 'center',
     alignItems: 'flex-end',
-    paddingHorizontal: 26,
+    paddingHorizontal: 24,
   },
-  skipText: { fontFamily: P500, fontSize: 19, color: '#7b8792' },
+  skipText: { fontFamily: P500, fontSize: 16, color: '#7b8792' },
 
   /* Slide 1 */
-  heroMain: { width: '100%', height: 330 },
+  heroMain: { width: '100%', height: 260 },
   badgeRow: { alignItems: 'center', marginTop: 2 },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 7,
     backgroundColor: '#d7f4e5',
-    paddingVertical: 9,
-    paddingHorizontal: 20,
+    paddingVertical: 7,
+    paddingHorizontal: 16,
     borderRadius: 999,
   },
   badgeText: {
     fontFamily: P600,
-    fontSize: 15,
+    fontSize: 13.5,
     letterSpacing: 0.2,
     color: '#17b06b',
   },
   bigTitle: {
     fontFamily: P800,
-    fontSize: 34,
-    lineHeight: 40,
-    letterSpacing: -0.8,
+    fontSize: 27,
+    lineHeight: 33,
+    letterSpacing: -0.6,
     color: GREEN,
     textAlign: 'center',
-    marginTop: 20,
-    paddingHorizontal: 26,
+    marginTop: 12,
+    paddingHorizontal: 24,
   },
   bigSub: {
     fontFamily: P500,
-    fontSize: 18,
-    lineHeight: 26,
+    fontSize: 15,
+    lineHeight: 21.5,
     color: '#6b7580',
     textAlign: 'center',
-    marginTop: 16,
-    paddingHorizontal: 34,
+    marginTop: 10,
+    paddingHorizontal: 30,
   },
   bigSubStrong: { fontFamily: P700, color: GREEN },
   featureCard: {
     flexDirection: 'row',
     backgroundColor: '#ffffff',
-    borderRadius: 26,
-    paddingVertical: 26,
+    borderRadius: 22,
+    paddingVertical: 16,
     paddingHorizontal: 6,
-    marginTop: 26,
-    marginHorizontal: 26,
+    marginTop: 16,
+    marginHorizontal: 24,
     shadowColor: 'rgba(30,50,70,1)',
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.14,
-    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
     elevation: 5,
   },
   featureCol: {
     flex: 1,
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 10,
+    gap: 9,
+    paddingHorizontal: 8,
   },
   featureColMid: {
     borderLeftWidth: 1,
@@ -289,42 +295,42 @@ const styles = StyleSheet.create({
     borderColor: '#eef0f4',
   },
   featureIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
   featureText: {
     fontFamily: P600,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 12.5,
+    lineHeight: 16.5,
     color: '#3a444e',
     textAlign: 'center',
   },
 
   /* Slides 2-5 */
-  slideWrap: { flex: 1, paddingHorizontal: 26 },
+  slideWrap: { flex: 1, paddingHorizontal: 24 },
   slideHeroWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 280,
+    minHeight: 180,
   },
   slideHero: { width: '100%', height: '100%' },
   slideTitle: {
     fontFamily: P800,
-    fontSize: 31,
-    lineHeight: 37,
-    letterSpacing: -0.6,
+    fontSize: 25,
+    lineHeight: 31,
+    letterSpacing: -0.5,
     color: '#1b2733',
     textAlign: 'center',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   slideSub: {
     fontFamily: P500,
-    fontSize: 17,
-    lineHeight: 25,
+    fontSize: 15,
+    lineHeight: 21.5,
     color: '#6b7580',
     textAlign: 'center',
     maxWidth: 340,
@@ -334,45 +340,45 @@ const styles = StyleSheet.create({
   /* Dots */
   dots: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 28,
-    marginBottom: 26,
+    marginTop: 12,
+    marginBottom: 10,
   },
   dot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#cfd5dd',
   },
   dotActive: {
-    width: 26,
-    height: 9,
+    width: 22,
+    height: 8,
     borderRadius: 999,
     backgroundColor: '#06b870',
   },
 
   /* CTA */
   cta: {
-    height: 74,
-    borderRadius: 22,
+    height: 54,
+    borderRadius: 17,
     backgroundColor: BTN_GREEN,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#12b86f',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.6,
-    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.45,
+    shadowRadius: 22,
     elevation: 8,
   },
-  ctaText: { fontFamily: P700, fontSize: 21, color: '#ffffff' },
-  ctaArrow: { position: 'absolute', right: 30 },
+  ctaText: { fontFamily: P700, fontSize: 17, color: '#ffffff' },
+  ctaArrow: { position: 'absolute', right: 22 },
   backWrap: {
-    height: 46,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
+    marginTop: 2,
   },
-  backText: { fontFamily: P700, fontSize: 17, color: '#7b8792' },
+  backText: { fontFamily: P700, fontSize: 14.5, color: '#7b8792' },
 });

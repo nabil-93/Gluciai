@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -158,7 +159,7 @@ function Field({
   autoCapitalize?: 'words' | 'none';
 }) {
   return (
-    <View style={{ marginTop: 18 }}>
+    <View style={{ marginTop: 12 }}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={styles.fieldBox}>
         <IconTile>{icon}</IconTile>
@@ -207,6 +208,9 @@ export default function WizardScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
+  // Scale the hero to the viewport so title + fields + CTA stay visible.
+  const heroH = Math.min(150, Math.round(winH * 0.17));
   const setWizardDone = useAppStore((s) => s.setWizardDone);
 
   const [step, setStep] = useState(0);
@@ -334,7 +338,7 @@ export default function WizardScreen() {
   return (
     <View style={styles.root}>
       {/* Header: back + progress + step count */}
-      <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 30 }}>
+      <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 26 }}>
         <View style={styles.progressRow}>
           <Pressable onPress={back} hitSlop={10}>
             <Svg
@@ -375,12 +379,16 @@ export default function WizardScreen() {
         key={key}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 30, paddingBottom: 16 }}
-        style={{ flex: 1, marginTop: 6 }}
+        contentContainerStyle={{ paddingHorizontal: 26, paddingBottom: 12 }}
+        style={{ flex: 1, marginTop: 4 }}
       >
         <FadeInView distance={10} duration={400}>
           <View style={{ alignItems: 'center' }}>
-            <Image source={HEROES[key]} style={styles.hero} resizeMode="contain" />
+            <Image
+              source={HEROES[key]}
+              style={[styles.hero, { height: heroH }]}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.title}>{info.title}</Text>
           {info.sub ? <Text style={styles.subtitle}>{info.sub}</Text> : null}
@@ -441,7 +449,7 @@ export default function WizardScreen() {
                     style={[styles.optionCard, on && styles.cardOn]}
                   >
                     <View style={styles.optionIcon}>
-                      <Text style={{ fontSize: 24 }}>{o.icon}</Text>
+                      <Text style={{ fontSize: 20 }}>{o.icon}</Text>
                     </View>
                     <Text style={styles.optionLabel}>{t(`wizard.${o.v}`)}</Text>
                     <View style={[styles.radioLg, on && styles.radioOn]}>
@@ -472,7 +480,7 @@ export default function WizardScreen() {
                     style={[styles.optionCard, on && styles.cardOn]}
                   >
                     <View style={styles.optionIcon}>
-                      <Text style={{ fontSize: 24 }}>{o.icon}</Text>
+                      <Text style={{ fontSize: 20 }}>{o.icon}</Text>
                     </View>
                     <Text style={styles.optionLabel}>{o.label}</Text>
                     <View style={[styles.radioLg, on && styles.radioOn]}>
@@ -596,16 +604,16 @@ export default function WizardScreen() {
             </>
           ) : null}
 
-          <View style={{ height: 16 }} />
+          <View style={{ height: 8 }} />
         </FadeInView>
       </ScrollView>
 
       {/* Footer CTA */}
       <View
         style={{
-          paddingHorizontal: 30,
-          paddingTop: 10,
-          paddingBottom: Math.max(insets.bottom, 10) + 4,
+          paddingHorizontal: 26,
+          paddingTop: 6,
+          paddingBottom: Math.max(insets.bottom, 8) + 2,
         }}
       >
         <Pressable onPress={next} disabled={!canContinue || saving}>
@@ -664,47 +672,47 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 4 },
   stepText: {
     fontFamily: N600,
-    fontSize: 16,
+    fontSize: 13.5,
     color: '#8a93a3',
     textAlign: 'center',
-    marginTop: 14,
+    marginTop: 8,
   },
   stepNum: { fontFamily: N800, color: GREEN },
 
-  hero: { width: '82%', maxWidth: 330, height: 190 },
+  hero: { width: '72%', maxWidth: 280, height: 140 },
   title: {
     fontFamily: N800,
-    fontSize: 30,
-    letterSpacing: -0.4,
+    fontSize: 24,
+    letterSpacing: -0.3,
     color: '#101a2b',
     textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 12,
+    marginTop: 4,
+    marginBottom: 8,
   },
   subtitle: {
     fontFamily: N500,
-    fontSize: 16.5,
-    lineHeight: 23,
+    fontSize: 14.5,
+    lineHeight: 20,
     color: '#7b8494',
     textAlign: 'center',
     maxWidth: 360,
     alignSelf: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
 
   /* Gender cards — vertical so the label is never clipped */
-  genderRow: { flexDirection: 'row', gap: 12, marginTop: 22, marginBottom: 6 },
+  genderRow: { flexDirection: 'row', gap: 10, marginTop: 14, marginBottom: 4 },
   genderCard: {
     flex: 1,
     minWidth: 0,
     alignItems: 'center',
-    gap: 12,
+    gap: 9,
     backgroundColor: '#ffffff',
     borderWidth: 2,
     borderColor: 'transparent',
-    borderRadius: 18,
-    paddingTop: 22,
-    paddingBottom: 16,
+    borderRadius: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
     paddingHorizontal: 8,
     shadowColor: 'rgba(20,28,45,1)',
     shadowOffset: { width: 0, height: 4 },
@@ -726,32 +734,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   genderIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  genderIconText: { fontSize: 24, fontWeight: '700', color: '#ffffff' },
+  genderIconText: { fontSize: 20, fontWeight: '700', color: '#ffffff' },
   genderLabel: {
     fontFamily: N700,
-    fontSize: 15,
+    fontSize: 13.5,
     color: '#2b3442',
     textAlign: 'center',
   },
 
   /* Radio option cards */
-  optionsCol: { gap: 16, marginTop: 22 },
+  optionsCol: { gap: 11, marginTop: 14 },
   optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
     backgroundColor: '#ffffff',
     borderWidth: 2,
     borderColor: 'transparent',
-    borderRadius: 18,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
+    borderRadius: 16,
+    paddingVertical: 11,
+    paddingHorizontal: 15,
     shadowColor: 'rgba(20,28,45,1)',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
@@ -759,14 +767,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   optionIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#ece8fb',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  optionLabel: { flex: 1, fontFamily: N700, fontSize: 18, color: '#2b3442' },
+  optionLabel: { flex: 1, fontFamily: N700, fontSize: 16, color: '#2b3442' },
 
   radio: {
     width: 22,
@@ -793,19 +801,19 @@ const styles = StyleSheet.create({
   /* Fields */
   fieldLabel: {
     fontFamily: N800,
-    fontSize: 18,
+    fontSize: 15.5,
     color: '#2b3442',
-    marginBottom: 10,
+    marginBottom: 7,
     marginLeft: 2,
   },
   fieldBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    height: 64,
+    gap: 12,
+    height: 54,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingHorizontal: 14,
+    borderRadius: 15,
+    paddingHorizontal: 10,
     shadowColor: 'rgba(20,28,45,1)',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
@@ -813,9 +821,9 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   iconTile: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     backgroundColor: '#e4f4ec',
     alignItems: 'center',
     justifyContent: 'center',
@@ -823,54 +831,54 @@ const styles = StyleSheet.create({
   fieldInput: {
     flex: 1,
     fontFamily: N600,
-    fontSize: 17,
+    fontSize: 15.5,
     color: '#101a2b',
     padding: 0,
   },
-  fieldUnit: { fontFamily: N600, fontSize: 16, color: '#98a1af' },
+  fieldUnit: { fontFamily: N600, fontSize: 14, color: '#98a1af' },
 
   /* Info boxes */
   infoBox: {
     flexDirection: 'row',
-    gap: 14,
-    borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    marginTop: 24,
+    gap: 12,
+    borderRadius: 16,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    marginTop: 14,
     alignItems: 'flex-start',
   },
   infoTitle: {
     fontFamily: N800,
-    fontSize: 17,
+    fontSize: 15,
     color: '#2b3442',
-    marginBottom: 5,
+    marginBottom: 4,
   },
   infoText: {
     fontFamily: N600,
-    fontSize: 15.5,
-    lineHeight: 22,
+    fontSize: 13.5,
+    lineHeight: 19,
     color: '#4a5766',
   },
 
   /* CTA */
   cta: {
-    height: 62,
-    borderRadius: 18,
+    height: 54,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#1fbc78',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.36,
-    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.32,
+    shadowRadius: 22,
     elevation: 8,
   },
-  ctaText: { fontFamily: N700, fontSize: 19, color: '#ffffff' },
-  ctaArrow: { position: 'absolute', right: 26 },
+  ctaText: { fontFamily: N700, fontSize: 17, color: '#ffffff' },
+  ctaArrow: { position: 'absolute', right: 22 },
   backWrap: {
-    height: 44,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 6,
+    marginTop: 2,
   },
-  backText: { fontFamily: N700, fontSize: 17, color: '#7b8494' },
+  backText: { fontFamily: N700, fontSize: 14.5, color: '#7b8494' },
 });

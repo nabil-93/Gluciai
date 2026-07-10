@@ -170,9 +170,9 @@ export default function AuthScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          paddingTop: insets.top + 16,
-          paddingHorizontal: 30,
-          paddingBottom: Math.max(insets.bottom, 16) + 24,
+          paddingTop: insets.top + 8,
+          paddingHorizontal: 26,
+          paddingBottom: Math.max(insets.bottom, 12) + 14,
         }}
       >
         {/* Hero */}
@@ -192,7 +192,7 @@ export default function AuthScreen() {
         </Text>
 
         {/* Fields */}
-        <View style={{ gap: 14 }}>
+        <View style={{ gap: 11 }}>
           {isRegister ? (
             <View style={styles.field}>
               <UserIcon />
@@ -244,7 +244,7 @@ export default function AuthScreen() {
             <Text style={styles.demoText}>{t('common.demoBadge')}</Text>
           </View>
         ) : (
-          <View style={{ height: 18 }} />
+          <View style={{ height: 12 }} />
         )}
 
         {/* CTA */}
@@ -269,7 +269,7 @@ export default function AuthScreen() {
         </View>
 
         {/* Social */}
-        <View style={{ gap: 14 }}>
+        <View style={{ gap: 11 }}>
           <Pressable style={styles.socialBtn} onPress={social}>
             <GoogleIcon />
             <Text style={styles.socialText}>{t('auth.continueWithGoogle')}</Text>
@@ -305,31 +305,31 @@ export default function AuthScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8f9fc' },
-  hero: { width: '78%', maxWidth: 320, height: 210 },
+  hero: { width: '64%', maxWidth: 260, height: 150 },
   title: {
     fontFamily: N800,
-    fontSize: 34,
-    letterSpacing: -0.5,
+    fontSize: 27,
+    letterSpacing: -0.4,
     color: '#101a2b',
     textAlign: 'center',
     marginTop: 2,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   subtitle: {
     fontFamily: N600,
-    fontSize: 18,
+    fontSize: 15,
     color: '#5f6b7a',
     textAlign: 'center',
-    marginBottom: 26,
+    marginBottom: 18,
   },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    height: 60,
+    height: 52,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingHorizontal: 18,
+    borderRadius: 15,
+    paddingHorizontal: 16,
     shadowColor: 'rgba(20,28,45,1)',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontFamily: N600,
-    fontSize: 17,
+    fontSize: 15.5,
     color: '#101a2b',
     padding: 0,
   },
@@ -354,8 +354,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    marginTop: 12,
-    marginBottom: 18,
+    marginTop: 10,
+    marginBottom: 12,
     marginHorizontal: 2,
   },
   demoText: {
@@ -365,47 +365,47 @@ const styles = StyleSheet.create({
     color: '#ef8a3c',
   },
   cta: {
-    height: 62,
-    borderRadius: 16,
+    height: 54,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#1fbc78',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.36,
-    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.32,
+    shadowRadius: 22,
     elevation: 8,
   },
-  ctaText: { fontFamily: N700, fontSize: 19, color: '#ffffff' },
+  ctaText: { fontFamily: N700, fontSize: 17, color: '#ffffff' },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    marginVertical: 22,
+    marginVertical: 14,
   },
   dividerLine: { flex: 1, height: 1, backgroundColor: '#dfe3ea' },
-  dividerText: { fontFamily: N600, fontSize: 16, color: '#98a1af' },
+  dividerText: { fontFamily: N600, fontSize: 14, color: '#98a1af' },
   socialBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    height: 60,
+    height: 52,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 15,
     shadowColor: 'rgba(20,28,45,1)',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
     shadowRadius: 16,
     elevation: 2,
   },
-  socialText: { fontFamily: N700, fontSize: 17, color: '#2b3442' },
+  socialText: { fontFamily: N700, fontSize: 15.5, color: '#2b3442' },
   switchText: {
     fontFamily: N600,
-    fontSize: 16,
+    fontSize: 14.5,
     color: '#5f6b7a',
     textAlign: 'center',
-    marginTop: 24,
-    marginBottom: 4,
+    marginTop: 14,
+    marginBottom: 2,
   },
   switchLink: { fontFamily: N800, color: '#2f7cf6' },
   securityRow: {
@@ -413,12 +413,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: 14,
+    marginTop: 10,
   },
   securityText: {
     fontFamily: N500,
-    fontSize: 13.5,
-    lineHeight: 19,
+    fontSize: 12.5,
+    lineHeight: 17.5,
     color: '#98a1af',
     textAlign: 'center',
   },
