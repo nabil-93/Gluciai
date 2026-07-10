@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isDemoMode, supabase } from '@/lib/supabase';
+import { useAppStore } from '@/store/useAppStore';
 
 const N500 = 'Nunito_500Medium';
 const N600 = 'Nunito_600SemiBold';
@@ -109,6 +110,7 @@ export default function AuthScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const setWizardDone = useAppStore((s) => s.setWizardDone);
   const [mode, setMode] = useState<Mode>('register');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -119,11 +121,38 @@ export default function AuthScreen() {
 
   const isRegister = mode === 'register';
 
+  // OAuth (Google/Apple) on web redirects away and back to this screen with
+  // a session in the URL. Once Supabase has picked it up, a signed-in user
+  // has already onboarded → send them straight to the dashboard.
+  useEffect(() => {
+    if (isDemoMode || !supabase || Platform.OS !== 'web') return;
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setWizardDone();
+        router.replace('/(tabs)');
+      }
+    });
+    return () => sub.subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // New sign-ups fill their medical profile first; returning users who log
+  // in already have one, so they skip straight to the dashboard.
+  const goAfterAuth = (returning: boolean) => {
+    if (returning) {
+      setWizardDone();
+      router.replace('/(tabs)');
+    } else {
+      router.replace('/wizard');
+    }
+  };
+
   const submit = async () => {
     setError(null);
-    // Demo mode: no backend — go straight to the medical wizard.
+    // Demo mode: no backend — register still shows the wizard; a demo
+    // "login" jumps straight to the dashboard.
     if (isDemoMode || !supabase) {
-      router.replace('/wizard');
+      goAfterAuth(!isRegister);
       return;
     }
     setLoading(true);
@@ -142,7 +171,7 @@ export default function AuthScreen() {
         });
         if (err) throw err;
       }
-      router.replace('/wizard');
+      goAfterAuth(!isRegister);
     } catch (e: any) {
       setError(e.message ?? t('common.error'));
     } finally {
@@ -150,17 +179,29 @@ export default function AuthScreen() {
     }
   };
 
-  const social = () => {
-    // Social sign-in requires the Supabase OAuth setup — in demo mode we
-    // continue directly so the flow stays usable.
+  const social = async (provider: 'google' | 'apple') => {
+    setError(null);
+    // Demo mode (no backend): continue directly so the flow stays usable.
     if (isDemoMode || !supabase) {
-      router.replace('/wizard');
+      goAfterAuth(!isRegister);
       return;
     }
-    if (Platform.OS === 'web') {
-      window.alert(t('auth.comingSoon'));
-    } else {
-      Alert.alert(t('auth.comingSoon'));
+    try {
+      if (Platform.OS === 'web') {
+        // OAuth on web redirects the browser to the provider and back to
+        // the app URL, where detectSessionInUrl picks up the session.
+        const { error: err } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: { redirectTo: window.location.origin },
+        });
+        if (err) throw err;
+      } else {
+        // Native OAuth needs the expo-auth-session / deep-link setup; until
+        // that's wired, tell the user instead of silently doing nothing.
+        Alert.alert(t('auth.comingSoon'));
+      }
+    } catch (e: any) {
+      setError(e.message ?? t('common.error'));
     }
   };
 
@@ -270,11 +311,11 @@ export default function AuthScreen() {
 
         {/* Social */}
         <View style={{ gap: 11 }}>
-          <Pressable style={styles.socialBtn} onPress={social}>
+          <Pressable style={styles.socialBtn} onPress={() => social('google')}>
             <GoogleIcon />
             <Text style={styles.socialText}>{t('auth.continueWithGoogle')}</Text>
           </Pressable>
-          <Pressable style={styles.socialBtn} onPress={social}>
+          <Pressable style={styles.socialBtn} onPress={() => social('apple')}>
             <AppleIcon />
             <Text style={styles.socialText}>{t('auth.continueWithApple')}</Text>
           </Pressable>
