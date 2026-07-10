@@ -1689,6 +1689,7 @@ export default function HomeScreen() {
               {/* PAGE 1 — Glycémie */}
               <View style={{ width: glyW, paddingHorizontal: 20 }}>
                 <MetricPage
+                  key={`gly-${lastGlucose?.value ?? 'x'}-${dayReadings.length}`}
                   value={lastGlucose ? lastGlucose.value : null}
                   unit="mg/dL"
                   zone={glyZone}
@@ -1714,6 +1715,7 @@ export default function HomeScreen() {
               {/* PAGE 2 — Glucides */}
               <View style={{ width: glyW, paddingHorizontal: 20 }}>
                 <MetricPage
+                  key={`carb-${Math.round(totalCarbs)}-${carbReadings.length}`}
                   value={totalCarbs > 0 ? Math.round(totalCarbs) : null}
                   unit="g"
                   zone={carbZone}
@@ -1744,6 +1746,7 @@ export default function HomeScreen() {
               {/* PAGE 3 — Insuline */}
               <View style={{ width: glyW, paddingHorizontal: 20 }}>
                 <MetricPage
+                  key={`ins-${totalInsulin}-${insulinReadings.length}`}
                   value={totalInsulin > 0 ? totalInsulin : null}
                   unit="U"
                   zone={insulinZone}
