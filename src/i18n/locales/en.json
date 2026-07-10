@@ -483,7 +483,9 @@
     "end": "End call",
     "speaker": "Speaker",
     "safety": "This call is secure and confidential. The AI can make mistakes — always consult a professional.",
-    "connecting": "Connecting…"
+    "connecting": "Connecting…",
+    "incoming": "AI call ready",
+    "answer": "Answer"
   },
   "history": {
     "title": "History",

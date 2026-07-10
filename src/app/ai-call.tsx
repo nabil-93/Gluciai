@@ -47,6 +47,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 };
 
 type CallStatus =
+  | 'incoming'
   | 'connecting'
   | 'listening'
   | 'thinking'
@@ -83,6 +84,16 @@ function PhoneDownIcon() {
     <Svg width={26} height={26} viewBox="0 0 24 24">
       <Path
         d="M3.5 14.5c5-4.5 12-4.5 17 0l-2 3c-.6.9-1.8 1.2-2.8.7l-2-1a2 2 0 01-1.1-1.8v-1.2a13 13 0 00-5.2 0v1.2a2 2 0 01-1.1 1.8l-2 1c-1 .5-2.2.2-2.8-.7l-2-3z"
+        fill="#ffffff"
+      />
+    </Svg>
+  );
+}
+function PhoneUpIcon() {
+  return (
+    <Svg width={30} height={30} viewBox="0 0 24 24">
+      <Path
+        d="M6.6 10.8a15.5 15.5 0 006.6 6.6l2.2-2.2a1.4 1.4 0 011.5-.3c1.2.4 2.5.6 3.8.6.8 0 1.4.6 1.4 1.4v3.4c0 .8-.6 1.4-1.4 1.4C11.2 21.7 2.3 12.8 2.3 3.3c0-.8.6-1.4 1.4-1.4h3.4c.8 0 1.4.6 1.4 1.4 0 1.3.2 2.6.6 3.8.2.5 0 1.1-.3 1.5l-2.2 2.2z"
         fill="#ffffff"
       />
     </Svg>
@@ -188,16 +199,17 @@ export default function AiCallScreen() {
   const rtl = isRTL(i18n.language);
   const profile = useAppStore((s) => s.profile);
 
-  const [status, setStatus] = useState<CallStatus>('connecting');
+  const [status, setStatus] = useState<CallStatus>('incoming');
   const [advice, setAdvice] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [micOn, setMicOn] = useState(true);
   const [speakerOn, setSpeakerOn] = useState(true);
 
-  const statusRef = useRef<CallStatus>('connecting');
+  const statusRef = useRef<CallStatus>('incoming');
   const micOnRef = useRef(true);
   const speakerOnRef = useRef(true);
   const endedRef = useRef(false);
+  const startedRef = useRef(false);
   const engineRef = useRef<'live' | 'classic' | null>(null);
 
   // Live engine
@@ -222,9 +234,11 @@ export default function AiCallScreen() {
   const canClassic =
     !!SRClass && typeof window !== 'undefined' && !!(window as any).speechSynthesis;
 
-  /* ── Call timer ── */
+  /* ── Call timer (starts once the call is answered) ── */
   useEffect(() => {
-    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    const id = setInterval(() => {
+      if (startedRef.current && !endedRef.current) setSeconds((s) => s + 1);
+    }, 1000);
     return () => clearInterval(id);
   }, []);
   const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
@@ -240,19 +254,22 @@ language or dialect — French, German, English, Arabic or Moroccan Darija — y
 understand them all; never say you don't understand, never ask to switch language.
 STYLE: natural, warm, short spoken sentences (1-3 per turn), like a caring human
 on the phone. No lists, no markdown. It's OK to ask short follow-up questions.
-SAFETY: never diagnose or prescribe doses; suggest a professional when needed.
+BE CONCRETELY HELPFUL: give real practical suggestions (foods, portions, timing,
+hydration, activity) and analyse the patient's own data when asked — never refuse
+with "I can't judge". Insulin education with their own ratios is fine; just never
+impose a new dose as a prescription. Mention "confirm with your doctor" only when
+discussing dose or treatment changes.
 PATIENT DATA (live from the app — use it to answer questions about meals,
 glucose, insulin, parameters):
 ${buildHealthContext()}`;
   };
 
   /* ────────────── LIVE ENGINE (Gemini Live API) ────────────── */
-  const startLive = async (): Promise<boolean> => {
+  const startLive = async (player: PcmPlayer, mic: MicStreamer): Promise<boolean> => {
     if (Platform.OS !== 'web') return false;
     const token = await getLiveToken();
     if (!token || endedRef.current) return false;
 
-    const player = new PcmPlayer();
     playerRef.current = player;
     player.onDrain = () => {
       if (!endedRef.current && statusRef.current === 'speaking') {
@@ -297,8 +314,8 @@ ${buildHealthContext()}`;
       if (endedRef.current) return false;
       try {
         await session.connect(token, model, instruction, liveLang);
-        // Connected — start streaming the mic.
-        const mic = new MicStreamer();
+        // Connected — start streaming the mic (its AudioContext was
+        // created inside the answer tap, so iOS lets it run).
         micRef.current = mic;
         await mic.start((b64) => session.sendAudio(b64));
         mic.setMuted(!micOnRef.current);
@@ -425,25 +442,44 @@ ${buildHealthContext()}`;
     recRef.current = null;
   };
 
-  /* ────────────── Boot: Live first, classic as fallback ────────────── */
-  useEffect(() => {
+  /* ────────────── Answering the call ──────────────
+   * Everything audio MUST begin inside this tap: iOS Safari only allows
+   * AudioContexts created/resumed during a user gesture. The answer
+   * button is also what makes it feel like picking up a real call. */
+  const answerCall = () => {
+    if (startedRef.current || endedRef.current) return;
+    startedRef.current = true;
+
+    if (Platform.OS !== 'web') {
+      setStatusSafe('unsupported');
+      return;
+    }
+    // Synchronously, within the gesture: create both audio contexts.
+    const player = new PcmPlayer();
+    const mic = new MicStreamer();
+    mic.prepareContext();
+    setStatusSafe('connecting');
+
     (async () => {
-      if (Platform.OS !== 'web') {
-        setStatusSafe('unsupported');
-        return;
-      }
-      setStatusSafe('connecting');
-      const liveOk = await startLive();
+      const liveOk = await startLive(player, mic);
       if (endedRef.current) return;
       if (liveOk) {
         engineRef.current = 'live';
       } else if (canClassic) {
+        try {
+          player.close();
+          mic.stop();
+        } catch {}
         engineRef.current = 'classic';
         startClassicLoop();
       } else {
         setStatusSafe('unsupported');
       }
     })();
+  };
+
+  /* Cleanup on unmount */
+  useEffect(() => {
     return () => {
       endedRef.current = true;
       cleanupLive();
@@ -500,17 +536,19 @@ ${buildHealthContext()}`;
   };
 
   const statusText =
-    status === 'connecting'
-      ? t('call.connecting')
-      : status === 'listening'
-        ? t('call.listening')
-        : status === 'thinking'
-          ? t('call.thinking')
-          : status === 'speaking'
-            ? t('call.speaking')
-            : status === 'muted'
-              ? t('call.muted')
-              : t('call.unsupported');
+    status === 'incoming'
+      ? t('call.incoming')
+      : status === 'connecting'
+        ? t('call.connecting')
+        : status === 'listening'
+          ? t('call.listening')
+          : status === 'thinking'
+            ? t('call.thinking')
+            : status === 'speaking'
+              ? t('call.speaking')
+              : status === 'muted'
+                ? t('call.muted')
+                : t('call.unsupported');
 
   const active = status === 'listening' || status === 'speaking';
 
@@ -569,36 +607,51 @@ ${buildHealthContext()}`;
       </View>
 
       {/* ── Controls ── */}
-      <View style={styles.controls}>
-        <View style={styles.controlCol}>
-          <Pressable
-            onPress={toggleMic}
-            style={[styles.roundBtn, !micOn && styles.roundBtnOff]}
-            disabled={status === 'unsupported'}
-          >
-            <MicIcon off={!micOn} />
-          </Pressable>
-          <Text style={styles.controlLabel}>{t('call.mute')}</Text>
+      {status === 'incoming' ? (
+        /* Answer button — the call (audio contexts, mic, WebSocket) starts
+           inside this tap, which is what iOS Safari requires. */
+        <View style={styles.controls}>
+          <View style={styles.controlCol}>
+            <Pressable onPress={answerCall} style={styles.answerBtn}>
+              <PhoneUpIcon />
+            </Pressable>
+            <Text style={[styles.controlLabel, { color: '#16955f' }]}>
+              {t('call.answer')}
+            </Text>
+          </View>
         </View>
+      ) : (
+        <View style={styles.controls}>
+          <View style={styles.controlCol}>
+            <Pressable
+              onPress={toggleMic}
+              style={[styles.roundBtn, !micOn && styles.roundBtnOff]}
+              disabled={status === 'unsupported'}
+            >
+              <MicIcon off={!micOn} />
+            </Pressable>
+            <Text style={styles.controlLabel}>{t('call.mute')}</Text>
+          </View>
 
-        <View style={styles.controlCol}>
-          <Pressable onPress={endCall} style={styles.endBtn}>
-            <PhoneDownIcon />
-          </Pressable>
-          <Text style={styles.controlLabel}>{t('call.end')}</Text>
-        </View>
+          <View style={styles.controlCol}>
+            <Pressable onPress={endCall} style={styles.endBtn}>
+              <PhoneDownIcon />
+            </Pressable>
+            <Text style={styles.controlLabel}>{t('call.end')}</Text>
+          </View>
 
-        <View style={styles.controlCol}>
-          <Pressable
-            onPress={toggleSpeaker}
-            style={[styles.roundBtn, !speakerOn && styles.roundBtnOff]}
-            disabled={status === 'unsupported'}
-          >
-            <SpeakerIcon off={!speakerOn} />
-          </Pressable>
-          <Text style={styles.controlLabel}>{t('call.speaker')}</Text>
+          <View style={styles.controlCol}>
+            <Pressable
+              onPress={toggleSpeaker}
+              style={[styles.roundBtn, !speakerOn && styles.roundBtnOff]}
+              disabled={status === 'unsupported'}
+            >
+              <SpeakerIcon off={!speakerOn} />
+            </Pressable>
+            <Text style={styles.controlLabel}>{t('call.speaker')}</Text>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* ── Safety note ── */}
       <View
@@ -728,6 +781,19 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   roundBtnOff: { backgroundColor: '#fdeaea' },
+  answerBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#19c37d',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#19c37d',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 8,
+  },
   endBtn: {
     width: 64,
     height: 64,

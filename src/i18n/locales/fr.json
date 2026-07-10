@@ -483,7 +483,9 @@
     "end": "Terminer l'appel",
     "speaker": "Haut-parleur",
     "safety": "Cet appel est sécurisé et confidentiel. L'IA peut faire des erreurs, consultez toujours un professionnel.",
-    "connecting": "Connexion…"
+    "connecting": "Connexion…",
+    "incoming": "Appel IA prêt",
+    "answer": "Décrocher"
   },
   "history": {
     "title": "Historique",

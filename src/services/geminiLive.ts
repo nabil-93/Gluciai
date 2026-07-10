@@ -108,6 +108,9 @@ export class GeminiLiveSession {
                   languageCode,
                   voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } },
                 },
+                // Verified: accepted by the live model, keeps replies snappy
+                // (~570 ms to first audio) even on longer questions.
+                thinkingConfig: { thinkingBudget: 0 },
               },
               systemInstruction: { parts: [{ text: systemInstruction }] },
               outputAudioTranscription: {},
@@ -172,13 +175,16 @@ export class GeminiLiveSession {
     });
   }
 
-  /** Stream one base64 chunk of 16 kHz 16-bit mono PCM from the mic. */
+  /** Stream one base64 chunk of 16 kHz 16-bit mono PCM from the mic.
+   *  (Field name `audio` verified end-to-end: model heard speech and
+   *  answered with voice. VAD needs the silence the mic naturally sends
+   *  after the user stops talking.) */
   sendAudio(base64Pcm16k: string) {
     if (!this.ready || this.ws?.readyState !== WebSocket.OPEN) return;
     this.ws.send(
       JSON.stringify({
         realtimeInput: {
-          mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: base64Pcm16k }],
+          audio: { mimeType: 'audio/pcm;rate=16000', data: base64Pcm16k },
         },
       })
     );
@@ -233,9 +239,18 @@ export class MicStreamer {
   private proc: ScriptProcessorNode | null = null;
   private muted = false;
 
-  async start(onChunk: (b64: string) => void): Promise<void> {
+  /** MUST be called synchronously inside a user gesture on iOS Safari —
+   *  audio contexts created outside a tap stay suspended forever. */
+  prepareContext() {
+    if (this.ctx) return;
     const AC =
       (window as any).AudioContext || (window as any).webkitAudioContext;
+    this.ctx = new AC();
+    this.ctx!.resume().catch(() => {});
+  }
+
+  async start(onChunk: (b64: string) => void): Promise<void> {
+    this.prepareContext();
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -244,7 +259,7 @@ export class MicStreamer {
         autoGainControl: true,
       },
     });
-    this.ctx = new AC();
+    this.ctx!.resume().catch(() => {});
     const src = this.ctx!.createMediaStreamSource(this.stream);
     this.proc = this.ctx!.createScriptProcessor(4096, 1, 1);
     const rate = this.ctx!.sampleRate;
@@ -300,7 +315,10 @@ export class PcmPlayer {
   constructor() {
     const AC =
       (window as any).AudioContext || (window as any).webkitAudioContext;
-    this.ctx = new AC({ sampleRate: 24000 });
+    // No forced sampleRate: iOS Safari can refuse non-native rates. The
+    // buffers are created at 24 kHz and WebAudio resamples automatically.
+    this.ctx = new AC();
+    this.ctx.resume().catch(() => {});
     this.gain = this.ctx.createGain();
     this.gain.connect(this.ctx.destination);
   }

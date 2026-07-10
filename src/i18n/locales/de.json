@@ -483,7 +483,9 @@
     "end": "Anruf beenden",
     "speaker": "Lautsprecher",
     "safety": "Dieser Anruf ist sicher und vertraulich. Die KI kann Fehler machen — konsultiere immer eine Fachperson.",
-    "connecting": "Verbindung…"
+    "connecting": "Verbindung…",
+    "incoming": "KI-Anruf bereit",
+    "answer": "Annehmen"
   },
   "history": {
     "title": "Verlauf",
