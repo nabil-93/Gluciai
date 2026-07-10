@@ -147,6 +147,8 @@
     "glyNormal": "طبيعي",
     "glyModerate": "متوسط",
     "glyHigh": "مرتفع",
+    "glyVeryHigh": "مرتفع جداً",
+    "moreDetails": "المزيد من التفاصيل",
     "glyLowTitle": "مستوى منخفض",
     "glyLowDesc": "مستوى السكر في الدم أقل من النطاق المستهدف.",
     "glyNormalTitle": "مستوى طبيعي",

@@ -11,7 +11,16 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
+import Svg, {
+  Circle,
+  Defs,
+  Ellipse,
+  Line,
+  Path,
+  RadialGradient,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -595,6 +604,9 @@ function CalendarPopup({
 type GlyZone = {
   key: 'low' | 'normal' | 'moderate' | 'high';
   color: string;
+  /** Ring degradé: pale (top of the ring) → strong (sides/bottom) */
+  pale: string;
+  strong: string;
   labelKey: string;
   tint: string;
   alertBg: string;
@@ -606,6 +618,8 @@ const GLY_ZONES: GlyZone[] = [
   {
     key: 'low',
     color: '#3b82f6',
+    pale: '#dbeafe',
+    strong: '#3b82f6',
     labelKey: 'home.glyLow',
     tint: 'rgba(59,130,246,0.28)',
     alertBg: 'rgba(211,229,255,0.55)',
@@ -616,6 +630,8 @@ const GLY_ZONES: GlyZone[] = [
   {
     key: 'normal',
     color: '#22b95e',
+    pale: '#cdeed9',
+    strong: '#3fc873',
     labelKey: 'home.glyNormal',
     tint: 'rgba(63,200,115,0.28)',
     alertBg: 'rgba(63,200,115,0.14)',
@@ -626,6 +642,8 @@ const GLY_ZONES: GlyZone[] = [
   {
     key: 'moderate',
     color: '#f5b60a',
+    pale: '#fbeab9',
+    strong: '#f6bc1c',
     labelKey: 'home.glyModerate',
     tint: 'rgba(246,188,28,0.3)',
     alertBg: 'rgba(250,235,190,0.5)',
@@ -636,7 +654,9 @@ const GLY_ZONES: GlyZone[] = [
   {
     key: 'high',
     color: '#ef4444',
-    labelKey: 'home.glyHighTitle',
+    pale: '#fbd0d0',
+    strong: '#f05656',
+    labelKey: 'home.glyVeryHigh',
     tint: 'rgba(240,86,86,0.3)',
     alertBg: 'rgba(252,215,215,0.55)',
     icon: '!',
@@ -664,102 +684,274 @@ function sliderFrac(value: number, low: number, high: number): number {
   return Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
 }
 
+/** Lerp two #rrggbb colors → rgb() string (for the ring's degradé). */
+function mixHex(a: string, b: string, t: number) {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const ch = (sh: number) => {
+    const va = (pa >> sh) & 255;
+    const vb = (pb >> sh) & 255;
+    return Math.round(va + (vb - va) * t);
+  };
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+}
+
 /**
- * Speedometer gauge — a 240° arc that fills grey→zone-color up to the
- * reading, with the value + unit + status pill in the centre and a knob
- * riding the arc at the reading's position. Faithful to the gluci mockup
- * (circular degradé ring + knob), redrawn as an RN-SVG arc.
+ * Circular degradé ring — 1:1 port of the gluci mockup gauge: a FULL
+ * ring whose conic gradient runs pale at the top → saturated on the
+ * sides/bottom, a white radial face holding value + unit + status pill,
+ * a knob riding the ring, and a tinted reflection ellipse underneath.
+ * Geometry copied from the mockup's 280×280 canvas and scaled.
  */
-function GlucoseGauge({
+function GlucoseRing({
   value,
   zone,
   zoneLabel,
   frac,
-  size = 220,
+  width = 216,
+  emptyText,
 }: {
   value: number | null;
   zone: GlyZone | null;
   /** Localized status label shown in the centre pill */
   zoneLabel: string;
-  /** 0..1 fill fraction along the arc */
+  /** 0..1 position along the Bas→Haut scale (drives the knob) */
   frac: number;
-  size?: number;
+  width?: number;
+  emptyText?: string;
 }) {
-  const stroke = 18;
-  const r = (size - stroke) / 2;
-  const cx = size / 2;
-  const cy = size / 2;
-  const START = 150; // degrees — arc opens at the bottom
-  const SWEEP = 240;
-  const rad = (deg: number) => ((deg - 180) * Math.PI) / 180;
-  const pt = (deg: number) => ({
-    x: cx + r * Math.cos(rad(deg)),
-    y: cy + r * Math.sin(rad(deg)),
-  });
-  const arcPath = (fromDeg: number, toDeg: number) => {
-    const p1 = pt(fromDeg);
-    const p2 = pt(toDeg);
-    const large = toDeg - fromDeg > 180 ? 1 : 0;
-    return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  const VB = 280; // mockup canvas
+  const H = 330; // ring + reflection strip below
+  const s = width / VB;
+  const cx = 140;
+  const cy = 140;
+  const R_RING = 128.5; // middle of the mockup's masked 117..140 band
+  const RING_W = 23;
+  const pale = zone?.pale ?? '#e9edf2';
+  const strong = zone?.strong ?? '#ccd5df';
+  const tint = zone?.strong ?? '#ccd5df';
+
+  // conic-gradient(from 0deg, pale 0°, strong 78°, strong 282°, pale 360°)
+  const colorAt = (deg: number) => {
+    const d = ((deg % 360) + 360) % 360;
+    const t = d <= 78 ? d / 78 : d >= 282 ? (360 - d) / 78 : 1;
+    return mixHex(pale, strong, t);
   };
-  const endDeg = START + SWEEP * frac;
-  const knob = pt(endDeg);
-  const color = zone?.color ?? '#c7d0dc';
+  // 0° = 12 o'clock, clockwise — same convention as CSS conic gradients.
+  const pt = (deg: number, r: number) => ({
+    x: cx + r * Math.sin((deg * Math.PI) / 180),
+    y: cy - r * Math.cos((deg * Math.PI) / 180),
+  });
+  const SEGS = 72;
+  const STEP = 360 / SEGS;
+  const segs = Array.from({ length: SEGS }, (_, i) => {
+    const a0 = i * STEP;
+    const p0 = pt(a0, R_RING);
+    const p1 = pt(a0 + STEP + 0.8, R_RING); // slight overlap hides seams
+    return {
+      d: `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${R_RING} ${R_RING} 0 0 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`,
+      color: colorAt(a0 + STEP / 2),
+    };
+  });
+  // The mockup's demo states ride between -46° and +74°; map the same span.
+  const knob = pt(-55 + 150 * frac, 130);
 
   return (
-    <View style={{ width: size, height: size * 0.82, alignItems: 'center' }}>
-      <Svg width={size} height={size} style={{ position: 'absolute' }}>
+    <View style={{ width, height: Math.round(H * s) }}>
+      <Svg width={width} height={Math.round(H * s)} viewBox={`0 0 ${VB} ${H}`}>
         <Defs>
-          <SvgGradient id="glyArc" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={color} stopOpacity={0.55} />
-            <Stop offset="1" stopColor={color} stopOpacity={1} />
-          </SvgGradient>
+          <RadialGradient id="gringFace" cx="50%" cy="35%" r="75%">
+            <Stop offset="0" stopColor="#ffffff" />
+            <Stop offset="1" stopColor="#f5faf6" />
+          </RadialGradient>
+          <RadialGradient id="gringFaceShadow" cx="50%" cy="50%" r="50%">
+            <Stop offset="0.82" stopColor="#28503a" stopOpacity="0.26" />
+            <Stop offset="1" stopColor="#28503a" stopOpacity="0" />
+          </RadialGradient>
+          <RadialGradient id="gringReflect" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={tint} stopOpacity="0.3" />
+            <Stop offset="0.72" stopColor={tint} stopOpacity="0" />
+            <Stop offset="1" stopColor={tint} stopOpacity="0" />
+          </RadialGradient>
         </Defs>
-        {/* Track */}
+
+        {/* Degradé ring */}
+        {segs.map((g, i) => (
+          <Path key={i} d={g.d} stroke={g.color} strokeWidth={RING_W} fill="none" />
+        ))}
+        {/* Soft shadow between face and ring, then the white face on top */}
+        <Circle cx={cx} cy={cy + 8} r={119} fill="url(#gringFaceShadow)" />
+        <Circle cx={cx} cy={cy} r={120} fill="url(#gringFace)" />
+
+        {/* Tinted reflection under the gauge + white highlight arc */}
+        <Ellipse cx={cx} cy={287} rx={120} ry={19} fill="url(#gringReflect)" />
         <Path
-          d={arcPath(START, START + SWEEP)}
-          stroke="#eef1f5"
-          strokeWidth={stroke}
-          strokeLinecap="round"
+          d={`M ${cx - 98} 288 A 98 15 0 0 1 ${cx + 98} 288`}
+          stroke="rgba(255,255,255,0.85)"
+          strokeWidth={2}
           fill="none"
         />
-        {/* Fill up to the reading */}
-        {value != null && frac > 0 ? (
-          <Path
-            d={arcPath(START, endDeg)}
-            stroke="url(#glyArc)"
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            fill="none"
-          />
-        ) : null}
-        {/* Knob */}
+
+        {/* Knob riding the ring */}
         {value != null ? (
           <>
+            <Circle cx={knob.x} cy={knob.y + 2} r={13.5} fill="rgba(0,0,0,0.14)" />
             <Circle cx={knob.x} cy={knob.y} r={13} fill="#ffffff" />
-            <Circle cx={knob.x} cy={knob.y} r={6.5} fill={color} />
+            <Circle cx={knob.x} cy={knob.y} r={6.5} fill={zone?.color ?? '#ccd5df'} />
           </>
         ) : null}
       </Svg>
-      {/* Centre readout */}
-      <View style={styles.gaugeCenter}>
+
+      {/* Centre readout, overlaid on the face */}
+      <View
+        style={{
+          position: 'absolute',
+          left: 20 * s,
+          top: 20 * s,
+          width: 240 * s,
+          height: 240 * s,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         {value != null ? (
           <>
-            <Text style={styles.gaugeValue}>{value}</Text>
-            <Text style={styles.gaugeUnit}>mg/dL</Text>
+            <Text style={[styles.gringValue, { fontSize: 62 * s, lineHeight: 66 * s }]}>
+              {value}
+            </Text>
+            <Text style={[styles.gringUnit, { fontSize: 20 * s }]}>mg/dL</Text>
             {zone ? (
-              <View style={[styles.gaugePill, { backgroundColor: zone.color }]}>
-                <Text style={styles.gaugePillText}>{zoneLabel}</Text>
+              <View style={[styles.gringPill, { backgroundColor: zone.color }]}>
+                <Text style={styles.gringPillText}>{zoneLabel}</Text>
               </View>
             ) : null}
           </>
         ) : (
           <>
-            <View style={styles.gaugeDash} />
-            <Text style={styles.gaugeUnit}>mg/dL</Text>
+            <View style={styles.gringDash} />
+            <Text style={[styles.gringUnit, { fontSize: 20 * s }]}>mg/dL</Text>
+            {emptyText ? <Text style={styles.gringEmpty}>{emptyText}</Text> : null}
           </>
         )}
       </View>
+    </View>
+  );
+}
+
+/**
+ * Day curve — 1:1 port of the mockup chart: 900×250 canvas, dashed
+ * gridlines, right-hand mg/dL scale (300/200/100/0), smooth Catmull-Rom
+ * segments and dots colored by zone.
+ */
+function GlyDayChart({
+  readings,
+  low,
+  high,
+}: {
+  readings: { minutes: number; value: number }[];
+  low: number;
+  high: number;
+}) {
+  const yMax = 320;
+  const x0 = 20;
+  const x1 = 830;
+  const yTop = 30;
+  const yBot = 200;
+  const yFor = (v: number) => yBot - (Math.min(v, yMax) / yMax) * (yBot - yTop);
+  const pts = readings
+    .slice()
+    .sort((a, b) => a.minutes - b.minutes)
+    .map((r) => ({
+      x: x0 + (r.minutes / 1440) * (x1 - x0),
+      y: yFor(r.value),
+      val: r.value,
+    }));
+  const segs: { d: string; color: string }[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || pts[i + 1];
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    segs.push({
+      d: `M${p1.x.toFixed(1)} ${p1.y.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`,
+      color: zoneFor(Math.max(p1.val, p2.val), low, high).color,
+    });
+  }
+  const Y_LABELS: [number, string][] = [
+    [35, '300'],
+    [98, '200'],
+    [161, '100'],
+    [205, '0'],
+  ];
+  const X_LABELS: [number, string][] = [
+    [60, '00:00'],
+    [260, '06:00'],
+    [450, '12:00'],
+    [645, '18:00'],
+    [820, '24:00'],
+  ];
+  return (
+    <View style={{ marginTop: 2, marginBottom: 4 }}>
+      <Svg width="100%" viewBox="0 0 900 250" style={{ aspectRatio: 900 / 250 }}>
+        {[30, 93, 156].map((y) => (
+          <Line
+            key={y}
+            x1={20}
+            y1={y}
+            x2={830}
+            y2={y}
+            stroke="#c7dccb"
+            strokeWidth={1.5}
+            strokeDasharray="2 8"
+            strokeLinecap="round"
+          />
+        ))}
+        <Line x1={20} y1={200} x2={830} y2={200} stroke="#b8d2bd" strokeWidth={1.5} />
+        {segs.map((g, i) => (
+          <Path
+            key={i}
+            d={g.d}
+            fill="none"
+            stroke={g.color}
+            strokeWidth={4.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
+        {pts.map((p, i) => (
+          <Circle
+            key={i}
+            cx={p.x.toFixed(1)}
+            cy={p.y.toFixed(1)}
+            r={7.5}
+            fill={zoneFor(p.val, low, high).color}
+            stroke="#ffffff"
+            strokeWidth={3.5}
+          />
+        ))}
+        {Y_LABELS.map(([y, l]) => (
+          <SvgText key={l} x={852} y={y} fill="#8aa693" fontSize={20} fontFamily={F600}>
+            {l}
+          </SvgText>
+        ))}
+        {X_LABELS.map(([x, l]) => (
+          <SvgText
+            key={l}
+            x={x}
+            y={235}
+            fill="#8aa693"
+            fontSize={20}
+            fontFamily={F600}
+            textAnchor="middle"
+          >
+            {l}
+          </SvgText>
+        ))}
+      </Svg>
     </View>
   );
 }
@@ -812,19 +1004,24 @@ export default function HomeScreen() {
   ).length;
   const tir = todayGlucose.length ? inRangeCount / todayGlucose.length : 0;
 
-  const glucoseStatus = lastGlucose
-    ? lastGlucose.value < low
-      ? { label: t('home.belowRange'), color: '#f97316', bg: '#fef5ee' }
-      : lastGlucose.value > high
-        ? { label: t('home.aboveRange'), color: '#f97316', bg: '#fef5ee' }
-        : { label: t('home.inRange'), color: '#16955f', bg: '#e9fbf2' }
-    : null;
-
-  // Gauge zone + slider position for the latest reading (gluci mockup).
+  // Gauge zone + Bas→Haut position for the latest reading (gluci mockup).
   const glyZone = lastGlucose ? zoneFor(lastGlucose.value, low, high) : null;
-  const glySliderFrac = lastGlucose ? sliderFrac(lastGlucose.value, low, high) : 0;
-  // The 240° arc fills proportionally to the same Bas→Haut scale.
-  const glyGaugeFrac = glySliderFrac;
+  const glySliderFrac = lastGlucose
+    ? sliderFrac(lastGlucose.value, low, high)
+    : 0;
+  // Ring width follows the measured card width (mockup ratio ≈ 0.68).
+  const [glyW, setGlyW] = React.useState(0);
+  const glyRingW =
+    glyW > 0 ? Math.min(264, Math.max(190, Math.round(glyW * 0.68))) : 214;
+  // Today's readings mapped onto the 00:00 → 24:00 chart.
+  const dayReadings = useMemo(
+    () =>
+      todayGlucose.map((g) => {
+        const d = new Date(g.created_at);
+        return { minutes: d.getHours() * 60 + d.getMinutes(), value: g.value };
+      }),
+    [todayGlucose]
+  );
 
   // Meals section: which day is shown, and whether the calendar popup is open.
   const [selectedDate, setSelectedDate] = React.useState(() => new Date());
@@ -1149,44 +1346,32 @@ export default function HomeScreen() {
           onPress={() => router.push('/glucose')}
         >
           <View style={styles.glyHead}>
-            <View style={styles.glyTitleRow}>
-              <View style={styles.glyPurpleDot} />
-              <Text style={styles.glyTitle}>{t('home.glycemia')}</Text>
-            </View>
-            <View
-              style={[
-                styles.glyBadge,
-                glucoseStatus
-                  ? { backgroundColor: glucoseStatus.bg }
-                  : null,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.glyBadgeText,
-                  glucoseStatus ? { color: glucoseStatus.color } : null,
-                ]}
-              >
-                {glucoseStatus ? glucoseStatus.label : t('home.noMeasure')}
-              </Text>
+            <Text style={styles.glyTitle}>{t('home.glycemia')}</Text>
+            <View style={styles.glyDetailsBtn}>
+              <Text style={styles.glyDetailsText}>{t('home.moreDetails')}</Text>
+              <View style={styles.glyDetailsChev}>
+                <Text style={styles.glyDetailsChevText}>›</Text>
+              </View>
             </View>
           </View>
 
-          {/* ── Speedometer gauge (gluci mockup) ── */}
-          <View style={styles.gaugeWrap}>
-            <GlucoseGauge
+          {/* ── Degradé ring gauge (gluci mockup) ── */}
+          <View
+            style={styles.gringWrap}
+            onLayout={(e) => setGlyW(e.nativeEvent.layout.width)}
+          >
+            <GlucoseRing
               value={lastGlucose ? lastGlucose.value : null}
               zone={glyZone}
               zoneLabel={glyZone ? t(glyZone.labelKey) : ''}
-              frac={glyGaugeFrac}
-              size={210}
+              frac={glySliderFrac}
+              width={glyRingW}
+              emptyText={t('home.noMeasureToday')}
             />
           </View>
-          {!lastGlucose ? (
-            <Text style={styles.gaugeEmptyText}>
-              {t('home.noMeasureToday')}
-            </Text>
-          ) : null}
+
+          {/* ── Day curve (00:00 → 24:00) ── */}
+          <GlyDayChart readings={dayReadings} low={low} high={high} />
 
           {/* ── Alert row, tinted to the current zone ── */}
           {glyZone ? (
@@ -1200,12 +1385,14 @@ export default function HomeScreen() {
                   {t(glyZone.alertDescKey)}
                 </Text>
               </View>
-              <ChevRight size={16} color={glyZone.color} />
+              <Text style={[styles.glyAlertChev, { color: glyZone.color }]}>›</Text>
             </View>
           ) : null}
 
-          {/* ── Bas ↔ Haut gradient slider ── */}
-          <View style={styles.glySliderCard}>
+          {/* ── Bas ↔ Haut gradient slider, % bubble riding the knob ── */}
+          <View
+            style={[styles.glySliderCard, { paddingTop: lastGlucose ? 46 : 18 }]}
+          >
             <View style={styles.glySliderRow}>
               <Text style={[styles.glySliderEnd, { color: '#3b82f6' }]}>
                 {t('home.glyLow')}
@@ -1217,25 +1404,55 @@ export default function HomeScreen() {
                   end={{ x: 1, y: 0 }}
                   style={styles.glySliderTrack}
                 />
-                {lastGlucose ? (
-                  <View
-                    style={[
-                      styles.glySliderKnob,
-                      { left: `${glySliderFrac * 100}%` },
-                    ]}
-                  >
+                {lastGlucose && glyZone ? (
+                  <>
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.glyBubbleWrap,
+                        { left: `${glySliderFrac * 100}%` },
+                      ]}
+                    >
+                      <View
+                        style={[styles.glyBubble, { backgroundColor: glyZone.color }]}
+                      >
+                        <Text style={styles.glyBubbleText}>
+                          {Math.round(glySliderFrac * 100)}%
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.glyBubbleArrow,
+                          { borderTopColor: glyZone.color },
+                        ]}
+                      />
+                    </View>
                     <View
                       style={[
-                        styles.glySliderKnobDot,
-                        { backgroundColor: glyZone?.color ?? '#111827' },
+                        styles.glySliderKnob,
+                        { left: `${glySliderFrac * 100}%` },
                       ]}
-                    />
-                  </View>
+                    >
+                      <View
+                        style={[
+                          styles.glySliderKnobDot,
+                          { backgroundColor: glyZone.color },
+                        ]}
+                      />
+                    </View>
+                  </>
                 ) : null}
               </View>
               <Text style={[styles.glySliderEnd, { color: '#ef4444' }]}>
                 {t('home.glyHigh')}
               </Text>
+            </View>
+            <View style={styles.glyScaleRow}>
+              {['0%', '25%', '50%', '75%', '100%'].map((l) => (
+                <Text key={l} style={styles.glyScaleLabel}>
+                  {l}
+                </Text>
+              ))}
             </View>
           </View>
 
@@ -1676,35 +1893,50 @@ const styles = StyleSheet.create({
   glyCard: {
     marginTop: 9,
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 15,
-    ...CARD_SHADOW,
+    borderRadius: 30,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
+    shadowColor: 'rgba(30,80,50,1)',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.14,
+    shadowRadius: 28,
+    elevation: 6,
   },
   glyHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  glyTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  glyPurpleDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: '#19c37d',
-  },
   glyTitle: {
     fontFamily: F800,
-    fontSize: 16.5,
-    letterSpacing: -0.2,
-    color: '#111827',
+    fontSize: 24,
+    letterSpacing: -0.4,
+    color: '#0f3d24',
   },
-  glyBadge: {
-    backgroundColor: '#f1f2f8',
-    borderRadius: 13,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+  glyDetailsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(120,190,140,0.35)',
+    paddingVertical: 8,
+    paddingHorizontal: 13,
+    borderRadius: 18,
   },
-  glyBadgeText: { fontFamily: F600, fontSize: 11.5, color: '#6b7280' },
+  glyDetailsText: { fontFamily: F600, fontSize: 12.5, color: '#3f6b4d' },
+  glyDetailsChev: {
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    backgroundColor: 'rgba(120,190,140,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glyDetailsChevText: {
+    fontFamily: F700,
+    fontSize: 10,
+    color: '#3f6b4d',
+    marginTop: -1,
+  },
   glyAddBtn: {
     marginTop: 4,
     height: 44,
@@ -1717,104 +1949,116 @@ const styles = StyleSheet.create({
   },
   glyAddText: { fontFamily: F700, fontSize: 14, color: '#17a56d' },
 
-  /* Speedometer gauge */
-  gaugeWrap: { alignItems: 'center', marginTop: 10, marginBottom: 2 },
-  gaugeCenter: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+  /* Degradé ring gauge */
+  gringWrap: { alignItems: 'center', marginTop: 12 },
+  gringValue: { fontFamily: F800, color: '#152a1c', letterSpacing: -1 },
+  gringUnit: { fontFamily: F600, color: '#7c9585', marginTop: 2 },
+  gringPill: {
+    marginTop: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 20,
+    borderRadius: 18,
   },
-  gaugeValue: {
-    fontFamily: F800,
-    fontSize: 52,
-    lineHeight: 54,
-    letterSpacing: -1,
-    color: '#111827',
-  },
-  gaugeUnit: { fontFamily: F600, fontSize: 15, color: '#8b93a7', marginTop: 2 },
-  gaugeDash: {
+  gringPillText: { fontFamily: F600, fontSize: 14, color: '#ffffff' },
+  gringDash: {
     width: 34,
     height: 5,
     borderRadius: 3,
     backgroundColor: '#c7d0dc',
     marginBottom: 6,
   },
-  gaugePill: {
-    marginTop: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-  },
-  gaugePillText: { fontFamily: F700, fontSize: 13, color: '#ffffff' },
-  gaugeEmptyText: {
+  gringEmpty: {
     fontFamily: F600,
-    fontSize: 13,
-    color: '#8b93a7',
+    fontSize: 12.5,
+    color: '#8aa693',
     textAlign: 'center',
-    marginTop: -6,
-    marginBottom: 6,
+    marginTop: 8,
+    paddingHorizontal: 24,
   },
 
   /* Alert row */
   glyAlert: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 13,
-    borderRadius: 18,
-    padding: 13,
-    marginTop: 8,
+    gap: 14,
+    borderRadius: 22,
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    marginTop: 10,
   },
   glyAlertIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  glyAlertIconText: { fontFamily: F800, fontSize: 18, color: '#ffffff' },
-  glyAlertTitle: { fontFamily: F700, fontSize: 15, color: '#1c3326' },
+  glyAlertIconText: { fontFamily: F800, fontSize: 20, color: '#ffffff' },
+  glyAlertTitle: { fontFamily: F700, fontSize: 15.5, color: '#1c3326' },
   glyAlertDesc: {
     fontFamily: F500,
     fontSize: 12.5,
     color: '#6f8a78',
     marginTop: 2,
-    lineHeight: 17,
+    lineHeight: 17.5,
   },
+  glyAlertChev: { fontFamily: F700, fontSize: 22, marginTop: -2 },
 
   /* Bas ↔ Haut gradient slider */
   glySliderCard: {
-    backgroundColor: '#f7f9fb',
-    borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingBottom: 14,
     marginTop: 10,
   },
   glySliderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  glySliderEnd: { fontFamily: F700, fontSize: 14 },
+  glySliderEnd: { fontFamily: F700, fontSize: 16 },
   glySliderTrackWrap: { flex: 1, height: 14, justifyContent: 'center' },
-  glySliderTrack: { height: 10, borderRadius: 5 },
+  glySliderTrack: { height: 14, borderRadius: 7 },
   glySliderKnob: {
     position: 'absolute',
     top: '50%',
-    width: 22,
-    height: 22,
-    marginLeft: -11,
-    marginTop: -11,
-    borderRadius: 11,
+    width: 26,
+    height: 26,
+    marginLeft: -13,
+    marginTop: -13,
+    borderRadius: 13,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: 'rgba(0,0,0,0.25)',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: 'rgba(0,0,0,0.3)',
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  glySliderKnobDot: { width: 11, height: 11, borderRadius: 6 },
+  glySliderKnobDot: { width: 13, height: 13, borderRadius: 7 },
+  glyBubbleWrap: {
+    position: 'absolute',
+    bottom: 24,
+    width: 64,
+    marginLeft: -32,
+    alignItems: 'center',
+  },
+  glyBubble: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: 12 },
+  glyBubbleText: { fontFamily: F700, fontSize: 13, color: '#ffffff' },
+  glyBubbleArrow: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 7,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  glyScaleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 13,
+    paddingHorizontal: 2,
+  },
+  glyScaleLabel: { fontFamily: F600, fontSize: 11.5, color: '#8aa693' },
 
   /* Rings */
   ringsRow: { flexDirection: 'row', gap: 10, marginTop: 12 },

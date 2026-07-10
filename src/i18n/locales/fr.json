@@ -147,6 +147,8 @@
     "glyNormal": "Normal",
     "glyModerate": "Modéré",
     "glyHigh": "Haut",
+    "glyVeryHigh": "Très élevé",
+    "moreDetails": "Plus de détails",
     "glyLowTitle": "Niveau bas",
     "glyLowDesc": "Votre glycémie est en dessous de la plage cible.",
     "glyNormalTitle": "Niveau normal",

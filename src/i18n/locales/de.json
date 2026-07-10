@@ -147,6 +147,8 @@
     "glyNormal": "Normal",
     "glyModerate": "Moderat",
     "glyHigh": "Hoch",
+    "glyVeryHigh": "Sehr hoch",
+    "moreDetails": "Mehr Details",
     "glyLowTitle": "Niedriger Wert",
     "glyLowDesc": "Dein Blutzucker liegt unter dem Zielbereich.",
     "glyNormalTitle": "Normaler Wert",
