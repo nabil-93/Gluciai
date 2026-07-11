@@ -58,7 +58,8 @@
     "continueWithGoogle": "Mit Google fortfahren",
     "continueWithApple": "Mit Apple fortfahren",
     "comingSoon": "Demnächst verfügbar",
-    "securityNote": "Deine Daten sind sicher und geschützt.\nWir verwenden modernste Verschlüsselung."
+    "securityNote": "Deine Daten sind sicher und geschützt.\nWir verwenden modernste Verschlüsselung.",
+    "phone": "Telefonnummer (WhatsApp)"
   },
   "wizard": {
     "progress": "Schritt {{current}} von {{total}}",
@@ -721,5 +722,24 @@
     "checkCautionFallback": "Diese Dosis weicht von der berechneten Empfehlung ab. Prüfe sie gut, bevor du fortfährst.",
     "noteAccepted": "KI-Bolus — Mahlzeit {{carbs}} g, Blutzucker {{glucose}}",
     "noteModified": "KI-Bolus {{rec}} E → vom Patienten auf {{dose}} E geändert"
+  },
+  "day": {
+    "emptyTitle": "Nichts an diesem Tag",
+    "emptyMsg": "Keine Daten für diesen Tag gespeichert.",
+    "avgGly": "Ø mg/dL",
+    "totInsulin": "Insulin (E)",
+    "totCarbs": "Kohlenh. (g)",
+    "totActivity": "Sport (Min)",
+    "meals": "Mahlzeiten",
+    "meal": "Mahlzeit",
+    "carbsShort": "KH",
+    "sugarShort": "Zucker",
+    "insulin": "Insulin",
+    "insu_rapid": "Schnell",
+    "insu_long": "Lang",
+    "insu_mixed": "Misch",
+    "glucose": "Blutzucker",
+    "activity": "Aktivität",
+    "measures": "Messungen"
   }
 }

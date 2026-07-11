@@ -58,7 +58,8 @@
     "continueWithGoogle": "المتابعة باستخدام Google",
     "continueWithApple": "المتابعة باستخدام Apple",
     "comingSoon": "قريبًا",
-    "securityNote": "بياناتك آمنة ومحمية.\nنستخدم تشفيرًا متطورًا."
+    "securityNote": "بياناتك آمنة ومحمية.\nنستخدم تشفيرًا متطورًا.",
+    "phone": "رقم الهاتف (واتساب)"
   },
   "wizard": {
     "progress": "الخطوة {{current}} من {{total}}",
@@ -721,5 +722,24 @@
     "checkCautionFallback": "هذه الجرعة تختلف عن التوصية المحسوبة. تحقق جيدًا قبل المتابعة.",
     "noteAccepted": "جرعة الذكاء الاصطناعي — وجبة {{carbs}} غ، سكر {{glucose}}",
     "noteModified": "جرعة الذكاء الاصطناعي {{rec}} → عدّلها المريض إلى {{dose}}"
+  },
+  "day": {
+    "emptyTitle": "لا شيء في ذلك اليوم",
+    "emptyMsg": "لا توجد بيانات مسجلة لهذا اليوم.",
+    "avgGly": "معدل مغ/دل",
+    "totInsulin": "أنسولين (U)",
+    "totCarbs": "كربوهيدرات (غ)",
+    "totActivity": "رياضة (دق)",
+    "meals": "الوجبات",
+    "meal": "وجبة",
+    "carbsShort": "كربوهيدرات",
+    "sugarShort": "سكريات",
+    "insulin": "الأنسولين",
+    "insu_rapid": "سريع",
+    "insu_long": "بطيء",
+    "insu_mixed": "مختلط",
+    "glucose": "سكر الدم",
+    "activity": "النشاط",
+    "measures": "القياسات"
   }
 }

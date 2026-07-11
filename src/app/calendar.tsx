@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useRouter } from 'expo-router';
@@ -13,7 +13,7 @@ const DOW = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 export default function CalendarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { glucoseLogs, profile } = useAppStore();
+  const { glucoseLogs, meals, insulinLogs, profile } = useAppStore();
 
   const low = profile?.target_low ?? 70;
   const high = profile?.target_high ?? 180;
@@ -23,16 +23,38 @@ export default function CalendarScreen() {
     else router.replace('/(tabs)');
   };
 
+  /* Month being browsed: 0 = current, 1 = previous… every past day stays
+     tappable — tapping opens the full archive of that day (/day). */
+  const [monthsBack, setMonthsBack] = useState(0);
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const monthName = now.toLocaleDateString('fr-FR', {
+  const shown = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+  const year = shown.getFullYear();
+  const month = shown.getMonth();
+  const monthName = shown.toLocaleDateString('fr-FR', {
     month: 'long',
     year: 'numeric',
   });
   const firstDay = (new Date(year, month, 1).getDay() + 6) % 7; // Monday-first
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = now.getDate();
+  const today =
+    monthsBack === 0 ? now.getDate() : -1; // highlight only in the current month
+
+  /* Days of this month that hold ANY data (meals / insulin) — small dot */
+  const dataDays = useMemo(() => {
+    const set = new Set<number>();
+    const mark = (iso: string) => {
+      const d = new Date(iso);
+      if (d.getFullYear() === year && d.getMonth() === month) set.add(d.getDate());
+    };
+    meals.forEach((m) => mark(m.created_at));
+    insulinLogs.forEach((i) => mark(i.created_at));
+    return set;
+  }, [meals, insulinLogs, year, month]);
+
+  const openDay = (n: number) => {
+    const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(n).padStart(2, '0')}`;
+    router.push(`/day?date=${iso}` as any);
+  };
 
   // Per-day glucose stats for the current month
   const dayStats = useMemo(() => {
@@ -67,9 +89,24 @@ export default function CalendarScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
       <View style={styles.headerRow}>
+        <Pressable
+          style={styles.navBtn}
+          onPress={() => setMonthsBack((m) => m + 1)}
+          hitSlop={8}
+        >
+          <Text style={styles.navBtnText}>‹</Text>
+        </Pressable>
         <Pressable style={styles.titleBtn} onPress={close}>
           <Text style={styles.title}>{capitalize(monthName)}</Text>
           <ChevronDown size={16} />
+        </Pressable>
+        <Pressable
+          style={[styles.navBtn, monthsBack === 0 && { opacity: 0.35 }]}
+          onPress={() => setMonthsBack((m) => Math.max(0, m - 1))}
+          disabled={monthsBack === 0}
+          hitSlop={8}
+        >
+          <Text style={styles.navBtnText}>›</Text>
         </Pressable>
       </View>
 
@@ -94,7 +131,10 @@ export default function CalendarScreen() {
             {n === null ? (
               <View style={styles.cellBlank} />
             ) : (
-              <View style={[styles.cell, n === today && styles.cellToday]}>
+              <Pressable
+                onPress={() => openDay(n)}
+                style={[styles.cell, n === today && styles.cellToday]}
+              >
                 <Svg width={22} height={22} viewBox="0 0 24 24">
                   <Circle
                     cx={12}
@@ -118,7 +158,8 @@ export default function CalendarScreen() {
                     {dayStats.get(n)!.count}
                   </Text>
                 ) : null}
-              </View>
+                {dataDays.has(n) ? <View style={styles.dataDot} /> : null}
+              </Pressable>
             )}
           </View>
         ))}
@@ -155,6 +196,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   titleBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  navBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  navBtnText: { fontSize: 22, fontWeight: '700', color: colors.text, lineHeight: 24 },
   title: {
     fontSize: 26,
     fontWeight: '800',
@@ -208,6 +259,14 @@ const styles = StyleSheet.create({
   cellToday: { borderWidth: 2, borderColor: colors.ink },
   cellNum: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
   cellCount: { fontSize: 10, color: colors.textTertiary },
+  dataDot: {
+    position: 'absolute',
+    bottom: 2,
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#1fbc78',
+  },
   todayBtn: {
     position: 'absolute',
     left: 16,

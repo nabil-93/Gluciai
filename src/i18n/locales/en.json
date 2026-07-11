@@ -58,7 +58,8 @@
     "continueWithGoogle": "Continue with Google",
     "continueWithApple": "Continue with Apple",
     "comingSoon": "Coming soon",
-    "securityNote": "Your data is secure and protected.\nWe use state-of-the-art encryption."
+    "securityNote": "Your data is secure and protected.\nWe use state-of-the-art encryption.",
+    "phone": "Phone number (WhatsApp)"
   },
   "wizard": {
     "progress": "Step {{current}} of {{total}}",
@@ -721,5 +722,24 @@
     "checkCautionFallback": "This dose deviates from the computed recommendation. Double-check before continuing.",
     "noteAccepted": "AI bolus — meal {{carbs}} g, glucose {{glucose}}",
     "noteModified": "AI bolus {{rec}} U → changed to {{dose}} U by the patient"
+  },
+  "day": {
+    "emptyTitle": "Nothing that day",
+    "emptyMsg": "No data recorded for this day.",
+    "avgGly": "Avg mg/dL",
+    "totInsulin": "Insulin (U)",
+    "totCarbs": "Carbs (g)",
+    "totActivity": "Sport (min)",
+    "meals": "Meals",
+    "meal": "Meal",
+    "carbsShort": "carbs",
+    "sugarShort": "sugars",
+    "insulin": "Insulin",
+    "insu_rapid": "Rapid",
+    "insu_long": "Long",
+    "insu_mixed": "Mixed",
+    "glucose": "Glucose",
+    "activity": "Activity",
+    "measures": "Measures"
   }
 }

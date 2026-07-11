@@ -158,6 +158,14 @@ const statusOf = (row) => {
   return row.status;
 };
 
+/* WhatsApp deep link — normalizes local numbers (MA/DE) to international. */
+function waHref(phone, lang, msg) {
+  let d = String(phone || '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  else if (d.startsWith('0')) d = (lang === 'de' ? '49' : '212') + d.slice(1);
+  return `https://wa.me/${d}${msg ? `?text=${encodeURIComponent(msg)}` : ''}`;
+}
+
 function lightbox(url, caption) {
   const ov = document.createElement('div');
   ov.className = 'lightbox';
@@ -558,9 +566,12 @@ async function pagePatient(pid, initTab) {
             ${prof.language ? `<span class="badge gray">${esc(String(prof.language).toUpperCase())}</span>` : ''}
             ${ov.doctor_name ? `<span class="badge violet">Dr. ${esc(ov.doctor_name)}</span>` : ''}
             ${prof.promo_code_used ? `<span class="badge amber">Code ${esc(prof.promo_code_used)}</span>` : ''}
+            ${prof.phone ? `<span class="badge blue">📱 ${esc(prof.phone)}</span>` : '<span class="badge gray">📱 —</span>'}
             ${subBadge(ov)}
           </div>
         </div>
+        ${prof.phone ? `<a class="btn btn-ghost" style="text-decoration:none" target="_blank" rel="noopener"
+            href="${waHref(prof.phone, prof.language, `Bonjour ${prof.name || ''} 👋, ici l'équipe GlucoAI.`)}">💬 WhatsApp</a>` : ''}
       </div>
 
       <div class="stats-grid fade-up">
@@ -1175,13 +1186,23 @@ async function pageSubs() {
     const dl = daysLeft(p.expires_at);
     const eff = Math.max(0, Number(p.price || 0) * (1 - Number(p.discount_pct || 0) / 100));
     const nUnpaid = unpaidCount(p);
+    // WhatsApp renewal reminder — only when we can reach them AND it matters
+    const needsReminder = p.phone && ((dl !== null && dl <= 7) || (nUnpaid ?? 0) > 0);
+    const waMsg = dl !== null && dl < 0
+      ? `Bonjour ${p.name || ''} 👋, votre abonnement GlucoAI a expiré le ${fmtDate(p.expires_at)}. Pensez à le renouveler pour continuer à profiter de toutes les fonctionnalités 😊`
+      : dl !== null && dl <= 7
+        ? `Bonjour ${p.name || ''} 👋, votre abonnement GlucoAI expire le ${fmtDate(p.expires_at)} (dans ${dl} jour${dl > 1 ? 's' : ''}). Pensez à le renouveler 😊`
+        : `Bonjour ${p.name || ''} 👋, il reste ${nUnpaid} mois impayé${(nUnpaid ?? 0) > 1 ? 's' : ''} sur votre abonnement GlucoAI. Merci de régulariser quand vous pouvez 😊`;
     return `<tr class="click" data-sub="${p.user_id}">
-      <td><div class="cell-user">${avatar(p.name, p.email)}<div style="min-width:0"><div class="nm">${esc(p.name || 'Sans nom')}</div><div class="em">${esc(p.email || '')}</div></div></div></td>
+      <td><div class="cell-user">${avatar(p.name, p.email)}<div style="min-width:0"><div class="nm">${esc(p.name || 'Sans nom')}</div><div class="em">${esc(p.phone || p.email || '')}</div></div></div></td>
       <td>${p.plan ? PLAN_LABEL[p.plan] || esc(p.plan) : '—'}</td>
       <td>${subBadge(p)}</td>
       <td>${p.price ? `<b>${eff.toFixed(2)} €</b>${p.discount_pct ? ` <span style="color:var(--green-text);font-size:11px">-${p.discount_pct}%</span>` : ''}` : '—'}</td>
       <td>${nUnpaid === null ? '—' : nUnpaid > 0 ? `<span class="badge red">${nUnpaid} mois impayé${nUnpaid > 1 ? 's' : ''}</span>` : '<span class="badge green">À jour ✓</span>'}</td>
       <td style="font-size:12px;color:var(--muted)">${p.expires_at ? `${fmtDate(p.expires_at)}${dl !== null ? ` <span style="color:${dl < 0 ? 'var(--red-text)' : dl <= 7 ? 'var(--amber-text)' : 'var(--muted-2)'}">(${dl < 0 ? 'expiré' : dl + ' j'})</span>` : ''}` : '—'}</td>
+      <td style="width:52px">${needsReminder
+        ? `<a class="btn btn-ghost" data-stop="1" style="height:32px;padding:0 10px;font-size:12px;text-decoration:none" target="_blank" rel="noopener" title="Rappel WhatsApp" href="${waHref(p.phone, p.language, waMsg)}">💬</a>`
+        : ''}</td>
       <td style="color:var(--muted-2);width:20px">${I.chevR}</td>
     </tr>`;
   }).join('');
@@ -1196,12 +1217,13 @@ async function pageSubs() {
     if (fPay === 'late') f = f.filter((p) => (unpaidCount(p) ?? 0) > 0);
     if (fPay === 'ok') f = f.filter((p) => unpaidCount(p) === 0);
     document.getElementById('subsBody').innerHTML = rowsHtml(f)
-      || `<tr><td colspan="7"><div class="empty"><div class="e">🔍</div><div class="t">Aucun résultat</div></div></td></tr>`;
+      || `<tr><td colspan="8"><div class="empty"><div class="e">🔍</div><div class="t">Aucun résultat</div></div></td></tr>`;
     bindSubRows();
   };
   const bindSubRows = () => {
     page.querySelectorAll('tr[data-sub]').forEach((tr) =>
-      tr.addEventListener('click', async () => {
+      tr.addEventListener('click', async (e) => {
+        if (e.target.closest('[data-stop]')) return; // WhatsApp link, not the row
         const pid = tr.dataset.sub;
         const { data: sub } = await db.from('subscriptions').select('*').eq('user_id', pid).maybeSingle();
         subModal(pid, sub, () => pageSubs());
@@ -1235,7 +1257,7 @@ async function pageSubs() {
     <div class="card fade-up">
       <div class="card-head"><h3>Tous les patients</h3><span class="hint">cliquez pour modifier l'abonnement · les mois se gèrent depuis la fiche patient</span></div>
       <div class="table-wrap"><table class="data">
-        <thead><tr><th>Patient</th><th>Plan</th><th>Statut</th><th>Prix</th><th>Paiements</th><th>Expire</th><th></th></tr></thead>
+        <thead><tr><th>Patient</th><th>Plan</th><th>Statut</th><th>Prix</th><th>Paiements</th><th>Expire</th><th>Rappel</th><th></th></tr></thead>
         <tbody id="subsBody">${rowsHtml(patients)}</tbody></table></div>
     </div>`;
   bindSubRows();

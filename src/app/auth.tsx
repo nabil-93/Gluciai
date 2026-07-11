@@ -45,6 +45,19 @@ function MailIcon() {
     </Svg>
   );
 }
+function PhoneIcon() {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24">
+      <Path
+        d="M5 4h4l2 5-2.5 1.5a12 12 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"
+        stroke={GREEN}
+        strokeWidth={2}
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
 function LockIcon() {
   return (
     <Svg width={22} height={22} viewBox="0 0 24 24">
@@ -87,6 +100,7 @@ export default function AuthScreen() {
   const setWizardDone = useAppStore((s) => s.setWizardDone);
   const [mode, setMode] = useState<Mode>('register');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -120,9 +134,20 @@ export default function AuthScreen() {
         const { error: err } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { name } },
+          options: { data: { name, phone } },
         });
         if (err) throw err;
+        // The signup trigger created the profile row — attach the phone so
+        // the dashboard can reach the patient (WhatsApp renewal reminders).
+        if (phone.trim()) {
+          const { data: u } = await supabase.auth.getUser();
+          if (u.user) {
+            await supabase
+              .from('profiles')
+              .update({ phone: phone.trim(), name: name || undefined })
+              .eq('user_id', u.user.id);
+          }
+        }
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({
           email,
@@ -168,17 +193,31 @@ export default function AuthScreen() {
         {/* Fields */}
         <View style={{ gap: 11 }}>
           {isRegister ? (
-            <View style={styles.field}>
-              <UserIcon />
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                placeholder={t('auth.name')}
-                placeholderTextColor="#98a1af"
-                autoCapitalize="words"
-                style={styles.input}
-              />
-            </View>
+            <>
+              <View style={styles.field}>
+                <UserIcon />
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder={t('auth.name')}
+                  placeholderTextColor="#98a1af"
+                  autoCapitalize="words"
+                  style={styles.input}
+                />
+              </View>
+              <View style={styles.field}>
+                <PhoneIcon />
+                <TextInput
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder={t('auth.phone')}
+                  placeholderTextColor="#98a1af"
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  style={styles.input}
+                />
+              </View>
+            </>
           ) : null}
           <View style={styles.field}>
             <MailIcon />
