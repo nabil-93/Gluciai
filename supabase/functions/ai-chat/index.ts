@@ -33,12 +33,124 @@ Deno.serve(async (req) => {
       profile = null,
       mode = 'chat',
       healthData = '',
+      bolus = null,
+      modifiedDose = null,
     } = await req.json();
     if (!GEMINI_API_KEY) {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
     }
 
     const langName = LANGUAGE_NAMES[language] ?? 'English';
+
+    /* ── Bolus modes: the app's clinical engine computed the dose; the AI
+       explains it (report) or sanity-checks a patient edit (check).
+       Structured JSON output so the app can render it reliably. ── */
+    if (mode === 'bolus' || mode === 'bolus_check') {
+      if (!bolus) return json({ error: 'missing bolus data' }, 400);
+
+      const dataBlock =
+        `ENGINE RESULT (computed with the patient's own clinical parameters):\n` +
+        JSON.stringify(bolus) +
+        (healthData ? `\n\nPATIENT CONTEXT:\n${healthData}` : '');
+
+      const systemPrompt =
+        mode === 'bolus'
+          ? `You are GlucoAI, a warm diabetes assistant. The app just computed an
+insulin bolus recommendation using the patient's OWN clinical parameters
+(carb ratio, correction factor, insulin on board with 4h linear decay,
+recent exercise reduction, glucose trend, hypo guard). Your job: explain
+this recommendation to the patient in ${langName}, personally and clearly.
+
+Write ONLY valid JSON (no markdown fences):
+{"sections":[{"icon":"🍽️","title":"...","body":"..."}],
+ "conclusion":"...", "warnings":["..."]}
+
+Sections (include ONLY those with real data, in this order):
+1. 🍽️ the meal: name it, carbs g, sugar g, calories — comment if sugar-heavy
+   (fast spike) or balanced.
+2. 🩸 current glucose vs their target range; mention the trend (rising/
+   falling/stable) if known.
+3. 💉 their insulin: which type they use; if insulin is still active (IOB),
+   say how many units remain and WHY it must be deducted (stacking risk).
+4. 🏃 recent sport: name it and explain the reduction + the delayed-hypo
+   effect of exercise (can lower glucose for hours).
+5. ✅ "why this dose": walk through the math SIMPLY with their real numbers
+   (e.g. "62 g ÷ ratio 10 = 6.2 U; glucose 210 above target → +1.3 U;
+   minus 1.5 U still active; −15% for sport → 5.5 U").
+
+conclusion: 1-2 warm sentences recommending the final dose, ending with:
+this is an AI estimate, not a final decision — confirm with your doctor.
+warnings: short strings, one per real risk (hypo, falling glucose, very
+high glucose, sugar spike, delayed sport hypo, missing profile ratios).
+Empty array if none. Everything in ${langName}. Numbers must match the
+ENGINE RESULT exactly — never invent different numbers.`
+          : `You are GlucoAI's safety checker. The app recommended
+${bolus.total} U of rapid insulin (clinically computed). The patient wants
+to take ${modifiedDose} U instead. Assess the risk of the MODIFIED dose
+given the data.
+
+Write ONLY valid JSON: {"risk":"ok"|"caution"|"danger","message":"..."}
+
+- "danger": could plausibly cause severe hypoglycemia or is grossly wrong
+  (glucose low or falling and the dose was increased; dose far above needs;
+  stacking on active insulin; dose while in hypo).
+- "caution": questionable deviation worth double-checking.
+- "ok": small, reasonable adjustment.
+message: 2-3 sentences in ${langName}, personal and concrete (use their
+numbers). For caution/danger, clearly tell them to check with their doctor
+BEFORE injecting this modified dose.`;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ role: 'user', parts: [{ text: dataBlock }] }],
+            generationConfig: {
+              thinkingConfig: { thinkingBudget: 0 },
+              responseMimeType: 'application/json',
+              maxOutputTokens: mode === 'bolus' ? 1400 : 350,
+              temperature: 0.4,
+            },
+          }),
+        }
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        return json({ error: 'AI provider error', detail }, 502);
+      }
+      const data = await response.json();
+      const text = (data.candidates?.[0]?.content?.parts ?? [])
+        .map((p: { text?: string }) => p.text ?? '')
+        .join('')
+        .trim();
+
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return json({ error: 'AI returned invalid JSON', raw: text }, 502);
+      }
+
+      const um = data.usageMetadata ?? {};
+      const inTok = um.promptTokenCount ?? 0;
+      const outTok = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
+      const uid = await callerUserId(req);
+      if (uid && (inTok || outTok)) {
+        await logUsage({
+          user_id: uid,
+          kind: 'bolus',
+          model: MODEL,
+          input_tokens: inTok,
+          output_tokens: outTok,
+          cost_usd: flashCost(inTok, outTok),
+        });
+      }
+
+      return json({ result: parsed });
+    }
     const profileContext = profile
       ? `User context: diabetes type ${profile.diabetes_type}; target glucose ${profile.target_low}-${profile.target_high} mg/dL; carb ratio ${profile.carb_ratio ?? 'unknown'}; correction factor ${profile.correction_factor ?? 'unknown'}.`
       : 'No profile data available.';

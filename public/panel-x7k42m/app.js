@@ -1252,6 +1252,7 @@ const KIND_META = {
   scan: { label: 'Scanner repas', icon: '📷' },
   call: { label: 'Appel vocal (Live)', icon: '📞' },
   voice: { label: 'Voix (secours)', icon: '🎙️' },
+  bolus: { label: 'Calcul insuline', icon: '💉' },
 };
 
 async function pageUsage() {

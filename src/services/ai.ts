@@ -505,6 +505,54 @@ export async function sendChatMessage(
   return reply;
 }
 
+/* ── AI bolus report + modified-dose safety check ──
+ * The clinical engine (bolusEngine.ts) computes the dose; these calls make
+ * Gemini explain it in the app language and vet patient edits. */
+
+export interface BolusAIReport {
+  sections: { icon: string; title: string; body: string }[];
+  conclusion: string;
+  warnings: string[];
+}
+
+export async function requestBolusReport(
+  engine: unknown,
+  language: string
+): Promise<BolusAIReport | null> {
+  if (isDemoMode || !supabase) return null;
+  try {
+    const { data, error } = await supabase.functions.invoke('ai-chat', {
+      body: {
+        mode: 'bolus',
+        language,
+        bolus: engine,
+        healthData: buildHealthContext(),
+      },
+    });
+    if (error || !data?.result?.sections) return null;
+    return data.result as BolusAIReport;
+  } catch {
+    return null;
+  }
+}
+
+export async function checkModifiedDoseAI(
+  engine: unknown,
+  modifiedDose: number,
+  language: string
+): Promise<{ risk: 'ok' | 'caution' | 'danger'; message: string } | null> {
+  if (isDemoMode || !supabase) return null;
+  try {
+    const { data, error } = await supabase.functions.invoke('ai-chat', {
+      body: { mode: 'bolus_check', language, bolus: engine, modifiedDose },
+    });
+    if (error || !data?.result?.risk) return null;
+    return data.result;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Informational insulin estimate from carbs + profile ratios.
  * Formula-based (never AI): carbs / ratio. The full calculation with
