@@ -12,6 +12,8 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
+import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
+
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_VISION_MODEL') ?? 'gemini-2.5-flash';
 
@@ -130,8 +132,21 @@ Deno.serve(async (req) => {
     );
 
     const prompt = mode === 'menu' ? MENU_PROMPT : DETECT_PROMPT;
-    const raw = await callGemini(prompt, image_base64, language);
+    const { text: raw, inTok, outTok } = await callGemini(prompt, image_base64, language);
     const parsed = parseJson(raw);
+
+    // Exact billing data from Gemini (usageMetadata) → ai_usage table.
+    const uid = await callerUserId(req);
+    if (uid && (inTok || outTok)) {
+      await logUsage({
+        user_id: uid,
+        kind: 'scan',
+        model: MODEL,
+        input_tokens: inTok,
+        output_tokens: outTok,
+        cost_usd: flashCost(inTok, outTok),
+      });
+    }
 
     if (mode === 'menu') {
       const dishes = Array.isArray(parsed?.dishes)
@@ -158,7 +173,7 @@ async function callGemini(
   prompt: string,
   imageBase64: string,
   language: string
-): Promise<string> {
+): Promise<{ text: string; inTok: number; outTok: number }> {
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent` +
     `?key=${encodeURIComponent(GEMINI_API_KEY)}`;
@@ -224,7 +239,12 @@ async function callGemini(
     .join('')
     .trim();
   if (!text) throw new Error('Empty response from Gemini');
-  return text;
+  const um = data?.usageMetadata ?? {};
+  return {
+    text,
+    inTok: um.promptTokenCount ?? 0,
+    outTok: (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0),
+  };
 }
 
 /* ─────────────────────────────── HELPERS ────────────────────────────── */

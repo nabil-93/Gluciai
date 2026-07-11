@@ -258,11 +258,15 @@ function AiCallScreen() {
   const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
   const ss = String(seconds % 60).padStart(2, '0');
 
-  /** Persist the call duration for the doctor/admin dashboard (best-effort). */
+  /** Persist call duration + EXACT Gemini Live token usage (best-effort).
+   *  Prices: gemini-3.1-flash-live-preview, USD per 1M tokens
+   *  (text in $0.75 · audio in $3.00 · text out $4.50 · audio out $12.00). */
   const logCallDuration = () => {
     if (callLoggedRef.current || secondsRef.current < 1) return;
     callLoggedRef.current = true;
     const duration = secondsRef.current;
+    // Read the session totals synchronously — cleanup nulls liveRef right after.
+    const usage = liveRef.current?.getUsageTotals() ?? null;
     if (isDemoMode || !supabase) return;
     void (async () => {
       try {
@@ -274,6 +278,23 @@ function AiCallScreen() {
           duration_sec: duration,
           language: i18n.language,
         });
+        const tokens =
+          (usage?.textIn ?? 0) + (usage?.audioIn ?? 0) + (usage?.textOut ?? 0) + (usage?.audioOut ?? 0);
+        if (usage && tokens > 0) {
+          const cost =
+            (usage.textIn * 0.75 + usage.audioIn * 3.0 + usage.textOut * 4.5 + usage.audioOut * 12.0) /
+            1_000_000;
+          await supabase.from('ai_usage').insert({
+            user_id: uid,
+            kind: 'call',
+            model: LIVE_MODELS[0],
+            input_tokens: usage.textIn,
+            output_tokens: usage.textOut,
+            audio_input_tokens: usage.audioIn,
+            audio_output_tokens: usage.audioOut,
+            cost_usd: cost,
+          });
+        }
       } catch {
         // logging only
       }

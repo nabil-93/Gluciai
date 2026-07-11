@@ -4,6 +4,8 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
+import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
+
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_CHAT_MODEL') ?? 'gemini-2.5-flash';
 
@@ -135,6 +137,23 @@ Rules:
     if (!reply) {
       return json({ error: 'Empty AI reply' }, 502);
     }
+
+    // Exact billing data from Gemini (usageMetadata) → ai_usage table.
+    const um = data.usageMetadata ?? {};
+    const inTok = um.promptTokenCount ?? 0;
+    const outTok = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
+    const uid = await callerUserId(req);
+    if (uid && (inTok || outTok)) {
+      await logUsage({
+        user_id: uid,
+        kind: mode === 'voice' ? 'voice' : 'chat',
+        model: MODEL,
+        input_tokens: inTok,
+        output_tokens: outTok,
+        cost_usd: flashCost(inTok, outTok),
+      });
+    }
+
     return json({ reply });
   } catch (error) {
     return json({ error: String(error) }, 500);

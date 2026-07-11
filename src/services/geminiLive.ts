@@ -65,8 +65,36 @@ export class GeminiLiveSession {
   private ready = false;
   private closedByUs = false;
   private turnText = '';
+  /** Exact token totals accumulated from the API's usageMetadata. */
+  private usageTotals = { textIn: 0, audioIn: 0, textOut: 0, audioOut: 0 };
+  private pendingUsage: any = null;
 
   constructor(private events: LiveEvents) {}
+
+  /** Fold the latest per-turn usageMetadata into the session totals.
+   *  The API may resend (growing) usage during a turn — we always keep the
+   *  last snapshot and commit it once per turn (turnComplete/interrupted). */
+  private commitUsage() {
+    const um = this.pendingUsage;
+    this.pendingUsage = null;
+    if (!um) return;
+    const byModality = (details: any[] | undefined, modality: string) =>
+      (details ?? [])
+        .filter((d) => d?.modality === modality)
+        .reduce((a, d) => a + (d.tokenCount ?? 0), 0);
+    const audioIn = byModality(um.promptTokensDetails, 'AUDIO');
+    const audioOut = byModality(um.responseTokensDetails, 'AUDIO');
+    this.usageTotals.audioIn += audioIn;
+    this.usageTotals.textIn += Math.max(0, (um.promptTokenCount ?? 0) - audioIn);
+    this.usageTotals.audioOut += audioOut;
+    this.usageTotals.textOut += Math.max(0, (um.responseTokenCount ?? 0) - audioOut);
+  }
+
+  /** Exact tokens used this session (call after hang-up). */
+  getUsageTotals() {
+    this.commitUsage(); // count an unfinished last turn too
+    return { ...this.usageTotals };
+  }
 
   connect(
     token: string,
@@ -139,10 +167,13 @@ export class GeminiLiveSession {
           return;
         }
 
+        if (msg.usageMetadata) this.pendingUsage = msg.usageMetadata;
+
         const sc = msg.serverContent;
         if (!sc) return;
         if (sc.interrupted) {
           this.turnText = '';
+          this.commitUsage();
           this.events.onInterrupted?.();
           return;
         }
@@ -158,6 +189,7 @@ export class GeminiLiveSession {
         }
         if (sc.turnComplete) {
           this.turnText = '';
+          this.commitUsage();
           this.events.onTurnComplete?.();
         }
       };

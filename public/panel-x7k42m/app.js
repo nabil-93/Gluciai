@@ -37,6 +37,7 @@ const I = {
   pulse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
   syringe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 2 4 4"/><path d="m17 7 3-3"/><path d="M19 9 8.7 19.3c-1 1-2.5 1-3.4 0l-.6-.6c-1-1-1-2.5 0-3.4L15 5"/><path d="m9 11 4 4"/><path d="m5 19-3 3"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  cpu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>',
 };
 
 const FEATURES = [
@@ -226,6 +227,7 @@ const NAV = [
   { hash: '#/doctors', label: 'Médecins', icon: I.steth, roles: ['admin'] },
   { hash: '#/promos', label: 'Codes promo', icon: I.tag, roles: ['admin', 'doctor'] },
   { hash: '#/subs', label: 'Abonnements', icon: I.card, roles: ['admin'] },
+  { hash: '#/usage', label: 'Conso IA', icon: I.cpu, roles: ['admin', 'doctor'] },
 ];
 
 function shell(active, title, sub, bodyHTML) {
@@ -286,6 +288,7 @@ async function route() {
     if (h.startsWith('#/doctors') && me.role === 'admin') return await pageDoctors();
     if (h.startsWith('#/promos')) return await pagePromos();
     if (h.startsWith('#/subs') && me.role === 'admin') return await pageSubs();
+    if (h.startsWith('#/usage')) return await pageUsage();
     return await pageOverview();
   } catch (e) {
     console.error(e);
@@ -519,6 +522,7 @@ async function pagePatient(pid, initTab) {
     db.from('chat_history').select('*').eq('user_id', pid).order('created_at', { ascending: true }).limit(300).then((r) => r.data ?? []),
     db.from('call_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(100).then((r) => r.data ?? []),
   ]);
+  const aiUsage = (await db.from('ai_usage').select('kind, input_tokens, output_tokens, audio_input_tokens, audio_output_tokens, cost_usd').eq('user_id', pid)).data ?? [];
 
   const week = Date.now() - 7 * 86400000;
   const gly7 = glys.filter((g) => new Date(g.created_at).getTime() > week);
@@ -601,6 +605,8 @@ async function pagePatient(pid, initTab) {
       </div>` : ''}
 
       ${paymentsCard(sub, payments)}
+
+      ${usageCard(aiUsage)}
 
       <div class="card fade-up">
         <div class="card-head">
@@ -750,6 +756,36 @@ async function pagePatient(pid, initTab) {
   }
 }
 const emptyData = (e, t) => `<div class="empty"><div class="e">${e}</div><div class="t">${t}</div></div>`;
+
+/* ── AI consumption card (patient detail) ── */
+function usageCard(rows) {
+  const totalCost = rows.reduce((a, r) => a + Number(r.cost_usd || 0), 0);
+  const byKind = {};
+  rows.forEach((r) => {
+    const k = (byKind[r.kind] ??= { n: 0, in: 0, out: 0, cost: 0 });
+    k.n++;
+    k.in += (r.input_tokens || 0) + (r.audio_input_tokens || 0);
+    k.out += (r.output_tokens || 0) + (r.audio_output_tokens || 0);
+    k.cost += Number(r.cost_usd || 0);
+  });
+  return `
+    <div class="card fade-up">
+      <div class="card-head"><h3>🧮 Consommation IA</h3><a href="#/usage" style="font-size:12px;font-weight:700;color:var(--primary)">Vue globale ›</a></div>
+      ${rows.length ? `
+      <div class="pay-stats" style="padding-bottom:2px">
+        <span class="badge indigo">Coût total : ${fmtUsd(totalCost)}</span>
+        <span class="badge gray">${rows.length} requête${rows.length > 1 ? 's' : ''}</span>
+      </div>
+      <div class="table-wrap"><table class="data">
+        <thead><tr><th>Fonction</th><th>Requêtes</th><th>Tokens entrée</th><th>Tokens sortie</th><th>Coût</th></tr></thead>
+        <tbody>${Object.entries(byKind).map(([k, v]) => `
+          <tr><td><b>${KIND_META[k]?.icon ?? '🤖'} ${KIND_META[k]?.label ?? esc(k)}</b></td>
+          <td>${v.n}</td><td>${fmtTok(v.in)}</td><td>${fmtTok(v.out)}</td>
+          <td><b style="color:var(--primary)">${fmtUsd(v.cost)}</b></td></tr>`).join('')}</tbody>
+      </table></div>`
+      : `<div class="empty" style="padding:26px 20px"><div class="e">🧮</div><div class="t">Aucune utilisation IA enregistrée</div><div class="s">Le suivi exact est actif depuis le 11 juillet 2026.</div></div>`}
+    </div>`;
+}
 
 /* ── Monthly payments card (patient detail) ── */
 function paymentsCard(sub, payments) {
@@ -1182,6 +1218,121 @@ async function pageSubs() {
   document.getElementById('ssearch').addEventListener('input', renderTable);
   document.getElementById('sfStat').addEventListener('change', renderTable);
   document.getElementById('sfPay').addEventListener('change', renderTable);
+}
+
+/* ════════════════ AI USAGE / COSTS ════════════════ */
+const fmtUsd = (v) => (v >= 0.01 ? `$${v.toFixed(3)}` : v > 0 ? `$${v.toFixed(6)}` : '$0');
+const fmtTok = (n) => Number(n || 0).toLocaleString('fr-FR');
+const KIND_META = {
+  chat: { label: 'Chat IA', icon: '💬' },
+  scan: { label: 'Scanner repas', icon: '📷' },
+  call: { label: 'Appel vocal (Live)', icon: '📞' },
+  voice: { label: 'Voix (secours)', icon: '🎙️' },
+};
+
+async function pageUsage() {
+  const page = shell('#/usage', 'Consommation IA', 'Tokens Gemini et coût exact par utilisateur', loading);
+
+  const render = async () => {
+    const period = document.getElementById('uPeriod')?.value ?? 'month';
+    let q = db.from('ai_usage').select('*').order('created_at', { ascending: false }).limit(5000);
+    const now = new Date();
+    if (period === 'month') q = q.gte('created_at', new Date(now.getFullYear(), now.getMonth(), 1).toISOString());
+    else if (period === '7d') q = q.gte('created_at', new Date(Date.now() - 7 * 86400e3).toISOString());
+    else if (period === '30d') q = q.gte('created_at', new Date(Date.now() - 30 * 86400e3).toISOString());
+
+    const [{ data: rowsRaw }, profRes] = await Promise.all([
+      q,
+      me.role === 'admin'
+        ? db.from('profiles').select('user_id, name, email, role')
+        : db.from('patient_overview').select('user_id, name, email'),
+    ]);
+    const rows = rowsRaw ?? [];
+    const profs = {};
+    (profRes.data ?? []).forEach((p) => { profs[p.user_id] = { name: p.name, email: p.email, role: p.role || 'patient' }; });
+    profs[me.id] = { name: me.name, email: me.email, role: me.role };
+
+    const totalCost = rows.reduce((a, r) => a + Number(r.cost_usd || 0), 0);
+    const totIn = rows.reduce((a, r) => a + (r.input_tokens || 0) + (r.audio_input_tokens || 0), 0);
+    const totOut = rows.reduce((a, r) => a + (r.output_tokens || 0) + (r.audio_output_tokens || 0), 0);
+
+    // by kind
+    const byKind = {};
+    rows.forEach((r) => {
+      const k = (byKind[r.kind] ??= { n: 0, in: 0, out: 0, cost: 0 });
+      k.n++; k.in += (r.input_tokens || 0) + (r.audio_input_tokens || 0);
+      k.out += (r.output_tokens || 0) + (r.audio_output_tokens || 0);
+      k.cost += Number(r.cost_usd || 0);
+    });
+
+    // by user
+    const byUser = {};
+    rows.forEach((r) => {
+      const u = (byUser[r.user_id] ??= { n: 0, in: 0, out: 0, cost: 0 });
+      u.n++; u.in += (r.input_tokens || 0) + (r.audio_input_tokens || 0);
+      u.out += (r.output_tokens || 0) + (r.audio_output_tokens || 0);
+      u.cost += Number(r.cost_usd || 0);
+    });
+    const users = Object.entries(byUser).sort((a, b) => b[1].cost - a[1].cost);
+
+    document.getElementById('usageBody').innerHTML = `
+      <div class="stats-grid fade-up" style="margin-bottom:16px">
+        <div class="card stat-card"><div class="ic" style="background:var(--primary-tint);color:var(--primary)">${I.cpu}</div><div class="v">${fmtUsd(totalCost)}</div><div class="l">Coût total (USD)</div></div>
+        <div class="card stat-card"><div class="ic" style="background:var(--blue-soft);color:var(--blue-text)">${I.pulse}</div><div class="v">${rows.length}</div><div class="l">Requêtes IA</div></div>
+        <div class="card stat-card"><div class="ic" style="background:var(--green-soft);color:var(--green-text)">${I.cpu}</div><div class="v">${fmtTok(totIn)}</div><div class="l">Tokens entrée</div></div>
+        <div class="card stat-card"><div class="ic" style="background:var(--violet-soft);color:var(--violet-text)">${I.cpu}</div><div class="v">${fmtTok(totOut)}</div><div class="l">Tokens sortie</div></div>
+      </div>
+
+      <div class="card fade-up" style="margin-bottom:16px">
+        <div class="card-head"><h3>Par fonctionnalité</h3></div>
+        <div class="table-wrap"><table class="data">
+          <thead><tr><th>Fonction</th><th>Requêtes</th><th>Tokens entrée</th><th>Tokens sortie</th><th>Coût (USD)</th></tr></thead>
+          <tbody>${Object.entries(byKind).length ? Object.entries(byKind).map(([k, v]) => `
+            <tr><td><b>${KIND_META[k]?.icon ?? '🤖'} ${KIND_META[k]?.label ?? esc(k)}</b></td>
+            <td>${v.n}</td><td>${fmtTok(v.in)}</td><td>${fmtTok(v.out)}</td>
+            <td><b style="color:var(--primary)">${fmtUsd(v.cost)}</b></td></tr>`).join('')
+          : `<tr><td colspan="5"><div class="empty"><div class="e">🧮</div><div class="t">Aucune utilisation sur cette période</div></div></td></tr>`}</tbody>
+        </table></div>
+      </div>
+
+      <div class="card fade-up">
+        <div class="card-head"><h3>Par utilisateur</h3><span class="hint">trié par coût</span></div>
+        <div class="table-wrap"><table class="data">
+          <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Requêtes</th><th>Tokens entrée</th><th>Tokens sortie</th><th>Coût (USD)</th></tr></thead>
+          <tbody>${users.length ? users.map(([uid, v]) => {
+            const p = profs[uid] ?? {};
+            const roleBadge = p.role === 'admin' ? '<span class="badge indigo">Admin</span>'
+              : p.role === 'doctor' ? '<span class="badge violet">Médecin</span>'
+              : '<span class="badge gray">Patient</span>';
+            return `<tr>
+              <td><div class="cell-user">${avatar(p.name, p.email)}<div style="min-width:0"><div class="nm">${esc(p.name || 'Sans nom')}</div><div class="em">${esc(p.email || uid.slice(0, 8) + '…')}</div></div></div></td>
+              <td>${roleBadge}</td><td><b>${v.n}</b></td>
+              <td>${fmtTok(v.in)}</td><td>${fmtTok(v.out)}</td>
+              <td><b style="color:var(--primary)">${fmtUsd(v.cost)}</b></td>
+            </tr>`;
+          }).join('') : `<tr><td colspan="6"><div class="empty"><div class="e">🧮</div><div class="t">Aucune utilisation sur cette période</div></div></td></tr>`}</tbody>
+        </table></div>
+      </div>
+
+      <p class="fade-up" style="font-size:11px;color:var(--muted-2);margin-top:14px;line-height:1.6">
+        Chiffres <b>exacts</b> renvoyés par l'API Gemini (usageMetadata) à chaque requête, valorisés aux tarifs officiels Google :
+        gemini-2.5-flash $0.30 entrée / $2.50 sortie · gemini-3.1-flash-live-preview $0.75 texte / $3.00 audio entrée, $4.50 texte / $12.00 audio sortie (par million de tokens).
+        Suivi actif depuis le 11 juillet 2026 — l'utilisation antérieure n'est pas comptée.
+      </p>`;
+  };
+
+  page.innerHTML = `
+    <div class="page-actions fade-up">
+      <select class="sel" id="uPeriod">
+        <option value="month">📅 Ce mois-ci</option>
+        <option value="7d">7 derniers jours</option>
+        <option value="30d">30 derniers jours</option>
+        <option value="all">Depuis le début</option>
+      </select>
+    </div>
+    <div id="usageBody">${loading}</div>`;
+  document.getElementById('uPeriod').addEventListener('change', render);
+  await render();
 }
 
 /* ── go ── */
