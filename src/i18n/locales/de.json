@@ -117,7 +117,15 @@
     "finishTitle": "Alles bereit!",
     "finishDesc": "GlucoAI ist bereit, dir jeden Tag zu helfen.",
     "start": "Dashboard öffnen",
-    "openDashboard": "Dashboard öffnen"
+    "openDashboard": "Dashboard öffnen",
+    "promoTitle": "Arzt-Promocode",
+    "promoSub": "Hat dir dein Arzt einen Code gegeben? Gib ihn ein: Rabatt auf dein Abo und persönliche Betreuung durch deinen Arzt.",
+    "promoPlaceholder": "z. B. AMINA10",
+    "promoApply": "Anwenden",
+    "promoChecking": "Prüfung…",
+    "promoInvalid": "Code ungültig oder abgelaufen.",
+    "promoApplied": "Code angewendet! -{{discount}} % auf dein Abo · betreut von Dr. {{doctor}}.",
+    "promoDoctorFallback": "deinem Arzt"
   },
   "home": {
     "goodMorning": "Guten Morgen",
@@ -626,5 +634,15 @@
     "termsS3T": "Weiterentwicklung des Dienstes",
     "termsS3B": "GlucoAI entwickelt sich ständig weiter: Funktionen können hinzugefügt, geändert oder entfernt werden. Über wichtige Änderungen der Bedingungen wirst du in der App informiert.",
     "termsNote": "Ohne Annahme dieser Bedingungen kann kein Konto erstellt werden."
+  },
+  "locked": {
+    "title": "Funktion gesperrt",
+    "featScanner": "Mahlzeiten-Scanner",
+    "featChat": "KI-Chat",
+    "featCall": "KI-Sprachanruf",
+    "message": "Diese Funktion ist derzeit nicht in deinem Konto enthalten.",
+    "subscribeNote": "Abo erforderlich — kontaktiere den Support, um sie zu aktivieren.",
+    "understood": "Verstanden",
+    "badge": "Gesperrt"
   }
 }

@@ -22,6 +22,7 @@ export { ScanStepper } from './ScanStepper';
 export { BoundingBoxOverlay } from './BoundingBoxOverlay';
 export { DidYouMeanSheet } from './DidYouMeanSheet';
 export { SneakerIcon } from './SneakerIcon';
+export { LockedScreen, LockChip } from './LockedFeature';
 export {
   FadeInView,
   PressableScale,

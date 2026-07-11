@@ -117,7 +117,15 @@
     "finishTitle": "Tout est prêt !",
     "finishDesc": "GlucoAI est prêt à t'aider chaque jour.",
     "start": "Ouvrir mon tableau de bord",
-    "openDashboard": "Ouvrir le dashboard"
+    "openDashboard": "Ouvrir le dashboard",
+    "promoTitle": "Code promo médecin",
+    "promoSub": "Ton médecin t'a donné un code ? Saisis-le : réduction sur ton abonnement et suivi personnalisé par ton médecin.",
+    "promoPlaceholder": "Ex : AMINA10",
+    "promoApply": "Appliquer",
+    "promoChecking": "Vérification…",
+    "promoInvalid": "Code invalide ou expiré.",
+    "promoApplied": "Code appliqué ! -{{discount}}% sur ton abonnement · suivi par Dr {{doctor}}.",
+    "promoDoctorFallback": "ton médecin"
   },
   "home": {
     "goodMorning": "Bonjour",
@@ -626,5 +634,15 @@
     "termsS3T": "Évolution du service",
     "termsS3B": "GlucoAI évolue régulièrement : des fonctionnalités peuvent être ajoutées, modifiées ou retirées. Toute mise à jour importante des conditions te sera signalée dans l’application.",
     "termsNote": "Le refus de ces conditions empêche la création du compte."
+  },
+  "locked": {
+    "title": "Fonctionnalité verrouillée",
+    "featScanner": "Scanner de repas",
+    "featChat": "Chat avec l'IA",
+    "featCall": "Appel vocal IA",
+    "message": "Cette fonctionnalité n'est pas incluse dans ton compte pour le moment.",
+    "subscribeNote": "Abonnement requis — contacte le support pour l’activer.",
+    "understood": "J'ai compris",
+    "badge": "Verrouillé"
   }
 }

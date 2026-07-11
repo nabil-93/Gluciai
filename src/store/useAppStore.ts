@@ -38,8 +38,11 @@ interface AppState {
   aiJournal: AIJournalEntry[];
   /** ISO timestamp the user last opened the notifications (AI journal) screen */
   aiJournalSeenAt: string | null;
+  /** Features blocked for this account from the admin dashboard (feature_access) */
+  lockedFeatures: string[];
 
   setLanguageChosen: () => void;
+  setLockedFeatures: (features: string[]) => void;
   setOnboardingDone: () => void;
   setWizardDone: () => void;
   setConsentAccepted: () => void;
@@ -82,6 +85,7 @@ const initialData = {
   corrections: [] as FoodCorrection[],
   aiJournal: [] as AIJournalEntry[],
   aiJournalSeenAt: null as string | null,
+  lockedFeatures: [] as string[],
 };
 
 export const useAppStore = create<AppState>()(
@@ -89,6 +93,7 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       ...initialData,
       setLanguageChosen: () => set({ languageChosen: true }),
+      setLockedFeatures: (lockedFeatures) => set({ lockedFeatures }),
       setOnboardingDone: () => set({ onboardingDone: true }),
       setWizardDone: () => set({ wizardDone: true }),
       setConsentAccepted: () =>

@@ -15,12 +15,21 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppButton, ScanProgress } from '@/components/ui';
+import { AppButton, LockedScreen, ScanProgress } from '@/components/ui';
 import { analyzeMealImage, type ScanStage } from '@/services/ai';
 import { setPendingScan } from '@/services/scanSession';
+import { useAppStore } from '@/store/useAppStore';
 import { colors, radius, spacing, typography } from '@/theme';
 
-export default function ScanScreen() {
+/* Blocked from the admin dashboard? Show the lock instead of the camera. */
+export default function ScanScreenGate() {
+  const locked = useAppStore((s) => s.lockedFeatures.includes('scanner'));
+  const { t } = useTranslation();
+  if (locked) return <LockedScreen featureLabel={t('locked.featScanner')} />;
+  return <ScanScreen />;
+}
+
+function ScanScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();

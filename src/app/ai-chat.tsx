@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import { sendChatMessage } from '@/services/ai';
 import { useAppStore } from '@/store/useAppStore';
@@ -88,7 +88,15 @@ function TypingDots() {
   );
 }
 
-export default function AiChatScreen() {
+/* Blocked from the admin dashboard? Show the lock instead of the chat. */
+export default function AiChatScreenGate() {
+  const locked = useAppStore((s) => s.lockedFeatures.includes('ai_chat'));
+  const { t } = useTranslation();
+  if (locked) return <LockedScreen featureLabel={t('locked.featChat')} />;
+  return <AiChatScreen />;
+}
+
+function AiChatScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();

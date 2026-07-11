@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FadeInView } from '@/components/ui';
 import { CONSENT_IDS, CONSENT_META } from '@/data/consent';
 import { isRTL } from '@/i18n';
+import { isDemoMode, supabase } from '@/lib/supabase';
 import { saveProfile } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import type { DiabetesType, InsulinType, Profile } from '@/types';
@@ -315,6 +316,33 @@ export default function WizardScreen() {
   const [doctorName, setDoctorName] = useState('');
   const [consents, setConsents] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
+  /* Doctor promo code (optional): links the patient to their doctor + discount */
+  const [promoCode, setPromoCode] = useState('');
+  const [promoState, setPromoState] = useState<'idle' | 'checking' | 'ok' | 'bad'>('idle');
+  const [promoInfo, setPromoInfo] = useState<{ doctor: string; discount: number } | null>(null);
+
+  const applyPromo = async () => {
+    const code = promoCode.trim();
+    if (!code || promoState === 'checking') return;
+    if (isDemoMode || !supabase) {
+      setPromoState('bad');
+      return;
+    }
+    setPromoState('checking');
+    try {
+      const { data, error } = await supabase.rpc('redeem_promo_code', { p_code: code });
+      if (error || !data?.ok) {
+        setPromoState('bad');
+        setPromoInfo(null);
+        return;
+      }
+      setPromoInfo({ doctor: String(data.doctor || ''), discount: Number(data.discount) || 0 });
+      setPromoState('ok');
+      if (data.doctor && !doctorName) setDoctorName(String(data.doctor));
+    } catch {
+      setPromoState('bad');
+    }
+  };
 
   const key = STEPS[step];
   const usesInsulin = insulinTypes.length > 0;
@@ -694,6 +722,62 @@ export default function WizardScreen() {
                 title={t('wizard.doctorInfoTitle')}
                 text={t('wizard.doctorInfoNote')}
               />
+
+              {/* ── Doctor promo code (optional, -10% + links the doctor) ── */}
+              {!isDemoMode ? (
+                <View style={styles.promoCard}>
+                  <View style={styles.promoHead}>
+                    <Text style={{ fontSize: 17 }}>🎟️</Text>
+                    <Text style={styles.promoTitle}>{t('wizard.promoTitle')}</Text>
+                  </View>
+                  <Text style={styles.promoSub}>{t('wizard.promoSub')}</Text>
+                  {promoState === 'ok' && promoInfo ? (
+                    <View style={styles.promoOkBox}>
+                      <Text style={{ fontSize: 15 }}>✅</Text>
+                      <Text style={styles.promoOkText}>
+                        {t('wizard.promoApplied', {
+                          discount: promoInfo.discount,
+                          doctor: promoInfo.doctor || t('wizard.promoDoctorFallback'),
+                        })}
+                      </Text>
+                    </View>
+                  ) : (
+                    <>
+                      <View style={styles.promoRow}>
+                        <TextInput
+                          value={promoCode}
+                          onChangeText={(v) => {
+                            setPromoCode(v.toUpperCase());
+                            if (promoState === 'bad') setPromoState('idle');
+                          }}
+                          placeholder={t('wizard.promoPlaceholder')}
+                          placeholderTextColor="#98a1af"
+                          autoCapitalize="characters"
+                          autoCorrect={false}
+                          style={styles.promoInput}
+                        />
+                        <Pressable
+                          onPress={applyPromo}
+                          disabled={!promoCode.trim() || promoState === 'checking'}
+                          style={[
+                            styles.promoBtn,
+                            (!promoCode.trim() || promoState === 'checking') && { opacity: 0.5 },
+                          ]}
+                        >
+                          <Text style={styles.promoBtnText}>
+                            {promoState === 'checking'
+                              ? t('wizard.promoChecking')
+                              : t('wizard.promoApply')}
+                          </Text>
+                        </Pressable>
+                      </View>
+                      {promoState === 'bad' ? (
+                        <Text style={styles.promoBad}>{t('wizard.promoInvalid')}</Text>
+                      ) : null}
+                    </>
+                  )}
+                </View>
+              ) : null}
             </>
           ) : null}
 
@@ -959,6 +1043,69 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   fieldUnit: { fontFamily: N600, fontSize: 14, color: '#98a1af' },
+
+  /* Doctor promo code */
+  promoCard: {
+    marginTop: 14,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 15,
+    borderWidth: 1.5,
+    borderColor: '#e8ecf3',
+  },
+  promoHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  promoTitle: { fontFamily: N800, fontSize: 14.5, color: '#101a2b' },
+  promoSub: {
+    fontFamily: N500,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: '#7b8494',
+    marginTop: 4,
+  },
+  promoRow: { flexDirection: 'row', gap: 9, marginTop: 11 },
+  promoInput: {
+    flex: 1,
+    height: 46,
+    backgroundColor: '#f5f7fb',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontFamily: N700,
+    fontSize: 14.5,
+    letterSpacing: 1.5,
+    color: '#101a2b',
+  },
+  promoBtn: {
+    height: 46,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: GREEN,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promoBtnText: { fontFamily: N700, fontSize: 13.5, color: '#ffffff' },
+  promoBad: {
+    fontFamily: N700,
+    fontSize: 12,
+    color: '#dc2626',
+    marginTop: 8,
+  },
+  promoOkBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    backgroundColor: '#e9f6ef',
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+    marginTop: 11,
+  },
+  promoOkText: {
+    flex: 1,
+    fontFamily: N700,
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: '#187a52',
+  },
 
   /* Info boxes */
   infoBox: {

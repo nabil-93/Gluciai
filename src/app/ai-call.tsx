@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import { buildHealthContext, sendChatMessage } from '@/services/ai';
 import {
@@ -192,7 +192,15 @@ function Waveform({ active }: { active: boolean }) {
   );
 }
 
-export default function AiCallScreen() {
+/* Blocked from the admin dashboard? Show the lock instead of the call. */
+export default function AiCallScreenGate() {
+  const locked = useAppStore((s) => s.lockedFeatures.includes('ai_call'));
+  const { t } = useTranslation();
+  if (locked) return <LockedScreen featureLabel={t('locked.featCall')} />;
+  return <AiCallScreen />;
+}
+
+function AiCallScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();

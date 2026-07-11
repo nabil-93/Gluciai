@@ -117,7 +117,15 @@
     "finishTitle": "You're all set!",
     "finishDesc": "GlucoAI is ready to help you every day.",
     "start": "Open my dashboard",
-    "openDashboard": "Open dashboard"
+    "openDashboard": "Open dashboard",
+    "promoTitle": "Doctor promo code",
+    "promoSub": "Did your doctor give you a code? Enter it: discount on your subscription and personalised follow-up by your doctor.",
+    "promoPlaceholder": "E.g. AMINA10",
+    "promoApply": "Apply",
+    "promoChecking": "Checking…",
+    "promoInvalid": "Invalid or expired code.",
+    "promoApplied": "Code applied! -{{discount}}% on your subscription · followed by Dr {{doctor}}.",
+    "promoDoctorFallback": "your doctor"
   },
   "home": {
     "goodMorning": "Good morning",
@@ -626,5 +634,15 @@
     "termsS3T": "Service evolution",
     "termsS3B": "GlucoAI evolves regularly: features may be added, changed or removed. Any important update to the terms will be announced in the app.",
     "termsNote": "Declining these terms prevents account creation."
+  },
+  "locked": {
+    "title": "Feature locked",
+    "featScanner": "Meal scanner",
+    "featChat": "AI chat",
+    "featCall": "AI voice call",
+    "message": "This feature is not included in your account at the moment.",
+    "subscribeNote": "Subscription required — contact support to activate it.",
+    "understood": "Got it",
+    "badge": "Locked"
   }
 }

@@ -10,8 +10,9 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, PremiumEmptyState } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, LockChip, PremiumEmptyState } from '@/components/ui';
 import { isRTL } from '@/i18n';
+import { refreshFeatureLocks } from '@/services/features';
 import { getPlannedReminders } from '@/services/notifications';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
@@ -37,10 +38,14 @@ export default function AiJournalScreen() {
   const rtl = isRTL(locale);
   const aiJournal = useAppStore((s) => s.aiJournal);
   const markAiJournalSeen = useAppStore((s) => s.markAiJournalSeen);
+  const lockedFeatures = useAppStore((s) => s.lockedFeatures);
+  const chatLocked = lockedFeatures.includes('ai_chat');
+  const callLocked = lockedFeatures.includes('ai_call');
 
-  // Opening the screen clears the unread badge.
+  // Opening the screen clears the unread badge + re-checks dashboard locks.
   useEffect(() => {
     markAiJournalSeen();
+    refreshFeatureLocks();
   }, [markAiJournalSeen]);
 
   const dayLabel = React.useCallback(
@@ -137,9 +142,10 @@ export default function AiJournalScreen() {
         {/* ── Talk to the AI: chat + voice call ── */}
         <View style={styles.aiActionsRow}>
           <Pressable
-            style={styles.aiActionCard}
+            style={[styles.aiActionCard, chatLocked && styles.aiActionLocked]}
             onPress={() => router.push('/ai-chat' as any)}
           >
+            {chatLocked ? <LockChip /> : null}
             <View style={[styles.aiActionIcon, { backgroundColor: '#f3f0ff' }]}>
               <Text style={{ fontSize: 17 }}>💬</Text>
             </View>
@@ -149,9 +155,10 @@ export default function AiJournalScreen() {
             </Text>
           </Pressable>
           <Pressable
-            style={styles.aiActionCard}
+            style={[styles.aiActionCard, callLocked && styles.aiActionLocked]}
             onPress={() => router.push('/ai-call' as any)}
           >
+            {callLocked ? <LockChip /> : null}
             <View style={[styles.aiActionIcon, { backgroundColor: '#e8f1fe' }]}>
               <Text style={{ fontSize: 17 }}>📞</Text>
             </View>
@@ -359,6 +366,7 @@ const styles = StyleSheet.create({
   },
   aiActionTitle: { fontFamily: F700, fontSize: 13.5, color: '#111827' },
   aiActionSub: { fontFamily: F500, fontSize: 11, color: '#8b93a7', marginTop: 2 },
+  aiActionLocked: { opacity: 0.72 },
 
   dayLabel: {
     fontFamily: F800,
