@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { isRTL } from '@/i18n';
+import { isDemoMode, supabase } from '@/lib/supabase';
 import { buildHealthContext, sendChatMessage } from '@/services/ai';
 import {
   GeminiLiveSession,
@@ -243,14 +244,41 @@ function AiCallScreen() {
     !!SRClass && typeof window !== 'undefined' && !!(window as any).speechSynthesis;
 
   /* ── Call timer (starts once the call is answered) ── */
+  const secondsRef = useRef(0);
+  const callLoggedRef = useRef(false);
   useEffect(() => {
     const id = setInterval(() => {
-      if (startedRef.current && !endedRef.current) setSeconds((s) => s + 1);
+      if (startedRef.current && !endedRef.current) {
+        secondsRef.current += 1;
+        setSeconds((s) => s + 1);
+      }
     }, 1000);
     return () => clearInterval(id);
   }, []);
   const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
   const ss = String(seconds % 60).padStart(2, '0');
+
+  /** Persist the call duration for the doctor/admin dashboard (best-effort). */
+  const logCallDuration = () => {
+    if (callLoggedRef.current || secondsRef.current < 1) return;
+    callLoggedRef.current = true;
+    const duration = secondsRef.current;
+    if (isDemoMode || !supabase) return;
+    void (async () => {
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        const uid = u.user?.id;
+        if (!uid) return;
+        await supabase.from('call_logs').insert({
+          user_id: uid,
+          duration_sec: duration,
+          language: i18n.language,
+        });
+      } catch {
+        // logging only
+      }
+    })();
+  };
 
   /** System instruction shared by both engines: the patient's language +
    *  full health snapshot + phone-call speaking style. */
@@ -490,6 +518,7 @@ ${buildHealthContext()}`;
   useEffect(() => {
     return () => {
       endedRef.current = true;
+      logCallDuration();
       cleanupLive();
       cleanupClassic();
     };
@@ -537,6 +566,7 @@ ${buildHealthContext()}`;
 
   const endCall = () => {
     endedRef.current = true;
+    logCallDuration();
     cleanupLive();
     cleanupClassic();
     if (router.canGoBack()) router.back();

@@ -62,7 +62,7 @@ function ScanScreen() {
       }
       // imageSize = dimensions of the image the model actually analyzed —
       // the coordinate space of its bounding boxes.
-      setPendingScan(result, uri, imageSize);
+      setPendingScan(result, uri, imageSize, base64);
       router.replace('/scan-result');
     } catch (e) {
       // Distinguish a temporary AI rate-limit (quota) from other failures,

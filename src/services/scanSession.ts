@@ -11,14 +11,17 @@ let pending: {
    * display image's intrinsic size.
    */
   imageSize?: { width: number; height: number };
+  /** JPEG base64 of the analyzed photo — uploaded to storage on save */
+  base64?: string;
 } | null = null;
 
 export function setPendingScan(
   result: NutritionResult,
   imageUri?: string,
-  imageSize?: { width: number; height: number }
+  imageSize?: { width: number; height: number },
+  base64?: string
 ) {
-  pending = { result, imageUri, imageSize };
+  pending = { result, imageUri, imageSize, base64 };
 }
 
 export function getPendingScan() {

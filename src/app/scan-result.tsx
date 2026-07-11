@@ -166,7 +166,7 @@ export default function ScanResultScreen() {
 
   if (!pending) return <Redirect href="/(tabs)" />;
 
-  const { imageUri } = pending;
+  const { imageUri, base64: imageBase64 } = pending;
   const originalItems = pending.result.items ?? [];
   // Recompute totals live from the (possibly edited) items
   const result = items.length > 0 ? aggregateItems(items) : pending.result;
@@ -342,7 +342,7 @@ export default function ScanResultScreen() {
     setSaving(true);
     try {
       saveCorrections();
-      await saveMeal(result, imageUri);
+      await saveMeal(result, imageUri, imageBase64);
       setSaved(true);
       setStep('saved');
     } finally {
@@ -354,7 +354,7 @@ export default function ScanResultScreen() {
     // Save the meal first so the calculator can prefill its carbs
     if (!saved) {
       saveCorrections();
-      await saveMeal(result, imageUri);
+      await saveMeal(result, imageUri, imageBase64);
     }
     clearPendingScan();
     router.replace('/bolus');

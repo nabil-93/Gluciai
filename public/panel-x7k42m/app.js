@@ -126,6 +126,45 @@ const daysLeft = (iso) => {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
 };
 
+/* ── Months / payments helpers ── */
+const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const fmtMonth = (key) =>
+  new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1)
+    .toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
+/** List of 'YYYY-MM' from the subscription start to today (capped at expiry). */
+function monthsDue(sub) {
+  if (!sub?.starts_at || !sub.status || sub.status === 'none') return [];
+  const start = new Date(sub.starts_at);
+  let end = new Date();
+  if (sub.expires_at && new Date(sub.expires_at) < end) end = new Date(sub.expires_at);
+  const out = [];
+  const d = new Date(start.getFullYear(), start.getMonth(), 1);
+  const last = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (d <= last && out.length < 120) {
+    out.push(monthKey(d));
+    d.setMonth(d.getMonth() + 1);
+  }
+  return out;
+}
+const fmtDur = (sec) => {
+  const m = Math.floor((sec || 0) / 60), s = (sec || 0) % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
+/** Effective subscription status (expiry beats the stored status). */
+const statusOf = (row) => {
+  if (!row?.status || row.status === 'none') return 'none';
+  if (row.expires_at && new Date(row.expires_at) < new Date()) return 'expired';
+  return row.status;
+};
+
+function lightbox(url, caption) {
+  const ov = document.createElement('div');
+  ov.className = 'lightbox';
+  ov.innerHTML = `<img src="${esc(url)}" alt="" />${caption ? `<div class="lb-cap">${esc(caption)}</div>` : ''}`;
+  ov.addEventListener('click', () => ov.remove());
+  document.body.appendChild(ov);
+}
+
 /* ── Auth / boot ── */
 async function boot() {
   const { data: { session } } = await db.auth.getSession();
@@ -238,10 +277,10 @@ const loading = `<div style="display:grid;gap:14px"><div class="skel" style="hei
 async function route() {
   if (!me) return boot();
   const h = location.hash || '#/';
-  const mPatient = h.match(/^#\/patient\/([\w-]+)/);
+  const mPatient = h.match(/^#\/patient\/([\w-]+)(?:\/(\w+))?/);
   const mDoctor = h.match(/^#\/doctor\/([\w-]+)/);
   try {
-    if (mPatient) return await pagePatient(mPatient[1]);
+    if (mPatient) return await pagePatient(mPatient[1], mPatient[2]);
     if (mDoctor && me.role === 'admin') return await pageDoctor(mDoctor[1]);
     if (h.startsWith('#/patients')) return await pagePatients();
     if (h.startsWith('#/doctors') && me.role === 'admin') return await pageDoctors();
@@ -382,23 +421,47 @@ async function pagePatients() {
   const patients = await fetchPatients();
   const doctors = me.role === 'admin' ? await fetchDoctors() : [];
 
-  const renderList = (q) => {
-    const f = q
-      ? patients.filter((p) => (p.name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q) || (p.doctor_name || '').toLowerCase().includes(q))
-      : patients;
+  const renderList = () => {
+    const q = (document.getElementById('psearch')?.value || '').trim().toLowerCase();
+    const fDoc = document.getElementById('fDoc')?.value || '';
+    const fSub = document.getElementById('fSub')?.value || '';
+    let f = patients;
+    if (q) f = f.filter((p) => (p.name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q) || (p.doctor_name || '').toLowerCase().includes(q));
+    if (fDoc === 'none') f = f.filter((p) => !p.doctor_id);
+    else if (fDoc) f = f.filter((p) => p.doctor_id === fDoc);
+    if (fSub) f = f.filter((p) => statusOf(p) === fSub);
     document.getElementById('plist').innerHTML = patientTable(f);
     bindPatientRows(document.getElementById('plist'));
+    document.getElementById('pcount').textContent = `${f.length} / ${patients.length}`;
   };
 
   page.innerHTML = `
     <div class="page-actions fade-up">
       <div class="search-bar">${I.search}<input id="psearch" placeholder="Rechercher un patient…" /></div>
+      ${me.role === 'admin' ? `
+      <select class="sel" id="fDoc">
+        <option value="">👨‍⚕️ Tous les médecins</option>
+        <option value="none">Sans médecin</option>
+        ${doctors.map((d) => `<option value="${d.user_id}">Dr. ${esc(d.name || d.email)}</option>`).join('')}
+      </select>` : ''}
+      <select class="sel" id="fSub">
+        <option value="">💳 Tous les abonnements</option>
+        <option value="active">Actif</option>
+        <option value="trial">Essai</option>
+        <option value="unpaid">Impayé</option>
+        <option value="expired">Expiré</option>
+        <option value="canceled">Annulé</option>
+        <option value="none">Aucun</option>
+      </select>
+      <span class="badge gray" id="pcount"></span>
       <div class="spacer" style="flex:1"></div>
       <button class="btn btn-primary" id="addPatient">${I.plus} Ajouter un patient</button>
     </div>
     <div class="card fade-up" style="animation-delay:.05s" id="plist"></div>`;
-  renderList('');
-  document.getElementById('psearch').addEventListener('input', (e) => renderList(e.target.value.trim().toLowerCase()));
+  renderList();
+  document.getElementById('psearch').addEventListener('input', renderList);
+  document.getElementById('fDoc')?.addEventListener('change', renderList);
+  document.getElementById('fSub')?.addEventListener('change', renderList);
   document.getElementById('addPatient').addEventListener('click', () => addUserModal('patient', doctors, () => pagePatients()));
 }
 
@@ -432,7 +495,7 @@ function addUserModal(kind, doctors, onDone, forcedDoctorId) {
 }
 
 /* ════════════════ PATIENT DETAIL ════════════════ */
-async function pagePatient(pid) {
+async function pagePatient(pid, initTab) {
   const page = shell('#/patients', 'Fiche patient', '', loading);
   const [ovRes, profRes, subRes, featRes, doctors] = await Promise.all([
     db.from('patient_overview').select('*').eq('user_id', pid).maybeSingle(),
@@ -446,12 +509,15 @@ async function pagePatient(pid) {
   const sub = subRes.data;
   const locks = Object.fromEntries((featRes.data ?? []).map((f) => [f.feature, f.allowed]));
 
-  const [meals, glys, insus, acts, meas] = await Promise.all([
+  const [meals, glys, insus, acts, meas, payments, chats, calls] = await Promise.all([
     db.from('meal_scans').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(60).then((r) => r.data ?? []),
     db.from('glucose_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(80).then((r) => r.data ?? []),
     db.from('insulin_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(80).then((r) => r.data ?? []),
     db.from('activity_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(60).then((r) => r.data ?? []),
     db.from('measure_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(60).then((r) => r.data ?? []),
+    db.from('payments').select('*').eq('user_id', pid).order('period', { ascending: false }).then((r) => r.data ?? []),
+    db.from('chat_history').select('*').eq('user_id', pid).order('created_at', { ascending: true }).limit(300).then((r) => r.data ?? []),
+    db.from('call_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(100).then((r) => r.data ?? []),
   ]);
 
   const week = Date.now() - 7 * 86400000;
@@ -534,14 +600,20 @@ async function pagePatient(pid) {
         </div>
       </div>` : ''}
 
+      ${paymentsCard(sub, payments)}
+
       <div class="card fade-up">
         <div class="card-head">
           <div class="tabs" id="dataTabs">
-            <button class="tab active" data-tab="meals">🍽️ Repas (${meals.length})</button>
-            <button class="tab" data-tab="gly">🩸 Glycémie (${glys.length})</button>
-            <button class="tab" data-tab="insu">💉 Insuline (${insus.length})</button>
-            <button class="tab" data-tab="act">🏃 Activité (${acts.length})</button>
-            <button class="tab" data-tab="meas">📏 Mesures (${meas.length})</button>
+            ${[
+              ['meals', `🍽️ Repas (${meals.length})`],
+              ['gly', `🩸 Glycémie (${glys.length})`],
+              ['insu', `💉 Insuline (${insus.length})`],
+              ['act', `🏃 Activité (${acts.length})`],
+              ['meas', `📏 Mesures (${meas.length})`],
+              ['chat', `💬 Chat IA (${Math.ceil(chats.length / 2)})`],
+              ['calls', `📞 Appels (${calls.length})`],
+            ].map(([k, label]) => `<button class="tab ${k === (initTab || 'meals') ? 'active' : ''}" data-tab="${k}">${label}</button>`).join('')}
           </div>
         </div>
         <div id="dataPanel"></div>
@@ -569,11 +641,15 @@ async function pagePatient(pid) {
   /* data tabs */
   const panel = document.getElementById('dataPanel');
   const tabRenders = {
-    meals: () => meals.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Repas</th><th>Kcal</th><th>Glucides</th><th>Sucre</th><th>IG</th><th>Score</th></tr></thead><tbody>
+    meals: () => meals.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Photo</th><th>Date</th><th>Repas</th><th>Kcal</th><th>Glucides</th><th>Sucre</th><th>IG</th><th>Score</th></tr></thead><tbody>
       ${meals.map((m) => {
         const r = m.result || {};
         const names = r.food_name || (r.items || []).map((i) => i.name).join(', ') || '—';
-        return `<tr><td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(m.created_at)}</td><td style="max-width:260px"><b>${esc(names)}</b></td><td>${Math.round(m.calories ?? r.calories ?? 0)}</td><td><b>${Math.round(m.carbs ?? r.carbohydrates ?? 0)} g</b></td><td>${Math.round(m.sugar ?? r.sugar ?? 0)} g</td><td>${m.glycemic_index ?? r.glycemic_index ?? '—'}</td><td>${r.meal_score != null ? `<span class="badge ${r.meal_score >= 70 ? 'green' : r.meal_score >= 45 ? 'amber' : 'red'}">${r.meal_score}/100</span>` : '—'}</td></tr>`;
+        const hasPhoto = m.image_url && /^https?:/i.test(m.image_url);
+        const photo = hasPhoto
+          ? `<img class="meal-thumb" src="${esc(m.image_url)}" data-photo="${esc(m.image_url)}" data-cap="${esc(names)}" loading="lazy" alt="" />`
+          : `<div class="meal-thumb ph">🍽️</div>`;
+        return `<tr><td style="width:52px">${photo}</td><td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(m.created_at)}</td><td style="max-width:240px"><b>${esc(names)}</b></td><td>${Math.round(m.calories ?? r.calories ?? 0)}</td><td><b>${Math.round(m.carbs ?? r.carbohydrates ?? 0)} g</b></td><td>${Math.round(m.sugar ?? r.sugar ?? 0)} g</td><td>${m.glycemic_index ?? r.glycemic_index ?? '—'}</td><td>${r.meal_score != null ? `<span class="badge ${r.meal_score >= 70 ? 'green' : r.meal_score >= 45 ? 'amber' : 'red'}">${r.meal_score}/100</span>` : '—'}</td></tr>`;
       }).join('')}</tbody></table></div>` : emptyData('🍽️', 'Aucun repas scanné'),
     gly: () => glys.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Valeur</th><th>Source</th><th>Notes</th></tr></thead><tbody>
       ${glys.map((g) => `<tr><td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(g.created_at)}</td><td>${glyBadge(g.value)}</td><td style="color:var(--muted)">${esc(g.source || 'manuel')}</td><td style="color:var(--muted)">${esc(g.notes || '—')}</td></tr>`).join('')}</tbody></table></div>` : emptyData('🩸', 'Aucune mesure de glycémie'),
@@ -583,15 +659,69 @@ async function pagePatient(pid) {
       ${acts.map((a) => `<tr><td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(a.created_at)}</td><td><b>${esc(a.kind || '—')}</b></td><td>${a.duration_min ?? '—'} min</td><td>${esc(a.intensity || '—')}</td></tr>`).join('')}</tbody></table></div>` : emptyData('🏃', 'Aucune activité'),
     meas: () => meas.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Mesure</th><th>Valeur</th></tr></thead><tbody>
       ${meas.map((x) => `<tr><td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(x.created_at)}</td><td><b>${esc(x.kind || '—')}</b></td><td>${x.value} ${esc(x.unit || '')}</td></tr>`).join('')}</tbody></table></div>` : emptyData('📏', 'Aucune mesure'),
+    chat: () => {
+      if (!chats.length) return emptyData('💬', "Aucune conversation avec l'IA");
+      let lastDay = '';
+      const rows = chats.map((c) => {
+        const day = new Date(c.created_at).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+        const sep = day !== lastDay ? `<div style="align-self:center;font-size:10.5px;font-weight:700;color:var(--muted-2);text-transform:capitalize;margin:8px 0 2px">${day}</div>` : '';
+        lastDay = day;
+        const time = new Date(c.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        return `${sep}<div class="bub ${c.role === 'user' ? 'u' : 'a'}">${esc(c.message)}<div class="bt">${time}</div></div>`;
+      }).join('');
+      return `<div class="chat-box" id="chatBox">${rows}</div>`;
+    },
+    calls: () => {
+      if (!calls.length) return emptyData('📞', 'Aucun appel vocal avec l’IA');
+      const total = calls.reduce((a, c) => a + (c.duration_sec || 0), 0);
+      return `
+        <div class="pay-stats" style="padding-bottom:2px">
+          <span class="badge indigo">${calls.length} appel${calls.length > 1 ? 's' : ''}</span>
+          <span class="badge green">Total ${fmtDur(total)} min</span>
+          <span class="badge gray">Moyenne ${fmtDur(Math.round(total / calls.length))}</span>
+        </div>
+        <div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Heure</th><th>Durée</th><th>Langue</th></tr></thead><tbody>
+        ${calls.map((c) => `<tr>
+          <td style="color:var(--muted);font-size:12px">${fmtDate(c.created_at)}</td>
+          <td style="color:var(--muted);font-size:12px">${new Date(c.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+          <td><span class="badge ${c.duration_sec >= 180 ? 'amber' : 'green'}">⏱ ${fmtDur(c.duration_sec)}</span></td>
+          <td>${c.language ? `<span class="badge gray">${esc(String(c.language).toUpperCase())}</span>` : '—'}</td>
+        </tr>`).join('')}</tbody></table></div>`;
+    },
   };
   const emptyDataFn = tabRenders;
-  panel.innerHTML = tabRenders.meals();
+  panel.innerHTML = (tabRenders[initTab] || tabRenders.meals)();
+  {
+    const cb = document.getElementById('chatBox');
+    if (cb) cb.scrollTop = cb.scrollHeight;
+  }
+  panel.addEventListener('click', (e) => {
+    const ph = e.target.closest('[data-photo]');
+    if (ph) lightbox(ph.dataset.photo, ph.dataset.cap);
+  });
   document.querySelectorAll('#dataTabs .tab').forEach((t) =>
     t.addEventListener('click', () => {
       document.querySelectorAll('#dataTabs .tab').forEach((x) => x.classList.remove('active'));
       t.classList.add('active');
       panel.innerHTML = emptyDataFn[t.dataset.tab]();
+      const cb = document.getElementById('chatBox');
+      if (cb) cb.scrollTop = cb.scrollHeight;
     }));
+
+  /* payments (admin edits, doctor views) */
+  if (me.role === 'admin') {
+    const effAmount = sub ? Math.max(0, Number(sub.price || 0) * (1 - Number(sub.discount_pct || 0) / 100)) : 0;
+    document.getElementById('addPay')?.addEventListener('click', () =>
+      payModal(pid, null, effAmount, () => pagePatient(pid)));
+    document.querySelectorAll('[data-payid]').forEach((chip) =>
+      chip.addEventListener('click', () => {
+        const p = payments.find((x) => x.id === chip.dataset.payid);
+        if (p) payModal(pid, p, effAmount, () => pagePatient(pid));
+      }));
+    document.querySelectorAll('[data-payperiod]').forEach((chip) =>
+      chip.addEventListener('click', () =>
+        payModal(pid, { period: chip.dataset.payperiod + '-01' }, effAmount, () => pagePatient(pid))));
+  }
 
   /* feature toggles */
   if (me.role === 'admin') {
@@ -620,6 +750,88 @@ async function pagePatient(pid) {
   }
 }
 const emptyData = (e, t) => `<div class="empty"><div class="e">${e}</div><div class="t">${t}</div></div>`;
+
+/* ── Monthly payments card (patient detail) ── */
+function paymentsCard(sub, payments) {
+  const due = monthsDue(sub);
+  const paidByMonth = Object.fromEntries(payments.map((p) => [String(p.period).slice(0, 7), p]));
+  // Months owed but with no payment row = unpaid
+  const unpaid = due.filter((k) => !paidByMonth[k]);
+  const totalPaid = payments.reduce((a, p) => a + Number(p.amount || 0), 0);
+  const isAdmin = me.role === 'admin';
+
+  // Show newest first: merge due months + any extra paid months outside the range
+  const allKeys = [...new Set([...due, ...Object.keys(paidByMonth)])].sort().reverse();
+
+  const chips = allKeys.map((k) => {
+    const p = paidByMonth[k];
+    if (p) {
+      return `<div class="month-chip paid ${isAdmin ? 'click' : ''}" ${isAdmin ? `data-payid="${p.id}"` : ''} title="${esc(p.method || '')}">
+        <div class="m">${fmtMonth(k)}</div><div class="a">✓ ${Number(p.amount).toFixed(2)} €</div>
+      </div>`;
+    }
+    return `<div class="month-chip unpaid ${isAdmin ? 'click' : ''}" ${isAdmin ? `data-payperiod="${k}"` : ''}>
+      <div class="m">${fmtMonth(k)}</div><div class="a">✗ Impayé</div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="card fade-up">
+      <div class="card-head">
+        <h3>💰 Historique des paiements</h3>
+        ${isAdmin ? `<button class="btn btn-primary" style="height:34px;font-size:12px" id="addPay">${I.plus} Paiement</button>` : ''}
+      </div>
+      ${allKeys.length ? `
+        <div class="pay-stats">
+          <span class="badge green">${payments.length} mois payé${payments.length > 1 ? 's' : ''}</span>
+          ${unpaid.length ? `<span class="badge red">${unpaid.length} mois impayé${unpaid.length > 1 ? 's' : ''}</span>` : '<span class="badge gray">Aucun impayé</span>'}
+          <span class="badge indigo">Total encaissé : ${totalPaid.toFixed(2)} €</span>
+        </div>
+        <div class="months-grid">${chips}</div>`
+      : `<div class="empty"><div class="e">💰</div><div class="t">Aucun paiement</div><div class="s">${sub?.starts_at ? 'Ajoutez le premier paiement du patient.' : "Renseignez d'abord la date de début de l'abonnement."}</div></div>`}
+    </div>`;
+}
+
+function payModal(pid, existing, defaultAmount, onDone) {
+  const isEdit = !!existing?.id;
+  const period = existing?.period ? String(existing.period).slice(0, 7) : monthKey(new Date());
+  const ov = modal(`
+    <div class="modal-head"><h3>${isEdit ? 'Modifier le paiement' : 'Enregistrer un paiement'}</h3><button class="icon-btn" data-close>${I.x}</button></div>
+    <div class="modal-body">
+      <div class="field"><div class="row2">
+        <div><label>Mois</label><input id="pMonth" type="month" value="${period}" ${isEdit ? 'disabled' : ''} /></div>
+        <div><label>Montant (€)</label><input id="pAmount" type="number" step="0.01" value="${existing?.amount ?? defaultAmount.toFixed(2)}" /></div>
+      </div></div>
+      <div class="field"><label>Méthode</label><select id="pMethod">
+        ${['Espèces', 'Carte', 'Virement', 'Autre'].map((m) => `<option ${existing?.method === m ? 'selected' : ''}>${m}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Notes (optionnel)</label><input id="pNotes" value="${esc(existing?.notes || '')}" /></div>
+    </div>
+    <div class="modal-foot">
+      ${isEdit ? `<button class="btn btn-danger" id="pDel" style="margin-right:auto">${I.trash} Supprimer</button>` : ''}
+      <button class="btn btn-ghost" data-close>Annuler</button>
+      <button class="btn btn-primary" id="pGo">${isEdit ? 'Enregistrer' : 'Marquer payé ✓'}</button>
+    </div>`);
+  ov.querySelector('#pGo').addEventListener('click', async () => {
+    const btn = ov.querySelector('#pGo'); btn.disabled = true;
+    const month = ov.querySelector('#pMonth').value;
+    if (!month) { toast('Choisissez un mois', true); btn.disabled = false; return; }
+    const { error } = await db.from('payments').upsert({
+      user_id: pid,
+      period: month + '-01',
+      amount: Number(ov.querySelector('#pAmount').value || 0),
+      method: ov.querySelector('#pMethod').value,
+      notes: ov.querySelector('#pNotes').value || null,
+    }, { onConflict: 'user_id,period' });
+    if (error) { toast('Erreur: ' + error.message, true); btn.disabled = false; return; }
+    ov.remove(); toast('Paiement enregistré ✓'); onDone?.();
+  });
+  ov.querySelector('#pDel')?.addEventListener('click', async () => {
+    const { error } = await db.from('payments').delete().eq('id', existing.id);
+    if (error) return toast('Erreur: ' + error.message, true);
+    ov.remove(); toast('Paiement supprimé'); onDone?.();
+  });
+}
 
 function subModal(pid, sub, onDone) {
   const ov = modal(`
@@ -879,44 +1091,97 @@ async function pagePromos() {
 /* ════════════════ SUBSCRIPTIONS (admin) ════════════════ */
 async function pageSubs() {
   const page = shell('#/subs', 'Abonnements', 'Paiements et échéances des patients', loading);
-  const patients = await fetchPatients();
+  const [patients, allPays] = await Promise.all([
+    fetchPatients(),
+    db.from('payments').select('user_id, period, amount').then((r) => r.data ?? []),
+  ]);
+  const paysByUser = {};
+  allPays.forEach((p) => { (paysByUser[p.user_id] ??= new Set()).add(String(p.period).slice(0, 7)); });
+  const unpaidCount = (p) => {
+    const due = monthsDue(p); // patient_overview carries starts_at/expires_at/status
+    if (!due.length) return null;
+    const paid = paysByUser[p.user_id] ?? new Set();
+    return due.filter((k) => !paid.has(k)).length;
+  };
+
   const withSub = patients.filter((p) => p.status && p.status !== 'none');
-  const active = withSub.filter((p) => p.status === 'active' && (!p.expires_at || new Date(p.expires_at) > new Date()));
-  const unpaid = withSub.filter((p) => p.paid === false);
+  const active = withSub.filter((p) => statusOf(p) === 'active');
+  const unpaid = withSub.filter((p) => (unpaidCount(p) ?? 0) > 0 || p.paid === false);
   const expSoon = withSub.filter((p) => { const d = daysLeft(p.expires_at); return d !== null && d >= 0 && d <= 7; });
-  const revenue = withSub.reduce((a, p) => a + Number(p.paid_amount || 0), 0);
+  const revenue = allPays.reduce((a, p) => a + Number(p.amount || 0), 0)
+    || withSub.reduce((a, p) => a + Number(p.paid_amount || 0), 0);
+
+  const rowsHtml = (list) => list.map((p) => {
+    const dl = daysLeft(p.expires_at);
+    const eff = Math.max(0, Number(p.price || 0) * (1 - Number(p.discount_pct || 0) / 100));
+    const nUnpaid = unpaidCount(p);
+    return `<tr class="click" data-sub="${p.user_id}">
+      <td><div class="cell-user">${avatar(p.name, p.email)}<div style="min-width:0"><div class="nm">${esc(p.name || 'Sans nom')}</div><div class="em">${esc(p.email || '')}</div></div></div></td>
+      <td>${p.plan ? PLAN_LABEL[p.plan] || esc(p.plan) : '—'}</td>
+      <td>${subBadge(p)}</td>
+      <td>${p.price ? `<b>${eff.toFixed(2)} €</b>${p.discount_pct ? ` <span style="color:var(--green-text);font-size:11px">-${p.discount_pct}%</span>` : ''}` : '—'}</td>
+      <td>${nUnpaid === null ? '—' : nUnpaid > 0 ? `<span class="badge red">${nUnpaid} mois impayé${nUnpaid > 1 ? 's' : ''}</span>` : '<span class="badge green">À jour ✓</span>'}</td>
+      <td style="font-size:12px;color:var(--muted)">${p.expires_at ? `${fmtDate(p.expires_at)}${dl !== null ? ` <span style="color:${dl < 0 ? 'var(--red-text)' : dl <= 7 ? 'var(--amber-text)' : 'var(--muted-2)'}">(${dl < 0 ? 'expiré' : dl + ' j'})</span>` : ''}` : '—'}</td>
+      <td style="color:var(--muted-2);width:20px">${I.chevR}</td>
+    </tr>`;
+  }).join('');
+
+  const renderTable = () => {
+    const q = (document.getElementById('ssearch')?.value || '').trim().toLowerCase();
+    const fStat = document.getElementById('sfStat')?.value || '';
+    const fPay = document.getElementById('sfPay')?.value || '';
+    let f = patients;
+    if (q) f = f.filter((p) => (p.name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q));
+    if (fStat) f = f.filter((p) => statusOf(p) === fStat);
+    if (fPay === 'late') f = f.filter((p) => (unpaidCount(p) ?? 0) > 0);
+    if (fPay === 'ok') f = f.filter((p) => unpaidCount(p) === 0);
+    document.getElementById('subsBody').innerHTML = rowsHtml(f)
+      || `<tr><td colspan="7"><div class="empty"><div class="e">🔍</div><div class="t">Aucun résultat</div></div></td></tr>`;
+    bindSubRows();
+  };
+  const bindSubRows = () => {
+    page.querySelectorAll('tr[data-sub]').forEach((tr) =>
+      tr.addEventListener('click', async () => {
+        const pid = tr.dataset.sub;
+        const { data: sub } = await db.from('subscriptions').select('*').eq('user_id', pid).maybeSingle();
+        subModal(pid, sub, () => pageSubs());
+      }));
+  };
 
   page.innerHTML = `
     <div class="stats-grid fade-up" style="margin-bottom:16px">
       <div class="card stat-card"><div class="ic" style="background:var(--green-soft);color:var(--green-text)">${I.card}</div><div class="v">${active.length}</div><div class="l">Abonnés actifs</div></div>
-      <div class="card stat-card"><div class="ic" style="background:var(--red-soft);color:var(--red-text)">${I.card}</div><div class="v">${unpaid.length}</div><div class="l">Impayés</div></div>
+      <div class="card stat-card"><div class="ic" style="background:var(--red-soft);color:var(--red-text)">${I.card}</div><div class="v">${unpaid.length}</div><div class="l">En retard de paiement</div></div>
       <div class="card stat-card"><div class="ic" style="background:var(--amber-soft);color:var(--amber-text)">${I.card}</div><div class="v">${expSoon.length}</div><div class="l">Expirent sous 7 j</div></div>
       <div class="card stat-card"><div class="ic" style="background:var(--primary-tint);color:var(--primary)">${I.card}</div><div class="v">${revenue.toFixed(0)} €</div><div class="l">Total encaissé</div></div>
     </div>
+    <div class="page-actions fade-up">
+      <div class="search-bar">${I.search}<input id="ssearch" placeholder="Rechercher un patient…" /></div>
+      <select class="sel" id="sfStat">
+        <option value="">💳 Tous les statuts</option>
+        <option value="active">Actif</option>
+        <option value="trial">Essai</option>
+        <option value="unpaid">Impayé</option>
+        <option value="expired">Expiré</option>
+        <option value="canceled">Annulé</option>
+        <option value="none">Aucun</option>
+      </select>
+      <select class="sel" id="sfPay">
+        <option value="">💰 Tous les paiements</option>
+        <option value="late">En retard</option>
+        <option value="ok">À jour</option>
+      </select>
+    </div>
     <div class="card fade-up">
-      <div class="card-head"><h3>Tous les patients</h3><span class="hint">cliquez pour modifier</span></div>
+      <div class="card-head"><h3>Tous les patients</h3><span class="hint">cliquez pour modifier l'abonnement · les mois se gèrent depuis la fiche patient</span></div>
       <div class="table-wrap"><table class="data">
-        <thead><tr><th>Patient</th><th>Plan</th><th>Statut</th><th>Prix</th><th>Payé</th><th>Expire</th><th></th></tr></thead>
-        <tbody>${patients.map((p) => {
-          const dl = daysLeft(p.expires_at);
-          const eff = Math.max(0, Number(p.price || 0) * (1 - Number(p.discount_pct || 0) / 100));
-          return `<tr class="click" data-sub="${p.user_id}">
-            <td><div class="cell-user">${avatar(p.name, p.email)}<div style="min-width:0"><div class="nm">${esc(p.name || 'Sans nom')}</div><div class="em">${esc(p.email || '')}</div></div></div></td>
-            <td>${p.plan ? PLAN_LABEL[p.plan] || esc(p.plan) : '—'}</td>
-            <td>${subBadge(p)}</td>
-            <td>${p.price ? `<b>${eff.toFixed(2)} €</b>${p.discount_pct ? ` <span style="color:var(--green-text);font-size:11px">-${p.discount_pct}%</span>` : ''}` : '—'}</td>
-            <td>${p.status && p.status !== 'none' ? (p.paid ? '<span class="badge green">Payé ✓</span>' : '<span class="badge red">Non payé</span>') : '—'}</td>
-            <td style="font-size:12px;color:var(--muted)">${p.expires_at ? `${fmtDate(p.expires_at)}${dl !== null ? ` <span style="color:${dl < 0 ? 'var(--red-text)' : dl <= 7 ? 'var(--amber-text)' : 'var(--muted-2)'}">(${dl < 0 ? 'expiré' : dl + ' j'})</span>` : ''}` : '—'}</td>
-            <td style="color:var(--muted-2);width:20px">${I.chevR}</td>
-          </tr>`;
-        }).join('')}</tbody></table></div>
+        <thead><tr><th>Patient</th><th>Plan</th><th>Statut</th><th>Prix</th><th>Paiements</th><th>Expire</th><th></th></tr></thead>
+        <tbody id="subsBody">${rowsHtml(patients)}</tbody></table></div>
     </div>`;
-  page.querySelectorAll('tr[data-sub]').forEach((tr) =>
-    tr.addEventListener('click', async () => {
-      const pid = tr.dataset.sub;
-      const { data: sub } = await db.from('subscriptions').select('*').eq('user_id', pid).maybeSingle();
-      subModal(pid, sub, () => pageSubs());
-    }));
+  bindSubRows();
+  document.getElementById('ssearch').addEventListener('input', renderTable);
+  document.getElementById('sfStat').addEventListener('change', renderTable);
+  document.getElementById('sfPay').addEventListener('change', renderTable);
 }
 
 /* ── go ── */

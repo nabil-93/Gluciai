@@ -482,7 +482,27 @@ export async function sendChatMessage(
   });
   if (error) throw error;
   if (data.error) throw new Error(data.error);
-  return data.reply as string;
+  const reply = data.reply as string;
+
+  // Mirror the chat exchange server-side so the doctor/admin dashboard can
+  // follow what the patient asked (fire-and-forget, never blocks the UI).
+  if (mode === 'chat' && lastUser) {
+    void (async () => {
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        const uid = u.user?.id;
+        if (!uid) return;
+        await supabase.from('chat_history').insert([
+          { user_id: uid, role: 'user', message: lastUser.content, language },
+          { user_id: uid, role: 'assistant', message: reply, language },
+        ]);
+      } catch {
+        // history sync is best-effort
+      }
+    })();
+  }
+
+  return reply;
 }
 
 /**
