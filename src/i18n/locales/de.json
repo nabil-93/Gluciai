@@ -493,7 +493,9 @@
     "safety": "Dieser Anruf ist sicher und vertraulich. Die KI kann Fehler machen — konsultiere immer eine Fachperson.",
     "connecting": "Verbindung…",
     "incoming": "KI-Anruf bereit",
-    "answer": "Annehmen"
+    "answer": "Annehmen",
+    "endedSilence": "Anruf beendet (längere Stille).",
+    "endedMax": "Maximale Anrufdauer erreicht."
   },
   "history": {
     "title": "Verlauf",
@@ -643,6 +645,9 @@
     "message": "Diese Funktion ist derzeit nicht in deinem Konto enthalten.",
     "subscribeNote": "Abo erforderlich — kontaktiere den Support, um sie zu aktivieren.",
     "understood": "Verstanden",
-    "badge": "Gesperrt"
+    "badge": "Gesperrt",
+    "quotaTitle": "Anrufminuten aufgebraucht",
+    "quotaMessage": "Du hast diesen Monat alle deine Sprachanruf-Minuten verbraucht.",
+    "quotaNote": "Deine Minuten werden nächsten Monat zurückgesetzt, oder kontaktiere den Support für mehr."
   }
 }

@@ -523,6 +523,13 @@ async function pagePatient(pid, initTab) {
     db.from('call_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(100).then((r) => r.data ?? []),
   ]);
   const aiUsage = (await db.from('ai_usage').select('kind, input_tokens, output_tokens, audio_input_tokens, audio_output_tokens, cost_usd').eq('user_id', pid)).data ?? [];
+  // Voice-call minutes consumed this calendar month (quota tracking).
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+  const callSecMonth = calls
+    .filter((c) => new Date(c.created_at).getTime() >= monthStart)
+    .reduce((a, c) => a + (c.duration_sec || 0), 0);
+  const callMinMonth = Math.ceil(callSecMonth / 60);
+  const callLimit = sub?.call_minutes_limit ?? null;
 
   const week = Date.now() - 7 * 86400000;
   const gly7 = glys.filter((g) => new Date(g.created_at).getTime() > week);
@@ -573,6 +580,7 @@ async function pagePatient(pid, initTab) {
             <div class="info-cell"><div class="k">Payé</div><div class="v">${sub ? (sub.paid ? '<span class="badge green">Payé ✓</span>' : '<span class="badge red">Non payé</span>') : '—'}</div></div>
             <div class="info-cell"><div class="k">Montant payé</div><div class="v">${sub?.paid_amount ? Number(sub.paid_amount).toFixed(2) + ' €' : '—'}</div></div>
             <div class="info-cell"><div class="k">Expire</div><div class="v">${sub?.expires_at ? `${fmtDate(sub.expires_at)}${dl !== null ? ` <span style="font-size:11px;color:${dl < 0 ? 'var(--red-text)' : dl <= 7 ? 'var(--amber-text)' : 'var(--muted-2)'}">(${dl < 0 ? 'expiré' : 'dans ' + dl + ' j'})</span>` : ''}` : '—'}</div></div>
+            <div class="info-cell"><div class="k">Appels vocaux/mois</div><div class="v">${callLimit == null ? 'Illimité' : `${callLimit} min`}</div></div>
           </div>
         </div>
 
@@ -606,7 +614,7 @@ async function pagePatient(pid, initTab) {
 
       ${paymentsCard(sub, payments)}
 
-      ${usageCard(aiUsage)}
+      ${usageCard(aiUsage, { callMinMonth, callLimit })}
 
       <div class="card fade-up">
         <div class="card-head">
@@ -758,7 +766,7 @@ async function pagePatient(pid, initTab) {
 const emptyData = (e, t) => `<div class="empty"><div class="e">${e}</div><div class="t">${t}</div></div>`;
 
 /* ── AI consumption card (patient detail) ── */
-function usageCard(rows) {
+function usageCard(rows, callInfo) {
   const totalCost = rows.reduce((a, r) => a + Number(r.cost_usd || 0), 0);
   const byKind = {};
   rows.forEach((r) => {
@@ -768,9 +776,22 @@ function usageCard(rows) {
     k.out += (r.output_tokens || 0) + (r.audio_output_tokens || 0);
     k.cost += Number(r.cost_usd || 0);
   });
+  // Monthly voice-call quota chip
+  let quotaChip = '';
+  if (callInfo) {
+    const { callMinMonth, callLimit } = callInfo;
+    if (callLimit == null) {
+      quotaChip = `<span class="badge gray">📞 ${callMinMonth} min ce mois · illimité</span>`;
+    } else {
+      const left = Math.max(0, callLimit - callMinMonth);
+      const cls = left === 0 ? 'red' : left <= Math.max(2, callLimit * 0.2) ? 'amber' : 'green';
+      quotaChip = `<span class="badge ${cls}">📞 ${callMinMonth}/${callLimit} min ce mois · ${left} restantes</span>`;
+    }
+  }
   return `
     <div class="card fade-up">
       <div class="card-head"><h3>🧮 Consommation IA</h3><a href="#/usage" style="font-size:12px;font-weight:700;color:var(--primary)">Vue globale ›</a></div>
+      ${quotaChip ? `<div class="pay-stats" style="padding-bottom:0">${quotaChip}</div>` : ''}
       ${rows.length ? `
       <div class="pay-stats" style="padding-bottom:2px">
         <span class="badge indigo">Coût total : ${fmtUsd(totalCost)}</span>
@@ -889,6 +910,8 @@ function subModal(pid, sub, onDone) {
         <div><label>Début</label><input id="sStart" type="date" value="${sub?.starts_at ? sub.starts_at.slice(0, 10) : ''}" /></div>
         <div><label>Expire le</label><input id="sEnd" type="date" value="${sub?.expires_at ? sub.expires_at.slice(0, 10) : ''}" /></div>
       </div></div>
+      <div class="field"><label>📞 Minutes d'appel vocal / mois <span style="font-weight:600;color:var(--muted-2)">(vide = illimité)</span></label>
+        <input id="sCallMin" type="number" min="0" step="1" placeholder="∞ illimité" value="${sub?.call_minutes_limit ?? ''}" /></div>
       <div class="field"><label>Notes</label><textarea id="sNotes" rows="2">${esc(sub?.notes || '')}</textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" data-close>Annuler</button><button class="btn btn-primary" id="sGo">Enregistrer</button></div>`);
@@ -904,6 +927,7 @@ function subModal(pid, sub, onDone) {
       paid_amount: Number(ov.querySelector('#sPaidAmt').value || 0),
       starts_at: ov.querySelector('#sStart').value ? new Date(ov.querySelector('#sStart').value).toISOString() : null,
       expires_at: ov.querySelector('#sEnd').value ? new Date(ov.querySelector('#sEnd').value + 'T23:59:59').toISOString() : null,
+      call_minutes_limit: ov.querySelector('#sCallMin').value === '' ? null : Number(ov.querySelector('#sCallMin').value),
       notes: ov.querySelector('#sNotes').value || null,
       updated_at: new Date().toISOString(),
     };

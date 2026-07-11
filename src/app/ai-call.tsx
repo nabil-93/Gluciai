@@ -32,6 +32,13 @@ const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
+/* Cost guards for the (expensive) live audio session:
+ *  - hang up automatically after this many seconds of total silence
+ *    (nobody speaking) so an idle open mic never bills forever,
+ *  - and cap any single call so a forgotten call can't drain the quota. */
+const SILENCE_TIMEOUT_MS = 25_000;
+const MAX_CALL_MS = 5 * 60_000;
+
 /* Classic fallback (SpeechRecognition) language tags */
 const SR_LANG_TAGS: Record<string, string> = {
   fr: 'fr-FR',
@@ -193,12 +200,44 @@ function Waveform({ active }: { active: boolean }) {
   );
 }
 
-/* Blocked from the admin dashboard? Show the lock instead of the call. */
+/* Blocked from the admin dashboard, or monthly call minutes spent?
+ * Show the lock instead of the call. The quota is checked server-side
+ * (my_call_minutes_left RPC) before the expensive live session starts. */
 export default function AiCallScreenGate() {
   const locked = useAppStore((s) => s.lockedFeatures.includes('ai_call'));
   const { t } = useTranslation();
+  const [quota, setQuota] = useState<'checking' | 'ok' | 'exceeded'>('checking');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (isDemoMode || !supabase) {
+        if (alive) setQuota('ok');
+        return;
+      }
+      try {
+        const { data, error } = await supabase.rpc('my_call_minutes_left');
+        if (!alive) return;
+        setQuota(!error && typeof data === 'number' && data <= 0 ? 'exceeded' : 'ok');
+      } catch {
+        if (alive) setQuota('ok'); // never block on a transient error
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   if (locked) return <LockedScreen featureLabel={t('locked.featCall')} />;
+  if (quota === 'exceeded')
+    return <LockedScreen featureLabel={t('locked.featCall')} variant="quota" />;
+  if (quota === 'checking') return <CallQuotaSplash />;
   return <AiCallScreen />;
+}
+
+/** Tiny neutral splash while the quota RPC resolves (usually <150 ms). */
+function CallQuotaSplash() {
+  return <View style={{ flex: 1, backgroundColor: '#0b1220' }} />;
 }
 
 function AiCallScreen() {
@@ -246,6 +285,34 @@ function AiCallScreen() {
   /* ── Call timer (starts once the call is answered) ── */
   const secondsRef = useRef(0);
   const callLoggedRef = useRef(false);
+  const [endNotice, setEndNotice] = useState<string | null>(null);
+
+  /* ── Cost guards: silence timeout + hard cap ── */
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Declared here, assigned after endCall exists (avoids TS use-before-def).
+  const endForReasonRef = useRef<(reason: 'silence' | 'max') => void>(() => {});
+
+  const clearGuardTimers = () => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
+    silenceTimerRef.current = null;
+    maxTimerRef.current = null;
+  };
+  /** Reset the silence countdown — called on any speech (mic or AI). */
+  const bumpActivity = () => {
+    if (endedRef.current || !startedRef.current) return;
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    silenceTimerRef.current = setTimeout(
+      () => endForReasonRef.current('silence'),
+      SILENCE_TIMEOUT_MS
+    );
+  };
+  const startGuardTimers = () => {
+    bumpActivity();
+    maxTimerRef.current = setTimeout(() => endForReasonRef.current('max'), MAX_CALL_MS);
+  };
+
   useEffect(() => {
     const id = setInterval(() => {
       if (startedRef.current && !endedRef.current) {
@@ -337,6 +404,7 @@ ${buildHealthContext()}`;
     const session = new GeminiLiveSession({
       onAudio: (chunk) => {
         if (endedRef.current) return;
+        bumpActivity(); // AI is speaking → not silent
         player.play(chunk);
         if (statusRef.current !== 'speaking') setStatusSafe('speaking');
       },
@@ -515,7 +583,10 @@ ${buildHealthContext()}`;
     const player = new PcmPlayer();
     const mic = new MicStreamer();
     mic.prepareContext();
+    // Patient speech resets the silence-hangup countdown.
+    mic.onSpeech = bumpActivity;
     setStatusSafe('connecting');
+    startGuardTimers();
 
     (async () => {
       const liveOk = await startLive(player, mic);
@@ -539,6 +610,7 @@ ${buildHealthContext()}`;
   useEffect(() => {
     return () => {
       endedRef.current = true;
+      clearGuardTimers();
       logCallDuration();
       cleanupLive();
       cleanupClassic();
@@ -587,6 +659,7 @@ ${buildHealthContext()}`;
 
   const endCall = () => {
     endedRef.current = true;
+    clearGuardTimers();
     logCallDuration();
     cleanupLive();
     cleanupClassic();
@@ -594,8 +667,27 @@ ${buildHealthContext()}`;
     else router.replace('/(tabs)');
   };
 
-  const statusText =
-    status === 'incoming'
+  /** Auto-hang-up from a cost guard: shows a short reason, then closes.
+   *  Kept behind a ref so the guard timers (set up before this line) can
+   *  call the latest version without a forward-reference. */
+  endForReasonRef.current = (reason: 'silence' | 'max') => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    clearGuardTimers();
+    logCallDuration();
+    cleanupLive();
+    cleanupClassic();
+    setEndNotice(reason === 'silence' ? t('call.endedSilence') : t('call.endedMax'));
+    // Let the notice show briefly, then leave the screen.
+    setTimeout(() => {
+      if (router.canGoBack()) router.back();
+      else router.replace('/(tabs)');
+    }, 2600);
+  };
+
+  const statusText = endNotice
+    ? endNotice
+    : status === 'incoming'
       ? t('call.incoming')
       : status === 'connecting'
         ? t('call.connecting')

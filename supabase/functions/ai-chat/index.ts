@@ -93,8 +93,11 @@ Rules:
 - Be warm, clear and concise.${voiceRules}`;
 
     // Map to Gemini roles; the conversation must start with a user turn.
+    // Only the last few turns are sent — a long chat re-bills the whole
+    // history on every message, so we cap it (voice needs even less context).
+    const historyLimit = mode === 'voice' ? 6 : 8;
     const contents = (messages as { role: string; content: string }[])
-      .slice(-20)
+      .slice(-historyLimit)
       .filter((m) => typeof m.content === 'string' && m.content.trim())
       .map((m) => ({
         role: m.role === 'assistant' ? 'model' : 'user',

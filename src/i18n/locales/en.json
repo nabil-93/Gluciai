@@ -493,7 +493,9 @@
     "safety": "This call is secure and confidential. The AI can make mistakes — always consult a professional.",
     "connecting": "Connecting…",
     "incoming": "AI call ready",
-    "answer": "Answer"
+    "answer": "Answer",
+    "endedSilence": "Call ended (extended silence).",
+    "endedMax": "Maximum call duration reached."
   },
   "history": {
     "title": "History",
@@ -643,6 +645,9 @@
     "message": "This feature is not included in your account at the moment.",
     "subscribeNote": "Subscription required — contact support to activate it.",
     "understood": "Got it",
-    "badge": "Locked"
+    "badge": "Locked",
+    "quotaTitle": "Call minutes used up",
+    "quotaMessage": "You've used all your voice-call minutes for this month.",
+    "quotaNote": "Your minutes reset next month, or contact support to add more."
   }
 }

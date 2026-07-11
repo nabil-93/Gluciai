@@ -25,13 +25,21 @@ function BigLock({ size = 34, color = '#b45309' }: { size?: number; color?: stri
 
 /**
  * Full-screen state shown instead of a feature the admin dashboard has
- * blocked for this account (feature_access.allowed = false).
+ * blocked for this account (feature_access.allowed = false), or — with
+ * variant="quota" — when a monthly usage budget (e.g. call minutes) is spent.
  */
-export function LockedScreen({ featureLabel }: { featureLabel: string }) {
+export function LockedScreen({
+  featureLabel,
+  variant = 'locked',
+}: {
+  featureLabel: string;
+  variant?: 'locked' | 'quota';
+}) {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
+  const isQuota = variant === 'quota';
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -54,13 +62,19 @@ export function LockedScreen({ featureLabel }: { featureLabel: string }) {
             <BigLock />
           </View>
         </View>
-        <Text style={styles.title}>{t('locked.title')}</Text>
+        <Text style={styles.title}>
+          {isQuota ? t('locked.quotaTitle') : t('locked.title')}
+        </Text>
         <Text style={styles.feature}>{featureLabel}</Text>
-        <Text style={styles.message}>{t('locked.message')}</Text>
+        <Text style={styles.message}>
+          {isQuota ? t('locked.quotaMessage') : t('locked.message')}
+        </Text>
 
         <View style={styles.noteBox}>
-          <Text style={{ fontSize: 16 }}>💳</Text>
-          <Text style={styles.noteText}>{t('locked.subscribeNote')}</Text>
+          <Text style={{ fontSize: 16 }}>{isQuota ? '⏳' : '💳'}</Text>
+          <Text style={styles.noteText}>
+            {isQuota ? t('locked.quotaNote') : t('locked.subscribeNote')}
+          </Text>
         </View>
 
         <Pressable onPress={close} style={{ alignSelf: 'stretch', marginTop: 22 }}>

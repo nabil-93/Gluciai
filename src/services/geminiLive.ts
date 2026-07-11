@@ -270,6 +270,9 @@ export class MicStreamer {
   private stream: MediaStream | null = null;
   private proc: ScriptProcessorNode | null = null;
   private muted = false;
+  /** Fired (throttled) when the mic picks up actual speech, not just noise. */
+  onSpeech: (() => void) | null = null;
+  private lastSpeechEmit = 0;
 
   /** MUST be called synchronously inside a user gesture on iOS Safari —
    *  audio contexts created outside a tap stay suspended forever. */
@@ -298,6 +301,19 @@ export class MicStreamer {
     this.proc.onaudioprocess = (e) => {
       if (this.muted) return;
       const f32 = e.inputBuffer.getChannelData(0);
+      // Voice-activity detection: emit onSpeech only when the frame carries
+      // real energy (speech ≫ background), throttled to once per ~500 ms.
+      // Used by the caller to reset the silence-hangup countdown.
+      if (this.onSpeech) {
+        let sum = 0;
+        for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
+        const rms = Math.sqrt(sum / f32.length);
+        const nowMs = Date.now();
+        if (rms > 0.02 && nowMs - this.lastSpeechEmit > 500) {
+          this.lastSpeechEmit = nowMs;
+          this.onSpeech();
+        }
+      }
       onChunk(floatTo16BitBase64(downsampleTo16k(f32, rate)));
     };
     src.connect(this.proc);

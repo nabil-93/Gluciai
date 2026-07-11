@@ -493,7 +493,9 @@
     "safety": "Cet appel est sécurisé et confidentiel. L'IA peut faire des erreurs, consultez toujours un professionnel.",
     "connecting": "Connexion…",
     "incoming": "Appel IA prêt",
-    "answer": "Décrocher"
+    "answer": "Décrocher",
+    "endedSilence": "Appel terminé (silence prolongé).",
+    "endedMax": "Durée maximale d'appel atteinte."
   },
   "history": {
     "title": "Historique",
@@ -643,6 +645,9 @@
     "message": "Cette fonctionnalité n'est pas incluse dans ton compte pour le moment.",
     "subscribeNote": "Abonnement requis — contacte le support pour l’activer.",
     "understood": "J'ai compris",
-    "badge": "Verrouillé"
+    "badge": "Verrouillé",
+    "quotaTitle": "Minutes d'appel épuisées",
+    "quotaMessage": "Tu as utilisé toutes tes minutes d'appel vocal pour ce mois-ci.",
+    "quotaNote": "Tes minutes se rechargent le mois prochain, ou contacte le support pour en ajouter."
   }
 }
