@@ -331,6 +331,19 @@ Rules:
   these are suggestions, not medical advice, and that any treatment change
   should be confirmed with their doctor or care team.`;
 
+    // Voice message in the regular chat: the audio IS the user's turn. We
+    // ask for JSON {transcript, reply} so the app can show what it heard.
+    const hasAudio = !!(audio?.data && audio?.mimeType);
+    const audioRule = hasAudio
+      ? `
+- The LAST user turn is a VOICE MESSAGE (audio). Listen carefully — it may
+  be in any language or dialect (often Moroccan Darija). Answer what the
+  patient SAID.
+- Reply ONLY valid JSON (no markdown fences): {"transcript":"...","reply":"..."}
+  transcript = faithfully what the patient said in their own words; reply =
+  your normal answer, in ${langName}.`
+      : '';
+
     const systemPrompt = `You are GlucoAI, the patient's personal diabetes assistant inside the GlucoAI app.
 
 LANGUAGE RULES (critical):
@@ -369,19 +382,28 @@ Rules:
   have, then ask at most ONE short follow-up question.
 - Never diagnose disease.
 - Explain uncertainty when data is estimated.
-- Be warm, clear and concise.${voiceRules}`;
+- Be warm, clear and concise.${voiceRules}${audioRule}`;
 
     // Map to Gemini roles; the conversation must start with a user turn.
     // Only the last few turns are sent — a long chat re-bills the whole
     // history on every message, so we cap it (voice needs even less context).
     const historyLimit = mode === 'voice' ? 6 : 8;
-    const contents = (messages as { role: string; content: string }[])
+    const contents: { role: string; parts: Record<string, unknown>[] }[] = (
+      messages as { role: string; content: string }[]
+    )
       .slice(-historyLimit)
       .filter((m) => typeof m.content === 'string' && m.content.trim())
       .map((m) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],
       }));
+    // Voice message: the audio itself is the final user turn.
+    if (hasAudio) {
+      contents.push({
+        role: 'user',
+        parts: [{ inlineData: { mimeType: audio.mimeType, data: audio.data } }],
+      });
+    }
     while (contents.length && contents[0].role === 'model') contents.shift();
     if (contents.length === 0) {
       return json({ error: 'Empty conversation' }, 400);
@@ -401,6 +423,7 @@ Rules:
             thinkingConfig: { thinkingBudget: 0 },
             maxOutputTokens: mode === 'voice' ? 500 : 1500,
             temperature: 0.6,
+            ...(hasAudio ? { responseMimeType: 'application/json' } : {}),
           },
         }),
       }
@@ -412,10 +435,22 @@ Rules:
     }
 
     const data = await response.json();
-    const reply = (data.candidates?.[0]?.content?.parts ?? [])
+    const rawText = (data.candidates?.[0]?.content?.parts ?? [])
       .map((p: { text?: string }) => p.text ?? '')
       .join('')
       .trim();
+
+    let reply = rawText;
+    let transcript = '';
+    if (hasAudio) {
+      try {
+        const parsed = JSON.parse(rawText);
+        reply = typeof parsed.reply === 'string' ? parsed.reply : rawText;
+        transcript = typeof parsed.transcript === 'string' ? parsed.transcript : '';
+      } catch {
+        reply = rawText; // model didn't wrap in JSON — use the text as-is
+      }
+    }
     if (!reply) {
       return json({ error: 'Empty AI reply' }, 502);
     }
@@ -424,6 +459,9 @@ Rules:
     const um = data.usageMetadata ?? {};
     const inTok = um.promptTokenCount ?? 0;
     const outTok = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
+    const audioIn = ((um.promptTokensDetails ?? []) as any[])
+      .filter((d) => d?.modality === 'AUDIO')
+      .reduce((a, d) => a + (d.tokenCount ?? 0), 0);
     const uid = await callerUserId(req);
     if (uid && (inTok || outTok)) {
       await logUsage({
@@ -432,11 +470,12 @@ Rules:
         model: MODEL,
         input_tokens: inTok,
         output_tokens: outTok,
-        cost_usd: flashCost(inTok, outTok),
+        audio_input_tokens: audioIn,
+        cost_usd: flashCost(inTok, outTok, audioIn),
       });
     }
 
-    return json({ reply });
+    return json({ reply, transcript });
   } catch (error) {
     return json({ error: String(error) }, 500);
   }

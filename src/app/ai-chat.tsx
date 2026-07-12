@@ -17,8 +17,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { LoggerConfirmCard } from '@/components/LoggerConfirmCard';
+import { VoiceRecorderBar } from '@/components/VoiceRecorderBar';
 import { isRTL } from '@/i18n';
-import { sendChatMessage } from '@/services/ai';
+import { sendChatMessage, sendChatVoice } from '@/services/ai';
 import {
   actionSummary,
   applyLoggerAction,
@@ -207,6 +208,54 @@ function AiChatScreen() {
     }
   };
 
+  // Voice message: Gemini listens to the audio (Darija included), shows the
+  // transcript as the user's bubble and answers normally. Also offers to log
+  // it when the patient described something loggable.
+  const sendVoice = async (audio: { mimeType: string; data: string }) => {
+    if (thinking) return;
+    setPendingAction(null);
+    setThinking(true);
+    try {
+      const history = chatMessages.map((m) => ({ role: m.role, content: m.content }));
+      const { reply, transcript } = await sendChatVoice(
+        history,
+        i18n.language,
+        profile,
+        audio
+      );
+      const heard = (transcript || '').trim();
+      addChatMessage({
+        id: `${Date.now()}-uv`,
+        role: 'user',
+        content: heard ? `🎙️ ${heard}` : `🎙️ ${t('logger.voiceNote')}`,
+        created_at: new Date().toISOString(),
+      });
+      addChatMessage({
+        id: `${Date.now()}-a`,
+        role: 'assistant',
+        content: reply,
+        created_at: new Date().toISOString(),
+      });
+      // If the spoken message was loggable, extract + offer the confirm card.
+      if (heard && looksLoggable(heard)) {
+        sendLoggerMessage([{ role: 'user', content: heard }], i18n.language)
+          .then((ex) => {
+            if (ex?.action) setPendingAction(ex.action);
+          })
+          .catch(() => {});
+      }
+    } catch {
+      addChatMessage({
+        id: `${Date.now()}-e`,
+        role: 'assistant',
+        content: t('common.error'),
+        created_at: new Date().toISOString(),
+      });
+    } finally {
+      setThinking(false);
+    }
+  };
+
   const fmtTime = (iso: string) =>
     new Date(iso).toLocaleTimeString(i18n.language, {
       hour: '2-digit',
@@ -306,29 +355,42 @@ function AiChatScreen() {
         ))}
       </View>
 
-      {/* ── Input bar ── */}
+      {/* ── Input bar (mic → voice message; recording takes over the row) ── */}
       <View
         style={[
           styles.inputBar,
           { paddingBottom: Math.max(insets.bottom, 10) + 4 },
         ]}
       >
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder={t('chat.placeholder')}
-          placeholderTextColor="#98a1af"
-          style={styles.input}
-          multiline
-          onSubmitEditing={() => send(input)}
-        />
-        <Pressable
-          onPress={() => send(input)}
-          style={[styles.sendBtn, (!input.trim() || thinking) && { opacity: 0.5 }]}
-          disabled={!input.trim() || thinking}
+        <VoiceRecorderBar
+          disabled={thinking}
+          onAudio={sendVoice}
+          onDenied={() =>
+            addChatMessage({
+              id: `${Date.now()}-md`,
+              role: 'assistant',
+              content: t('logger.micDenied'),
+              created_at: new Date().toISOString(),
+            })
+          }
         >
-          <SendIcon />
-        </Pressable>
+          <TextInput
+            value={input}
+            onChangeText={setInput}
+            placeholder={t('chat.placeholder')}
+            placeholderTextColor="#98a1af"
+            style={styles.input}
+            multiline
+            onSubmitEditing={() => send(input)}
+          />
+          <Pressable
+            onPress={() => send(input)}
+            style={[styles.sendBtn, (!input.trim() || thinking) && { opacity: 0.5 }]}
+            disabled={!input.trim() || thinking}
+          >
+            <SendIcon />
+          </Pressable>
+        </VoiceRecorderBar>
       </View>
     </KeyboardAvoidingView>
   );
@@ -437,7 +499,7 @@ const styles = StyleSheet.create({
   /* Input bar */
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: 10,
     paddingHorizontal: 16,
     paddingTop: 8,

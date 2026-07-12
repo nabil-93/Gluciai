@@ -530,6 +530,57 @@ export async function sendChatMessage(
   return reply;
 }
 
+/**
+ * Send a VOICE MESSAGE to the regular chat: Gemini listens to the audio
+ * directly (Darija included), returns its transcript + a normal answer.
+ * Mirrors the exchange to chat_history like sendChatMessage does.
+ */
+export async function sendChatVoice(
+  history: { role: 'user' | 'assistant'; content: string }[],
+  language: string,
+  profile: Profile | null,
+  audio: { mimeType: string; data: string }
+): Promise<{ reply: string; transcript: string }> {
+  if (isDemoMode || !supabase) {
+    return { reply: DEMO_REPLIES[language] ?? DEMO_REPLIES.en, transcript: '' };
+  }
+  const { data, error } = await supabase.functions.invoke('ai-chat', {
+    body: {
+      messages: history,
+      language,
+      profile,
+      mode: 'chat',
+      healthData: buildHealthContext(),
+      audio,
+    },
+  });
+  if (error) throw error;
+  if (data.error) throw new Error(data.error);
+  const reply = data.reply as string;
+  const transcript = (data.transcript as string) ?? '';
+
+  void (async () => {
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u.user?.id;
+      if (!uid) return;
+      await supabase.from('chat_history').insert([
+        {
+          user_id: uid,
+          role: 'user',
+          message: transcript || '[voice message]',
+          language,
+        },
+        { user_id: uid, role: 'assistant', message: reply, language },
+      ]);
+    } catch {
+      // history sync is best-effort
+    }
+  })();
+
+  return { reply, transcript };
+}
+
 /* ── AI bolus report + modified-dose safety check ──
  * The clinical engine (bolusEngine.ts) computes the dose; these calls make
  * Gemini explain it in the app language and vet patient edits. */
