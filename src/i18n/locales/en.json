@@ -575,7 +575,10 @@
     "error": "An error occurred.",
     "sectionPlan": "Subscription",
     "planRowTitle": "My subscription",
-    "planRowSub": "Free plan · unlock every feature"
+    "planRowSub": "Free plan · unlock every feature",
+    "planRowSubFree": "Free plan · unlock every feature",
+    "planRowSubPartial": "{{active}}/{{total}} features active · unlock the rest",
+    "planRowSubFull": "All features are active"
   },
   "log": {
     "glucoseTitle": "Log glucose",
@@ -842,6 +845,29 @@
     "freeBadge": "Free plan",
     "upgrade": "Upgrade to the full version",
     "later": "Later",
-    "waMessage": "Hello, I would like to upgrade to the full version of GlucoAI. Thank you."
+    "waMessage": "Hello, I would like to upgrade to the full version of GlucoAI. Thank you.",
+    "manageTitle": "My subscription",
+    "statusFree": "Free plan",
+    "statusFreeSub": "No premium feature is active yet.",
+    "statusPartial": "Active subscription",
+    "statusPartialSub": "{{active}}/{{total}} features active",
+    "statusFull": "Full version",
+    "statusFullSub": "All features are active. Thank you!",
+    "chooseTitle": "What would you like to unlock?",
+    "chooseSub": "Select the features, then contact us on WhatsApp.",
+    "active": "Active",
+    "featScanDesc": "Analyze meals from a photo",
+    "featChatDesc": "AI conversational assistant",
+    "featCallDesc": "Voice call with the AI",
+    "contactWa": "Contact support",
+    "contactWaN": "Unlock {{n}} features",
+    "waIntro": "Hello, I'd like to unlock the following features on GlucoAI:",
+    "waOutro": "Thank you!",
+    "waGeneric": "Hello, I'd like to unlock features on GlucoAI. Thank you!",
+    "selectAtLeastOne": "Select at least one feature",
+    "allActive": "Everything is unlocked 🎉",
+    "allActiveSub": "You're enjoying all of GlucoAI's features.",
+    "welcomeManage": "Manage my subscription",
+    "welcomeContact": "Contact support"
   }
 }

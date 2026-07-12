@@ -575,7 +575,10 @@
     "error": "Ein Fehler ist aufgetreten.",
     "sectionPlan": "Abo",
     "planRowTitle": "Mein Abo",
-    "planRowSub": "Kostenlose Version · alle Funktionen freischalten"
+    "planRowSub": "Kostenlose Version · alle Funktionen freischalten",
+    "planRowSubFree": "Kostenlose Version · alle Funktionen freischalten",
+    "planRowSubPartial": "{{active}}/{{total}} Funktionen aktiv · Rest freischalten",
+    "planRowSubFull": "Alle Funktionen sind aktiv"
   },
   "log": {
     "glucoseTitle": "Blutzucker erfassen",
@@ -842,6 +845,29 @@
     "freeBadge": "Kostenlose Version",
     "upgrade": "Zur Vollversion wechseln",
     "later": "Später",
-    "waMessage": "Hallo, ich möchte zur Vollversion von GlucoAI wechseln. Danke."
+    "waMessage": "Hallo, ich möchte zur Vollversion von GlucoAI wechseln. Danke.",
+    "manageTitle": "Mein Abo",
+    "statusFree": "Kostenlose Version",
+    "statusFreeSub": "Noch keine Premium-Funktion aktiv.",
+    "statusPartial": "Aktives Abo",
+    "statusPartialSub": "{{active}}/{{total}} Funktionen aktiv",
+    "statusFull": "Vollversion",
+    "statusFullSub": "Alle Funktionen sind aktiv. Danke!",
+    "chooseTitle": "Was möchtest du freischalten?",
+    "chooseSub": "Wähle die Funktionen und kontaktiere uns per WhatsApp.",
+    "active": "Aktiv",
+    "featScanDesc": "Mahlzeiten per Foto analysieren",
+    "featChatDesc": "KI-Chat-Assistent",
+    "featCallDesc": "Sprachanruf mit der KI",
+    "contactWa": "Support kontaktieren",
+    "contactWaN": "{{n}} Funktionen freischalten",
+    "waIntro": "Hallo, ich möchte folgende Funktionen bei GlucoAI freischalten:",
+    "waOutro": "Danke!",
+    "waGeneric": "Hallo, ich möchte Funktionen bei GlucoAI freischalten. Danke!",
+    "selectAtLeastOne": "Wähle mindestens eine Funktion",
+    "allActive": "Alles freigeschaltet 🎉",
+    "allActiveSub": "Du nutzt alle Funktionen von GlucoAI.",
+    "welcomeManage": "Abo verwalten",
+    "welcomeContact": "Support kontaktieren"
   }
 }

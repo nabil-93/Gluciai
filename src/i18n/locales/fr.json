@@ -575,7 +575,10 @@
     "error": "Une erreur est survenue.",
     "sectionPlan": "Abonnement",
     "planRowTitle": "Mon abonnement",
-    "planRowSub": "Version gratuite · débloquez toutes les fonctionnalités"
+    "planRowSub": "Version gratuite · débloquez toutes les fonctionnalités",
+    "planRowSubFree": "Version gratuite · débloquez toutes les fonctionnalités",
+    "planRowSubPartial": "{{active}}/{{total}} fonctionnalités actives · débloquez le reste",
+    "planRowSubFull": "Toutes les fonctionnalités sont actives"
   },
   "log": {
     "glucoseTitle": "Enregistrer la glycémie",
@@ -842,6 +845,29 @@
     "freeBadge": "Version gratuite",
     "upgrade": "Passer à la version complète",
     "later": "Plus tard",
-    "waMessage": "Bonjour, je souhaite passer à la version complète de GlucoAI. Merci."
+    "waMessage": "Bonjour, je souhaite passer à la version complète de GlucoAI. Merci.",
+    "manageTitle": "Mon abonnement",
+    "statusFree": "Version gratuite",
+    "statusFreeSub": "Aucune fonctionnalité premium n'est encore active.",
+    "statusPartial": "Abonnement actif",
+    "statusPartialSub": "{{active}}/{{total}} fonctionnalités actives",
+    "statusFull": "Version complète",
+    "statusFullSub": "Toutes les fonctionnalités sont actives. Merci !",
+    "chooseTitle": "Que voulez-vous débloquer ?",
+    "chooseSub": "Sélectionnez les fonctionnalités, puis contactez-nous sur WhatsApp.",
+    "active": "Actif",
+    "featScanDesc": "Analyse de repas par photo",
+    "featChatDesc": "Assistant conversationnel IA",
+    "featCallDesc": "Appel vocal avec l'IA",
+    "contactWa": "Contacter le support",
+    "contactWaN": "Débloquer {{n}} fonctionnalités",
+    "waIntro": "Bonjour, je souhaite débloquer les fonctionnalités suivantes sur GlucoAI :",
+    "waOutro": "Merci !",
+    "waGeneric": "Bonjour, je souhaite débloquer des fonctionnalités sur GlucoAI. Merci !",
+    "selectAtLeastOne": "Sélectionnez au moins une fonctionnalité",
+    "allActive": "Tout est débloqué 🎉",
+    "allActiveSub": "Vous profitez de toutes les fonctionnalités de GlucoAI.",
+    "welcomeManage": "Gérer mon abonnement",
+    "welcomeContact": "Contacter le support"
   }
 }

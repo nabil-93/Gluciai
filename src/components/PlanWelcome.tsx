@@ -1,5 +1,6 @@
 import React from 'react';
 import { Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +28,7 @@ function WhatsAppIcon() {
  */
 export function PlanWelcome() {
   const { t } = useTranslation();
+  const router = useRouter();
   const shown = useAppStore((s) => s.planWelcomeShown);
   const wizardDone = useAppStore((s) => s.wizardDone);
   const lockedFeatures = useAppStore((s) => s.lockedFeatures);
@@ -54,6 +56,11 @@ export function PlanWelcome() {
   const dismiss = () => {
     setVisible(false);
     mark();
+  };
+
+  const manage = () => {
+    dismiss();
+    router.push('/subscription' as any);
   };
 
   const contactSupport = () => {
@@ -86,16 +93,25 @@ export function PlanWelcome() {
             <Text style={styles.freeChipText}>⭐ {t('plan.freeBadge')}</Text>
           </View>
 
-          <Pressable onPress={contactSupport} style={{ alignSelf: 'stretch' }}>
+          {/* Primary: open the manage-subscription page to pick features. */}
+          <Pressable onPress={manage} style={{ alignSelf: 'stretch' }}>
             <LinearGradient
-              colors={['#25D366', '#1ebe5d']}
+              colors={['#2ee59d', '#19C37D']}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 1 }}
               style={styles.cta}
             >
-              <WhatsAppIcon />
-              <Text style={styles.ctaText}>{t('plan.upgrade')}</Text>
+              <Text style={{ fontSize: 16 }}>⭐</Text>
+              <Text style={styles.ctaText}>{t('plan.welcomeManage')}</Text>
             </LinearGradient>
+          </Pressable>
+
+          {/* Secondary: jump straight to WhatsApp support. */}
+          <Pressable onPress={contactSupport} style={{ alignSelf: 'stretch', marginTop: 10 }}>
+            <View style={styles.waBtn}>
+              <WhatsAppIcon />
+              <Text style={styles.waBtnText}>{t('plan.welcomeContact')}</Text>
+            </View>
           </Pressable>
 
           <Pressable onPress={dismiss} style={styles.later}>
@@ -181,6 +197,16 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
   },
   ctaText: { fontFamily: F800, fontSize: 15.5, color: '#ffffff' },
-  later: { paddingVertical: 14, marginTop: 4 },
+  waBtn: {
+    height: 50,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    backgroundColor: '#25D366',
+  },
+  waBtnText: { fontFamily: F700, fontSize: 14.5, color: '#ffffff' },
+  later: { paddingVertical: 14, marginTop: 2 },
   laterText: { fontFamily: F700, fontSize: 14, color: '#98a1af' },
 });

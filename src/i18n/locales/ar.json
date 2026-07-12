@@ -575,7 +575,10 @@
     "error": "حدث خطأ.",
     "sectionPlan": "الاشتراك",
     "planRowTitle": "الاشتراك ديالي",
-    "planRowSub": "النسخة المجانية · فك كل الميزات"
+    "planRowSub": "النسخة المجانية · فك كل الميزات",
+    "planRowSubFree": "النسخة المجانية · فك جميع الميزات",
+    "planRowSubPartial": "{{active}}/{{total}} ميزات نشطة · فك الباقي",
+    "planRowSubFull": "جميع الميزات نشطة"
   },
   "log": {
     "glucoseTitle": "تسجيل سكر الدم",
@@ -842,6 +845,29 @@
     "freeBadge": "النسخة المجانية",
     "upgrade": "رقّي للنسخة الكاملة",
     "later": "من بعد",
-    "waMessage": "السلام، بغيت نرقّي للنسخة الكاملة ديال GlucoAI. شكراً."
+    "waMessage": "السلام، بغيت نرقّي للنسخة الكاملة ديال GlucoAI. شكراً.",
+    "manageTitle": "الاشتراك ديالي",
+    "statusFree": "النسخة المجانية",
+    "statusFreeSub": "حتى ميزة مدفوعة مازال ماخدامة.",
+    "statusPartial": "اشتراك نشط",
+    "statusPartialSub": "{{active}}/{{total}} ميزات نشطة",
+    "statusFull": "النسخة الكاملة",
+    "statusFullSub": "جميع الميزات نشطة. شكراً!",
+    "chooseTitle": "شنو بغيتي تفك؟",
+    "chooseSub": "ختار الميزات، من بعد تواصل معانا عبر واتساب.",
+    "active": "نشط",
+    "featScanDesc": "تحليل الوجبات بالصورة",
+    "featChatDesc": "مساعد المحادثة الذكي",
+    "featCallDesc": "مكالمة صوتية مع الذكاء الاصطناعي",
+    "contactWa": "تواصل مع الدعم",
+    "contactWaN": "فك {{n}} ميزات",
+    "waIntro": "السلام، بغيت نفك الميزات هادو فـ GlucoAI:",
+    "waOutro": "شكراً!",
+    "waGeneric": "السلام، بغيت نفك ميزات فـ GlucoAI. شكراً!",
+    "selectAtLeastOne": "ختار على الأقل ميزة وحدة",
+    "allActive": "كلشي مفكوك 🎉",
+    "allActiveSub": "راك كتستافد من جميع ميزات GlucoAI.",
+    "welcomeManage": "دبّر الاشتراك ديالي",
+    "welcomeContact": "تواصل مع الدعم"
   }
 }

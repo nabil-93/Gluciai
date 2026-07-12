@@ -24,6 +24,7 @@ import {
   uploadAvatar,
 } from '@/services/account';
 import { saveProfile } from '@/services/data';
+import { ALL_FEATURES, planStatus } from '@/services/features';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
 import type { DiabetesType, InsulinType, Profile } from '@/types';
@@ -64,6 +65,7 @@ export default function ProfileScreen() {
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const profile = useAppStore((s) => s.profile);
+  const lockedFeatures = useAppStore((s) => s.lockedFeatures);
 
   const [draft, setDraft] = useState<Profile | null>(() => profile);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -367,7 +369,19 @@ export default function ProfileScreen() {
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.planTitle}>{t('profile.planRowTitle')}</Text>
               <Text style={styles.planSub} numberOfLines={2}>
-                {t('profile.planRowSub')}
+                {(() => {
+                  const status = planStatus(lockedFeatures);
+                  const active =
+                    ALL_FEATURES.length -
+                    ALL_FEATURES.filter((f) => lockedFeatures.includes(f)).length;
+                  if (status === 'full') return t('profile.planRowSubFull');
+                  if (status === 'partial')
+                    return t('profile.planRowSubPartial', {
+                      active,
+                      total: ALL_FEATURES.length,
+                    });
+                  return t('profile.planRowSubFree');
+                })()}
               </Text>
             </View>
             <Text style={styles.planArrow}>›</Text>
