@@ -802,5 +802,17 @@
     "f_weight": "Gewicht",
     "f_height": "Größe",
     "note": "Notiz"
+  },
+  "barcode": {
+    "title": "Barcode",
+    "aim": "Richte die Kamera auf den Barcode",
+    "starting": "Kamera wird gestartet…",
+    "allowCamera": "Kamera erlauben",
+    "type": "Barcode eingeben (EAN)",
+    "orType": "Oder manuell eingeben",
+    "example": "z. B. 3017620422003",
+    "searching": "Suche in Open Food Facts…",
+    "notFound": "Produkt {{code}} nicht in Open Food Facts gefunden. Nutze stattdessen den Mahlzeiten-Scanner.",
+    "cameraError": "Kein Kamerazugriff — gib den Code manuell ein."
   }
 }

@@ -802,5 +802,17 @@
     "f_weight": "Weight",
     "f_height": "Height",
     "note": "Note"
+  },
+  "barcode": {
+    "title": "Barcode",
+    "aim": "Point at the product barcode",
+    "starting": "Starting camera…",
+    "allowCamera": "Allow camera",
+    "type": "Enter the barcode (EAN)",
+    "orType": "Or enter it manually",
+    "example": "e.g. 3017620422003",
+    "searching": "Searching Open Food Facts…",
+    "notFound": "Product {{code}} not found in Open Food Facts. Try the meal scanner instead.",
+    "cameraError": "Can't access the camera — enter the code manually."
   }
 }

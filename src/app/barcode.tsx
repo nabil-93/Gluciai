@@ -12,9 +12,14 @@ import {
 import { Image } from 'expo-image';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton, BevelCard, ChevronLeft } from '@/components/ui';
+import {
+  WebBarcodeScanner,
+  webBarcodeSupported,
+} from '@/components/WebBarcodeScanner';
 import { saveMeal } from '@/services/data';
 import { scoreMeal } from '@/services/nutrition/mealScore';
 import {
@@ -28,6 +33,7 @@ const PORTIONS = [30, 50, 100, 150, 250];
 
 export default function BarcodeScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [manualCode, setManualCode] = useState('');
@@ -36,6 +42,7 @@ export default function BarcodeScreen() {
   const [product, setProduct] = useState<BarcodeProduct | null>(null);
   const [grams, setGrams] = useState(100);
   const [saved, setSaved] = useState(false);
+  const [camError, setCamError] = useState<string | null>(null);
   const scannedRef = useRef(false);
 
   const isWeb = Platform.OS === 'web';
@@ -144,13 +151,13 @@ export default function BarcodeScreen() {
           <Pressable onPress={close} style={styles.backBtn}>
             <ChevronLeft size={16} />
           </Pressable>
-          <Text style={styles.headTitle}>Code-barres</Text>
+          <Text style={styles.headTitle}>{t('barcode.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
         {!product ? (
           <>
-            {/* Native camera scanner */}
+            {/* Native camera scanner (iOS/Android app) */}
             {!isWeb && permission?.granted ? (
               <View style={styles.cameraWrap}>
                 <CameraView
@@ -161,32 +168,42 @@ export default function BarcodeScreen() {
                   onBarcodeScanned={onBarcodeScanned}
                 />
                 <View style={styles.scanFrame} />
-                <Text style={styles.scanHint}>
-                  Visez le code-barres du produit
-                </Text>
+                <Text style={styles.scanHint}>{t('barcode.aim')}</Text>
               </View>
             ) : null}
             {!isWeb && permission && !permission.granted ? (
               <AppButton
-                label="Autoriser la caméra"
+                label={t('barcode.allowCamera')}
                 onPress={requestPermission}
                 style={{ marginBottom: 14 }}
               />
             ) : null}
 
-            {/* Manual input (web + fallback) */}
+            {/* Web camera scanner (BarcodeDetector) */}
+            {isWeb && webBarcodeSupported && !camError ? (
+              <WebBarcodeScanner
+                onDetected={(code) => {
+                  if (scannedRef.current || product || loading) return;
+                  scannedRef.current = true;
+                  lookup(code);
+                }}
+                onError={(m) => setCamError(m)}
+              />
+            ) : null}
+
+            {/* Manual input — always available as a fallback */}
             <BevelCard>
               <Text style={styles.manualLabel}>
-                {isWeb
-                  ? 'Saisissez le code-barres (EAN)'
-                  : 'Ou saisissez-le manuellement'}
+                {isWeb && webBarcodeSupported && !camError
+                  ? t('barcode.orType')
+                  : t('barcode.type')}
               </Text>
               <View style={styles.manualRow}>
                 <TextInput
                   value={manualCode}
                   onChangeText={setManualCode}
                   keyboardType="numeric"
-                  placeholder="ex : 3017620422003"
+                  placeholder={t('barcode.example')}
                   placeholderTextColor={colors.textPlaceholder}
                   style={styles.manualInput}
                 />
@@ -208,14 +225,14 @@ export default function BarcodeScreen() {
                 </Pressable>
               </View>
               {loading ? (
-                <Text style={styles.searching}>
-                  Recherche dans Open Food Facts…
-                </Text>
+                <Text style={styles.searching}>{t('barcode.searching')}</Text>
+              ) : null}
+              {camError ? (
+                <Text style={styles.searching}>{camError}</Text>
               ) : null}
               {notFound ? (
                 <Text style={styles.notFound}>
-                  Produit {notFound} introuvable dans Open Food Facts. Essayez
-                  le scanner de repas à la place.
+                  {t('barcode.notFound', { code: notFound })}
                 </Text>
               ) : null}
             </BevelCard>

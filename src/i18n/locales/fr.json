@@ -802,5 +802,17 @@
     "f_weight": "Poids",
     "f_height": "Taille",
     "note": "Note"
+  },
+  "barcode": {
+    "title": "Code-barres",
+    "aim": "Visez le code-barres du produit",
+    "starting": "Démarrage de la caméra…",
+    "allowCamera": "Autoriser la caméra",
+    "type": "Saisissez le code-barres (EAN)",
+    "orType": "Ou saisissez-le manuellement",
+    "example": "ex : 3017620422003",
+    "searching": "Recherche dans Open Food Facts…",
+    "notFound": "Produit {{code}} introuvable dans Open Food Facts. Essayez le scanner de repas à la place.",
+    "cameraError": "Impossible d'accéder à la caméra — saisissez le code manuellement."
   }
 }
