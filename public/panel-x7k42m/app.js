@@ -330,18 +330,18 @@ async function pageOverview() {
 
   const stats = me.role === 'admin'
     ? [
-        { l: 'Patients', v: patients.length, icon: I.users, bg: 'var(--primary-tint)', c: 'var(--primary)' },
-        { l: 'Médecins', v: doctors.length, icon: I.steth, bg: 'var(--violet-soft)', c: 'var(--violet-text)' },
-        { l: 'Scans repas', v: totMeals, icon: I.scan, bg: 'var(--blue-soft)', c: 'var(--blue-text)' },
-        { l: 'Mesures glycémie', v: totGly, icon: I.drop, bg: 'var(--red-soft)', c: 'var(--red-text)' },
-        { l: 'Abonnés actifs', v: activeSubs, icon: I.card, bg: 'var(--green-soft)', c: 'var(--green-text)' },
-        { l: 'Codes promo', v: promos.length, icon: I.tag, bg: 'var(--amber-soft)', c: 'var(--amber-text)' },
+        { l: 'Patients', v: patients.length, icon: I.users, tone: 'indigo' },
+        { l: 'Médecins', v: doctors.length, icon: I.steth, tone: 'violet' },
+        { l: 'Scans repas', v: totMeals, icon: I.scan, tone: 'blue' },
+        { l: 'Mesures glycémie', v: totGly, icon: I.drop, tone: 'red' },
+        { l: 'Abonnés actifs', v: activeSubs, icon: I.card, tone: 'green' },
+        { l: 'Codes promo', v: promos.length, icon: I.tag, tone: 'amber' },
       ]
     : [
-        { l: 'Mes patients', v: patients.length, icon: I.users, bg: 'var(--primary-tint)', c: 'var(--primary)' },
-        { l: 'Scans repas', v: totMeals, icon: I.scan, bg: 'var(--blue-soft)', c: 'var(--blue-text)' },
-        { l: 'Mesures glycémie', v: totGly, icon: I.drop, bg: 'var(--red-soft)', c: 'var(--red-text)' },
-        { l: 'Mes codes promo', v: promos.length, icon: I.tag, bg: 'var(--amber-soft)', c: 'var(--amber-text)' },
+        { l: 'Mes patients', v: patients.length, icon: I.users, tone: 'indigo' },
+        { l: 'Scans repas', v: totMeals, icon: I.scan, tone: 'blue' },
+        { l: 'Mesures glycémie', v: totGly, icon: I.drop, tone: 'red' },
+        { l: 'Mes codes promo', v: promos.length, icon: I.tag, tone: 'amber' },
       ];
 
   // 14-day chart buckets
@@ -370,7 +370,7 @@ async function pageOverview() {
       </div>
 
       <div class="stats-grid fade-up" style="animation-delay:.05s">
-        ${stats.map((s) => `<div class="card stat-card"><div class="ic" style="background:${s.bg};color:${s.c}">${s.icon}</div><div class="v">${s.v}</div><div class="l">${s.l}</div></div>`).join('')}
+        ${stats.map((s) => `<div class="card stat-card"><div class="sc-body"><div class="l">${s.l}</div><div class="v">${s.v}</div></div><div class="ic tone-${s.tone}">${s.icon}</div></div>`).join('')}
       </div>
 
       <div class="card fade-up" style="animation-delay:.1s">
@@ -575,10 +575,10 @@ async function pagePatient(pid, initTab) {
       </div>
 
       <div class="stats-grid fade-up">
-        <div class="card stat-card"><div class="ic" style="background:var(--blue-soft);color:var(--blue-text)">${I.scan}</div><div class="v">${ov.meals_count ?? 0}</div><div class="l">Repas scannés</div></div>
-        <div class="card stat-card"><div class="ic" style="background:var(--red-soft);color:var(--red-text)">${I.drop}</div><div class="v">${ov.glucose_count ?? 0}</div><div class="l">Glycémies</div></div>
-        <div class="card stat-card"><div class="ic" style="background:var(--green-soft);color:var(--green-text)">${I.pulse}</div><div class="v">${avg7 ?? '—'}</div><div class="l">Moy. 7j (mg/dL)${tir !== null ? ` · TIR ${tir}%` : ''}</div></div>
-        <div class="card stat-card"><div class="ic" style="background:var(--violet-soft);color:var(--violet-text)">${I.syringe}</div><div class="v">${Math.round(insu7 * 10) / 10}</div><div class="l">Insuline 7j (U)</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Repas scannés</div><div class="v">${ov.meals_count ?? 0}</div></div><div class="ic tone-blue">${I.scan}</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Glycémies</div><div class="v">${ov.glucose_count ?? 0}</div></div><div class="ic tone-red">${I.drop}</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Moy. 7j (mg/dL)${tir !== null ? ` · TIR ${tir}%` : ''}</div><div class="v">${avg7 ?? '—'}</div></div><div class="ic tone-green">${I.pulse}</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Insuline 7j (U)</div><div class="v">${Math.round(insu7 * 10) / 10}</div></div><div class="ic tone-violet">${I.syringe}</div></div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px" class="fade-up">
@@ -1146,9 +1146,9 @@ async function pagePromos() {
 
   page.innerHTML = `
     <div class="stats-grid fade-up" style="margin-bottom:16px">
-      <div class="card stat-card"><div class="ic" style="background:var(--amber-soft);color:var(--amber-text)">${I.tag}</div><div class="v">${codes.length}</div><div class="l">Codes créés</div></div>
-      <div class="card stat-card"><div class="ic" style="background:var(--green-soft);color:var(--green-text)">${I.users}</div><div class="v">${totalUses}</div><div class="l">Patients parrainés</div></div>
-      <div class="card stat-card"><div class="ic" style="background:var(--primary-tint);color:var(--primary)">${I.check}</div><div class="v">${codes.filter((c) => c.active).length}</div><div class="l">Codes actifs</div></div>
+      <div class="card stat-card"><div class="sc-body"><div class="l">Codes créés</div><div class="v">${codes.length}</div></div><div class="ic tone-amber">${I.tag}</div></div>
+      <div class="card stat-card"><div class="sc-body"><div class="l">Patients parrainés</div><div class="v">${totalUses}</div></div><div class="ic tone-green">${I.users}</div></div>
+      <div class="card stat-card"><div class="sc-body"><div class="l">Codes actifs</div><div class="v">${codes.filter((c) => c.active).length}</div></div><div class="ic tone-indigo">${I.check}</div></div>
     </div>
     <div class="page-actions fade-up">
       <div class="spacer" style="flex:1"></div>
@@ -1232,10 +1232,10 @@ async function pageSubs() {
 
   page.innerHTML = `
     <div class="stats-grid fade-up" style="margin-bottom:16px">
-      <div class="card stat-card"><div class="ic" style="background:var(--green-soft);color:var(--green-text)">${I.card}</div><div class="v">${active.length}</div><div class="l">Abonnés actifs</div></div>
-      <div class="card stat-card"><div class="ic" style="background:var(--red-soft);color:var(--red-text)">${I.card}</div><div class="v">${unpaid.length}</div><div class="l">En retard de paiement</div></div>
-      <div class="card stat-card"><div class="ic" style="background:var(--amber-soft);color:var(--amber-text)">${I.card}</div><div class="v">${expSoon.length}</div><div class="l">Expirent sous 7 j</div></div>
-      <div class="card stat-card"><div class="ic" style="background:var(--primary-tint);color:var(--primary)">${I.card}</div><div class="v">${revenue.toFixed(0)} €</div><div class="l">Total encaissé</div></div>
+      <div class="card stat-card"><div class="sc-body"><div class="l">Abonnés actifs</div><div class="v">${active.length}</div></div><div class="ic tone-green">${I.card}</div></div>
+      <div class="card stat-card"><div class="sc-body"><div class="l">En retard de paiement</div><div class="v">${unpaid.length}</div></div><div class="ic tone-red">${I.card}</div></div>
+      <div class="card stat-card"><div class="sc-body"><div class="l">Expirent sous 7 j</div><div class="v">${expSoon.length}</div></div><div class="ic tone-amber">${I.card}</div></div>
+      <div class="card stat-card"><div class="sc-body"><div class="l">Total encaissé</div><div class="v">${revenue.toFixed(0)} €</div></div><div class="ic tone-indigo">${I.card}</div></div>
     </div>
     <div class="page-actions fade-up">
       <div class="search-bar">${I.search}<input id="ssearch" placeholder="Rechercher un patient…" /></div>
@@ -1324,10 +1324,10 @@ async function pageUsage() {
 
     document.getElementById('usageBody').innerHTML = `
       <div class="stats-grid fade-up" style="margin-bottom:16px">
-        <div class="card stat-card"><div class="ic" style="background:var(--primary-tint);color:var(--primary)">${I.cpu}</div><div class="v">${fmtUsd(totalCost)}</div><div class="l">Coût total (USD)</div></div>
-        <div class="card stat-card"><div class="ic" style="background:var(--blue-soft);color:var(--blue-text)">${I.pulse}</div><div class="v">${rows.length}</div><div class="l">Requêtes IA</div></div>
-        <div class="card stat-card"><div class="ic" style="background:var(--green-soft);color:var(--green-text)">${I.cpu}</div><div class="v">${fmtTok(totIn)}</div><div class="l">Tokens entrée</div></div>
-        <div class="card stat-card"><div class="ic" style="background:var(--violet-soft);color:var(--violet-text)">${I.cpu}</div><div class="v">${fmtTok(totOut)}</div><div class="l">Tokens sortie</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Coût total (USD)</div><div class="v">${fmtUsd(totalCost)}</div></div><div class="ic tone-indigo">${I.cpu}</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Requêtes IA</div><div class="v">${rows.length}</div></div><div class="ic tone-blue">${I.pulse}</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Tokens entrée</div><div class="v">${fmtTok(totIn)}</div></div><div class="ic tone-green">${I.cpu}</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Tokens sortie</div><div class="v">${fmtTok(totOut)}</div></div><div class="ic tone-violet">${I.cpu}</div></div>
       </div>
 
       <div class="card fade-up" style="margin-bottom:16px">
