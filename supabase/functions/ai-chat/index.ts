@@ -35,6 +35,7 @@ Deno.serve(async (req) => {
       healthData = '',
       bolus = null,
       modifiedDose = null,
+      audio = null,
     } = await req.json();
     if (!GEMINI_API_KEY) {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
@@ -169,8 +170,16 @@ it perfectly; NEVER ask them to rephrase in another language.
 PATIENT CONTEXT:
 ${healthData || 'none'}
 
+The patient may also send a VOICE MESSAGE (audio). Listen to it carefully —
+it can be in any language or dialect, very often Moroccan Darija. What the
+patient SAID in the audio is the request to process.
+
 Reply ONLY valid JSON (no markdown fences):
-{"reply":"...", "action": null | ACTION}
+{"transcript":"...", "reply":"...", "action": null | ACTION}
+
+transcript: ONLY when the last user turn is audio — write faithfully what
+the patient said, in their own words (Darija stays Darija, in Arabic or
+Latin script as spoken). Empty string for text messages.
 
 ACTION is exactly one of:
 {"type":"insulin","dose":N,"insulin_type":"rapid"|"long"|"mixed","minutes_ago":N?}
@@ -198,13 +207,26 @@ Rules:
   you understood (with the numbers, mark meal nutrition as approximate)
   and invite them to confirm below. NEVER claim it is already saved.`;
 
-      const logContents = (messages as { role: string; content: string }[])
+      const logContents: {
+        role: string;
+        parts: Record<string, unknown>[];
+      }[] = (messages as { role: string; content: string }[])
         .slice(-10)
         .filter((m) => typeof m.content === 'string' && m.content.trim())
         .map((m) => ({
           role: m.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: m.content }],
         }));
+      // Voice note: the audio itself IS the user's turn — Gemini listens
+      // to it directly (understands Darija), no browser speech-to-text.
+      if (audio?.data && audio?.mimeType) {
+        logContents.push({
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType: audio.mimeType, data: audio.data } },
+          ],
+        });
+      }
       while (logContents.length && logContents[0].role === 'model') logContents.shift();
       if (logContents.length === 0) return json({ error: 'Empty conversation' }, 400);
 
@@ -255,6 +277,9 @@ Rules:
       const um = data.usageMetadata ?? {};
       const inTok = um.promptTokenCount ?? 0;
       const outTok = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
+      const audioIn = ((um.promptTokensDetails ?? []) as any[])
+        .filter((d) => d?.modality === 'AUDIO')
+        .reduce((a, d) => a + (d.tokenCount ?? 0), 0);
       const uid = await callerUserId(req);
       if (uid && (inTok || outTok)) {
         await logUsage({
@@ -263,11 +288,21 @@ Rules:
           model: MODEL,
           input_tokens: inTok,
           output_tokens: outTok,
-          cost_usd: flashCost(inTok, outTok),
+          audio_input_tokens: audioIn,
+          cost_usd: flashCost(inTok, outTok, audioIn),
         });
       }
 
-      return json({ result: { reply: parsed.reply, action } });
+      return json({
+        result: {
+          reply: parsed.reply,
+          action,
+          transcript:
+            typeof (parsed as { transcript?: unknown }).transcript === 'string'
+              ? (parsed as { transcript: string }).transcript
+              : '',
+        },
+      });
     }
 
     const profileContext = profile

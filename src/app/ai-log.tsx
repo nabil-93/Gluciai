@@ -18,11 +18,12 @@ import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { LoggerConfirmCard } from '@/components/LoggerConfirmCard';
 import { isRTL } from '@/i18n';
 import {
+  VOICE_NOTE_MAX_MS,
+  VoiceNoteRecorder,
   applyLoggerAction,
   sendLoggerMessage,
   type LoggerAction,
 } from '@/services/aiLogger';
-import { LIVE_LANG_TAGS } from '@/services/geminiLive';
 import { useAppStore } from '@/store/useAppStore';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -96,7 +97,8 @@ function AiLogScreen() {
   const [pendingAction, setPendingAction] = useState<LoggerAction | null>(null);
   const [listening, setListening] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
-  const recRef = useRef<any>(null);
+  const recRef = useRef<VoiceNoteRecorder | null>(null);
+  const recTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scrollDown = () => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
@@ -171,49 +173,86 @@ function AiLogScreen() {
     pushBubble('assistant', t('logger.canceled'));
   };
 
-  /* ── Voice input (Web Speech API — hidden when unsupported) ── */
-  const SpeechRec =
-    Platform.OS === 'web'
-      ? (globalThis as any).SpeechRecognition ||
-        (globalThis as any).webkitSpeechRecognition
-      : null;
+  /* ── Voice notes: record real audio and let GEMINI listen to it —
+     it understands Darija and mixed dialects exactly like typed text
+     (browser speech-to-text does not, so we never use it). ── */
+  const canRecord =
+    Platform.OS === 'web' &&
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia;
 
-  const toggleMic = () => {
-    if (!SpeechRec) return;
-    if (listening) {
-      try {
-        recRef.current?.stop();
-      } catch {}
-      setListening(false);
+  const sendVoiceNote = async (audio: { mimeType: string; data: string }) => {
+    if (thinking) return;
+    setPendingAction(null);
+    setThinking(true);
+    try {
+      const turn = await sendLoggerMessage(
+        thread.map((b) => ({ role: b.role, content: b.content })),
+        i18n.language,
+        audio
+      );
+      // Show what the AI HEARD as the user's bubble — instant feedback
+      // that the voice note was understood correctly.
+      const heard = (turn.transcript ?? '').trim();
+      setThread((s) => [
+        ...s,
+        {
+          id: `${Date.now()}-v`,
+          role: 'user',
+          content: heard ? `🎙️ ${heard}` : t('logger.voiceNote'),
+        },
+        ...(turn.reply
+          ? [{ id: `${Date.now()}-a`, role: 'assistant' as const, content: turn.reply }]
+          : []),
+      ]);
+      if (turn.action) setPendingAction(turn.action);
+    } catch {
+      pushBubble('assistant', t('logger.error'));
+    } finally {
+      setThinking(false);
+    }
+  };
+
+  const stopRecording = (send: boolean) => {
+    if (recTimerRef.current) {
+      clearTimeout(recTimerRef.current);
+      recTimerRef.current = null;
+    }
+    const rec = recRef.current;
+    recRef.current = null;
+    setListening(false);
+    if (!rec) return;
+    if (!send) {
+      rec.cancel();
       return;
     }
+    const audio = rec.stop();
+    if (audio) void sendVoiceNote(audio);
+  };
+
+  const toggleMic = async () => {
+    if (listening) {
+      stopRecording(true);
+      return;
+    }
+    if (thinking) return;
     try {
-      const rec = new SpeechRec();
+      const rec = new VoiceNoteRecorder();
+      await rec.start(); // must happen inside the tap (iOS)
       recRef.current = rec;
-      rec.lang = LIVE_LANG_TAGS[i18n.language] ?? 'fr-FR';
-      rec.interimResults = true;
-      rec.continuous = false;
-      rec.onresult = (e: any) => {
-        const txt = Array.from(e.results)
-          .map((r: any) => r[0]?.transcript ?? '')
-          .join(' ')
-          .trim();
-        setInput(txt);
-      };
-      rec.onend = () => setListening(false);
-      rec.onerror = () => setListening(false);
-      rec.start();
       setListening(true);
+      recTimerRef.current = setTimeout(() => stopRecording(true), VOICE_NOTE_MAX_MS);
     } catch {
+      recRef.current = null;
       setListening(false);
+      pushBubble('assistant', t('logger.micDenied'));
     }
   };
 
   useEffect(
     () => () => {
-      try {
-        recRef.current?.stop();
-      } catch {}
+      if (recTimerRef.current) clearTimeout(recTimerRef.current);
+      recRef.current?.cancel();
     },
     []
   );
@@ -310,7 +349,7 @@ function AiLogScreen() {
       <View
         style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 10) + 4 }]}
       >
-        {SpeechRec ? (
+        {canRecord ? (
           <Pressable
             onPress={toggleMic}
             style={[styles.micBtn, listening && styles.micBtnOn]}
@@ -321,7 +360,8 @@ function AiLogScreen() {
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder={listening ? t('logger.listening') : t('logger.placeholder')}
+          editable={!listening}
+          placeholder={listening ? t('logger.recording') : t('logger.placeholder')}
           placeholderTextColor="#98a1af"
           style={styles.input}
           multiline

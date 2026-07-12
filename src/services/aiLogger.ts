@@ -1,4 +1,5 @@
 import { isDemoMode, supabase } from '@/lib/supabase';
+import { MicStreamer } from '@/services/geminiLive';
 import { useAppStore } from '@/store/useAppStore';
 import type {
   ActivityIntensity,
@@ -55,6 +56,9 @@ export type LoggerAction =
 export interface LoggerTurn {
   reply: string;
   action: LoggerAction | null;
+  /** What the patient said, when the turn was a voice note (Gemini
+   *  listens to the audio directly — Darija included). */
+  transcript?: string;
 }
 
 const INSULIN_TYPES: InsulinType[] = ['rapid', 'long', 'mixed'];
@@ -148,10 +152,13 @@ function loggerContext(): string {
   );
 }
 
-/** One turn of the logging conversation. Throws on network/API failure. */
+/** One turn of the logging conversation. Throws on network/API failure.
+ *  `audio` (base64 WAV + mime) sends a voice note — Gemini hears it
+ *  directly, in any language or dialect, and returns the transcript. */
 export async function sendLoggerMessage(
   history: { role: 'user' | 'assistant'; content: string }[],
-  language: string
+  language: string,
+  audio?: { mimeType: string; data: string }
 ): Promise<LoggerTurn> {
   if (isDemoMode || !supabase) {
     return { reply: '…', action: null };
@@ -162,6 +169,7 @@ export async function sendLoggerMessage(
       language,
       messages: history,
       healthData: loggerContext(),
+      ...(audio ? { audio } : {}),
     },
   });
   if (error) throw error;
@@ -170,6 +178,7 @@ export async function sendLoggerMessage(
   return {
     reply: typeof result.reply === 'string' ? result.reply : '',
     action: sanitizeAction(result.action),
+    transcript: typeof result.transcript === 'string' ? result.transcript : '',
   };
 }
 
@@ -373,6 +382,96 @@ export function actionFromFunctionCall(
       return sanitizeAction({ type: 'measure', ...args });
     default:
       return null;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * VOICE NOTES
+ * Records the mic as 16 kHz PCM (the same battle-tested pipeline as
+ * the live call) and packages it as a WAV that Gemini listens to
+ * DIRECTLY — no browser speech-to-text, so Darija and mixed dialects
+ * are understood exactly like typed text.
+ * ──────────────────────────────────────────────────────────── */
+
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToB64(bytes: Uint8Array): string {
+  let bin = '';
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
+/** Wrap raw 16 kHz 16-bit mono PCM in a WAV container (44-byte header). */
+function pcmToWav(pcm: Uint8Array): Uint8Array {
+  const wav = new Uint8Array(44 + pcm.length);
+  const dv = new DataView(wav.buffer);
+  const str = (off: number, s: string) => {
+    for (let i = 0; i < s.length; i++) wav[off + i] = s.charCodeAt(i);
+  };
+  str(0, 'RIFF');
+  dv.setUint32(4, 36 + pcm.length, true);
+  str(8, 'WAVE');
+  str(12, 'fmt ');
+  dv.setUint32(16, 16, true); // fmt chunk size
+  dv.setUint16(20, 1, true); // PCM
+  dv.setUint16(22, 1, true); // mono
+  dv.setUint32(24, 16000, true); // sample rate
+  dv.setUint32(28, 32000, true); // byte rate (16000 × 2)
+  dv.setUint16(32, 2, true); // block align
+  dv.setUint16(34, 16, true); // bits per sample
+  str(36, 'data');
+  dv.setUint32(40, pcm.length, true);
+  wav.set(pcm, 44);
+  return wav;
+}
+
+export const VOICE_NOTE_MAX_MS = 30_000;
+
+export class VoiceNoteRecorder {
+  private mic: MicStreamer | null = null;
+  private chunks: Uint8Array[] = [];
+
+  /** Must be called from a user tap (iOS audio-context rule). */
+  async start(): Promise<void> {
+    this.chunks = [];
+    this.mic = new MicStreamer();
+    await this.mic.start((b64) => {
+      this.chunks.push(b64ToBytes(b64));
+    });
+  }
+
+  /** Stop and return the WAV voice note (null when too short ~<0.4 s). */
+  stop(): { mimeType: string; data: string } | null {
+    try {
+      this.mic?.stop();
+    } catch {}
+    this.mic = null;
+    const total = this.chunks.reduce((s, c) => s + c.length, 0);
+    if (total < 12_000) return null;
+    const pcm = new Uint8Array(total);
+    let off = 0;
+    for (const c of this.chunks) {
+      pcm.set(c, off);
+      off += c.length;
+    }
+    this.chunks = [];
+    return { mimeType: 'audio/wav', data: bytesToB64(pcmToWav(pcm)) };
+  }
+
+  cancel() {
+    try {
+      this.mic?.stop();
+    } catch {}
+    this.mic = null;
+    this.chunks = [];
   }
 }
 

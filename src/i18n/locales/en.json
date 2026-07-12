@@ -769,6 +769,9 @@
     "chipInsulin": "I took my insulin",
     "chipMeal": "I ate a tajine",
     "chipGlucose": "My glucose is 140",
-    "chipSport": "I walked 30 minutes"
+    "chipSport": "I walked 30 minutes",
+    "voiceNote": "🎙️ Voice message",
+    "recording": "I'm listening… tap the mic to send 🎙️",
+    "micDenied": "I can't access the microphone. Allow it in the browser, or type instead."
   }
 }

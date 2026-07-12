@@ -769,6 +769,9 @@
     "chipInsulin": "J'ai pris mon insuline",
     "chipMeal": "J'ai mangé un tajine",
     "chipGlucose": "Ma glycémie est à 140",
-    "chipSport": "J'ai marché 30 minutes"
+    "chipSport": "J'ai marché 30 minutes",
+    "voiceNote": "🎙️ Message vocal",
+    "recording": "Je vous écoute… touchez le micro pour envoyer 🎙️",
+    "micDenied": "Je n'ai pas accès au micro. Autorisez-le dans le navigateur, ou écrivez-moi."
   }
 }

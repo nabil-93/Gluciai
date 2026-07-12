@@ -5,8 +5,10 @@
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-/** gemini-2.5-flash: $0.30 in (text/image), $2.50 out — per 1M tokens. */
+/** gemini-2.5-flash: $0.30 in (text/image), $1.00 in (audio), $2.50 out —
+ *  per 1M tokens. */
 export const FLASH_IN_PER_M = 0.3;
+export const FLASH_AUDIO_IN_PER_M = 1.0;
 export const FLASH_OUT_PER_M = 2.5;
 
 /** Resolve the calling user's id from the request JWT (null if anonymous). */
@@ -32,6 +34,7 @@ export async function logUsage(row: {
   model: string;
   input_tokens: number;
   output_tokens: number;
+  audio_input_tokens?: number;
   cost_usd: number;
 }): Promise<void> {
   try {
@@ -51,7 +54,17 @@ export async function logUsage(row: {
   }
 }
 
-/** Cost of a gemini-2.5-flash call, from exact token counts. */
-export function flashCost(inputTokens: number, outputTokens: number): number {
-  return (inputTokens * FLASH_IN_PER_M + outputTokens * FLASH_OUT_PER_M) / 1_000_000;
+/** Cost of a gemini-2.5-flash call, from exact token counts. Audio input
+ *  tokens (voice notes) are billed at their own rate. */
+export function flashCost(
+  inputTokens: number,
+  outputTokens: number,
+  audioInputTokens = 0
+): number {
+  return (
+    ((inputTokens - audioInputTokens) * FLASH_IN_PER_M +
+      audioInputTokens * FLASH_AUDIO_IN_PER_M +
+      outputTokens * FLASH_OUT_PER_M) /
+    1_000_000
+  );
 }
