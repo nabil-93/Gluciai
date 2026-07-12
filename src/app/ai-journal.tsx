@@ -139,6 +139,24 @@ export default function AiJournalScreen() {
           </View>
         </View>
 
+        {/* ── "Dites-le, je l'enregistre": the AI logs it for you ── */}
+        <Pressable
+          style={[styles.logCard, chatLocked && styles.aiActionLocked]}
+          onPress={() => router.push('/ai-log' as any)}
+        >
+          {chatLocked ? <LockChip /> : null}
+          <View style={styles.logCardIcon}>
+            <Text style={{ fontSize: 19 }}>📝</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.logCardTitle}>{t('logger.entryTitle')}</Text>
+            <Text style={styles.logCardSub} numberOfLines={2}>
+              {t('logger.entrySub')}
+            </Text>
+          </View>
+          <Text style={styles.logCardArrow}>›</Text>
+        </Pressable>
+
         {/* ── Talk to the AI: chat + voice call ── */}
         <View style={styles.aiActionsRow}>
           <Pressable
@@ -345,6 +363,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   statText: { fontFamily: F700, fontSize: 10.5 },
+
+  /* "Dites-le, je l'enregistre" card */
+  logCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#101828',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 15,
+    marginTop: 12,
+  },
+  logCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logCardTitle: { fontFamily: F800, fontSize: 14.5, color: '#ffffff' },
+  logCardSub: {
+    fontFamily: F500,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.65)',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  logCardArrow: { fontFamily: F800, fontSize: 22, color: 'rgba(255,255,255,0.7)' },
 
   /* Chat / voice-call action cards */
   aiActionsRow: { flexDirection: 'row', gap: 10, marginTop: 12 },

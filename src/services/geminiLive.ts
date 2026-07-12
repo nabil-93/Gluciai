@@ -46,6 +46,12 @@ export async function getLiveToken(): Promise<string | null> {
   }
 }
 
+export interface LiveFunctionCall {
+  id?: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
 export interface LiveEvents {
   /** Model audio chunk arrived (playback should begin/continue). */
   onAudio: (base64Pcm24k: string) => void;
@@ -55,6 +61,8 @@ export interface LiveEvents {
   onInterrupted?: () => void;
   /** Model finished its spoken turn. */
   onTurnComplete?: () => void;
+  /** The model invoked one of the declared tools (e.g. log_insulin). */
+  onToolCall?: (calls: LiveFunctionCall[]) => void;
   /** Connection dropped / errored after setup. */
   onClose?: () => void;
 }
@@ -101,7 +109,9 @@ export class GeminiLiveSession {
     model: string,
     systemInstruction: string,
     languageCode: string,
-    timeoutMs = 8000
+    timeoutMs = 8000,
+    /** Optional function declarations (Live API tools / function calling). */
+    tools?: unknown[]
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -142,6 +152,7 @@ export class GeminiLiveSession {
               },
               systemInstruction: { parts: [{ text: systemInstruction }] },
               outputAudioTranscription: {},
+              ...(tools && tools.length ? { tools } : {}),
             },
           })
         );
@@ -168,6 +179,19 @@ export class GeminiLiveSession {
         }
 
         if (msg.usageMetadata) this.pendingUsage = msg.usageMetadata;
+
+        // Function calling: the model wants the app to log something.
+        const calls = msg.toolCall?.functionCalls;
+        if (Array.isArray(calls) && calls.length) {
+          this.events.onToolCall?.(
+            calls.map((c: any) => ({
+              id: c.id,
+              name: String(c.name ?? ''),
+              args: c.args ?? {},
+            }))
+          );
+          return;
+        }
 
         const sc = msg.serverContent;
         if (!sc) return;
@@ -219,6 +243,16 @@ export class GeminiLiveSession {
           audio: { mimeType: 'audio/pcm;rate=16000', data: base64Pcm16k },
         },
       })
+    );
+  }
+
+  /** Answer a toolCall so the model can confirm out loud to the patient. */
+  sendToolResponse(
+    responses: { id?: string; name: string; response: Record<string, unknown> }[]
+  ) {
+    if (!this.ready || this.ws?.readyState !== WebSocket.OPEN) return;
+    this.ws.send(
+      JSON.stringify({ toolResponse: { functionResponses: responses } })
     );
   }
 

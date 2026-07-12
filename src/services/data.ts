@@ -96,7 +96,9 @@ async function uploadMealPhoto(user_id: string, base64: string): Promise<string 
 export async function saveMeal(
   result: NutritionResult,
   imageUri?: string,
-  imageBase64?: string
+  imageBase64?: string,
+  /** Optional backdated timestamp (AI logger: "I ate an hour ago"). */
+  createdAt?: string
 ) {
   const user_id = await currentUserId();
 
@@ -122,6 +124,7 @@ export async function saveMeal(
       fiber: result.fiber,
       glycemic_index: result.glycemic_index,
       confidence: result.confidence,
+      ...(createdAt ? { created_at: createdAt } : {}),
     });
   }
 
@@ -130,13 +133,13 @@ export async function saveMeal(
     user_id,
     image_url: remoteUrl ?? imageUri,
     result,
-    created_at: row?.created_at ?? new Date().toISOString(),
+    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addMeal(meal);
   return meal;
 }
 
-export async function saveGlucose(value: number, notes?: string) {
+export async function saveGlucose(value: number, notes?: string, createdAt?: string) {
   const user_id = await currentUserId();
   let row: { id: string; created_at: string } | null = null;
   if (user_id !== 'demo-user') {
@@ -146,6 +149,7 @@ export async function saveGlucose(value: number, notes?: string) {
       unit: 'mg/dL',
       source: 'manual',
       notes: notes ?? null,
+      ...(createdAt ? { created_at: createdAt } : {}),
     });
   }
   const log: GlucoseLog = {
@@ -155,13 +159,18 @@ export async function saveGlucose(value: number, notes?: string) {
     unit: 'mg/dL',
     source: 'manual',
     notes,
-    created_at: row?.created_at ?? new Date().toISOString(),
+    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addGlucoseLog(log);
   return log;
 }
 
-export async function saveInsulin(dose: number, insulinType: InsulinType, notes?: string) {
+export async function saveInsulin(
+  dose: number,
+  insulinType: InsulinType,
+  notes?: string,
+  createdAt?: string
+) {
   const user_id = await currentUserId();
   let row: { id: string; created_at: string } | null = null;
   if (user_id !== 'demo-user') {
@@ -170,6 +179,7 @@ export async function saveInsulin(dose: number, insulinType: InsulinType, notes?
       insulin_type: insulinType,
       dose,
       notes: notes ?? null,
+      ...(createdAt ? { created_at: createdAt } : {}),
     });
   }
   const log: InsulinLog = {
@@ -178,7 +188,7 @@ export async function saveInsulin(dose: number, insulinType: InsulinType, notes?
     insulin_type: insulinType,
     dose,
     notes,
-    created_at: row?.created_at ?? new Date().toISOString(),
+    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addInsulinLog(log);
   return log;
@@ -198,7 +208,8 @@ export async function saveActivity(
   kind: ActivityKind,
   durationMin: number,
   intensity: ActivityIntensity,
-  notes?: string
+  notes?: string,
+  createdAt?: string
 ) {
   const user_id = await currentUserId();
   let row: { id: string; created_at: string } | null = null;
@@ -209,6 +220,7 @@ export async function saveActivity(
       duration_min: durationMin,
       intensity,
       notes: notes ?? null,
+      ...(createdAt ? { created_at: createdAt } : {}),
     });
   }
   const log: ActivityLog = {
@@ -218,17 +230,28 @@ export async function saveActivity(
     duration_min: durationMin,
     intensity,
     notes,
-    created_at: row?.created_at ?? new Date().toISOString(),
+    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addActivityLog(log);
   return log;
 }
 
-export async function saveMeasure(kind: MeasureKind, value: number, unit: string) {
+export async function saveMeasure(
+  kind: MeasureKind,
+  value: number,
+  unit: string,
+  createdAt?: string
+) {
   const user_id = await currentUserId();
   let row: { id: string; created_at: string } | null = null;
   if (user_id !== 'demo-user') {
-    row = await insertReturning('measure_logs', { user_id, kind, value, unit });
+    row = await insertReturning('measure_logs', {
+      user_id,
+      kind,
+      value,
+      unit,
+      ...(createdAt ? { created_at: createdAt } : {}),
+    });
   }
   const log: MeasureLog = {
     id: row?.id ?? id(),
@@ -236,7 +259,7 @@ export async function saveMeasure(kind: MeasureKind, value: number, unit: string
     kind,
     value,
     unit,
-    created_at: row?.created_at ?? new Date().toISOString(),
+    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addMeasureLog(log);
   return log;

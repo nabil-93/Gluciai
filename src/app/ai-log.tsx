@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,7 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Rect } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,28 +17,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { LoggerConfirmCard } from '@/components/LoggerConfirmCard';
 import { isRTL } from '@/i18n';
-import { sendChatMessage } from '@/services/ai';
 import {
   applyLoggerAction,
-  looksLoggable,
   sendLoggerMessage,
   type LoggerAction,
 } from '@/services/aiLogger';
+import { LIVE_LANG_TAGS } from '@/services/geminiLive';
 import { useAppStore } from '@/store/useAppStore';
-import type { ChatMessage } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
-
-/* Quick-topic chips under the conversation (from the design mockup) */
-const CHIPS = [
-  { key: 'chip1', icon: '🥗' },
-  { key: 'chip2', icon: '📊' },
-  { key: 'chip3', icon: '💊' },
-  { key: 'chip4', icon: '💬' },
-] as const;
 
 function SendIcon() {
   return (
@@ -55,138 +44,106 @@ function SendIcon() {
   );
 }
 
-/** Three bouncing dots shown while Gemini is thinking. */
-function TypingDots() {
-  const vals = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
-  useEffect(() => {
-    const loops = vals.map((v, i) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(i * 140),
-          Animated.timing(v, { toValue: 1, duration: 300, useNativeDriver: true }),
-          Animated.timing(v, { toValue: 0, duration: 300, useNativeDriver: true }),
-          Animated.delay((2 - i) * 140),
-        ])
-      )
-    );
-    loops.forEach((l) => l.start());
-    return () => loops.forEach((l) => l.stop());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+function MicIcon({ active }: { active: boolean }) {
+  const color = active ? '#ffffff' : '#3b4657';
   return (
-    <View style={{ flexDirection: 'row', gap: 4, paddingVertical: 4 }}>
-      {vals.map((v, i) => (
-        <Animated.View
-          key={i}
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: 4,
-            backgroundColor: '#9aa6b5',
-            transform: [
-              {
-                translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }),
-              },
-            ],
-          }}
-        />
-      ))}
-    </View>
+    <Svg width={19} height={19} viewBox="0 0 24 24">
+      <Rect x={9} y={3} width={6} height={11} rx={3} fill={color} />
+      <Path
+        d="M5 11a7 7 0 0 0 14 0M12 18v3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </Svg>
   );
 }
 
-/* Blocked from the admin dashboard? Show the lock instead of the chat. */
-export default function AiChatScreenGate() {
+const CHIP_KEYS = ['chipInsulin', 'chipMeal', 'chipGlucose', 'chipSport'] as const;
+const CHIP_ICONS = ['💉', '🍽️', '🩸', '🏃'] as const;
+
+interface Bubble {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/* Locked with the same switch as the chat (it's an AI text feature). */
+export default function AiLogScreenGate() {
   const locked = useAppStore((s) => s.lockedFeatures.includes('ai_chat'));
   const { t } = useTranslation();
   if (locked) return <LockedScreen featureLabel={t('locked.featChat')} />;
-  return <AiChatScreen />;
+  return <AiLogScreen />;
 }
 
-function AiChatScreen() {
+/**
+ * "Dites-le, je l'enregistre": the patient tells the robot what they did
+ * (typed or dictated); the AI structures it, the patient CONFIRMS, and the
+ * entry is saved exactly like a manual one (history, day report, AI
+ * context, doctor dashboard).
+ */
+function AiLogScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
-  const { chatMessages, addChatMessage, profile, addAiJournalEntry } = useAppStore();
+  const addAiJournalEntry = useAppStore((s) => s.addAiJournalEntry);
+
+  const [thread, setThread] = useState<Bubble[]>([]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [pendingAction, setPendingAction] = useState<LoggerAction | null>(null);
+  const [listening, setListening] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const recRef = useRef<any>(null);
+
+  const scrollDown = () => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+  };
+  useEffect(scrollDown, [thread.length, thinking, pendingAction]);
 
   const close = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
   };
 
-  const scrollDown = () => {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
-  };
-
-  useEffect(scrollDown, [chatMessages.length, thinking, pendingAction]);
+  const pushBubble = (role: Bubble['role'], content: string) =>
+    setThread((s) => [...s, { id: `${Date.now()}-${s.length}`, role, content }]);
 
   const send = async (text: string) => {
     const content = text.trim();
     if (!content || thinking) return;
     setInput('');
     setPendingAction(null);
-
-    const userMessage: ChatMessage = {
-      id: `${Date.now()}-u`,
-      role: 'user',
-      content,
-      created_at: new Date().toISOString(),
-    };
-    addChatMessage(userMessage);
+    const next: Bubble[] = [
+      ...thread,
+      { id: `${Date.now()}-u`, role: 'user', content },
+    ];
+    setThread(next);
     setThinking(true);
-
-    // "rani dert 6 unités", "klit tajine"… — when the message states
-    // something loggable, extract it in parallel with the normal answer
-    // and offer to save it (always behind an explicit confirmation).
-    const extraction = looksLoggable(content)
-      ? sendLoggerMessage([{ role: 'user', content }], i18n.language).catch(
-          () => null
-        )
-      : Promise.resolve(null);
-
     try {
-      const history = [...chatMessages, userMessage].map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-      const reply = await sendChatMessage(history, i18n.language, profile);
-      addChatMessage({
-        id: `${Date.now()}-a`,
-        role: 'assistant',
-        content: reply,
-        created_at: new Date().toISOString(),
-      });
-      const extracted = await extraction;
-      if (extracted?.action) setPendingAction(extracted.action);
+      const turn = await sendLoggerMessage(
+        next.map((b) => ({ role: b.role, content: b.content })),
+        i18n.language
+      );
+      if (turn.reply) pushBubble('assistant', turn.reply);
+      if (turn.action) setPendingAction(turn.action);
     } catch {
-      addChatMessage({
-        id: `${Date.now()}-e`,
-        role: 'assistant',
-        content: t('common.error'),
-        created_at: new Date().toISOString(),
-      });
+      pushBubble('assistant', t('logger.error'));
     } finally {
       setThinking(false);
     }
   };
 
-  const confirmLog = async () => {
+  const confirm = async () => {
     if (!pendingAction) return;
     const action = pendingAction;
     try {
       await applyLoggerAction(action);
       setPendingAction(null);
-      addChatMessage({
-        id: `${Date.now()}-log`,
-        role: 'assistant',
-        content: t('logger.added'),
-        created_at: new Date().toISOString(),
-      });
+      pushBubble('assistant', t('logger.added'));
+      // Trace in the AI coach journal so the robot's log shows it too.
       addAiJournalEntry({
         id: `log-${Date.now()}`,
         icon: '📝',
@@ -205,20 +162,61 @@ function AiChatScreen() {
         created_at: new Date().toISOString(),
       });
     } catch {
-      addChatMessage({
-        id: `${Date.now()}-loge`,
-        role: 'assistant',
-        content: t('logger.error'),
-        created_at: new Date().toISOString(),
-      });
+      pushBubble('assistant', t('logger.error'));
     }
   };
 
-  const fmtTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString(i18n.language, {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const cancel = () => {
+    setPendingAction(null);
+    pushBubble('assistant', t('logger.canceled'));
+  };
+
+  /* ── Voice input (Web Speech API — hidden when unsupported) ── */
+  const SpeechRec =
+    Platform.OS === 'web'
+      ? (globalThis as any).SpeechRecognition ||
+        (globalThis as any).webkitSpeechRecognition
+      : null;
+
+  const toggleMic = () => {
+    if (!SpeechRec) return;
+    if (listening) {
+      try {
+        recRef.current?.stop();
+      } catch {}
+      setListening(false);
+      return;
+    }
+    try {
+      const rec = new SpeechRec();
+      recRef.current = rec;
+      rec.lang = LIVE_LANG_TAGS[i18n.language] ?? 'fr-FR';
+      rec.interimResults = true;
+      rec.continuous = false;
+      rec.onresult = (e: any) => {
+        const txt = Array.from(e.results)
+          .map((r: any) => r[0]?.transcript ?? '')
+          .join(' ')
+          .trim();
+        setInput(txt);
+      };
+      rec.onend = () => setListening(false);
+      rec.onerror = () => setListening(false);
+      rec.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  };
+
+  useEffect(
+    () => () => {
+      try {
+        recRef.current?.stop();
+      } catch {}
+    },
+    []
+  );
 
   return (
     <KeyboardAvoidingView
@@ -233,37 +231,35 @@ function AiChatScreen() {
           </View>
         </Pressable>
         <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={styles.headerTitle}>{t('chat.headerTitle')}</Text>
-          <Text style={styles.headerSub}>{t('chat.headerSub')}</Text>
+          <Text style={styles.headerTitle}>{t('logger.title')}</Text>
+          <Text style={styles.headerSub}>{t('logger.sub')}</Text>
         </View>
         <View style={styles.headerRobot}>
           <AnimatedRobot size={40} mood="happy" />
         </View>
       </View>
 
-      {/* ── Conversation ── */}
+      {/* ── Thread ── */}
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Greeting bubble (always first, not stored) */}
         <View style={styles.aiRow}>
           <View style={styles.aiAvatar}>
             <AnimatedRobot size={30} mood="happy" />
           </View>
           <View style={styles.aiBubble}>
-            <Text style={styles.aiText}>{t('chat.greeting')}</Text>
+            <Text style={styles.aiText}>{t('logger.intro')}</Text>
           </View>
         </View>
 
-        {chatMessages.map((m) =>
+        {thread.map((m) =>
           m.role === 'user' ? (
             <View key={m.id} style={styles.userRow}>
               <View style={styles.userBubble}>
                 <Text style={styles.userText}>{m.content}</Text>
-                <Text style={styles.userTime}>{fmtTime(m.created_at)}</Text>
               </View>
             </View>
           ) : (
@@ -273,7 +269,6 @@ function AiChatScreen() {
               </View>
               <View style={styles.aiBubble}>
                 <Text style={styles.aiText}>{m.content}</Text>
-                <Text style={styles.aiTime}>{fmtTime(m.created_at)}</Text>
               </View>
             </View>
           )
@@ -285,7 +280,7 @@ function AiChatScreen() {
               <AnimatedRobot size={30} mood="happy" />
             </View>
             <View style={styles.aiBubble}>
-              <TypingDots />
+              <Text style={styles.aiText}>…</Text>
             </View>
           </View>
         ) : null}
@@ -293,37 +288,40 @@ function AiChatScreen() {
         {pendingAction ? (
           <LoggerConfirmCard
             action={pendingAction}
-            onConfirm={confirmLog}
-            onCancel={() => setPendingAction(null)}
+            onConfirm={confirm}
+            onCancel={cancel}
           />
         ) : null}
       </ScrollView>
 
-      {/* ── Quick topics ── */}
-      <View style={styles.chipsWrap}>
-        {CHIPS.map((c) => (
-          <Pressable
-            key={c.key}
-            style={styles.chip}
-            onPress={() => send(t(`chat.${c.key}Q`))}
-          >
-            <Text style={{ fontSize: 13 }}>{c.icon}</Text>
-            <Text style={styles.chipText}>{t(`chat.${c.key}`)}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {/* ── Example chips ── */}
+      {thread.length === 0 ? (
+        <View style={styles.chipsWrap}>
+          {CHIP_KEYS.map((k, i) => (
+            <Pressable key={k} style={styles.chip} onPress={() => send(t(`logger.${k}`))}>
+              <Text style={{ fontSize: 13 }}>{CHIP_ICONS[i]}</Text>
+              <Text style={styles.chipText}>{t(`logger.${k}`)}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       {/* ── Input bar ── */}
       <View
-        style={[
-          styles.inputBar,
-          { paddingBottom: Math.max(insets.bottom, 10) + 4 },
-        ]}
+        style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 10) + 4 }]}
       >
+        {SpeechRec ? (
+          <Pressable
+            onPress={toggleMic}
+            style={[styles.micBtn, listening && styles.micBtnOn]}
+          >
+            <MicIcon active={listening} />
+          </Pressable>
+        ) : null}
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder={t('chat.placeholder')}
+          placeholder={listening ? t('logger.listening') : t('logger.placeholder')}
           placeholderTextColor="#98a1af"
           style={styles.input}
           multiline
@@ -343,7 +341,6 @@ function AiChatScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f9fafe' },
-
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -365,7 +362,6 @@ const styles = StyleSheet.create({
   headerSub: { fontFamily: F500, fontSize: 11.5, color: '#8b93a7', marginTop: 1 },
   headerRobot: { width: 40, alignItems: 'center' },
 
-  /* AI bubbles (left, with avatar) */
   aiRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -400,9 +396,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   aiText: { fontFamily: F500, fontSize: 13.5, lineHeight: 19.5, color: '#26313f' },
-  aiTime: { fontFamily: F500, fontSize: 10, color: '#a6aebc', marginTop: 5 },
 
-  /* User bubbles (right, green) */
   userRow: { alignItems: 'flex-end', marginBottom: 12, paddingLeft: 40 },
   userBubble: {
     backgroundColor: '#d8f5e5',
@@ -412,15 +406,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   userText: { fontFamily: F600, fontSize: 13.5, lineHeight: 19.5, color: '#14532d' },
-  userTime: {
-    fontFamily: F500,
-    fontSize: 10,
-    color: '#6fa88a',
-    marginTop: 5,
-    textAlign: 'right',
-  },
 
-  /* Quick topic chips */
   chipsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -441,7 +427,6 @@ const styles = StyleSheet.create({
   },
   chipText: { fontFamily: F600, fontSize: 12, color: '#3b4657' },
 
-  /* Input bar */
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -452,6 +437,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#eef0f5',
   },
+  micBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#f1f3f8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micBtnOn: { backgroundColor: '#ef4444' },
   input: {
     flex: 1,
     minHeight: 44,

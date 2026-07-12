@@ -748,5 +748,27 @@
     "today": "Heute",
     "yesterday": "Gestern",
     "aiNote": "Die KI liest diesen vollständigen Bericht (heute + gestern), bevor sie eine Insulindosis vorschlägt."
+  },
+  "logger": {
+    "title": "Eingabe-Assistent",
+    "sub": "Sag es mir, ich trage es ein",
+    "entryTitle": "Sag es mir, ich trage es ein 📝",
+    "entrySub": "„Ich habe Insulin genommen“, „ich habe eine Tajine gegessen“… der Roboter fügt es für dich hinzu.",
+    "intro": "Sag mir, was du gerade gemacht hast — Insulin, Essen, Blutzucker, Sport, Gewicht — und ich füge es deinem Konto hinzu. Ich frage immer erst nach deiner Bestätigung. 😊",
+    "placeholder": "Z. B.: Ich habe 6 Einheiten Insulin genommen…",
+    "listening": "Ich höre zu… 🎙️",
+    "confirmTitle": "Soll ich es eintragen?",
+    "confirm": "Ja, speichern",
+    "cancel": "Abbrechen",
+    "added": "Notiert! ✅ Zu deinem Konto hinzugefügt — sichtbar im Verlauf und im Tagesbericht.",
+    "canceled": "Okay, ich habe nichts hinzugefügt.",
+    "error": "Ups, das hat nicht geklappt. Versuch es nochmal.",
+    "now": "jetzt",
+    "weight": "Gewicht",
+    "journalTitle": "Über den Assistenten hinzugefügt",
+    "chipInsulin": "Ich habe mein Insulin genommen",
+    "chipMeal": "Ich habe eine Tajine gegessen",
+    "chipGlucose": "Mein Blutzucker ist 140",
+    "chipSport": "Ich bin 30 Minuten gelaufen"
   }
 }

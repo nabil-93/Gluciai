@@ -151,6 +151,125 @@ BEFORE injecting this modified dose.`;
 
       return json({ result: parsed });
     }
+
+    /* ── Logger mode: the patient TELLS the assistant what they did
+       ("rani dert 6 unités d'insuline", "klit tajine d lkefta") and it
+       returns a structured entry. The APP asks the patient to confirm
+       before saving — the AI never saves anything itself. ── */
+    if (mode === 'logger') {
+      const loggerPrompt = `You are GlucoAI's logging assistant. The patient TELLS you what they
+did and you turn it into ONE structured entry that the app will save
+AFTER the patient confirms in the UI. You never save anything yourself.
+
+The patient writes in ANY language or dialect, especially MOROCCAN
+DARIJA in Latin letters ("rani dert 6 unités insuline", "klit tajine d
+lkefta", "3ndi sokar 180", "dert nss sa3a dial la marche"). Understand
+it perfectly; NEVER ask them to rephrase in another language.
+
+PATIENT CONTEXT:
+${healthData || 'none'}
+
+Reply ONLY valid JSON (no markdown fences):
+{"reply":"...", "action": null | ACTION}
+
+ACTION is exactly one of:
+{"type":"insulin","dose":N,"insulin_type":"rapid"|"long"|"mixed","minutes_ago":N?}
+{"type":"glucose","value":N,"minutes_ago":N?}
+{"type":"meal","name":"short dish name","portion":"e.g. 1 assiette","calories":N,"carbs":N,"sugar":N,"protein":N,"fat":N,"fiber":N,"glycemic_index":N,"minutes_ago":N?}
+{"type":"activity","kind":"walk"|"run"|"bike"|"gym"|"other","duration_min":N,"intensity":"low"|"medium"|"high","minutes_ago":N?}
+{"type":"measure","kind":"weight"|"hba1c","value":N,"unit":"kg"|"%","minutes_ago":N?}
+
+Rules:
+- Produce an action ONLY for something the patient explicitly did or
+  measured. Greetings, questions, anything else → action:null with a
+  short reply explaining what you can log for them.
+- NEVER invent a critical number. Missing insulin dose, glucose value or
+  sport duration → action:null and ask ONE short question for it.
+- Insulin type: if not stated, check "insulin types" in the context —
+  exactly one type → use it silently; several → ask which one.
+- Glucose stated in mmol/L (value < 30) → convert to mg/dL (×18, round).
+- Meals: estimate realistic nutrition for the described portion — you
+  know Moroccan dishes (tajine, couscous, harira, msemen, bissara…).
+  Unknown portion → assume one normal serving and say so in the reply.
+- minutes_ago: only when the patient clearly said when ("had sba7" ≈
+  morning). More than ~12h ago → action:null, explain it's better added
+  from the app's manual entry. "daba"/now → omit the field.
+- reply: 1-2 warm sentences in ${langName}. With an action, recap what
+  you understood (with the numbers, mark meal nutrition as approximate)
+  and invite them to confirm below. NEVER claim it is already saved.`;
+
+      const logContents = (messages as { role: string; content: string }[])
+        .slice(-10)
+        .filter((m) => typeof m.content === 'string' && m.content.trim())
+        .map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        }));
+      while (logContents.length && logContents[0].role === 'model') logContents.shift();
+      if (logContents.length === 0) return json({ error: 'Empty conversation' }, 400);
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: loggerPrompt }] },
+            contents: logContents,
+            generationConfig: {
+              thinkingConfig: { thinkingBudget: 0 },
+              responseMimeType: 'application/json',
+              maxOutputTokens: 500,
+              temperature: 0.3,
+            },
+          }),
+        }
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        return json({ error: 'AI provider error', detail }, 502);
+      }
+      const data = await response.json();
+      const text = (data.candidates?.[0]?.content?.parts ?? [])
+        .map((p: { text?: string }) => p.text ?? '')
+        .join('')
+        .trim();
+
+      let parsed: { reply?: unknown; action?: unknown } | null = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return json({ error: 'AI returned invalid JSON', raw: text }, 502);
+      }
+      if (!parsed || typeof parsed.reply !== 'string') {
+        return json({ error: 'AI returned invalid JSON', raw: text }, 502);
+      }
+      const VALID_TYPES = ['insulin', 'glucose', 'meal', 'activity', 'measure'];
+      const action =
+        parsed.action &&
+        typeof parsed.action === 'object' &&
+        VALID_TYPES.includes((parsed.action as { type?: string }).type ?? '')
+          ? parsed.action
+          : null;
+
+      const um = data.usageMetadata ?? {};
+      const inTok = um.promptTokenCount ?? 0;
+      const outTok = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
+      const uid = await callerUserId(req);
+      if (uid && (inTok || outTok)) {
+        await logUsage({
+          user_id: uid,
+          kind: 'chat',
+          model: MODEL,
+          input_tokens: inTok,
+          output_tokens: outTok,
+          cost_usd: flashCost(inTok, outTok),
+        });
+      }
+
+      return json({ result: { reply: parsed.reply, action } });
+    }
+
     const profileContext = profile
       ? `User context: diabetes type ${profile.diabetes_type}; target glucose ${profile.target_low}-${profile.target_high} mg/dL; carb ratio ${profile.carb_ratio ?? 'unknown'}; correction factor ${profile.correction_factor ?? 'unknown'}.`
       : 'No profile data available.';

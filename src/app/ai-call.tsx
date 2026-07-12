@@ -18,6 +18,13 @@ import { isRTL } from '@/i18n';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { buildHealthContext, sendChatMessage } from '@/services/ai';
 import {
+  LIVE_LOG_INSTRUCTION,
+  LIVE_LOG_TOOLS,
+  actionFromFunctionCall,
+  actionSummary,
+  applyLoggerAction,
+} from '@/services/aiLogger';
+import {
   GeminiLiveSession,
   LIVE_LANG_TAGS,
   LIVE_MODELS,
@@ -287,6 +294,21 @@ function AiCallScreen() {
   const callLoggedRef = useRef(false);
   const [endNotice, setEndNotice] = useState<string | null>(null);
 
+  /* ── "Saved during the call" toast (function calling) ── */
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showSaved = (text: string) => {
+    setSavedNotice(text);
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setSavedNotice(null), 6000);
+  };
+  useEffect(
+    () => () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    },
+    []
+  );
+
   /* ── Cost guards: silence timeout + hard cap ── */
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -385,7 +407,8 @@ impose a new dose as a prescription. Mention "confirm with your doctor" only whe
 discussing dose or treatment changes.
 PATIENT DATA (live from the app — use it to answer questions about meals,
 glucose, insulin, parameters):
-${buildHealthContext()}`;
+${buildHealthContext()}
+${LIVE_LOG_INSTRUCTION}`;
   };
 
   /* ────────────── LIVE ENGINE (Gemini Live API) ────────────── */
@@ -418,6 +441,43 @@ ${buildHealthContext()}`;
       onTurnComplete: () => {
         // Status flips back on player drain; nothing to do here.
       },
+      onToolCall: (calls) => {
+        // The model (after confirming verbally with the patient) asks the
+        // app to log an entry. Save it through the normal pipeline, then
+        // answer the tool so the AI can confirm out loud.
+        if (endedRef.current) return;
+        bumpActivity();
+        for (const c of calls) {
+          const action = actionFromFunctionCall(c.name, c.args);
+          if (!action) {
+            liveRef.current?.sendToolResponse([
+              { id: c.id, name: c.name, response: { ok: false, error: 'invalid arguments' } },
+            ]);
+            continue;
+          }
+          void applyLoggerAction(action)
+            .then(() => {
+              liveRef.current?.sendToolResponse([
+                { id: c.id, name: c.name, response: { ok: true, saved: true } },
+              ]);
+              const summary = actionSummary(action);
+              showSaved(summary);
+              useAppStore.getState().addAiJournalEntry({
+                id: `log-${Date.now()}`,
+                icon: '📝',
+                title: t('logger.journalTitle'),
+                body: summary,
+                tone: 'success',
+                created_at: new Date().toISOString(),
+              });
+            })
+            .catch(() => {
+              liveRef.current?.sendToolResponse([
+                { id: c.id, name: c.name, response: { ok: false, error: 'save failed' } },
+              ]);
+            });
+        }
+      },
       onClose: () => {
         // Connection dropped mid-call → seamlessly fall back to classic.
         if (!endedRef.current && engineRef.current === 'live') {
@@ -438,7 +498,7 @@ ${buildHealthContext()}`;
     for (const model of LIVE_MODELS) {
       if (endedRef.current) return false;
       try {
-        await session.connect(token, model, instruction, liveLang);
+        await session.connect(token, model, instruction, liveLang, 8000, LIVE_LOG_TOOLS);
         // Connected — start streaming the mic (its AudioContext was
         // created inside the answer tap, so iOS lets it run).
         micRef.current = mic;
@@ -744,6 +804,15 @@ ${buildHealthContext()}`;
         </Text>
       </View>
 
+      {/* ── Saved-during-call toast (AI logged an entry) ── */}
+      {savedNotice ? (
+        <View style={styles.savedPill}>
+          <Text style={styles.savedPillText}>
+            ✅ {t('logger.added')} {savedNotice}
+          </Text>
+        </View>
+      ) : null}
+
       {/* ── Live advice card ── */}
       <View style={styles.adviceCard}>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -900,6 +969,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginTop: 18,
   },
+  savedPill: {
+    alignSelf: 'center',
+    backgroundColor: '#e9fbf2',
+    borderWidth: 1,
+    borderColor: '#19c37d',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  savedPillText: { fontFamily: F700, fontSize: 12.5, color: '#16955f' },
   adviceKicker: { fontFamily: F700, fontSize: 12, color: '#6d5ef9', marginBottom: 3 },
   adviceText: { fontFamily: F500, fontSize: 12.5, lineHeight: 18, color: '#3b4657' },
   adviceBulb: {

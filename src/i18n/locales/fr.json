@@ -748,5 +748,27 @@
     "today": "Aujourd'hui",
     "yesterday": "Hier",
     "aiNote": "L'IA consulte ce rapport complet (aujourd'hui + hier) avant de proposer une dose d'insuline."
+  },
+  "logger": {
+    "title": "Assistant de saisie",
+    "sub": "Dites-le, je l'enregistre",
+    "entryTitle": "Dites-le, je l'enregistre 📝",
+    "entrySub": "« J'ai pris mon insuline », « j'ai mangé un tajine »… le robot l'ajoute pour vous.",
+    "intro": "Dites-moi ce que vous venez de faire — insuline, repas, glycémie, sport, poids — et je l'ajoute à votre compte. Je vous demanderai toujours confirmation avant. 😊",
+    "placeholder": "Ex. : j'ai pris 6 unités d'insuline…",
+    "listening": "Je vous écoute… 🎙️",
+    "confirmTitle": "Je l'ajoute à votre compte ?",
+    "confirm": "Oui, enregistrer",
+    "cancel": "Annuler",
+    "added": "C'est noté ! ✅ Ajouté à votre compte — visible dans l'historique et le rapport du jour.",
+    "canceled": "D'accord, je n'ai rien ajouté.",
+    "error": "Oups, je n'ai pas réussi. Réessayez.",
+    "now": "maintenant",
+    "weight": "Poids",
+    "journalTitle": "Ajouté via l'assistant",
+    "chipInsulin": "J'ai pris mon insuline",
+    "chipMeal": "J'ai mangé un tajine",
+    "chipGlucose": "Ma glycémie est à 140",
+    "chipSport": "J'ai marché 30 minutes"
   }
 }

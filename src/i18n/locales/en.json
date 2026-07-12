@@ -748,5 +748,27 @@
     "today": "Today",
     "yesterday": "Yesterday",
     "aiNote": "The AI reads this full report (today + yesterday) before proposing an insulin dose."
+  },
+  "logger": {
+    "title": "Logging assistant",
+    "sub": "Tell me, I'll log it",
+    "entryTitle": "Tell me, I'll log it 📝",
+    "entrySub": "\"I took my insulin\", \"I ate a tajine\"… the robot adds it for you.",
+    "intro": "Tell me what you just did — insulin, meal, glucose, sport, weight — and I'll add it to your account. I'll always ask you to confirm first. 😊",
+    "placeholder": "E.g.: I took 6 units of insulin…",
+    "listening": "I'm listening… 🎙️",
+    "confirmTitle": "Add it to your account?",
+    "confirm": "Yes, save it",
+    "cancel": "Cancel",
+    "added": "Noted! ✅ Added to your account — visible in the history and the day report.",
+    "canceled": "Okay, I didn't add anything.",
+    "error": "Oops, that didn't work. Please try again.",
+    "now": "now",
+    "weight": "Weight",
+    "journalTitle": "Added via the assistant",
+    "chipInsulin": "I took my insulin",
+    "chipMeal": "I ate a tajine",
+    "chipGlucose": "My glucose is 140",
+    "chipSport": "I walked 30 minutes"
   }
 }
