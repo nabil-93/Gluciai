@@ -29,6 +29,7 @@ const KIND_COLOR: Record<DayEvent['kind'], string> = {
   glucose: '#e11d48',
   activity: '#12B76A',
   measure: '#7C93E8',
+  event: '#8a3ffc',
 };
 const KIND_ICON: Record<DayEvent['kind'], string> = {
   meal: '🍽️',
@@ -36,6 +37,7 @@ const KIND_ICON: Record<DayEvent['kind'], string> = {
   glucose: '🩸',
   activity: '🏃',
   measure: '📏',
+  event: '⚙️',
 };
 
 function zoneColor(v: number, low: number, high: number) {
@@ -60,8 +62,15 @@ export default function TimelineScreen() {
   const { date } = useLocalSearchParams<{ date?: string }>();
 
   // Subscribe so the timeline live-updates when something is logged.
-  const { meals, insulinLogs, glucoseLogs, activityLogs, measureLogs, profile } =
-    useAppStore();
+  const {
+    meals,
+    insulinLogs,
+    glucoseLogs,
+    activityLogs,
+    measureLogs,
+    eventLogs,
+    profile,
+  } = useAppStore();
 
   const startDay = useMemo(() => {
     if (date) {
@@ -87,7 +96,7 @@ export default function TimelineScreen() {
   const events = useMemo(
     () => buildDayEvents(day),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [day, meals, insulinLogs, glucoseLogs, activityLogs, measureLogs]
+    [day, meals, insulinLogs, glucoseLogs, activityLogs, measureLogs, eventLogs]
   );
   const totals = useMemo(() => dayTotals(events), [events]);
 
@@ -310,6 +319,24 @@ export default function TimelineScreen() {
                         </Text>
                         <Text style={styles.cardMeta}>
                           {t('day.activity')} · {e.activity.intensity}
+                        </Text>
+                      </View>
+                    ) : e.kind === 'event' ? (
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.cardTitle} numberOfLines={1}>
+                          {e.event.kind === 'status'
+                            ? t('events.statusChanged')
+                            : t('events.settingsChanged')}
+                        </Text>
+                        <Text style={styles.cardMeta} numberOfLines={2}>
+                          {e.event.kind === 'status'
+                            ? `${t(`events.st_${e.event.payload.from}` as any, String(e.event.payload.from))} → ${t(`events.st_${e.event.payload.to}` as any, String(e.event.payload.to))}`
+                            : Object.entries(e.event.payload.changes ?? {})
+                                .map(
+                                  ([f, v]: [string, any]) =>
+                                    `${t(`events.f_${f}` as any, f)}: ${Array.isArray(v?.from) ? v.from.join('+') : (v?.from ?? '—')} → ${Array.isArray(v?.to) ? v.to.join('+') : (v?.to ?? '—')}`
+                                )
+                                .join(' · ')}
                         </Text>
                       </View>
                     ) : (

@@ -20,6 +20,7 @@ import { LoggerConfirmCard } from '@/components/LoggerConfirmCard';
 import { isRTL } from '@/i18n';
 import { sendChatMessage } from '@/services/ai';
 import {
+  actionSummary,
   applyLoggerAction,
   looksLoggable,
   sendLoggerMessage,
@@ -184,23 +185,15 @@ function AiChatScreen() {
       addChatMessage({
         id: `${Date.now()}-log`,
         role: 'assistant',
-        content: t('logger.added'),
+        content:
+          action.type === 'reminder' ? t('logger.reminderSet') : t('logger.added'),
         created_at: new Date().toISOString(),
       });
       addAiJournalEntry({
         id: `log-${Date.now()}`,
-        icon: '📝',
+        icon: action.type === 'reminder' ? '⏰' : '📝',
         title: t('logger.journalTitle'),
-        body:
-          action.type === 'insulin'
-            ? `💉 ${action.dose} U ${t(`day.insu_${action.insulin_type}` as any)}`
-            : action.type === 'glucose'
-              ? `🩸 ${action.value} mg/dL`
-              : action.type === 'meal'
-                ? `🍽️ ${action.name} (≈${action.calories} kcal, ${action.carbs} g)`
-                : action.type === 'activity'
-                  ? `🏃 ${action.kind} ${action.duration_min} min`
-                  : `📏 ${action.value} ${action.unit}`,
+        body: actionSummary(action),
         tone: 'success',
         created_at: new Date().toISOString(),
       });

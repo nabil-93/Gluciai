@@ -33,7 +33,7 @@ export default function DayScreen() {
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
   const { date } = useLocalSearchParams<{ date?: string }>();
-  const { glucoseLogs, insulinLogs, meals, activityLogs, measureLogs, profile } = useAppStore();
+  const { glucoseLogs, insulinLogs, meals, activityLogs, measureLogs, eventLogs, profile } = useAppStore();
 
   const day = useMemo(() => {
     const d = date ? new Date(`${date}T12:00:00`) : new Date();
@@ -53,6 +53,7 @@ export default function DayScreen() {
   const dInsu = byTime(insulinLogs.filter((x) => sameDay(x.created_at)));
   const dActs = byTime(activityLogs.filter((a) => sameDay(a.created_at)));
   const dMeas = byTime(measureLogs.filter((x) => sameDay(x.created_at)));
+  const dEvents = byTime((eventLogs ?? []).filter((e) => sameDay(e.created_at)));
 
   const low = profile?.target_low ?? 70;
   const high = profile?.target_high ?? 180;
@@ -69,7 +70,8 @@ export default function DayScreen() {
     : null;
 
   const isEmpty =
-    dMeals.length + dGly.length + dInsu.length + dActs.length + dMeas.length === 0;
+    dMeals.length + dGly.length + dInsu.length + dActs.length + dMeas.length + dEvents.length ===
+    0;
 
   const time = (iso: string) =>
     new Date(iso).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' });
@@ -281,6 +283,36 @@ export default function DayScreen() {
                       </Text>
                       <View style={{ flex: 1 }} />
                       <Text style={styles.timeText}>{time(a.created_at)}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            {/* ── Account events (status / settings changes) ── */}
+            {dEvents.length ? (
+              <>
+                <Text style={styles.section}>
+                  ⚙️ {t('events.section')} ({dEvents.length})
+                </Text>
+                <View style={{ gap: 8 }}>
+                  {dEvents.map((e) => (
+                    <View key={e.id} style={styles.row}>
+                      <Text style={{ fontSize: 14 }}>
+                        {e.kind === 'status' ? '🩺' : '⚙️'}
+                      </Text>
+                      <Text style={[styles.rowNotes, { color: '#4b5563' }]} numberOfLines={2}>
+                        {e.kind === 'status'
+                          ? `${t('events.statusChanged')}: ${t(`events.st_${e.payload.from}` as any, String(e.payload.from))} → ${t(`events.st_${e.payload.to}` as any, String(e.payload.to))}`
+                          : `${t('events.settingsChanged')}: ` +
+                            Object.entries(e.payload.changes ?? {})
+                              .map(
+                                ([f, v]: [string, any]) =>
+                                  `${t(`events.f_${f}` as any, f)} ${Array.isArray(v?.from) ? v.from.join('+') : (v?.from ?? '—')} → ${Array.isArray(v?.to) ? v.to.join('+') : (v?.to ?? '—')}`
+                              )
+                              .join(' · ')}
+                      </Text>
+                      <Text style={styles.timeText}>{time(e.created_at)}</Text>
                     </View>
                   ))}
                 </View>

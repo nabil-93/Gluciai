@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ActivityGlyph, ChevronLeft } from '@/components/ui';
+import { changeActivityStatus } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { colors } from '@/theme';
 import type { ActivityStatus } from '@/types';
@@ -37,7 +38,6 @@ const OPTIONS = [
 export default function ActivityStatusScreen() {
   const router = useRouter();
   const activityStatus = useAppStore((s) => s.activityStatus);
-  const setActivityStatus = useAppStore((s) => s.setActivityStatus);
   const [step, setStep] = useState<'intro' | 'choice'>('choice');
   const [selected, setSelected] = useState<ActivityStatus>(activityStatus);
 
@@ -47,7 +47,8 @@ export default function ActivityStatusScreen() {
   };
 
   const update = () => {
-    setActivityStatus(selected);
+    // Recorded as an account event → history, day report, AI context.
+    void changeActivityStatus(selected);
     close();
   };
 

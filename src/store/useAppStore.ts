@@ -6,6 +6,8 @@ import type {
   ActivityLog,
   ActivityStatus,
   AIJournalEntry,
+  AiReminder,
+  AppEvent,
   ChatMessage,
   FoodCorrection,
   GlucoseLog,
@@ -25,6 +27,8 @@ export interface ServerSnapshot {
   activityLogs: ActivityLog[];
   measureLogs: MeasureLog[];
   chatMessages: ChatMessage[];
+  aiReminders: AiReminder[];
+  eventLogs: AppEvent[];
 }
 
 interface AppState {
@@ -54,6 +58,10 @@ interface AppState {
   aiJournalSeenAt: string | null;
   /** Features blocked for this account from the admin dashboard (feature_access) */
   lockedFeatures: string[];
+  /** Reminders the patient asked the AI to set */
+  aiReminders: AiReminder[];
+  /** Account events (status changes, parameter edits) — part of the history */
+  eventLogs: AppEvent[];
 
   setLanguageChosen: () => void;
   setLockedFeatures: (features: string[]) => void;
@@ -77,6 +85,10 @@ interface AppState {
   addAiJournalEntry: (entry: AIJournalEntry) => void;
   /** Mark the notifications screen as read (clears the unread badge) */
   markAiJournalSeen: () => void;
+
+  addAiReminder: (reminder: AiReminder) => void;
+  updateAiReminder: (id: string, patch: Partial<AiReminder>) => void;
+  addEventLog: (event: AppEvent) => void;
 
   addChatMessage: (message: ChatMessage) => void;
   updateLastChatMessage: (content: string) => void;
@@ -107,6 +119,8 @@ const initialData = {
   aiJournal: [] as AIJournalEntry[],
   aiJournalSeenAt: null as string | null,
   lockedFeatures: [] as string[],
+  aiReminders: [] as AiReminder[],
+  eventLogs: [] as AppEvent[],
 };
 
 export const useAppStore = create<AppState>()(
@@ -161,6 +175,17 @@ export const useAppStore = create<AppState>()(
         }),
       markAiJournalSeen: () =>
         set({ aiJournalSeenAt: new Date().toISOString() }),
+
+      addAiReminder: (reminder) =>
+        set((s) => ({ aiReminders: [reminder, ...s.aiReminders] })),
+      addEventLog: (event) =>
+        set((s) => ({ eventLogs: [event, ...s.eventLogs].slice(0, 1000) })),
+      updateAiReminder: (id, patch) =>
+        set((s) => ({
+          aiReminders: s.aiReminders.map((r) =>
+            r.id === id ? { ...r, ...patch } : r
+          ),
+        })),
 
       addChatMessage: (message) =>
         set((s) => ({ chatMessages: [...s.chatMessages, message] })),

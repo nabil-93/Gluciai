@@ -216,6 +216,36 @@ export interface MeasureLog {
 export type ActivityStatus = 'active' | 'sick' | 'injured' | 'paused';
 
 /**
+ * An account event: the patient changed their activity status
+ * (sick/injured/…) or edited medical parameters. Recorded like any log so
+ * it shows in the history/day report and the AI always knows the full,
+ * current situation.
+ */
+export interface AppEvent {
+  id: string;
+  user_id: string;
+  kind: 'status' | 'profile';
+  /** status: { from, to } — profile: { changes: { field: { from, to } } } */
+  payload: Record<string, any>;
+  created_at: string;
+}
+
+/**
+ * A reminder the patient asked the AI to set ("rappelle-moi dans 1h de
+ * prendre mon insuline"). pending → fired (shown to the patient) →
+ * done (they did it / logged it) or missed.
+ */
+export interface AiReminder {
+  id: string;
+  user_id: string;
+  message: string;
+  due_at: string;
+  follow_kind: 'insulin' | 'glucose' | 'meal' | 'activity' | 'measure' | 'other';
+  status: 'pending' | 'fired' | 'done' | 'missed';
+  created_at: string;
+}
+
+/**
  * One entry of the AI coach journal: everything the assistant
  * detected (good or bad), recorded chronologically like a coach
  * following the patient all day long.

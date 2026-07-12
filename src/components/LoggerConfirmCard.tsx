@@ -15,6 +15,7 @@ const ICONS: Record<LoggerAction['type'], string> = {
   meal: '🍽️',
   activity: '🏃',
   measure: '📏',
+  reminder: '⏰',
 };
 
 /**
@@ -46,6 +47,8 @@ export function LoggerConfirmCard({
         return `${action.kind} · ${action.duration_min} min`;
       case 'measure':
         return `${action.kind === 'weight' ? t('logger.weight') : 'HbA1c'} · ${action.value} ${action.unit}`;
+      case 'reminder':
+        return action.message;
     }
   })();
 
@@ -61,15 +64,30 @@ export function LoggerConfirmCard({
         return `${t('day.activity')} · ${action.intensity}`;
       case 'measure':
         return t('day.measures');
+      case 'reminder':
+        return t('logger.reminderLabel');
     }
   })();
 
-  const when = action.minutes_ago
-    ? new Date(Date.now() - action.minutes_ago * 60_000).toLocaleTimeString(
-        i18n.language,
-        { hour: '2-digit', minute: '2-digit' }
-      )
-    : t('logger.now');
+  const when = (() => {
+    if (action.type === 'reminder') {
+      const due = new Date(Date.now() + action.due_in_minutes * 60_000);
+      const sameDay = due.toDateString() === new Date().toDateString();
+      const time = due.toLocaleTimeString(i18n.language, {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      return sameDay
+        ? time
+        : `${due.toLocaleDateString(i18n.language, { weekday: 'short', day: 'numeric', month: 'short' })} ${time}`;
+    }
+    return action.minutes_ago
+      ? new Date(Date.now() - action.minutes_ago * 60_000).toLocaleTimeString(
+          i18n.language,
+          { hour: '2-digit', minute: '2-digit' }
+        )
+      : t('logger.now');
+  })();
 
   const confirm = async () => {
     if (busy) return;

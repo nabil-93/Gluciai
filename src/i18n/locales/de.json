@@ -289,7 +289,10 @@
     "breakfastReason": "Du erfasst morgens oft eine Mahlzeit",
     "eveningTitle": "Tagesbilanz",
     "eveningBody": "Blutzucker, Mahlzeiten und Injektionen des Tages.",
-    "eveningReason": "Tägliche Zusammenfassung"
+    "eveningReason": "Tägliche Zusammenfassung",
+    "firedTitle": "Es ist so weit! ⏰",
+    "followTitle": "Kurze Nachfrage 🤔",
+    "followBody": "„{{msg}}“ — hast du es gemacht? Öffne den Assistenten und sag es mir, ich trage es ein."
   },
   "insights": {
     "hypoTitle": "Niedriger Blutzucker erkannt",
@@ -772,6 +775,27 @@
     "chipSport": "Ich bin 30 Minuten gelaufen",
     "voiceNote": "🎙️ Sprachnachricht",
     "recording": "Ich höre zu… tippe aufs Mikro zum Senden 🎙️",
-    "micDenied": "Ich habe keinen Zugriff aufs Mikrofon. Erlaube es im Browser oder schreib mir."
+    "micDenied": "Ich habe keinen Zugriff aufs Mikrofon. Erlaube es im Browser oder schreib mir.",
+    "reminderLabel": "Erinnerung",
+    "reminderSet": "Notiert! ⏰ Ich erinnere dich zur geplanten Zeit — und hake danach nach, ob es erledigt ist.",
+    "followUpAsk": "⏰ Du hattest eine Erinnerung: „{{msg}}“. Hast du es gemacht? Sag es mir und ich trage es ein.",
+    "chipReminder": "Erinnere mich in 1 Std. an mein Insulin"
+  },
+  "events": {
+    "section": "Konto-Änderungen",
+    "statusChanged": "Status geändert",
+    "settingsChanged": "Einstellungen geändert",
+    "st_active": "Aktiv",
+    "st_sick": "Krank",
+    "st_injured": "Verletzt",
+    "st_paused": "Pausiert",
+    "f_diabetes_type": "Diabetes-Typ",
+    "f_insulin_types": "Insuline",
+    "f_target_low": "Untere Zielgrenze",
+    "f_target_high": "Obere Zielgrenze",
+    "f_carb_ratio": "KH-Verhältnis",
+    "f_correction_factor": "Korrekturfaktor",
+    "f_weight": "Gewicht",
+    "f_height": "Größe"
   }
 }

@@ -4,6 +4,8 @@ import type {
   ActivityIntensity,
   ActivityKind,
   ActivityLog,
+  ActivityStatus,
+  AppEvent,
   GlucoseLog,
   InsulinLog,
   InsulinType,
@@ -194,13 +196,70 @@ export async function saveInsulin(
   return log;
 }
 
+/* ─────────────────────── ACCOUNT EVENTS ───────────────────────
+ * Status changes and parameter edits are part of the patient's story:
+ * they land in the history/day report and in the AI's context, so the
+ * assistant always knows the full current situation. */
+
+export async function logEvent(kind: AppEvent['kind'], payload: Record<string, any>) {
+  const user_id = await currentUserId();
+  let row: { id: string; created_at: string } | null = null;
+  if (user_id !== 'demo-user') {
+    row = await insertReturning('event_logs', { user_id, kind, payload });
+  }
+  const event: AppEvent = {
+    id: row?.id ?? id(),
+    user_id,
+    kind,
+    payload,
+    created_at: row?.created_at ?? new Date().toISOString(),
+  };
+  useAppStore.getState().addEventLog(event);
+  return event;
+}
+
+/** Change the activity status AND record it (sick/injured/paused/active). */
+export async function changeActivityStatus(status: ActivityStatus) {
+  const prev = useAppStore.getState().activityStatus;
+  useAppStore.getState().setActivityStatus(status);
+  if (prev !== status) {
+    await logEvent('status', { from: prev, to: status });
+  }
+}
+
+/** Medical fields whose edits must be visible in the history + to the AI. */
+const TRACKED_PROFILE_FIELDS: (keyof Profile)[] = [
+  'diabetes_type',
+  'insulin_types',
+  'target_low',
+  'target_high',
+  'carb_ratio',
+  'correction_factor',
+  'weight',
+  'height',
+];
+
 export async function saveProfile(profile: Profile) {
+  const before = useAppStore.getState().profile;
   useAppStore.getState().setProfile(profile);
   if (!isDemoMode && supabase && profile.user_id !== 'demo-user') {
     await supabase.from('profiles').upsert({
       ...profile,
       updated_at: new Date().toISOString(),
     });
+  }
+
+  // Record what actually changed (skip the wizard's very first save).
+  if (before && before.user_id === profile.user_id) {
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    for (const f of TRACKED_PROFILE_FIELDS) {
+      const a = JSON.stringify(before[f] ?? null);
+      const b = JSON.stringify(profile[f] ?? null);
+      if (a !== b) changes[f] = { from: before[f] ?? null, to: profile[f] ?? null };
+    }
+    if (Object.keys(changes).length) {
+      await logEvent('profile', { changes });
+    }
   }
 }
 

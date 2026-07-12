@@ -15,6 +15,7 @@ import {
   saveMeal,
   saveMeasure,
 } from './data';
+import { createAiReminder, resolveFollowUps } from './reminders';
 
 /* ────────────────────────────────────────────────────────────
  * AI LOGGER
@@ -51,7 +52,13 @@ export type LoggerAction =
       intensity: ActivityIntensity;
       minutes_ago?: number;
     }
-  | { type: 'measure'; kind: 'weight' | 'hba1c'; value: number; unit: string; minutes_ago?: number };
+  | { type: 'measure'; kind: 'weight' | 'hba1c'; value: number; unit: string; minutes_ago?: number }
+  | {
+      type: 'reminder';
+      message: string;
+      due_in_minutes: number;
+      follow_kind: 'insulin' | 'glucose' | 'meal' | 'activity' | 'measure' | 'other';
+    };
 
 export interface LoggerTurn {
   reply: string;
@@ -134,6 +141,18 @@ export function sanitizeAction(raw: any): LoggerAction | null {
         minutes_ago: ago,
       };
     }
+    case 'reminder': {
+      const message = typeof raw.message === 'string' ? raw.message.trim() : '';
+      const due = Math.round(num(raw.due_in_minutes));
+      if (!message || due < 1 || due > 10_080) return null; // max 7 days
+      const FOLLOW = ['insulin', 'glucose', 'meal', 'activity', 'measure', 'other'];
+      return {
+        type: 'reminder',
+        message,
+        due_in_minutes: due,
+        follow_kind: FOLLOW.includes(raw.follow_kind) ? raw.follow_kind : 'other',
+      };
+    }
     default:
       return null;
   }
@@ -183,7 +202,7 @@ export async function sendLoggerMessage(
 }
 
 /** Timestamp for the entry ("30 min ago" → backdated). */
-export function actionCreatedAt(action: LoggerAction): string | undefined {
+export function actionCreatedAt(action: { minutes_ago?: number }): string | undefined {
   if (!action.minutes_ago) return undefined;
   return new Date(Date.now() - action.minutes_ago * 60_000).toISOString();
 }
@@ -194,19 +213,30 @@ export function actionCreatedAt(action: LoggerAction): string | undefined {
  * day report, the doctor dashboard and the AI's own context.
  */
 export async function applyLoggerAction(action: LoggerAction): Promise<void> {
-  const at = actionCreatedAt(action);
+  const at = 'minutes_ago' in action ? actionCreatedAt(action) : undefined;
   switch (action.type) {
     case 'insulin':
       await saveInsulin(action.dose, action.insulin_type, undefined, at);
+      resolveFollowUps('insulin');
       return;
     case 'glucose':
       await saveGlucose(action.value, undefined, at);
+      resolveFollowUps('glucose');
       return;
     case 'activity':
       await saveActivity(action.kind, action.duration_min, action.intensity, undefined, at);
+      resolveFollowUps('activity');
       return;
     case 'measure':
       await saveMeasure(action.kind, action.value, action.unit, at);
+      resolveFollowUps('measure');
+      return;
+    case 'reminder':
+      await createAiReminder(
+        action.message,
+        new Date(Date.now() + action.due_in_minutes * 60_000),
+        action.follow_kind
+      );
       return;
     case 'meal': {
       const result: NutritionResult = {
@@ -225,6 +255,7 @@ export async function applyLoggerAction(action: LoggerAction): Promise<void> {
         warnings: [],
       };
       await saveMeal(result, undefined, undefined, at);
+      resolveFollowUps('meal');
       return;
     }
   }
@@ -250,6 +281,8 @@ const LOGGABLE_RE = new RegExp(
     'sport', 'marche', 'mchit', 'jrit', 'course', 'v[ée]lo', 'gym', 'الرياضة', 'مشيت', 'جريت', 'gelaufen',
     // measures
     'poids', 'wazn', 'وزن', 'gewicht', 'weight', 'hba1c',
+    // reminders
+    'rappel', 'rappelle', 'fekerni', 'fakarni', 'fekkerni', 'remind', 'erinner', 'ذكرني', 'فكرني', 'تذكير',
   ].join('|'),
   'i'
 );
@@ -349,6 +382,26 @@ export const LIVE_LOG_TOOLS = [
           required: ['kind', 'value'],
         },
       },
+      {
+        name: 'set_reminder',
+        description:
+          'Set a reminder the patient asked for ("rappelle-moi dans 1h de prendre mon insuline"). The app will alert them at the right time and follow up. Confirm the time verbally first.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            message: { type: 'STRING', description: 'Short reminder text' },
+            due_in_minutes: {
+              type: 'NUMBER',
+              description: 'Minutes from now (max 10080 = 7 days)',
+            },
+            follow_kind: {
+              type: 'STRING',
+              enum: ['insulin', 'glucose', 'meal', 'activity', 'measure', 'other'],
+            },
+          },
+          required: ['message', 'due_in_minutes'],
+        },
+      },
     ],
   },
 ];
@@ -362,7 +415,11 @@ themselves — and it is not yet in their data, offer to log it for them
 (dose, value, duration…) by asking. Then REPEAT the exact entry back and
 ask for a clear yes. ONLY after the patient agrees, call the matching
 log_* function. When the tool answers ok, tell them briefly it's saved
-in the app. If they decline, don't call anything.`;
+in the app. If they decline, don't call anything.
+REMINDERS: when the patient asks to be reminded of something later
+("fekerni men daba sa3a bach nakhod l'insuline"), confirm the time and
+call set_reminder — the app WILL alert them at that time and follow up.
+Never say you can't set reminders.`;
 
 /** Map a Live-API function call to a validated LoggerAction. */
 export function actionFromFunctionCall(
@@ -380,6 +437,8 @@ export function actionFromFunctionCall(
       return sanitizeAction({ type: 'activity', intensity: 'medium', ...args });
     case 'log_measure':
       return sanitizeAction({ type: 'measure', ...args });
+    case 'set_reminder':
+      return sanitizeAction({ type: 'reminder', follow_kind: 'other', ...args });
     default:
       return null;
   }
@@ -488,5 +547,7 @@ export function actionSummary(action: LoggerAction): string {
       return `🏃 ${action.kind} ${action.duration_min} min`;
     case 'measure':
       return `📏 ${action.value} ${action.unit}`;
+    case 'reminder':
+      return `⏰ ${action.message}`;
   }
 }

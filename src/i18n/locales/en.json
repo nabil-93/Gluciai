@@ -289,7 +289,10 @@
     "breakfastReason": "You often log a meal in the morning",
     "eveningTitle": "Daily summary",
     "eveningBody": "Glucose, meals and injections of the day.",
-    "eveningReason": "Daily recap"
+    "eveningReason": "Daily recap",
+    "firedTitle": "It's time! ⏰",
+    "followTitle": "Quick check 🤔",
+    "followBody": "\"{{msg}}\" — did you do it? Open the assistant and tell me, I'll log it."
   },
   "insights": {
     "hypoTitle": "Low glucose detected",
@@ -772,6 +775,27 @@
     "chipSport": "I walked 30 minutes",
     "voiceNote": "🎙️ Voice message",
     "recording": "I'm listening… tap the mic to send 🎙️",
-    "micDenied": "I can't access the microphone. Allow it in the browser, or type instead."
+    "micDenied": "I can't access the microphone. Allow it in the browser, or type instead.",
+    "reminderLabel": "Reminder",
+    "reminderSet": "Noted! ⏰ I'll remind you at the scheduled time — and check afterwards that it's done.",
+    "followUpAsk": "⏰ You had a reminder: \"{{msg}}\". Did you do it? Tell me and I'll log it.",
+    "chipReminder": "Remind me in 1h to take my insulin"
+  },
+  "events": {
+    "section": "Account changes",
+    "statusChanged": "Status changed",
+    "settingsChanged": "Settings changed",
+    "st_active": "Active",
+    "st_sick": "Sick",
+    "st_injured": "Injured",
+    "st_paused": "Paused",
+    "f_diabetes_type": "Diabetes type",
+    "f_insulin_types": "Insulins",
+    "f_target_low": "Low target",
+    "f_target_high": "High target",
+    "f_carb_ratio": "Carb ratio",
+    "f_correction_factor": "Correction factor",
+    "f_weight": "Weight",
+    "f_height": "Height"
   }
 }

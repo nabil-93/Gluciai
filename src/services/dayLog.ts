@@ -1,6 +1,7 @@
 import { useAppStore } from '@/store/useAppStore';
 import type {
   ActivityLog,
+  AppEvent,
   GlucoseLog,
   InsulinLog,
   MealScan,
@@ -23,7 +24,8 @@ export type DayEvent =
   | { kind: 'insulin'; id: string; created_at: string; insulin: InsulinLog }
   | { kind: 'glucose'; id: string; created_at: string; glucose: GlucoseLog }
   | { kind: 'activity'; id: string; created_at: string; activity: ActivityLog }
-  | { kind: 'measure'; id: string; created_at: string; measure: MeasureLog };
+  | { kind: 'measure'; id: string; created_at: string; measure: MeasureLog }
+  | { kind: 'event'; id: string; created_at: string; event: AppEvent };
 
 /** All events of `day`, oldest → newest (the story of the day). */
 export function buildDayEvents(day: Date): DayEvent[] {
@@ -47,6 +49,9 @@ export function buildDayEvents(day: Date): DayEvent[] {
     ...s.measureLogs
       .filter((x) => sameDay(x.created_at))
       .map((x): DayEvent => ({ kind: 'measure', id: `x-${x.id}`, created_at: x.created_at, measure: x })),
+    ...(s.eventLogs ?? [])
+      .filter((e) => sameDay(e.created_at))
+      .map((e): DayEvent => ({ kind: 'event', id: `e-${e.id}`, created_at: e.created_at, event: e })),
   ];
 
   return events.sort(
@@ -119,6 +124,16 @@ function eventLine(e: DayEvent): string {
       return `${hhmm(e.created_at)} SPORT ${e.activity.kind} ${e.activity.duration_min} min (${e.activity.intensity} intensity)`;
     case 'measure':
       return `${hhmm(e.created_at)} MEASURE ${e.measure.kind} ${e.measure.value} ${e.measure.unit}`;
+    case 'event': {
+      const ev = e.event;
+      if (ev.kind === 'status') {
+        return `${hhmm(e.created_at)} STATUS CHANGED ${ev.payload.from ?? '?'} → ${ev.payload.to ?? '?'}`;
+      }
+      const ch = Object.entries(ev.payload.changes ?? {})
+        .map(([f, v]: [string, any]) => `${f}: ${JSON.stringify(v?.from)}→${JSON.stringify(v?.to)}`)
+        .join(', ');
+      return `${hhmm(e.created_at)} SETTINGS CHANGED ${ch}`;
+    }
   }
 }
 

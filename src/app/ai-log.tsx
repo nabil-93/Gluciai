@@ -20,10 +20,12 @@ import { isRTL } from '@/i18n';
 import {
   VOICE_NOTE_MAX_MS,
   VoiceNoteRecorder,
+  actionSummary,
   applyLoggerAction,
   sendLoggerMessage,
   type LoggerAction,
 } from '@/services/aiLogger';
+import { markReminder, pendingFollowUps } from '@/services/reminders';
 import { useAppStore } from '@/store/useAppStore';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -61,8 +63,14 @@ function MicIcon({ active }: { active: boolean }) {
   );
 }
 
-const CHIP_KEYS = ['chipInsulin', 'chipMeal', 'chipGlucose', 'chipSport'] as const;
-const CHIP_ICONS = ['💉', '🍽️', '🩸', '🏃'] as const;
+const CHIP_KEYS = [
+  'chipInsulin',
+  'chipMeal',
+  'chipGlucose',
+  'chipSport',
+  'chipReminder',
+] as const;
+const CHIP_ICONS = ['💉', '🍽️', '🩸', '🏃', '⏰'] as const;
 
 interface Bubble {
   id: string;
@@ -105,6 +113,26 @@ function AiLogScreen() {
   };
   useEffect(scrollDown, [thread.length, thinking, pendingAction]);
 
+  /* Reminder follow-ups: the coach opens with "did you do it?" for every
+     fired reminder still waiting on the patient's word. */
+  const followUpIdsRef = useRef<string[]>([]);
+  useEffect(() => {
+    const due = pendingFollowUps().slice(0, 2);
+    if (!due.length) return;
+    followUpIdsRef.current = due
+      .filter((r) => r.follow_kind === 'other')
+      .map((r) => r.id);
+    setThread((s) => [
+      ...s,
+      ...due.map((r, i) => ({
+        id: `fu-${r.id}-${i}`,
+        role: 'assistant' as const,
+        content: t('logger.followUpAsk', { msg: r.message }),
+      })),
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const close = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
@@ -118,6 +146,11 @@ function AiLogScreen() {
     if (!content || thinking) return;
     setInput('');
     setPendingAction(null);
+    // Replying to an "other"-kind follow-up counts as its answer.
+    if (followUpIdsRef.current.length) {
+      followUpIdsRef.current.forEach((rid) => markReminder(rid, 'done'));
+      followUpIdsRef.current = [];
+    }
     const next: Bubble[] = [
       ...thread,
       { id: `${Date.now()}-u`, role: 'user', content },
@@ -144,22 +177,16 @@ function AiLogScreen() {
     try {
       await applyLoggerAction(action);
       setPendingAction(null);
-      pushBubble('assistant', t('logger.added'));
+      pushBubble(
+        'assistant',
+        action.type === 'reminder' ? t('logger.reminderSet') : t('logger.added')
+      );
       // Trace in the AI coach journal so the robot's log shows it too.
       addAiJournalEntry({
         id: `log-${Date.now()}`,
-        icon: '📝',
+        icon: action.type === 'reminder' ? '⏰' : '📝',
         title: t('logger.journalTitle'),
-        body:
-          action.type === 'insulin'
-            ? `💉 ${action.dose} U ${t(`day.insu_${action.insulin_type}` as any)}`
-            : action.type === 'glucose'
-              ? `🩸 ${action.value} mg/dL`
-              : action.type === 'meal'
-                ? `🍽️ ${action.name} (≈${action.calories} kcal, ${action.carbs} g)`
-                : action.type === 'activity'
-                  ? `🏃 ${action.kind} ${action.duration_min} min`
-                  : `📏 ${action.value} ${action.unit}`,
+        body: actionSummary(action),
         tone: 'success',
         created_at: new Date().toISOString(),
       });

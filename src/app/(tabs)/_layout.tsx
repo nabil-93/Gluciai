@@ -6,6 +6,7 @@ import { BevelTabBar } from '@/components/ui';
 import { TabBarVisibilityProvider } from '@/components/ui/TabBarVisibility';
 import { refreshFeatureLocks } from '@/services/features';
 import { refreshSmartReminders } from '@/services/notifications';
+import { checkReminders } from '@/services/reminders';
 import { hydrateFromServer } from '@/services/sync';
 import { colors } from '@/theme';
 
@@ -19,7 +20,10 @@ export default function TabsLayout() {
   useEffect(() => {
     refreshSmartReminders();
     refreshFeatureLocks();
-    hydrateFromServer();
+    hydrateFromServer().then(() => checkReminders());
+    // AI reminders tick: fire due ones + "did you do it?" follow-ups.
+    const id = setInterval(checkReminders, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   return (

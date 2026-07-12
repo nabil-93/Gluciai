@@ -306,7 +306,7 @@ export async function analyzeMenu(
  */
 export function buildHealthContext(): string {
   const s = useAppStore.getState();
-  const { profile, glucoseLogs, insulinLogs, meals, activityLogs } = s;
+  const { profile, glucoseLogs, insulinLogs, meals, activityLogs, activityStatus, eventLogs } = s;
   const now = new Date();
   const isToday = (iso: string) =>
     new Date(iso).toDateString() === now.toDateString();
@@ -425,6 +425,30 @@ export function buildHealthContext(): string {
           '.'
       : 'Activity today: none logged.'
   );
+
+  // Current status + recent account changes — the assistant must know the
+  // patient's FULL situation (sick? new targets? new ratio?) before advising.
+  lines.push(
+    `Patient status right now: ${activityStatus}` +
+      (activityStatus === 'sick'
+        ? ' (illness can RAISE glucose and change insulin needs — factor it in).'
+        : activityStatus === 'injured'
+          ? ' (reduced activity — factor it in).'
+          : '.')
+  );
+  const recentEvents = (eventLogs ?? []).slice(0, 5).map((e) => {
+    const when = `${new Date(e.created_at).toLocaleDateString('fr-FR')} ${time(e.created_at)}`;
+    if (e.kind === 'status') {
+      return `${when}: status ${e.payload.from ?? '?'} → ${e.payload.to ?? '?'}`;
+    }
+    const ch = Object.entries(e.payload.changes ?? {})
+      .map(([f, v]: [string, any]) => `${f} ${JSON.stringify(v?.from)}→${JSON.stringify(v?.to)}`)
+      .join(', ');
+    return `${when}: settings changed (${ch})`;
+  });
+  if (recentEvents.length) {
+    lines.push(`Recent account changes: ${recentEvents.join('; ')}.`);
+  }
 
   return lines.join('\n');
 }

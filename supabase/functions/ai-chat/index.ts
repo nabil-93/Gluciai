@@ -187,6 +187,7 @@ ACTION is exactly one of:
 {"type":"meal","name":"short dish name","portion":"e.g. 1 assiette","calories":N,"carbs":N,"sugar":N,"protein":N,"fat":N,"fiber":N,"glycemic_index":N,"minutes_ago":N?}
 {"type":"activity","kind":"walk"|"run"|"bike"|"gym"|"other","duration_min":N,"intensity":"low"|"medium"|"high","minutes_ago":N?}
 {"type":"measure","kind":"weight"|"hba1c","value":N,"unit":"kg"|"%","minutes_ago":N?}
+{"type":"reminder","message":"short text of what to do, in ${langName}","due_in_minutes":N,"follow_kind":"insulin"|"glucose"|"meal"|"activity"|"measure"|"other"}
 
 Rules:
 - Produce an action ONLY for something the patient explicitly did or
@@ -203,6 +204,13 @@ Rules:
 - minutes_ago: only when the patient clearly said when ("had sba7" ≈
   morning). More than ~12h ago → action:null, explain it's better added
   from the app's manual entry. "daba"/now → omit the field.
+- REMINDERS: when the patient asks to be reminded of something later
+  ("fekerni men daba sa3a bach nakhod l'insuline", "rappelle-moi à 20h de
+  mesurer ma glycémie") → type:"reminder". Compute due_in_minutes from
+  their words and the current local time in the context (max 10080 =
+  7 days; if they name a past time today, assume tomorrow). follow_kind =
+  what the reminder is about. The app WILL alert them and follow up —
+  NEVER say you can't set reminders.
 - reply: 1-2 warm sentences in ${langName}. With an action, recap what
   you understood (with the numbers, mark meal nutrition as approximate)
   and invite them to confirm below. NEVER claim it is already saved.`;
@@ -266,7 +274,7 @@ Rules:
       if (!parsed || typeof parsed.reply !== 'string') {
         return json({ error: 'AI returned invalid JSON', raw: text }, 502);
       }
-      const VALID_TYPES = ['insulin', 'glucose', 'meal', 'activity', 'measure'];
+      const VALID_TYPES = ['insulin', 'glucose', 'meal', 'activity', 'measure', 'reminder'];
       const action =
         parsed.action &&
         typeof parsed.action === 'object' &&
@@ -340,6 +348,11 @@ insulin did I take", answer precisely from this data):
 ${healthData || profileContext}
 
 Rules:
+- The app CAN log entries and set reminders when the patient states them
+  ("I took 6 units", "remind me in 1 hour to take my insulin") — a green
+  confirmation card appears in the chat right under your answer. NEVER
+  say you can't log entries or set reminders; instead tell the patient
+  to confirm the card shown below your message.
 - BE CONCRETELY HELPFUL — never refuse to engage. When the patient asks
   your opinion about their data (meals, insulin taken, glucose), ANALYSE
   the PATIENT DATA above and give a clear, practical answer: what looks

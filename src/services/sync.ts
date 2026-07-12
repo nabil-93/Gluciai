@@ -2,6 +2,8 @@ import { isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import type {
   ActivityLog,
+  AiReminder,
+  AppEvent,
   ChatMessage,
   GlucoseLog,
   InsulinLog,
@@ -101,6 +103,8 @@ const INSULIN_COLS = 'id,user_id,insulin_type,dose,notes,created_at';
 const MEAL_COLS = 'id,user_id,image_url,result,created_at';
 const ACTIVITY_COLS = 'id,user_id,kind,duration_min,intensity,notes,created_at';
 const MEASURE_COLS = 'id,user_id,kind,value,unit,created_at';
+const REMINDER_COLS = 'id,user_id,message,due_at,follow_kind,status,created_at';
+const EVENT_COLS = 'id,user_id,kind,payload,created_at';
 
 const mapGlucose = (r: any): GlucoseLog => ({
   id: r.id,
@@ -148,6 +152,24 @@ const mapMeasure = (r: any): MeasureLog => ({
   created_at: r.created_at,
 });
 
+const mapReminder = (r: any): AiReminder => ({
+  id: r.id,
+  user_id: r.user_id,
+  message: r.message ?? '',
+  due_at: r.due_at,
+  follow_kind: r.follow_kind ?? 'other',
+  status: r.status ?? 'pending',
+  created_at: r.created_at,
+});
+
+const mapEvent = (r: any): AppEvent => ({
+  id: r.id,
+  user_id: r.user_id,
+  kind: r.kind,
+  payload: r.payload ?? {},
+  created_at: r.created_at,
+});
+
 /**
  * Pull the signed-in user's complete history from Supabase and replace the
  * local store with it. Returns true when the store was hydrated. Safe to
@@ -171,7 +193,7 @@ export async function hydrateFromServer(): Promise<boolean> {
     prevState.accountUserId !== null && prevState.accountUserId !== uid;
 
   try {
-    const [prof, glu, ins, meals, act, meas, chat] = await Promise.all([
+    const [prof, glu, ins, meals, act, meas, chat, rem, evts] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
       supabase
         .from('glucose_logs')
@@ -209,6 +231,18 @@ export async function hydrateFromServer(): Promise<boolean> {
         .eq('user_id', uid)
         .order('created_at', { ascending: false })
         .limit(120),
+      supabase
+        .from('ai_reminders')
+        .select(REMINDER_COLS)
+        .eq('user_id', uid)
+        .order('due_at', { ascending: false })
+        .limit(200),
+      supabase
+        .from('event_logs')
+        .select(EVENT_COLS)
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+        .limit(1000),
     ]);
 
     // Never replace local data from a partial read (flaky network / RLS
@@ -220,7 +254,9 @@ export async function hydrateFromServer(): Promise<boolean> {
       meals.error ||
       act.error ||
       meas.error ||
-      chat.error
+      chat.error ||
+      rem.error ||
+      evts.error
     ) {
       return false;
     }
@@ -230,12 +266,14 @@ export async function hydrateFromServer(): Promise<boolean> {
     let mealRows = meals.data ?? [];
     let activityRows = act.data ?? [];
     let measureRows = meas.data ?? [];
+    let reminderRows = rem.data ?? [];
+    let eventRows = evts.data ?? [];
 
     // Offline saves from THIS account get pushed before the store is
     // replaced (another account's leftovers are wiped, never re-pushed).
     // Dedup against the pull so nothing lands on the server twice.
     if (!switched) {
-      const [g2, i2, m2, a2, x2] = await Promise.all([
+      const [g2, i2, m2, a2, x2, r2, e2] = await Promise.all([
         pushRows(
           'glucose_logs',
           missingOnServer(
@@ -322,6 +360,36 @@ export async function hydrateFromServer(): Promise<boolean> {
           })),
           MEASURE_COLS
         ),
+        pushRows(
+          'ai_reminders',
+          missingOnServer(
+            prevState.aiReminders,
+            reminderRows,
+            (l, s) => s.message === l.message && s.due_at === l.due_at
+          ).map((r) => ({
+            user_id: uid,
+            message: r.message,
+            due_at: r.due_at,
+            follow_kind: r.follow_kind,
+            status: r.status,
+            created_at: r.created_at,
+          })),
+          REMINDER_COLS
+        ),
+        pushRows(
+          'event_logs',
+          missingOnServer(
+            prevState.eventLogs,
+            eventRows,
+            (l, s) => s.kind === l.kind
+          ).map((e) => ({
+            user_id: uid,
+            kind: e.kind,
+            payload: e.payload,
+            created_at: e.created_at,
+          })),
+          EVENT_COLS
+        ),
       ]);
 
       glucoseRows = [...glucoseRows, ...g2].sort(desc);
@@ -329,6 +397,8 @@ export async function hydrateFromServer(): Promise<boolean> {
       mealRows = [...mealRows, ...m2].sort(desc);
       activityRows = [...activityRows, ...a2].sort(desc);
       measureRows = [...measureRows, ...x2].sort(desc);
+      reminderRows = [...reminderRows, ...r2];
+      eventRows = [...eventRows, ...e2].sort(desc);
     }
 
     const state = useAppStore.getState();
@@ -347,6 +417,8 @@ export async function hydrateFromServer(): Promise<boolean> {
         meals: mealRows.map(mapMeal),
         activityLogs: activityRows.map(mapActivity),
         measureLogs: measureRows.map(mapMeasure),
+        aiReminders: reminderRows.map(mapReminder),
+        eventLogs: eventRows.map(mapEvent),
         chatMessages: (chat.data ?? [])
           .reverse()
           .map(
