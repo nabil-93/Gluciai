@@ -43,6 +43,7 @@ function Icon({ name, color = '#19C37D' }: { name: string; color?: string }) {
       'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c-2.5 2-2.5 16 0 18m0-18c2.5 2 2.5 16 0 18M3.5 9h17M3.5 15h17',
     camera:
       'M4 8h3l1.5-2h7L17 8h3v11H4V8Zm8 3.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
+    star: 'M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.9L12 17.8 6.8 19.2l1-5.9L3.5 9.2l5.9-.9L12 3Z',
   };
   const strokeW = name === 'shield' || name === 'heart' ? 1.7 : 1.8;
   return (
@@ -348,6 +349,31 @@ export default function ProfileScreen() {
           disabled={savedFlash}
         />
 
+        {/* Subscription → free-plan / support message */}
+        <View style={{ marginTop: 22 }}>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: '#FFF6E0' }]}>
+              <Icon name="star" color="#E8930C" />
+            </View>
+            <Text style={styles.sectionTitle}>{t('profile.sectionPlan')}</Text>
+          </View>
+          <Pressable
+            onPress={() => router.push('/subscription' as any)}
+            style={styles.planCard}
+          >
+            <View style={styles.planIcon}>
+              <Text style={{ fontSize: 20 }}>⭐</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.planTitle}>{t('profile.planRowTitle')}</Text>
+              <Text style={styles.planSub} numberOfLines={2}>
+                {t('profile.planRowSub')}
+              </Text>
+            </View>
+            <Text style={styles.planArrow}>›</Text>
+          </Pressable>
+        </View>
+
         {/* Security */}
         <Section icon="shield" title={t('profile.sectionSecurity')}>
           <Field
@@ -644,6 +670,35 @@ const styles = StyleSheet.create({
   pwMsg: { fontSize: 13, fontWeight: '600' },
   pwOk: { color: colors.primary },
   pwErr: { color: colors.danger },
+
+  planCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    padding: 15,
+    borderWidth: 1.5,
+    borderColor: '#FCE8B8',
+    ...shadows.soft,
+  },
+  planIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#FFF6E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planTitle: { fontSize: 14.5, fontWeight: '800', color: colors.text },
+  planSub: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  planArrow: { fontSize: 24, fontWeight: '700', color: '#C9A24B' },
 
   primaryBtn: {
     height: 54,

@@ -572,7 +572,10 @@
     "deleteWord": "LÖSCHEN",
     "cancel": "Abbrechen",
     "confirm": "Bestätigen",
-    "error": "Ein Fehler ist aufgetreten."
+    "error": "Ein Fehler ist aufgetreten.",
+    "sectionPlan": "Abo",
+    "planRowTitle": "Mein Abo",
+    "planRowSub": "Kostenlose Version · alle Funktionen freischalten"
   },
   "log": {
     "glucoseTitle": "Blutzucker erfassen",
@@ -655,7 +658,11 @@
     "quotaMessage": "Du hast diesen Monat alle deine Sprachanruf-Minuten verbraucht.",
     "quotaNote": "Deine Minuten werden nächsten Monat zurückgesetzt, oder kontaktiere den Support für mehr.",
     "contactWa": "Support kontaktieren",
-    "waMessage": "Hallo, ich möchte „{{feature}}“ in der GlucoAI-App freischalten. Danke."
+    "waMessage": "Hallo, ich möchte „{{feature}}“ in der GlucoAI-App freischalten. Danke.",
+    "planTitle": "Kostenlose Version",
+    "planFeature": "Dein Abo",
+    "planMessage": "Du nutzt GlucoAI in der kostenlosen Version. Um alle Funktionen freizuschalten (Scanner, KI-Chat, Sprachanruf…), kontaktiere den Support.",
+    "planNote": "Auf die Vollversion upgraden — kontaktiere den Support per WhatsApp."
   },
   "glucosePage": {
     "title": "Blutzucker",
@@ -828,5 +835,13 @@
     "lunch": "Mittag",
     "dinner": "Abendessen",
     "snack": "Snack"
+  },
+  "plan": {
+    "welcomeTitle": "Willkommen bei GlucoAI 👋",
+    "welcomeBody": "Du startest in der kostenlosen Version. Um alles zu nutzen — Mahlzeiten-Scanner, KI-Assistent, Sprachanruf, Insulinberechnung — wechsle zur Vollversion.",
+    "freeBadge": "Kostenlose Version",
+    "upgrade": "Zur Vollversion wechseln",
+    "later": "Später",
+    "waMessage": "Hallo, ich möchte zur Vollversion von GlucoAI wechseln. Danke."
   }
 }

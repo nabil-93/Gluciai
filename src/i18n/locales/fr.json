@@ -572,7 +572,10 @@
     "deleteWord": "SUPPRIMER",
     "cancel": "Annuler",
     "confirm": "Confirmer",
-    "error": "Une erreur est survenue."
+    "error": "Une erreur est survenue.",
+    "sectionPlan": "Abonnement",
+    "planRowTitle": "Mon abonnement",
+    "planRowSub": "Version gratuite · débloquez toutes les fonctionnalités"
   },
   "log": {
     "glucoseTitle": "Enregistrer la glycémie",
@@ -655,7 +658,11 @@
     "quotaMessage": "Tu as utilisé toutes tes minutes d'appel vocal pour ce mois-ci.",
     "quotaNote": "Tes minutes se rechargent le mois prochain, ou contacte le support pour en ajouter.",
     "contactWa": "Contacter le support",
-    "waMessage": "Bonjour, je souhaite activer « {{feature}} » dans l'application GlucoAI. Merci."
+    "waMessage": "Bonjour, je souhaite activer « {{feature}} » dans l'application GlucoAI. Merci.",
+    "planTitle": "Version gratuite",
+    "planFeature": "Votre abonnement",
+    "planMessage": "Vous utilisez GlucoAI en version gratuite. Pour débloquer toutes les fonctionnalités (scanner, chat IA, appel vocal…), contactez le support.",
+    "planNote": "Passez à la version complète — contactez le support sur WhatsApp."
   },
   "glucosePage": {
     "title": "Glycémie",
@@ -828,5 +835,13 @@
     "lunch": "Déjeuner",
     "dinner": "Dîner",
     "snack": "Collation"
+  },
+  "plan": {
+    "welcomeTitle": "Bienvenue sur GlucoAI 👋",
+    "welcomeBody": "Vous démarrez en version gratuite. Pour profiter de tout — scanner de repas, assistant IA, appel vocal, calcul d'insuline — passez à la version complète.",
+    "freeBadge": "Version gratuite",
+    "upgrade": "Passer à la version complète",
+    "later": "Plus tard",
+    "waMessage": "Bonjour, je souhaite passer à la version complète de GlucoAI. Merci."
   }
 }

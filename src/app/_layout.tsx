@@ -139,6 +139,7 @@ export default function RootLayout() {
               options={{ presentation: 'fullScreenModal' }}
             />
             <Stack.Screen name="profile" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="subscription" options={{ presentation: 'modal' }} />
           </Stack>
         </View>
       </QueryClientProvider>

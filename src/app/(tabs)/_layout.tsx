@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { BevelTabBar } from '@/components/ui';
 import { TabBarVisibilityProvider } from '@/components/ui/TabBarVisibility';
+import { PlanWelcome } from '@/components/PlanWelcome';
 import { refreshFeatureLocks } from '@/services/features';
 import { refreshSmartReminders } from '@/services/notifications';
 import { checkReminders } from '@/services/reminders';
@@ -40,6 +41,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="activity" options={{ title: t('tabs.activity') }} />
         <Tabs.Screen name="biology" options={{ title: t('tabs.biology') }} />
       </Tabs>
+      <PlanWelcome />
     </TabBarVisibilityProvider>
   );
 }

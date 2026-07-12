@@ -572,7 +572,10 @@
     "deleteWord": "DELETE",
     "cancel": "Cancel",
     "confirm": "Confirm",
-    "error": "An error occurred."
+    "error": "An error occurred.",
+    "sectionPlan": "Subscription",
+    "planRowTitle": "My subscription",
+    "planRowSub": "Free plan · unlock every feature"
   },
   "log": {
     "glucoseTitle": "Log glucose",
@@ -655,7 +658,11 @@
     "quotaMessage": "You've used all your voice-call minutes for this month.",
     "quotaNote": "Your minutes reset next month, or contact support to add more.",
     "contactWa": "Contact support",
-    "waMessage": "Hello, I would like to activate \"{{feature}}\" in the GlucoAI app. Thank you."
+    "waMessage": "Hello, I would like to activate \"{{feature}}\" in the GlucoAI app. Thank you.",
+    "planTitle": "Free plan",
+    "planFeature": "Your subscription",
+    "planMessage": "You're using GlucoAI on the free plan. To unlock every feature (scanner, AI chat, voice call…), contact support.",
+    "planNote": "Upgrade to the full version — contact support on WhatsApp."
   },
   "glucosePage": {
     "title": "Blood glucose",
@@ -828,5 +835,13 @@
     "lunch": "Lunch",
     "dinner": "Dinner",
     "snack": "Snack"
+  },
+  "plan": {
+    "welcomeTitle": "Welcome to GlucoAI 👋",
+    "welcomeBody": "You're starting on the free plan. To enjoy everything — meal scanner, AI assistant, voice call, insulin calculation — upgrade to the full version.",
+    "freeBadge": "Free plan",
+    "upgrade": "Upgrade to the full version",
+    "later": "Later",
+    "waMessage": "Hello, I would like to upgrade to the full version of GlucoAI. Thank you."
   }
 }

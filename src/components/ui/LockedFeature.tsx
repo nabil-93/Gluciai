@@ -60,18 +60,30 @@ export function LockedScreen({
   variant = 'locked',
 }: {
   featureLabel: string;
-  variant?: 'locked' | 'quota';
+  variant?: 'locked' | 'quota' | 'plan';
 }) {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
   const isQuota = variant === 'quota';
+  const isPlan = variant === 'plan';
 
   const close = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
   };
+
+  const title = isQuota
+    ? t('locked.quotaTitle')
+    : isPlan
+      ? t('locked.planTitle')
+      : t('locked.title');
+  const message = isQuota
+    ? t('locked.quotaMessage')
+    : isPlan
+      ? t('locked.planMessage')
+      : t('locked.message');
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 14 }]}>
@@ -84,23 +96,23 @@ export function LockedScreen({
       </View>
 
       <View style={styles.center}>
-        <View style={styles.halo}>
+        <View style={[styles.halo, isPlan && { backgroundColor: '#e9fbf2' }]}>
           <View style={styles.haloInner}>
-            <BigLock />
+            {isPlan ? <Text style={{ fontSize: 30 }}>⭐</Text> : <BigLock />}
           </View>
         </View>
-        <Text style={styles.title}>
-          {isQuota ? t('locked.quotaTitle') : t('locked.title')}
-        </Text>
-        <Text style={styles.feature}>{featureLabel}</Text>
-        <Text style={styles.message}>
-          {isQuota ? t('locked.quotaMessage') : t('locked.message')}
-        </Text>
+        <Text style={styles.title}>{title}</Text>
+        {featureLabel ? <Text style={styles.feature}>{featureLabel}</Text> : null}
+        <Text style={styles.message}>{message}</Text>
 
         <View style={styles.noteBox}>
-          <Text style={{ fontSize: 16 }}>{isQuota ? '⏳' : '💳'}</Text>
+          <Text style={{ fontSize: 16 }}>{isQuota ? '⏳' : isPlan ? '✨' : '💳'}</Text>
           <Text style={styles.noteText}>
-            {isQuota ? t('locked.quotaNote') : t('locked.subscribeNote')}
+            {isQuota
+              ? t('locked.quotaNote')
+              : isPlan
+                ? t('locked.planNote')
+                : t('locked.subscribeNote')}
           </Text>
         </View>
 
@@ -136,12 +148,11 @@ export function LockedScreen({
   );
 }
 
-/** Small padlock chip laid over a locked entry-point card. */
+/** Small padlock chip laid over a locked entry-point card (icon only). */
 export function LockChip() {
-  const { t } = useTranslation();
   return (
     <View style={styles.chip}>
-      <Text style={styles.chipText}>🔒 {t('locked.badge')}</Text>
+      <Text style={styles.chipText}>🔒</Text>
     </View>
   );
 }

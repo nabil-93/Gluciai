@@ -56,6 +56,8 @@ interface AppState {
   aiJournal: AIJournalEntry[];
   /** ISO timestamp the user last opened the notifications (AI journal) screen */
   aiJournalSeenAt: string | null;
+  /** True once the "you're on the free plan" welcome has been shown */
+  planWelcomeShown: boolean;
   /** Features blocked for this account from the admin dashboard (feature_access) */
   lockedFeatures: string[];
   /** Reminders the patient asked the AI to set */
@@ -85,6 +87,7 @@ interface AppState {
   addAiJournalEntry: (entry: AIJournalEntry) => void;
   /** Mark the notifications screen as read (clears the unread badge) */
   markAiJournalSeen: () => void;
+  markPlanWelcomeShown: () => void;
 
   addAiReminder: (reminder: AiReminder) => void;
   updateAiReminder: (id: string, patch: Partial<AiReminder>) => void;
@@ -118,6 +121,7 @@ const initialData = {
   corrections: [] as FoodCorrection[],
   aiJournal: [] as AIJournalEntry[],
   aiJournalSeenAt: null as string | null,
+  planWelcomeShown: false,
   lockedFeatures: [] as string[],
   aiReminders: [] as AiReminder[],
   eventLogs: [] as AppEvent[],
@@ -175,6 +179,7 @@ export const useAppStore = create<AppState>()(
         }),
       markAiJournalSeen: () =>
         set({ aiJournalSeenAt: new Date().toISOString() }),
+      markPlanWelcomeShown: () => set({ planWelcomeShown: true }),
 
       addAiReminder: (reminder) =>
         set((s) => ({ aiReminders: [reminder, ...s.aiReminders] })),
@@ -208,6 +213,7 @@ export const useAppStore = create<AppState>()(
                 aiJournalSeenAt: null,
                 lockedFeatures: [],
                 activityStatus: 'active',
+                planWelcomeShown: false,
               }
             : snapshot
         ),
