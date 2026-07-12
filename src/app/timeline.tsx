@@ -99,6 +99,9 @@ export default function TimelineScreen() {
     [day, meals, insulinLogs, glucoseLogs, activityLogs, measureLogs, eventLogs]
   );
   const totals = useMemo(() => dayTotals(events), [events]);
+  // Newest at the TOP (what the patient asked for) — the AI still reads the
+  // chronological oldest→newest journal from buildDayEvents/buildAIDayJournal.
+  const feed = useMemo(() => [...events].reverse(), [events]);
 
   const low = profile?.target_low ?? 70;
   const high = profile?.target_high ?? 180;
@@ -220,9 +223,9 @@ export default function TimelineScreen() {
               </View>
             </View>
 
-            {/* ── Chronological feed ── */}
+            {/* ── Feed, newest first ── */}
             <View style={{ marginTop: 20 }}>
-              {events.map((e, idx) => (
+              {feed.map((e, idx) => (
                 <View key={e.id} style={styles.eventRow}>
                   {/* time + spine */}
                   <View style={styles.spineCol}>
@@ -234,7 +237,7 @@ export default function TimelineScreen() {
                           { backgroundColor: KIND_COLOR[e.kind] },
                         ]}
                       />
-                      {idx < events.length - 1 ? (
+                      {idx < feed.length - 1 ? (
                         <View style={styles.spineLine} />
                       ) : null}
                     </View>

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -72,6 +73,73 @@ const CHIP_KEYS = [
 ] as const;
 const CHIP_ICONS = ['💉', '🍽️', '🩸', '🏃', '⏰'] as const;
 
+const WAVE_BARS = 22;
+
+/**
+ * Live "recording" indicator: a red pulsing dot + a bank of bars that move
+ * with the patient's actual voice level. Makes it unmistakable that the mic
+ * is on and picking up sound.
+ */
+function RecordingWave({ level }: { level: number }) {
+  const { t } = useTranslation();
+  const bars = useRef(
+    Array.from({ length: WAVE_BARS }, () => new Animated.Value(0.12))
+  ).current;
+  // Plain-number mirror of each bar's target so the scroll doesn't rely on
+  // Animated's private _value (undefined on web).
+  const levels = useRef<number[]>(Array(WAVE_BARS).fill(0.12)).current;
+  const dot = useRef(new Animated.Value(1)).current;
+
+  // Pulsing red dot loop.
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(dot, { toValue: 0.3, duration: 550, useNativeDriver: true }),
+        Animated.timing(dot, { toValue: 1, duration: 550, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [dot]);
+
+  // Push the current level in at the right edge; older values scroll left.
+  useEffect(() => {
+    for (let i = 0; i < WAVE_BARS - 1; i++) levels[i] = levels[i + 1];
+    const jitter = 0.75 + Math.random() * 0.5;
+    levels[WAVE_BARS - 1] = Math.max(0.12, Math.min(1, level * jitter));
+    for (let i = 0; i < WAVE_BARS; i++) {
+      Animated.timing(bars[i], {
+        toValue: levels[i],
+        duration: 90,
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [level, bars, levels]);
+
+  return (
+    <View style={styles.waveWrap}>
+      <Animated.View style={[styles.recDot, { opacity: dot }]} />
+      <Text style={styles.recText}>{t('logger.recording')}</Text>
+      <View style={styles.waveBars}>
+        {bars.map((v, i) => (
+          <Animated.View
+            key={i}
+            style={[
+              styles.waveBar,
+              {
+                height: v.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [4, 26],
+                }),
+              },
+            ]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 interface Bubble {
   id: string;
   role: 'user' | 'assistant';
@@ -104,6 +172,7 @@ function AiLogScreen() {
   const [thinking, setThinking] = useState(false);
   const [pendingAction, setPendingAction] = useState<LoggerAction | null>(null);
   const [listening, setListening] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const recRef = useRef<VoiceNoteRecorder | null>(null);
   const recTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -248,12 +317,13 @@ function AiLogScreen() {
     const rec = recRef.current;
     recRef.current = null;
     setListening(false);
+    setMicLevel(0);
     if (!rec) return;
     if (!send) {
       rec.cancel();
       return;
     }
-    const audio = rec.stop();
+    const audio = rec.stop(); // plays the stop cue
     if (audio) void sendVoiceNote(audio);
   };
 
@@ -265,9 +335,11 @@ function AiLogScreen() {
     if (thinking) return;
     try {
       const rec = new VoiceNoteRecorder();
-      await rec.start(); // must happen inside the tap (iOS)
+      rec.onLevel = (lvl) => setMicLevel(lvl); // drives the live waveform
+      await rec.start(); // plays the start cue; must be inside the tap (iOS)
       recRef.current = rec;
       setListening(true);
+      setMicLevel(0);
       recTimerRef.current = setTimeout(() => stopRecording(true), VOICE_NOTE_MAX_MS);
     } catch {
       recRef.current = null;
@@ -372,35 +444,42 @@ function AiLogScreen() {
         </View>
       ) : null}
 
-      {/* ── Input bar ── */}
+      {/* ── Input bar (recording takes over the whole bar) ── */}
       <View
         style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 10) + 4 }]}
       >
-        {canRecord ? (
-          <Pressable
-            onPress={toggleMic}
-            style={[styles.micBtn, listening && styles.micBtnOn]}
-          >
-            <MicIcon active={listening} />
-          </Pressable>
-        ) : null}
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          editable={!listening}
-          placeholder={listening ? t('logger.recording') : t('logger.placeholder')}
-          placeholderTextColor="#98a1af"
-          style={styles.input}
-          multiline
-          onSubmitEditing={() => send(input)}
-        />
-        <Pressable
-          onPress={() => send(input)}
-          style={[styles.sendBtn, (!input.trim() || thinking) && { opacity: 0.5 }]}
-          disabled={!input.trim() || thinking}
-        >
-          <SendIcon />
-        </Pressable>
+        {listening ? (
+          <>
+            <RecordingWave level={micLevel} />
+            <Pressable onPress={() => stopRecording(true)} style={styles.stopBtn}>
+              <View style={styles.stopSquare} />
+            </Pressable>
+          </>
+        ) : (
+          <>
+            {canRecord ? (
+              <Pressable onPress={toggleMic} style={styles.micBtn}>
+                <MicIcon active={false} />
+              </Pressable>
+            ) : null}
+            <TextInput
+              value={input}
+              onChangeText={setInput}
+              placeholder={t('logger.placeholder')}
+              placeholderTextColor="#98a1af"
+              style={styles.input}
+              multiline
+              onSubmitEditing={() => send(input)}
+            />
+            <Pressable
+              onPress={() => send(input)}
+              style={[styles.sendBtn, (!input.trim() || thinking) && { opacity: 0.5 }]}
+              disabled={!input.trim() || thinking}
+            >
+              <SendIcon />
+            </Pressable>
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -496,7 +575,7 @@ const styles = StyleSheet.create({
 
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: 10,
     paddingHorizontal: 16,
     paddingTop: 8,
@@ -512,7 +591,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  micBtnOn: { backgroundColor: '#ef4444' },
+
+  /* Recording indicator (replaces the input while listening) */
+  waveWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 44,
+    backgroundColor: '#fdeaea',
+    borderRadius: 22,
+    paddingHorizontal: 14,
+  },
+  recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#ef4444' },
+  recText: { fontFamily: F700, fontSize: 12, color: '#c62828' },
+  waveBars: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 2.5,
+    height: 30,
+  },
+  waveBar: {
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: '#ef4444',
+  },
+  stopBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  stopSquare: { width: 15, height: 15, borderRadius: 3, backgroundColor: '#ffffff' },
   input: {
     flex: 1,
     minHeight: 44,

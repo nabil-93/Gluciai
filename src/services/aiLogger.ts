@@ -494,17 +494,80 @@ function pcmToWav(pcm: Uint8Array): Uint8Array {
 
 export const VOICE_NOTE_MAX_MS = 30_000;
 
+/** Short in-app tones so the patient HEARS recording start/stop, generated
+ *  with WebAudio (no asset files). Non-blocking and best-effort. */
+export function playCue(kind: 'start' | 'stop') {
+  if (typeof window === 'undefined') return;
+  try {
+    const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const now = ctx.currentTime;
+    // start = rising two-note "ding"; stop = falling two-note "dong".
+    const notes =
+      kind === 'start'
+        ? [
+            { f: 660, t: 0, d: 0.09 },
+            { f: 990, t: 0.1, d: 0.13 },
+          ]
+        : [
+            { f: 780, t: 0, d: 0.09 },
+            { f: 520, t: 0.1, d: 0.14 },
+          ];
+    for (const n of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = n.f;
+      const at = now + n.t;
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.18, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + n.d);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(at);
+      osc.stop(at + n.d + 0.02);
+    }
+    // Release the context shortly after the cue finished.
+    setTimeout(() => ctx.close().catch(() => {}), 500);
+  } catch {}
+}
+
 export class VoiceNoteRecorder {
   private mic: MicStreamer | null = null;
   private chunks: Uint8Array[] = [];
+  /** Live input level 0..1 for the animated waveform (throttled ~60 ms). */
+  onLevel: ((level: number) => void) | null = null;
+  private lastLevelEmit = 0;
 
   /** Must be called from a user tap (iOS audio-context rule). */
   async start(): Promise<void> {
     this.chunks = [];
+    playCue('start');
     this.mic = new MicStreamer();
     await this.mic.start((b64) => {
-      this.chunks.push(b64ToBytes(b64));
+      const bytes = b64ToBytes(b64);
+      this.chunks.push(bytes);
+      this.emitLevel(bytes);
     });
+  }
+
+  /** RMS of the 16-bit PCM chunk → a normalized level for the UI meter. */
+  private emitLevel(bytes: Uint8Array) {
+    if (!this.onLevel) return;
+    const now = Date.now();
+    if (now - this.lastLevelEmit < 60) return;
+    this.lastLevelEmit = now;
+    const i16 = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length >> 1);
+    let sum = 0;
+    for (let i = 0; i < i16.length; i++) {
+      const v = i16[i] / 32768;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / Math.max(1, i16.length));
+    // Map a useful speech range (~0.01–0.3 RMS) to 0..1, lightly curved.
+    const level = Math.min(1, Math.max(0, (rms - 0.008) / 0.22));
+    this.onLevel(Math.pow(level, 0.6));
   }
 
   /** Stop and return the WAV voice note (null when too short ~<0.4 s). */
@@ -513,6 +576,7 @@ export class VoiceNoteRecorder {
       this.mic?.stop();
     } catch {}
     this.mic = null;
+    playCue('stop');
     const total = this.chunks.reduce((s, c) => s + c.length, 0);
     if (total < 12_000) return null;
     const pcm = new Uint8Array(total);
@@ -530,6 +594,7 @@ export class VoiceNoteRecorder {
       this.mic?.stop();
     } catch {}
     this.mic = null;
+    playCue('stop');
     this.chunks = [];
   }
 }
