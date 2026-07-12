@@ -302,6 +302,38 @@ function AiCallScreen() {
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
     savedTimerRef.current = setTimeout(() => setSavedNotice(null), 6000);
   };
+
+  /* ── Dedup guards against double-logging on a call ──
+   * Gemini Live can resend the SAME tool call (same id) across turn
+   * boundaries, and the patient may re-confirm ("yes, add it") which
+   * produces a NEW id but the same entry. We drop both:
+   *  - loggedCallIdsRef: every function-call id we already handled
+   *  - recentSigRef: content signature → timestamp, ignored if repeated
+   *    within a short window (same insulin dose / same note text, etc.) */
+  const loggedCallIdsRef = useRef<Set<string>>(new Set());
+  const recentSigRef = useRef<Map<string, number>>(new Map());
+  const DUP_WINDOW_MS = 90_000;
+
+  const actionSignature = (a: ReturnType<typeof actionFromFunctionCall>) => {
+    if (!a) return '';
+    switch (a.type) {
+      case 'insulin':
+        return `insulin:${a.dose}:${a.insulin_type}`;
+      case 'glucose':
+        return `glucose:${a.value}`;
+      case 'meal':
+        return `meal:${a.name.toLowerCase().trim()}`;
+      case 'activity':
+        return `activity:${a.kind}:${a.duration_min}`;
+      case 'measure':
+        return `measure:${a.kind}:${a.value}`;
+      case 'reminder':
+        return `reminder:${a.message.toLowerCase().trim()}`;
+      case 'note':
+        return `note:${a.text.toLowerCase().trim()}`;
+    }
+  };
+
   useEffect(
     () => () => {
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
@@ -443,8 +475,8 @@ ${LIVE_LOG_INSTRUCTION}`;
       },
       onToolCall: (calls) => {
         // The model (after confirming verbally with the patient) asks the
-        // app to log an entry. Save it through the normal pipeline, then
-        // answer the tool so the AI can confirm out loud.
+        // app to log an entry. Save it once, then answer the tool so the AI
+        // can confirm out loud. Guarded against duplicate tool calls.
         if (endedRef.current) return;
         bumpActivity();
         for (const c of calls) {
@@ -455,6 +487,36 @@ ${LIVE_LOG_INSTRUCTION}`;
             ]);
             continue;
           }
+
+          // Same tool-call id already handled → just re-ack, don't save.
+          if (c.id && loggedCallIdsRef.current.has(c.id)) {
+            liveRef.current?.sendToolResponse([
+              { id: c.id, name: c.name, response: { ok: true, already_saved: true } },
+            ]);
+            continue;
+          }
+          // Same content saved moments ago (patient re-confirmed) → skip the
+          // duplicate but tell the model it's already recorded.
+          const sig = actionSignature(action);
+          const now = Date.now();
+          const last = recentSigRef.current.get(sig);
+          if (sig && last && now - last < DUP_WINDOW_MS) {
+            if (c.id) loggedCallIdsRef.current.add(c.id);
+            liveRef.current?.sendToolResponse([
+              {
+                id: c.id,
+                name: c.name,
+                response: { ok: true, already_saved: true, note: 'already recorded, do not add again' },
+              },
+            ]);
+            continue;
+          }
+
+          // Reserve the signature + id BEFORE the async save so a second
+          // call arriving during the save can't slip a duplicate through.
+          if (sig) recentSigRef.current.set(sig, now);
+          if (c.id) loggedCallIdsRef.current.add(c.id);
+
           void applyLoggerAction(action)
             .then(() => {
               liveRef.current?.sendToolResponse([
@@ -472,6 +534,8 @@ ${LIVE_LOG_INSTRUCTION}`;
               });
             })
             .catch(() => {
+              // Save failed — release the reservation so a retry can work.
+              if (sig) recentSigRef.current.delete(sig);
               liveRef.current?.sendToolResponse([
                 { id: c.id, name: c.name, response: { ok: false, error: 'save failed' } },
               ]);
