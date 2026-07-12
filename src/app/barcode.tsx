@@ -22,10 +22,8 @@ import {
 } from '@/components/WebBarcodeScanner';
 import { saveMeal } from '@/services/data';
 import { scoreMeal } from '@/services/nutrition/mealScore';
-import {
-  lookupBarcode,
-  type BarcodeProduct,
-} from '@/services/nutrition/providers/openfoodfacts';
+import { lookupBarcodeMulti } from '@/services/nutrition/providers/barcodeLookup';
+import type { BarcodeProduct } from '@/services/nutrition/providers/openfoodfacts';
 import { colors, shadows } from '@/theme';
 import type { NutritionResult } from '@/types';
 
@@ -44,6 +42,9 @@ export default function BarcodeScreen() {
   const [saved, setSaved] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  // When a barcode is found but has NO nutrition anywhere, we still show the
+  // product name and let the patient type the values from the label.
+  const [nutritionKnown, setNutritionKnown] = useState(true);
   const scannedRef = useRef(false);
 
   const isWeb = Platform.OS === 'web';
@@ -58,9 +59,10 @@ export default function BarcodeScreen() {
     setLoading(true);
     setNotFound(null);
     try {
-      const p = await lookupBarcode(code.trim());
+      const p = await lookupBarcodeMulti(code.trim());
       if (p) {
         setProduct(p);
+        setNutritionKnown(p.nutritionKnown);
         setGrams(p.servingGrams ?? 100);
       } else {
         setNotFound(code.trim());
@@ -75,6 +77,15 @@ export default function BarcodeScreen() {
     if (scannedRef.current || product || loading) return;
     scannedRef.current = true;
     lookup(data);
+  };
+
+  // Edit one per-100g value when nutrition is unknown (patient reads the
+  // label). Values stay per 100 g; the portion scaler does the rest.
+  const setPer100 = (key: keyof BarcodeProduct['per100g'], text: string) => {
+    const v = Math.max(0, parseFloat(text.replace(',', '.')) || 0);
+    setProduct((prev) =>
+      prev ? { ...prev, per100g: { ...prev.per100g, [key]: v } } : prev
+    );
   };
 
   // Scaled values + diabetes verdict
@@ -276,10 +287,39 @@ export default function BarcodeScreen() {
                   <Text style={styles.productBrand}>{product.brand}</Text>
                 ) : null}
                 <Text style={styles.productSource}>
-                  Source : Open Food Facts · {product.barcode}
+                  {t('barcode.source')} · {product.barcode}
                 </Text>
               </View>
             </BevelCard>
+
+            {/* Nutrition unknown → let the patient type it from the label */}
+            {!nutritionKnown ? (
+              <View style={styles.editBanner}>
+                <Text style={styles.editBannerTitle}>
+                  ✏️ {t('barcode.noValuesTitle')}
+                </Text>
+                <Text style={styles.editBannerSub}>
+                  {t('barcode.noValuesSub')}
+                </Text>
+                <View style={styles.editRow}>
+                  <EditField
+                    label={t('barcode.kcal100')}
+                    value={product.per100g.calories}
+                    onChange={(v) => setPer100('calories', v)}
+                  />
+                  <EditField
+                    label={t('barcode.carbs100')}
+                    value={product.per100g.carbs}
+                    onChange={(v) => setPer100('carbs', v)}
+                  />
+                  <EditField
+                    label={t('barcode.sugar100')}
+                    value={product.per100g.sugar}
+                    onChange={(v) => setPer100('sugar', v)}
+                  />
+                </View>
+              </View>
+            ) : null}
 
             {/* Portion selector */}
             <BevelCard style={{ marginTop: 12 }}>
@@ -384,6 +424,31 @@ function Value({
   );
 }
 
+/** Editable per-100g number field used when nutrition is unknown. */
+function EditField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (text: string) => void;
+}) {
+  return (
+    <View style={styles.editField}>
+      <Text style={styles.editFieldLabel}>{label}</Text>
+      <TextInput
+        defaultValue={value ? String(value) : ''}
+        onChangeText={onChange}
+        keyboardType="numeric"
+        placeholder="0"
+        placeholderTextColor={colors.textPlaceholder}
+        style={styles.editFieldInput}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   headRow: {
@@ -456,6 +521,36 @@ const styles = StyleSheet.create({
   productName: { fontSize: 16.5, fontWeight: '750' as any, color: colors.text },
   productBrand: { marginTop: 2, fontSize: 13.5, color: colors.textSecondary },
   productSource: { marginTop: 4, fontSize: 12, color: colors.carbs, fontWeight: '600' },
+  editBanner: {
+    marginTop: 12,
+    backgroundColor: '#fff7e6',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#f5c86a',
+    padding: 14,
+  },
+  editBannerTitle: { fontSize: 14.5, fontWeight: '800' as any, color: '#8a5a00' },
+  editBannerSub: {
+    marginTop: 3,
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: '#8a6a2a',
+  },
+  editRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  editField: { flex: 1 },
+  editFieldLabel: { fontSize: 11.5, fontWeight: '600', color: '#8a6a2a', marginBottom: 5 },
+  editFieldInput: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#eddca8',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+  },
   portionTitle: { fontSize: 15, fontWeight: '650' as any, color: colors.text },
   portionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   pChip: {

@@ -812,8 +812,14 @@
     "orType": "Ou saisissez-le manuellement",
     "example": "ex : 3017620422003",
     "searching": "Recherche dans Open Food Facts…",
-    "notFound": "Produit {{code}} introuvable dans Open Food Facts. Essayez le scanner de repas à la place.",
+    "notFound": "Produit {{code}} introuvable dans nos bases. Saisissez le nom via le scanner de repas, ou tapez les valeurs.",
     "cameraError": "Impossible d'accéder à la caméra — saisissez le code manuellement.",
-    "scanWithCamera": "Scanner avec la caméra"
+    "scanWithCamera": "Scanner avec la caméra",
+    "source": "Bases : Open Food Facts · USDA · UPC",
+    "noValuesTitle": "Produit trouvé, sans valeurs nutritionnelles",
+    "noValuesSub": "Saisissez les valeurs pour 100 g depuis l’étiquette du produit.",
+    "kcal100": "kcal /100g",
+    "carbs100": "Glucides /100g",
+    "sugar100": "Sucre /100g"
   }
 }

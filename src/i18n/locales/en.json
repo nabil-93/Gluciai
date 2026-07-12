@@ -812,8 +812,14 @@
     "orType": "Or enter it manually",
     "example": "e.g. 3017620422003",
     "searching": "Searching Open Food Facts…",
-    "notFound": "Product {{code}} not found in Open Food Facts. Try the meal scanner instead.",
+    "notFound": "Product {{code}} not found in our databases. Enter the name via the meal scanner, or type the values.",
     "cameraError": "Can't access the camera — enter the code manually.",
-    "scanWithCamera": "Scan with camera"
+    "scanWithCamera": "Scan with camera",
+    "source": "Databases: Open Food Facts · USDA · UPC",
+    "noValuesTitle": "Product found, without nutrition values",
+    "noValuesSub": "Enter the values per 100 g from the product label.",
+    "kcal100": "kcal /100g",
+    "carbs100": "Carbs /100g",
+    "sugar100": "Sugar /100g"
   }
 }

@@ -812,8 +812,14 @@
     "orType": "Oder manuell eingeben",
     "example": "z. B. 3017620422003",
     "searching": "Suche in Open Food Facts…",
-    "notFound": "Produkt {{code}} nicht in Open Food Facts gefunden. Nutze stattdessen den Mahlzeiten-Scanner.",
+    "notFound": "Produkt {{code}} in unseren Datenbanken nicht gefunden. Nutze den Mahlzeiten-Scanner oder gib die Werte ein.",
     "cameraError": "Kein Kamerazugriff — gib den Code manuell ein.",
-    "scanWithCamera": "Mit der Kamera scannen"
+    "scanWithCamera": "Mit der Kamera scannen",
+    "source": "Quellen: Open Food Facts · USDA · UPC",
+    "noValuesTitle": "Produkt gefunden, ohne Nährwerte",
+    "noValuesSub": "Gib die Werte pro 100 g vom Etikett ein.",
+    "kcal100": "kcal /100g",
+    "carbs100": "Kohlenh. /100g",
+    "sugar100": "Zucker /100g"
   }
 }
