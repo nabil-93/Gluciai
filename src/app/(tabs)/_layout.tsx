@@ -6,16 +6,20 @@ import { BevelTabBar } from '@/components/ui';
 import { TabBarVisibilityProvider } from '@/components/ui/TabBarVisibility';
 import { refreshFeatureLocks } from '@/services/features';
 import { refreshSmartReminders } from '@/services/notifications';
+import { hydrateFromServer } from '@/services/sync';
 import { colors } from '@/theme';
 
 export default function TabsLayout() {
   const { t } = useTranslation();
 
   // Smart Notification Engine: build reminders from the user's habits.
-  // Also sync the per-account feature locks set from the admin dashboard.
+  // Also sync the per-account feature locks set from the admin dashboard,
+  // and refresh the store from the server (source of truth) — this is what
+  // restores the full history after a reinstall or on a second device.
   useEffect(() => {
     refreshSmartReminders();
     refreshFeatureLocks();
+    hydrateFromServer();
   }, []);
 
   return (

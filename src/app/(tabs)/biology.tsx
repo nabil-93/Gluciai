@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BevelCard, ChevronRight, PlusGlyph } from '@/components/ui';
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
-import { saveMeasure } from '@/services/data';
+import { deleteMeasure, saveMeasure } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, typography } from '@/theme';
 import type { MeasureKind } from '@/types';
@@ -41,7 +41,7 @@ export default function BiologyScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const { onScroll } = useTabBarScroll();
-  const { measureLogs, removeMeasureLog, profile } = useAppStore();
+  const { measureLogs, profile } = useAppStore();
   const locale = i18n.language;
 
   const [openKind, setOpenKind] = useState<MeasureKind | null>(null);
@@ -207,7 +207,7 @@ export default function BiologyScreen() {
                         })}
                       </Text>
                       <Pressable
-                        onPress={() => removeMeasureLog(m.id)}
+                        onPress={() => deleteMeasure(m.id)}
                         hitSlop={8}
                       >
                         <Text style={styles.historyDelete}>✕</Text>
@@ -218,7 +218,7 @@ export default function BiologyScreen() {
               ) : null}
               {latest ? (
                 <Pressable
-                  onPress={() => removeMeasureLog(latest.id)}
+                  onPress={() => deleteMeasure(latest.id)}
                   style={styles.deleteLatest}
                   hitSlop={6}
                 >

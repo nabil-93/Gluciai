@@ -16,6 +16,7 @@ import {
   PlusGlyph,
   PremiumEmptyState,
 } from '@/components/ui';
+import { deleteInsulin } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
 import type { InsulinType } from '@/types';
@@ -38,7 +39,7 @@ function isToday(iso: string) {
 export default function InsulinScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { insulinLogs, removeInsulinLog } = useAppStore();
+  const { insulinLogs } = useAppStore();
 
   const today = useMemo(
     () => insulinLogs.filter((l) => isToday(l.created_at)),
@@ -203,7 +204,7 @@ export default function InsulinScreen() {
                   })}
                 </Text>
                 <Pressable
-                  onPress={() => removeInsulinLog(l.id)}
+                  onPress={() => deleteInsulin(l.id)}
                   hitSlop={8}
                   style={styles.deleteBtn}
                 >

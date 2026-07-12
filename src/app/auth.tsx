@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isDemoMode, supabase } from '@/lib/supabase';
+import { hydrateFromServer } from '@/services/sync';
 import { useAppStore } from '@/store/useAppStore';
 
 const N500 = 'Nunito_500Medium';
@@ -154,6 +155,10 @@ export default function AuthScreen() {
           password,
         });
         if (err) throw err;
+        // Pull the account's full history (profile, meals + photos, insulin,
+        // glucose, activity, measures, chat) so a fresh install / new phone
+        // shows everything the user ever recorded.
+        await hydrateFromServer();
       }
       goAfterAuth(!isRegister);
     } catch (e: any) {

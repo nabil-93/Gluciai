@@ -24,6 +24,47 @@ async function currentUserId(): Promise<string> {
   return data.user?.id ?? 'demo-user';
 }
 
+/**
+ * Insert a row and return its server id + timestamp so the local copy uses
+ * THEM — that's what lets deletes reach the server and lets the sync layer
+ * tell synced rows (uuid) from offline ones (local timestamp id). Returns
+ * null offline / in demo mode; the caller falls back to a local id and the
+ * row is re-pushed by hydrateFromServer() on the next app open.
+ */
+async function insertReturning(
+  table: string,
+  payload: Record<string, unknown>
+): Promise<{ id: string; created_at: string } | null> {
+  if (isDemoMode || !supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from(table)
+      .insert(payload)
+      .select('id, created_at')
+      .single();
+    if (error || !data) return null;
+    return data as { id: string; created_at: string };
+  } catch {
+    return null;
+  }
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Best-effort server delete — only rows that actually live there (uuid). */
+function remoteDelete(table: string, rowId: string) {
+  if (isDemoMode || !supabase || !UUID_RE.test(rowId)) return;
+  supabase
+    .from(table)
+    .delete()
+    .eq('id', rowId)
+    .then(
+      () => {},
+      () => {}
+    );
+}
+
 /** Base64 → Uint8Array (atob is available on RN/Hermes and web). */
 function decodeBase64(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -65,19 +106,11 @@ export async function saveMeal(
   let remoteUrl: string | null = null;
   if (imageBase64) remoteUrl = await uploadMealPhoto(user_id, imageBase64);
 
-  const meal: MealScan = {
-    id: id(),
-    user_id,
-    image_url: remoteUrl ?? imageUri,
-    result,
-    created_at: new Date().toISOString(),
-  };
-  useAppStore.getState().addMeal(meal);
-
-  if (!isDemoMode && supabase && user_id !== 'demo-user') {
+  let row: { id: string; created_at: string } | null = null;
+  if (user_id !== 'demo-user') {
     const httpUrl =
       remoteUrl ?? (imageUri && /^https?:/i.test(imageUri) ? imageUri : null);
-    await supabase.from('meal_scans').insert({
+    row = await insertReturning('meal_scans', {
       user_id,
       image_url: httpUrl,
       result,
@@ -91,24 +124,23 @@ export async function saveMeal(
       confidence: result.confidence,
     });
   }
+
+  const meal: MealScan = {
+    id: row?.id ?? id(),
+    user_id,
+    image_url: remoteUrl ?? imageUri,
+    result,
+    created_at: row?.created_at ?? new Date().toISOString(),
+  };
+  useAppStore.getState().addMeal(meal);
   return meal;
 }
 
 export async function saveGlucose(value: number, notes?: string) {
   const user_id = await currentUserId();
-  const log: GlucoseLog = {
-    id: id(),
-    user_id,
-    value,
-    unit: 'mg/dL',
-    source: 'manual',
-    notes,
-    created_at: new Date().toISOString(),
-  };
-  useAppStore.getState().addGlucoseLog(log);
-
-  if (!isDemoMode && supabase && user_id !== 'demo-user') {
-    await supabase.from('glucose_logs').insert({
+  let row: { id: string; created_at: string } | null = null;
+  if (user_id !== 'demo-user') {
+    row = await insertReturning('glucose_logs', {
       user_id,
       value,
       unit: 'mg/dL',
@@ -116,29 +148,39 @@ export async function saveGlucose(value: number, notes?: string) {
       notes: notes ?? null,
     });
   }
+  const log: GlucoseLog = {
+    id: row?.id ?? id(),
+    user_id,
+    value,
+    unit: 'mg/dL',
+    source: 'manual',
+    notes,
+    created_at: row?.created_at ?? new Date().toISOString(),
+  };
+  useAppStore.getState().addGlucoseLog(log);
   return log;
 }
 
 export async function saveInsulin(dose: number, insulinType: InsulinType, notes?: string) {
   const user_id = await currentUserId();
-  const log: InsulinLog = {
-    id: id(),
-    user_id,
-    insulin_type: insulinType,
-    dose,
-    notes,
-    created_at: new Date().toISOString(),
-  };
-  useAppStore.getState().addInsulinLog(log);
-
-  if (!isDemoMode && supabase && user_id !== 'demo-user') {
-    await supabase.from('insulin_logs').insert({
+  let row: { id: string; created_at: string } | null = null;
+  if (user_id !== 'demo-user') {
+    row = await insertReturning('insulin_logs', {
       user_id,
       insulin_type: insulinType,
       dose,
       notes: notes ?? null,
     });
   }
+  const log: InsulinLog = {
+    id: row?.id ?? id(),
+    user_id,
+    insulin_type: insulinType,
+    dose,
+    notes,
+    created_at: row?.created_at ?? new Date().toISOString(),
+  };
+  useAppStore.getState().addInsulinLog(log);
   return log;
 }
 
@@ -159,19 +201,9 @@ export async function saveActivity(
   notes?: string
 ) {
   const user_id = await currentUserId();
-  const log: ActivityLog = {
-    id: id(),
-    user_id,
-    kind,
-    duration_min: durationMin,
-    intensity,
-    notes,
-    created_at: new Date().toISOString(),
-  };
-  useAppStore.getState().addActivityLog(log);
-
-  if (!isDemoMode && supabase && user_id !== 'demo-user') {
-    await supabase.from('activity_logs').insert({
+  let row: { id: string; created_at: string } | null = null;
+  if (user_id !== 'demo-user') {
+    row = await insertReturning('activity_logs', {
       user_id,
       kind,
       duration_min: durationMin,
@@ -179,25 +211,66 @@ export async function saveActivity(
       notes: notes ?? null,
     });
   }
+  const log: ActivityLog = {
+    id: row?.id ?? id(),
+    user_id,
+    kind,
+    duration_min: durationMin,
+    intensity,
+    notes,
+    created_at: row?.created_at ?? new Date().toISOString(),
+  };
+  useAppStore.getState().addActivityLog(log);
   return log;
 }
 
 export async function saveMeasure(kind: MeasureKind, value: number, unit: string) {
   const user_id = await currentUserId();
+  let row: { id: string; created_at: string } | null = null;
+  if (user_id !== 'demo-user') {
+    row = await insertReturning('measure_logs', { user_id, kind, value, unit });
+  }
   const log: MeasureLog = {
-    id: id(),
+    id: row?.id ?? id(),
     user_id,
     kind,
     value,
     unit,
-    created_at: new Date().toISOString(),
+    created_at: row?.created_at ?? new Date().toISOString(),
   };
   useAppStore.getState().addMeasureLog(log);
-
-  if (!isDemoMode && supabase && user_id !== 'demo-user') {
-    await supabase.from('measure_logs').insert({ user_id, kind, value, unit });
-  }
   return log;
+}
+
+/* ─────────────────────────── DELETES ───────────────────────────
+ * Removing an entry must also remove it on the server, otherwise the
+ * next sync would resurrect it (and the doctor dashboard would keep
+ * showing it). Local removal is instant; the server delete is
+ * fire-and-forget. */
+
+export function deleteGlucose(rowId: string) {
+  useAppStore.getState().removeGlucoseLog(rowId);
+  remoteDelete('glucose_logs', rowId);
+}
+
+export function deleteInsulin(rowId: string) {
+  useAppStore.getState().removeInsulinLog(rowId);
+  remoteDelete('insulin_logs', rowId);
+}
+
+export function deleteMeal(rowId: string) {
+  useAppStore.getState().removeMeal(rowId);
+  remoteDelete('meal_scans', rowId);
+}
+
+export function deleteActivity(rowId: string) {
+  useAppStore.getState().removeActivityLog(rowId);
+  remoteDelete('activity_logs', rowId);
+}
+
+export function deleteMeasure(rowId: string) {
+  useAppStore.getState().removeMeasureLog(rowId);
+  remoteDelete('measure_logs', rowId);
 }
 
 /**

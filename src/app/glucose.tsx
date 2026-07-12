@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView, PlusGlyph } from '@/components/ui';
+import { deleteGlucose } from '@/services/data';
 import { predictGlucose } from '@/services/prediction';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
@@ -228,7 +229,7 @@ export default function GlucoseScreen() {
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
-  const { glucoseLogs, meals, profile, removeGlucoseLog } = useAppStore();
+  const { glucoseLogs, meals, profile } = useAppStore();
 
   const low = profile?.target_low ?? 70;
   const high = profile?.target_high ?? 180;
@@ -585,7 +586,7 @@ export default function GlucoseScreen() {
                         minute: '2-digit',
                       })}
                     </Text>
-                    <Pressable onPress={() => removeGlucoseLog(g.id)} hitSlop={8} style={styles.deleteBtn}>
+                    <Pressable onPress={() => deleteGlucose(g.id)} hitSlop={8} style={styles.deleteBtn}>
                       <Text style={styles.deleteText}>✕</Text>
                     </Pressable>
                   </View>

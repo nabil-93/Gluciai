@@ -15,6 +15,18 @@ import type {
   Profile,
 } from '@/types';
 
+/** Everything hydrateFromServer() pulls back for the signed-in account. */
+export interface ServerSnapshot {
+  accountUserId: string;
+  profile: Profile | null;
+  glucoseLogs: GlucoseLog[];
+  insulinLogs: InsulinLog[];
+  meals: MealScan[];
+  activityLogs: ActivityLog[];
+  measureLogs: MeasureLog[];
+  chatMessages: ChatMessage[];
+}
+
 interface AppState {
   // Flow flags
   languageChosen: boolean;
@@ -22,6 +34,8 @@ interface AppState {
   wizardDone: boolean;
   /** ISO timestamp the user accepted the terms/consent (account creation) */
   consentAcceptedAt: string | null;
+  /** auth user the persisted data belongs to — guards account switches on a shared device */
+  accountUserId: string | null;
   // User
   profile: Profile | null;
   activityStatus: ActivityStatus;
@@ -66,6 +80,12 @@ interface AppState {
 
   addChatMessage: (message: ChatMessage) => void;
   updateLastChatMessage: (content: string) => void;
+  /**
+   * Replace local data with the account's server snapshot (server = source
+   * of truth). `switchedAccount` additionally wipes device-only leftovers
+   * (AI journal, corrections…) belonging to the previous account.
+   */
+  hydrateServer: (snapshot: ServerSnapshot, switchedAccount: boolean) => void;
   resetAll: () => void;
 }
 
@@ -74,6 +94,7 @@ const initialData = {
   onboardingDone: false,
   wizardDone: false,
   consentAcceptedAt: null as string | null,
+  accountUserId: null as string | null,
   profile: null,
   activityStatus: 'active' as ActivityStatus,
   glucoseLogs: [] as GlucoseLog[],
@@ -152,6 +173,19 @@ export const useAppStore = create<AppState>()(
           }
           return { chatMessages: messages };
         }),
+      hydrateServer: (snapshot, switchedAccount) =>
+        set(
+          switchedAccount
+            ? {
+                ...snapshot,
+                corrections: [],
+                aiJournal: [],
+                aiJournalSeenAt: null,
+                lockedFeatures: [],
+                activityStatus: 'active',
+              }
+            : snapshot
+        ),
       resetAll: () => set({ ...initialData }),
     }),
     {

@@ -15,7 +15,7 @@ import { PremiumEmptyState, PressableScale } from '@/components/ui';
 
 const SNEAKER = require('../../assets/claude/sneaker.png');
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
-import { saveActivity } from '@/services/data';
+import { deleteActivity, saveActivity } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import type { ActivityIntensity, ActivityKind } from '@/types';
 
@@ -55,7 +55,7 @@ export default function ActivityScreen() {
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
   const { onScroll } = useTabBarScroll();
-  const { activityLogs, removeActivityLog } = useAppStore();
+  const { activityLogs } = useAppStore();
   const locale = i18n.language;
 
   const [kind, setKind] = useState<ActivityKind>('walk');
@@ -290,7 +290,7 @@ export default function ActivityScreen() {
               <Pressable
                 key={a.id}
                 style={styles.row}
-                onLongPress={() => removeActivityLog(a.id)}
+                onLongPress={() => deleteActivity(a.id)}
               >
                 <View style={styles.rowIcon}>
                   <Text style={{ fontSize: 17 }}>{KIND_EMOJI[a.kind]}</Text>

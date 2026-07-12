@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   PremiumEmptyState,
 } from '@/components/ui';
+import { deleteMeal } from '@/services/data';
 import { getRecommendations } from '@/services/recommendations';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
@@ -30,7 +31,7 @@ function isToday(iso: string) {
 export default function NutritionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { meals, removeMeal, profile, glucoseLogs } = useAppStore();
+  const { meals, profile, glucoseLogs } = useAppStore();
 
   const todayMeals = useMemo(
     () => meals.filter((m) => isToday(m.created_at)),
@@ -203,7 +204,7 @@ export default function NutritionScreen() {
                     </Text>
                   </View>
                   <Pressable
-                    onPress={() => removeMeal(m.id)}
+                    onPress={() => deleteMeal(m.id)}
                     hitSlop={8}
                     style={styles.deleteBtn}
                   >
