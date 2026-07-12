@@ -44,6 +44,7 @@ export type LoggerAction =
       fat?: number;
       fiber?: number;
       glycemic_index?: number;
+      meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
       minutes_ago?: number;
     }
   | {
@@ -108,6 +109,7 @@ export function sanitizeAction(raw: any): LoggerAction | null {
     case 'meal': {
       const name = typeof raw.name === 'string' ? raw.name.trim() : '';
       if (!name) return null;
+      const MEALS = ['breakfast', 'lunch', 'dinner', 'snack'];
       return {
         type: 'meal',
         name,
@@ -119,6 +121,7 @@ export function sanitizeAction(raw: any): LoggerAction | null {
         fat: Math.max(0, Math.round(num(raw.fat))),
         fiber: Math.max(0, Math.round(num(raw.fiber))),
         glycemic_index: Math.min(110, Math.max(0, Math.round(num(raw.glycemic_index, 50)))),
+        meal_type: MEALS.includes(raw.meal_type) ? raw.meal_type : undefined,
         minutes_ago: ago,
       };
     }
@@ -167,17 +170,35 @@ export function sanitizeAction(raw: any): LoggerAction | null {
   }
 }
 
-/** Small context so the model can pick the insulin type & personalize. */
+/** Small context so the model can pick the insulin type, personalize, and
+ *  know which meals of TODAY are already logged (to ask about the rest). */
 function loggerContext(): string {
-  const { profile } = useAppStore.getState();
-  if (!profile) return 'No profile.';
-  return (
-    `Patient: ${profile.name || '?'}; diabetes ${profile.diabetes_type}; ` +
-    `insulin types [${(profile.insulin_types ?? []).join(', ') || 'unknown'}]; ` +
-    `target ${profile.target_low}-${profile.target_high} mg/dL; ` +
-    `carb ratio ${profile.carb_ratio ?? '?'} g/U. ` +
-    `Local time now: ${new Date().toLocaleString('fr-FR')}.`
+  const s = useAppStore.getState();
+  const { profile, meals } = s;
+  const now = new Date();
+  const isToday = (iso: string) =>
+    new Date(iso).toDateString() === now.toDateString();
+  const todayMeals = meals.filter((m) => isToday(m.created_at));
+  const logged = new Set(
+    todayMeals.map((m) => m.meal_type).filter(Boolean) as string[]
   );
+  const mealsLine =
+    todayMeals.length === 0
+      ? 'No meals logged today yet.'
+      : `Meals already logged today: ${todayMeals
+          .map((m) => `${m.meal_type ?? 'meal'} (${m.result.food_name})`)
+          .join(', ')}. Meal moments still MISSING today: ${
+          ['breakfast', 'lunch', 'dinner'].filter((k) => !logged.has(k)).join(', ') ||
+          'none'
+        }.`;
+
+  const base = profile
+    ? `Patient: ${profile.name || '?'}; diabetes ${profile.diabetes_type}; ` +
+      `insulin types [${(profile.insulin_types ?? []).join(', ') || 'unknown'}]; ` +
+      `target ${profile.target_low}-${profile.target_high} mg/dL; ` +
+      `carb ratio ${profile.carb_ratio ?? '?'} g/U. `
+    : 'No profile. ';
+  return base + `Local time now: ${now.toLocaleString('fr-FR')}. ${mealsLine}`;
 }
 
 /** One turn of the logging conversation. Throws on network/API failure.
@@ -266,7 +287,7 @@ export async function applyLoggerAction(action: LoggerAction): Promise<void> {
         source: 'ai_estimate',
         warnings: [],
       };
-      await saveMeal(result, undefined, undefined, at);
+      await saveMeal(result, undefined, undefined, at, action.meal_type);
       resolveFollowUps('meal');
       return;
     }
@@ -353,7 +374,7 @@ export const LIVE_LOG_TOOLS = [
       {
         name: 'log_meal',
         description:
-          'Save a meal the patient says they ate, with your realistic nutrition estimate for the described portion (you know Moroccan dishes). Confirm verbally first.',
+          'Save a meal the patient says they ate, with your realistic nutrition estimate for the described portion (you know Moroccan dishes). Ask which meal of the day it was (breakfast/lunch/dinner/snack) if unclear, then confirm verbally before calling.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -366,6 +387,10 @@ export const LIVE_LOG_TOOLS = [
             fat: { type: 'NUMBER' },
             fiber: { type: 'NUMBER' },
             glycemic_index: { type: 'NUMBER' },
+            meal_type: {
+              type: 'STRING',
+              enum: ['breakfast', 'lunch', 'dinner', 'snack'],
+            },
             minutes_ago: { type: 'NUMBER' },
           },
           required: ['name', 'calories', 'carbs', 'sugar'],
@@ -459,6 +484,11 @@ REMINDERS: when the patient asks to be reminded of something later
 ("fekerni men daba sa3a bach nakhod l'insuline"), confirm the time and
 call set_reminder — the app WILL alert them at that time and follow up.
 Never say you can't set reminders.
+MEALS: when logging a meal, always find out which meal of the day it was
+(breakfast/lunch/dinner/snack) — ask if unclear — and pass meal_type. If
+the patient hasn't mentioned the day's other main meals and it's
+plausible they've eaten them, gently ask what they had for the missing
+ones, one at a time, and log each (never nag; ask each meal only once).
 NOTES: anything else the patient did that doesn't fit the tools but may
 matter (drank water/coffee/tea/alcohol, felt stressed/tired/ill, skipped
 a meal…) → confirm and call log_note. Never say you can't record it.`;
@@ -650,8 +680,12 @@ export function actionSummary(action: LoggerAction): string {
       return `💉 ${action.dose} U`;
     case 'glucose':
       return `🩸 ${action.value} mg/dL`;
-    case 'meal':
-      return `🍽️ ${action.name} (≈${action.calories} kcal)`;
+    case 'meal': {
+      const moment = action.meal_type
+        ? { breakfast: '🌅', lunch: '☀️', dinner: '🌙', snack: '🍎' }[action.meal_type]
+        : '';
+      return `🍽️ ${moment ? moment + ' ' : ''}${action.name} (≈${action.calories} kcal)`;
+    }
     case 'activity':
       return `🏃 ${action.kind} ${action.duration_min} min`;
     case 'measure':

@@ -100,7 +100,7 @@ function mapProfile(row: any): Profile {
 
 const GLUCOSE_COLS = 'id,user_id,value,unit,source,notes,created_at';
 const INSULIN_COLS = 'id,user_id,insulin_type,dose,notes,created_at';
-const MEAL_COLS = 'id,user_id,image_url,result,created_at';
+const MEAL_COLS = 'id,user_id,image_url,result,meal_type,created_at';
 const ACTIVITY_COLS = 'id,user_id,kind,duration_min,intensity,notes,created_at';
 const MEASURE_COLS = 'id,user_id,kind,value,unit,created_at';
 const REMINDER_COLS = 'id,user_id,message,due_at,follow_kind,status,created_at';
@@ -130,6 +130,7 @@ const mapMeal = (r: any): MealScan => ({
   user_id: r.user_id,
   image_url: r.image_url ?? undefined,
   result: r.result,
+  meal_type: r.meal_type ?? undefined,
   created_at: r.created_at,
 });
 
@@ -324,6 +325,7 @@ export async function hydrateFromServer(): Promise<boolean> {
             fiber: m.result.fiber,
             glycemic_index: m.result.glycemic_index,
             confidence: m.result.confidence,
+            meal_type: m.meal_type ?? null,
             created_at: m.created_at,
           })),
           MEAL_COLS

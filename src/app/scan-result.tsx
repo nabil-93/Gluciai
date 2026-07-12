@@ -42,7 +42,28 @@ import { scoreMeal } from '@/services/nutrition/mealScore';
 import { clearPendingScan, getPendingScan } from '@/services/scanSession';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
-import type { FoodItemResult, MealHighlight, NutritionSource } from '@/types';
+import type {
+  FoodItemResult,
+  MealHighlight,
+  MealType,
+  NutritionSource,
+} from '@/types';
+
+/** Suggest the meal of the day from the current hour. */
+function defaultMealType(): MealType {
+  const h = new Date().getHours();
+  if (h < 11) return 'breakfast';
+  if (h < 16) return 'lunch';
+  if (h < 22) return 'dinner';
+  return 'snack';
+}
+
+const MEAL_TYPES: { key: MealType; icon: string }[] = [
+  { key: 'breakfast', icon: '🌅' },
+  { key: 'lunch', icon: '☀️' },
+  { key: 'dinner', icon: '🌙' },
+  { key: 'snack', icon: '🍎' },
+];
 
 const SOURCE_COLOR: Record<NutritionSource, string> = {
   moroccan_db: colors.primary,
@@ -90,6 +111,8 @@ export default function ScanResultScreen() {
   const insets = useSafeAreaInsets();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Which meal of the day — defaulted from the current time, user can change.
+  const [mealType, setMealType] = useState<MealType>(() => defaultMealType());
   // Stable snapshot of the scan for this screen's lifetime
   const [pending] = useState(() => getPendingScan());
   // Editable copy of items — the user can correct portions (Learning AI)
@@ -342,7 +365,7 @@ export default function ScanResultScreen() {
     setSaving(true);
     try {
       saveCorrections();
-      await saveMeal(result, imageUri, imageBase64);
+      await saveMeal(result, imageUri, imageBase64, undefined, mealType);
       setSaved(true);
       setStep('saved');
     } finally {
@@ -354,7 +377,7 @@ export default function ScanResultScreen() {
     // Save the meal first so the calculator can prefill its carbs
     if (!saved) {
       saveCorrections();
-      await saveMeal(result, imageUri, imageBase64);
+      await saveMeal(result, imageUri, imageBase64, undefined, mealType);
     }
     clearPendingScan();
     router.replace('/bolus');
@@ -1059,6 +1082,30 @@ export default function ScanResultScreen() {
         {/* Step 7 — final verification */}
         {step === 'verify' ? (
           <View style={[styles.body, { paddingTop: 16 }]}>
+            {/* Meal of the day */}
+            <Text style={styles.mealTypeTitle}>{t('result.mealMoment')}</Text>
+            <View style={styles.mealTypeRow}>
+              {MEAL_TYPES.map((m) => (
+                <Pressable
+                  key={m.key}
+                  onPress={() => setMealType(m.key)}
+                  style={[
+                    styles.mealTypeChip,
+                    mealType === m.key && styles.mealTypeChipOn,
+                  ]}
+                >
+                  <Text style={{ fontSize: 18 }}>{m.icon}</Text>
+                  <Text
+                    style={[
+                      styles.mealTypeText,
+                      mealType === m.key && styles.mealTypeTextOn,
+                    ]}
+                  >
+                    {t(`mealType.${m.key}`)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             {nutritionBlock}
             {macrosBlock}
             {verifyExtras}
@@ -1120,6 +1167,29 @@ function Metric({
 }
 
 const styles = StyleSheet.create({
+  mealTypeTitle: {
+    fontSize: 14.5,
+    fontWeight: '750' as any,
+    color: colors.text,
+    marginBottom: 10,
+  },
+  mealTypeRow: { flexDirection: 'row', gap: 8, marginBottom: 18 },
+  mealTypeChip: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 11,
+    borderRadius: 16,
+    backgroundColor: colors.surface2,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  mealTypeChipOn: {
+    backgroundColor: colors.surface,
+    borderColor: colors.primary,
+  },
+  mealTypeText: { fontSize: 11.5, fontWeight: '650' as any, color: colors.textSecondary },
+  mealTypeTextOn: { color: colors.primary },
   root: { flex: 1, backgroundColor: colors.background },
 
   // ── Wizard header / footer ──

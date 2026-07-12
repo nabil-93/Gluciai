@@ -458,7 +458,8 @@
     "savedTitle": "Meal saved!",
     "savedAt": "Today, {{time}}",
     "viewJournal": "View my journal",
-    "tapBoxHint": "Tap a food on the photo to see its details"
+    "tapBoxHint": "Tap a food on the photo to see its details",
+    "mealMoment": "Which meal?"
   },
   "chat": {
     "title": "AI Coach",
@@ -821,5 +822,11 @@
     "kcal100": "kcal /100g",
     "carbs100": "Carbs /100g",
     "sugar100": "Sugar /100g"
+  },
+  "mealType": {
+    "breakfast": "Breakfast",
+    "lunch": "Lunch",
+    "dinner": "Dinner",
+    "snack": "Snack"
   }
 }

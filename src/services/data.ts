@@ -10,6 +10,7 @@ import type {
   InsulinLog,
   InsulinType,
   MealScan,
+  MealType,
   MeasureKind,
   MeasureLog,
   NutritionResult,
@@ -100,7 +101,9 @@ export async function saveMeal(
   imageUri?: string,
   imageBase64?: string,
   /** Optional backdated timestamp (AI logger: "I ate an hour ago"). */
-  createdAt?: string
+  createdAt?: string,
+  /** Breakfast / lunch / dinner / snack. */
+  mealType?: MealType
 ) {
   const user_id = await currentUserId();
 
@@ -126,6 +129,7 @@ export async function saveMeal(
       fiber: result.fiber,
       glycemic_index: result.glycemic_index,
       confidence: result.confidence,
+      ...(mealType ? { meal_type: mealType } : {}),
       ...(createdAt ? { created_at: createdAt } : {}),
     });
   }
@@ -135,6 +139,7 @@ export async function saveMeal(
     user_id,
     image_url: remoteUrl ?? imageUri,
     result,
+    meal_type: mealType,
     created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addMeal(meal);

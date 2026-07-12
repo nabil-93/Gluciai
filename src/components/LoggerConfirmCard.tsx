@@ -58,7 +58,10 @@ export function LoggerConfirmCard({
   const detail = (() => {
     switch (action.type) {
       case 'meal':
-        return `≈ ${action.calories} kcal · ${action.carbs} g ${t('day.carbsShort')} · ${action.sugar} g ${t('day.sugarShort')}`;
+        return (
+          (action.meal_type ? `${t(`mealType.${action.meal_type}`)} · ` : '') +
+          `≈ ${action.calories} kcal · ${action.carbs} g ${t('day.carbsShort')} · ${action.sugar} g ${t('day.sugarShort')}`
+        );
       case 'insulin':
         return t('day.insulin');
       case 'glucose':

@@ -155,11 +155,16 @@ export interface NutritionResult {
   warnings: string[];
 }
 
+/** Which meal of the day a scanned food belongs to. */
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
 export interface MealScan {
   id: string;
   user_id: string;
   image_url?: string;
   result: NutritionResult;
+  /** Breakfast / lunch / dinner / snack — asked after a scan or in chat. */
+  meal_type?: MealType;
   created_at: string;
 }
 

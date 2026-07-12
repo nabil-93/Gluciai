@@ -458,7 +458,8 @@
     "savedTitle": "Repas enregistré !",
     "savedAt": "Aujourd'hui, {{time}}",
     "viewJournal": "Voir mon journal",
-    "tapBoxHint": "Touchez un aliment sur la photo pour le voir en détail"
+    "tapBoxHint": "Touchez un aliment sur la photo pour le voir en détail",
+    "mealMoment": "Quel repas ?"
   },
   "chat": {
     "title": "Coach IA",
@@ -821,5 +822,11 @@
     "kcal100": "kcal /100g",
     "carbs100": "Glucides /100g",
     "sugar100": "Sucre /100g"
+  },
+  "mealType": {
+    "breakfast": "Petit-déj",
+    "lunch": "Déjeuner",
+    "dinner": "Dîner",
+    "snack": "Collation"
   }
 }

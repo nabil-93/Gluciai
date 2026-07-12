@@ -458,7 +458,8 @@
     "savedTitle": "Mahlzeit gespeichert!",
     "savedAt": "Heute, {{time}}",
     "viewJournal": "Mein Tagebuch ansehen",
-    "tapBoxHint": "Tippe auf ein Lebensmittel im Foto für Details"
+    "tapBoxHint": "Tippe auf ein Lebensmittel im Foto für Details",
+    "mealMoment": "Welche Mahlzeit?"
   },
   "chat": {
     "title": "KI-Coach",
@@ -821,5 +822,11 @@
     "kcal100": "kcal /100g",
     "carbs100": "Kohlenh. /100g",
     "sugar100": "Zucker /100g"
+  },
+  "mealType": {
+    "breakfast": "Frühstück",
+    "lunch": "Mittag",
+    "dinner": "Abendessen",
+    "snack": "Snack"
   }
 }

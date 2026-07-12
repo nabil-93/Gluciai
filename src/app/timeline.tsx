@@ -264,6 +264,9 @@ export default function TimelineScreen() {
                       <>
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <Text style={styles.cardTitle} numberOfLines={1}>
+                            {e.meal.meal_type
+                              ? `${t(`mealType.${e.meal.meal_type}`)} · `
+                              : ''}
                             {e.meal.result.food_name ||
                               (e.meal.result.items ?? [])
                                 .map((i) => i.name)
