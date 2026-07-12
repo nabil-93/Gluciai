@@ -188,11 +188,19 @@ ACTION is exactly one of:
 {"type":"activity","kind":"walk"|"run"|"bike"|"gym"|"other","duration_min":N,"intensity":"low"|"medium"|"high","minutes_ago":N?}
 {"type":"measure","kind":"weight"|"hba1c","value":N,"unit":"kg"|"%","minutes_ago":N?}
 {"type":"reminder","message":"short text of what to do, in ${langName}","due_in_minutes":N,"follow_kind":"insulin"|"glucose"|"meal"|"activity"|"measure"|"other"}
+{"type":"note","text":"short description of what happened, in ${langName}","minutes_ago":N?}
 
 Rules:
-- Produce an action ONLY for something the patient explicitly did or
-  measured. Greetings, questions, anything else → action:null with a
-  short reply explaining what you can log for them.
+- Produce an action for something the patient explicitly did, measured
+  or wants remembered. If it fits a structured type (insulin/glucose/
+  meal/activity/measure/reminder), use it. Otherwise, if it's still
+  something real they did that could matter for their diabetes — drank
+  water/coffee/tea/alcohol, felt stressed/tired/ill, skipped a meal,
+  had a hypo snack, changed routine — use type "note" with a short
+  faithful description. Greetings, pure questions, or chit-chat →
+  action:null.
+- NEVER reply that you "can't record that" — anything the patient did
+  can be saved as a note.
 - NEVER invent a critical number. Missing insulin dose, glucose value or
   sport duration → action:null and ask ONE short question for it.
 - Insulin type: if not stated, check "insulin types" in the context —
@@ -274,7 +282,7 @@ Rules:
       if (!parsed || typeof parsed.reply !== 'string') {
         return json({ error: 'AI returned invalid JSON', raw: text }, 502);
       }
-      const VALID_TYPES = ['insulin', 'glucose', 'meal', 'activity', 'measure', 'reminder'];
+      const VALID_TYPES = ['insulin', 'glucose', 'meal', 'activity', 'measure', 'reminder', 'note'];
       const action =
         parsed.action &&
         typeof parsed.action === 'object' &&

@@ -126,6 +126,9 @@ function eventLine(e: DayEvent): string {
       return `${hhmm(e.created_at)} MEASURE ${e.measure.kind} ${e.measure.value} ${e.measure.unit}`;
     case 'event': {
       const ev = e.event;
+      if (ev.kind === 'note') {
+        return `${hhmm(e.created_at)} NOTE ${ev.payload.text ?? ''}`;
+      }
       if (ev.kind === 'status') {
         return `${hhmm(e.created_at)} STATUS CHANGED ${ev.payload.from ?? '?'} → ${ev.payload.to ?? '?'}`;
       }

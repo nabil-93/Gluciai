@@ -224,8 +224,8 @@ export type ActivityStatus = 'active' | 'sick' | 'injured' | 'paused';
 export interface AppEvent {
   id: string;
   user_id: string;
-  kind: 'status' | 'profile';
-  /** status: { from, to } — profile: { changes: { field: { from, to } } } */
+  kind: 'status' | 'profile' | 'note';
+  /** status: { from, to } — profile: { changes } — note: { text } */
   payload: Record<string, any>;
   created_at: string;
 }

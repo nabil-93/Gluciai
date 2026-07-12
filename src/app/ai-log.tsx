@@ -70,8 +70,9 @@ const CHIP_KEYS = [
   'chipGlucose',
   'chipSport',
   'chipReminder',
+  'chipNote',
 ] as const;
-const CHIP_ICONS = ['💉', '🍽️', '🩸', '🏃', '⏰'] as const;
+const CHIP_ICONS = ['💉', '🍽️', '🩸', '🏃', '⏰', '📝'] as const;
 
 const WAVE_BARS = 22;
 
@@ -253,7 +254,7 @@ function AiLogScreen() {
       // Trace in the AI coach journal so the robot's log shows it too.
       addAiJournalEntry({
         id: `log-${Date.now()}`,
-        icon: action.type === 'reminder' ? '⏰' : '📝',
+        icon: action.type === 'reminder' ? '⏰' : action.type === 'note' ? '📝' : '📝',
         title: t('logger.journalTitle'),
         body: actionSummary(action),
         tone: 'success',

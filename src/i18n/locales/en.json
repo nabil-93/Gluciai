@@ -779,7 +779,9 @@
     "reminderLabel": "Reminder",
     "reminderSet": "Noted! ⏰ I'll remind you at the scheduled time — and check afterwards that it's done.",
     "followUpAsk": "⏰ You had a reminder: \"{{msg}}\". Did you do it? Tell me and I'll log it.",
-    "chipReminder": "Remind me in 1h to take my insulin"
+    "chipReminder": "Remind me in 1h to take my insulin",
+    "noteLabel": "Note",
+    "chipNote": "I drank a glass of water"
   },
   "events": {
     "section": "Account changes",
@@ -796,6 +798,7 @@
     "f_carb_ratio": "Carb ratio",
     "f_correction_factor": "Correction factor",
     "f_weight": "Weight",
-    "f_height": "Height"
+    "f_height": "Height",
+    "note": "Note"
   }
 }

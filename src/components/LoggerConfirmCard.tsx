@@ -16,6 +16,7 @@ const ICONS: Record<LoggerAction['type'], string> = {
   activity: '🏃',
   measure: '📏',
   reminder: '⏰',
+  note: '📝',
 };
 
 /**
@@ -49,6 +50,8 @@ export function LoggerConfirmCard({
         return `${action.kind === 'weight' ? t('logger.weight') : 'HbA1c'} · ${action.value} ${action.unit}`;
       case 'reminder':
         return action.message;
+      case 'note':
+        return action.text;
     }
   })();
 
@@ -66,6 +69,8 @@ export function LoggerConfirmCard({
         return t('day.measures');
       case 'reminder':
         return t('logger.reminderLabel');
+      case 'note':
+        return t('logger.noteLabel');
     }
   })();
 

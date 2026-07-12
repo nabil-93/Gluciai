@@ -299,18 +299,20 @@ export default function DayScreen() {
                   {dEvents.map((e) => (
                     <View key={e.id} style={styles.row}>
                       <Text style={{ fontSize: 14 }}>
-                        {e.kind === 'status' ? '🩺' : '⚙️'}
+                        {e.kind === 'note' ? '📝' : e.kind === 'status' ? '🩺' : '⚙️'}
                       </Text>
-                      <Text style={[styles.rowNotes, { color: '#4b5563' }]} numberOfLines={2}>
-                        {e.kind === 'status'
-                          ? `${t('events.statusChanged')}: ${t(`events.st_${e.payload.from}` as any, String(e.payload.from))} → ${t(`events.st_${e.payload.to}` as any, String(e.payload.to))}`
-                          : `${t('events.settingsChanged')}: ` +
-                            Object.entries(e.payload.changes ?? {})
-                              .map(
-                                ([f, v]: [string, any]) =>
-                                  `${t(`events.f_${f}` as any, f)} ${Array.isArray(v?.from) ? v.from.join('+') : (v?.from ?? '—')} → ${Array.isArray(v?.to) ? v.to.join('+') : (v?.to ?? '—')}`
-                              )
-                              .join(' · ')}
+                      <Text style={[styles.rowNotes, { color: '#4b5563' }]} numberOfLines={3}>
+                        {e.kind === 'note'
+                          ? e.payload.text
+                          : e.kind === 'status'
+                            ? `${t('events.statusChanged')}: ${t(`events.st_${e.payload.from}` as any, String(e.payload.from))} → ${t(`events.st_${e.payload.to}` as any, String(e.payload.to))}`
+                            : `${t('events.settingsChanged')}: ` +
+                              Object.entries(e.payload.changes ?? {})
+                                .map(
+                                  ([f, v]: [string, any]) =>
+                                    `${t(`events.f_${f}` as any, f)} ${Array.isArray(v?.from) ? v.from.join('+') : (v?.from ?? '—')} → ${Array.isArray(v?.to) ? v.to.join('+') : (v?.to ?? '—')}`
+                                )
+                                .join(' · ')}
                       </Text>
                       <Text style={styles.timeText}>{time(e.created_at)}</Text>
                     </View>

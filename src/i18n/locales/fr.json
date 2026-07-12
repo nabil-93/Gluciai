@@ -779,7 +779,9 @@
     "reminderLabel": "Rappel",
     "reminderSet": "C'est noté ! ⏰ Je vous rappellerai à l'heure prévue — et je vérifierai après que c'est fait.",
     "followUpAsk": "⏰ Vous aviez un rappel : « {{msg}} ». L'avez-vous fait ? Dites-le-moi et je l'enregistre.",
-    "chipReminder": "Rappelle-moi dans 1h de prendre mon insuline"
+    "chipReminder": "Rappelle-moi dans 1h de prendre mon insuline",
+    "noteLabel": "Note",
+    "chipNote": "J'ai bu un verre d'eau"
   },
   "events": {
     "section": "Changements du compte",
@@ -796,6 +798,7 @@
     "f_carb_ratio": "Ratio glucides",
     "f_correction_factor": "Facteur de correction",
     "f_weight": "Poids",
-    "f_height": "Taille"
+    "f_height": "Taille",
+    "note": "Note"
   }
 }

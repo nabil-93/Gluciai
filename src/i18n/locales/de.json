@@ -779,7 +779,9 @@
     "reminderLabel": "Erinnerung",
     "reminderSet": "Notiert! ⏰ Ich erinnere dich zur geplanten Zeit — und hake danach nach, ob es erledigt ist.",
     "followUpAsk": "⏰ Du hattest eine Erinnerung: „{{msg}}“. Hast du es gemacht? Sag es mir und ich trage es ein.",
-    "chipReminder": "Erinnere mich in 1 Std. an mein Insulin"
+    "chipReminder": "Erinnere mich in 1 Std. an mein Insulin",
+    "noteLabel": "Notiz",
+    "chipNote": "Ich habe ein Glas Wasser getrunken"
   },
   "events": {
     "section": "Konto-Änderungen",
@@ -796,6 +798,7 @@
     "f_carb_ratio": "KH-Verhältnis",
     "f_correction_factor": "Korrekturfaktor",
     "f_weight": "Gewicht",
-    "f_height": "Größe"
+    "f_height": "Größe",
+    "note": "Notiz"
   }
 }

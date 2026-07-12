@@ -251,7 +251,13 @@ export default function TimelineScreen() {
                         { backgroundColor: `${KIND_COLOR[e.kind]}18` },
                       ]}
                     >
-                      <Text style={{ fontSize: 16 }}>{KIND_ICON[e.kind]}</Text>
+                      <Text style={{ fontSize: 16 }}>
+                        {e.kind === 'event' && e.event.kind === 'note'
+                          ? '📝'
+                          : e.kind === 'event' && e.event.kind === 'status'
+                            ? '🩺'
+                            : KIND_ICON[e.kind]}
+                      </Text>
                     </View>
 
                     {e.kind === 'meal' ? (
@@ -327,19 +333,23 @@ export default function TimelineScreen() {
                     ) : e.kind === 'event' ? (
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.cardTitle} numberOfLines={1}>
-                          {e.event.kind === 'status'
-                            ? t('events.statusChanged')
-                            : t('events.settingsChanged')}
+                          {e.event.kind === 'note'
+                            ? t('events.note')
+                            : e.event.kind === 'status'
+                              ? t('events.statusChanged')
+                              : t('events.settingsChanged')}
                         </Text>
-                        <Text style={styles.cardMeta} numberOfLines={2}>
-                          {e.event.kind === 'status'
-                            ? `${t(`events.st_${e.event.payload.from}` as any, String(e.event.payload.from))} → ${t(`events.st_${e.event.payload.to}` as any, String(e.event.payload.to))}`
-                            : Object.entries(e.event.payload.changes ?? {})
-                                .map(
-                                  ([f, v]: [string, any]) =>
-                                    `${t(`events.f_${f}` as any, f)}: ${Array.isArray(v?.from) ? v.from.join('+') : (v?.from ?? '—')} → ${Array.isArray(v?.to) ? v.to.join('+') : (v?.to ?? '—')}`
-                                )
-                                .join(' · ')}
+                        <Text style={styles.cardMeta} numberOfLines={3}>
+                          {e.event.kind === 'note'
+                            ? e.event.payload.text
+                            : e.event.kind === 'status'
+                              ? `${t(`events.st_${e.event.payload.from}` as any, String(e.event.payload.from))} → ${t(`events.st_${e.event.payload.to}` as any, String(e.event.payload.to))}`
+                              : Object.entries(e.event.payload.changes ?? {})
+                                  .map(
+                                    ([f, v]: [string, any]) =>
+                                      `${t(`events.f_${f}` as any, f)}: ${Array.isArray(v?.from) ? v.from.join('+') : (v?.from ?? '—')} → ${Array.isArray(v?.to) ? v.to.join('+') : (v?.to ?? '—')}`
+                                  )
+                                  .join(' · ')}
                         </Text>
                       </View>
                     ) : (

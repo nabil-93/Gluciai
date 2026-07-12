@@ -201,18 +201,27 @@ export async function saveInsulin(
  * they land in the history/day report and in the AI's context, so the
  * assistant always knows the full current situation. */
 
-export async function logEvent(kind: AppEvent['kind'], payload: Record<string, any>) {
+export async function logEvent(
+  kind: AppEvent['kind'],
+  payload: Record<string, any>,
+  createdAt?: string
+) {
   const user_id = await currentUserId();
   let row: { id: string; created_at: string } | null = null;
   if (user_id !== 'demo-user') {
-    row = await insertReturning('event_logs', { user_id, kind, payload });
+    row = await insertReturning('event_logs', {
+      user_id,
+      kind,
+      payload,
+      ...(createdAt ? { created_at: createdAt } : {}),
+    });
   }
   const event: AppEvent = {
     id: row?.id ?? id(),
     user_id,
     kind,
     payload,
-    created_at: row?.created_at ?? new Date().toISOString(),
+    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addEventLog(event);
   return event;

@@ -436,16 +436,46 @@ export function buildHealthContext(): string {
           ? ' (reduced activity — factor it in).'
           : '.')
   );
-  const recentEvents = (eventLogs ?? []).slice(0, 5).map((e) => {
-    const when = `${new Date(e.created_at).toLocaleDateString('fr-FR')} ${time(e.created_at)}`;
-    if (e.kind === 'status') {
-      return `${when}: status ${e.payload.from ?? '?'} → ${e.payload.to ?? '?'}`;
-    }
-    const ch = Object.entries(e.payload.changes ?? {})
-      .map(([f, v]: [string, any]) => `${f} ${JSON.stringify(v?.from)}→${JSON.stringify(v?.to)}`)
-      .join(', ');
-    return `${when}: settings changed (${ch})`;
-  });
+  // Free-text notes the patient told the assistant ("drank water", "had a
+  // coffee", "feeling stressed") — these can affect glucose/insulin, so the
+  // AI MUST read them. Today's notes are highlighted; older ones summarized.
+  const notes = (eventLogs ?? []).filter((e) => e.kind === 'note');
+  const todayNotes = notes.filter((e) => isToday(e.created_at));
+  if (todayNotes.length) {
+    lines.push(
+      `Notes today (things the patient reported — consider them for advice ` +
+        `and dosing): ` +
+        todayNotes
+          .sort((a, b) => a.created_at.localeCompare(b.created_at))
+          .map((e) => `${time(e.created_at)}→"${e.payload.text}"`)
+          .join('; ') +
+        '.'
+    );
+  }
+  const olderNotes = notes.filter((e) => !isToday(e.created_at)).slice(0, 4);
+  if (olderNotes.length) {
+    lines.push(
+      `Earlier notes: ` +
+        olderNotes
+          .map((e) => `${new Date(e.created_at).toLocaleDateString('fr-FR')} "${e.payload.text}"`)
+          .join('; ') +
+        '.'
+    );
+  }
+
+  const recentEvents = (eventLogs ?? [])
+    .filter((e) => e.kind !== 'note')
+    .slice(0, 5)
+    .map((e) => {
+      const when = `${new Date(e.created_at).toLocaleDateString('fr-FR')} ${time(e.created_at)}`;
+      if (e.kind === 'status') {
+        return `${when}: status ${e.payload.from ?? '?'} → ${e.payload.to ?? '?'}`;
+      }
+      const ch = Object.entries(e.payload.changes ?? {})
+        .map(([f, v]: [string, any]) => `${f} ${JSON.stringify(v?.from)}→${JSON.stringify(v?.to)}`)
+        .join(', ');
+      return `${when}: settings changed (${ch})`;
+    });
   if (recentEvents.length) {
     lines.push(`Recent account changes: ${recentEvents.join('; ')}.`);
   }

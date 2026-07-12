@@ -9,6 +9,7 @@ import type {
 } from '@/types';
 
 import {
+  logEvent,
   saveActivity,
   saveGlucose,
   saveInsulin,
@@ -58,7 +59,10 @@ export type LoggerAction =
       message: string;
       due_in_minutes: number;
       follow_kind: 'insulin' | 'glucose' | 'meal' | 'activity' | 'measure' | 'other';
-    };
+    }
+  /** Anything else the patient did that doesn't fit a structured log —
+   *  "I drank a glass of water", "I had a coffee", "I feel stressed". */
+  | { type: 'note'; text: string; minutes_ago?: number };
 
 export interface LoggerTurn {
   reply: string;
@@ -153,6 +157,11 @@ export function sanitizeAction(raw: any): LoggerAction | null {
         follow_kind: FOLLOW.includes(raw.follow_kind) ? raw.follow_kind : 'other',
       };
     }
+    case 'note': {
+      const text = typeof raw.text === 'string' ? raw.text.trim().slice(0, 300) : '';
+      if (!text) return null;
+      return { type: 'note', text, minutes_ago: ago };
+    }
     default:
       return null;
   }
@@ -238,6 +247,9 @@ export async function applyLoggerAction(action: LoggerAction): Promise<void> {
         action.follow_kind
       );
       return;
+    case 'note':
+      await logEvent('note', { text: action.text }, at);
+      return;
     case 'meal': {
       const result: NutritionResult = {
         food_name: action.name,
@@ -283,6 +295,13 @@ const LOGGABLE_RE = new RegExp(
     'poids', 'wazn', 'وزن', 'gewicht', 'weight', 'hba1c',
     // reminders
     'rappel', 'rappelle', 'fekerni', 'fakarni', 'fekkerni', 'remind', 'erinner', 'ذكرني', 'فكرني', 'تذكير',
+    // free-text notes: drinking, feelings, routine — anything that can
+    // affect glucose/insulin and that the patient wants recorded
+    'chrbt', 'chrebt', 'شربت', 'bu\\b', 'getrunken', 'drank', 'drunk',
+    'lma\\b', "l'?ma", 'الما', 'ماء', 'eau', 'wasser', 'water',
+    'caf[ée]', '9ahwa', 'قهوة', 'kaffee', 'coffee', 'th[ée]\\b', 'atay', 'أتاي', 'شاي',
+    'stress', 'fatigu', '3yan', '3ayan', 'عيان', 'متعب', 'm[üu]de', 'tired',
+    'dokht', 'دخت', 'malade', '3endi', 'nervous', '9le9',
   ].join('|'),
   'i'
 );
@@ -402,6 +421,19 @@ export const LIVE_LOG_TOOLS = [
           required: ['message', 'due_in_minutes'],
         },
       },
+      {
+        name: 'log_note',
+        description:
+          "Record ANYTHING the patient did that doesn't fit the other tools but may matter for their diabetes — drank water/coffee/tea/alcohol, felt stressed/tired, skipped a meal, had a hypo snack, changed routine. Confirm verbally first.",
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            text: { type: 'STRING', description: 'Short description of what happened' },
+            minutes_ago: { type: 'NUMBER' },
+          },
+          required: ['text'],
+        },
+      },
     ],
   },
 ];
@@ -419,7 +451,10 @@ in the app. If they decline, don't call anything.
 REMINDERS: when the patient asks to be reminded of something later
 ("fekerni men daba sa3a bach nakhod l'insuline"), confirm the time and
 call set_reminder — the app WILL alert them at that time and follow up.
-Never say you can't set reminders.`;
+Never say you can't set reminders.
+NOTES: anything else the patient did that doesn't fit the tools but may
+matter (drank water/coffee/tea/alcohol, felt stressed/tired/ill, skipped
+a meal…) → confirm and call log_note. Never say you can't record it.`;
 
 /** Map a Live-API function call to a validated LoggerAction. */
 export function actionFromFunctionCall(
@@ -439,6 +474,8 @@ export function actionFromFunctionCall(
       return sanitizeAction({ type: 'measure', ...args });
     case 'set_reminder':
       return sanitizeAction({ type: 'reminder', follow_kind: 'other', ...args });
+    case 'log_note':
+      return sanitizeAction({ type: 'note', ...args });
     default:
       return null;
   }
@@ -614,5 +651,7 @@ export function actionSummary(action: LoggerAction): string {
       return `📏 ${action.value} ${action.unit}`;
     case 'reminder':
       return `⏰ ${action.message}`;
+    case 'note':
+      return `📝 ${action.text}`;
   }
 }
