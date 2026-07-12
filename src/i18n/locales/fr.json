@@ -868,6 +868,7 @@
     "allActive": "Tout est débloqué 🎉",
     "allActiveSub": "Vous profitez de toutes les fonctionnalités de GlucoAI.",
     "welcomeManage": "Gérer mon abonnement",
-    "welcomeContact": "Contacter le support"
+    "welcomeContact": "Contacter le support",
+    "yourFeatures": "Vos fonctionnalités"
   }
 }

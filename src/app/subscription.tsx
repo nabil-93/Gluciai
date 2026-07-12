@@ -187,50 +187,58 @@ export default function SubscriptionScreen() {
           </Text>
         </LinearGradient>
 
+        {/* Section title — pick vs. review. */}
+        <Text style={styles.sectionTitle}>
+          {status === 'full' ? t('plan.yourFeatures') : t('plan.chooseTitle')}
+        </Text>
         {status === 'full' ? (
-          // Everything already unlocked — nothing to ask for.
-          <View style={styles.doneCard}>
-            <Text style={{ fontSize: 40 }}>🎉</Text>
-            <Text style={styles.doneTitle}>{t('plan.allActive')}</Text>
-            <Text style={styles.doneSub}>{t('plan.allActiveSub')}</Text>
+          <View style={{ height: 14 }} />
+        ) : (
+          <Text style={styles.sectionSub}>{t('plan.chooseSub')}</Text>
+        )}
+
+        {/* Feature list — always visible, whatever the plan. Unlocked ones
+            show an "Actif" badge; locked ones are selectable checkboxes. */}
+        <View style={styles.list}>
+          {ALL_FEATURES.map((f) => {
+            const locked = lockedFeatures.includes(f);
+            const m = META[f];
+            const on = selected.has(f);
+            return (
+              <Pressable
+                key={f}
+                onPress={locked ? () => toggle(f) : undefined}
+                style={[
+                  styles.featRow,
+                  locked && on && { borderColor: m.color, backgroundColor: `${m.color}0a` },
+                  !locked && { borderColor: '#e7f8ef' },
+                ]}
+              >
+                <View style={[styles.featIcon, { backgroundColor: m.bg }]}>
+                  <Text style={{ fontSize: 20 }}>{m.emoji}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.featTitle}>{t(featLabel(f))}</Text>
+                  <Text style={styles.featDesc}>{t(featDesc(f))}</Text>
+                </View>
+                {locked ? (
+                  <Check on={on} color={m.color} />
+                ) : (
+                  <ActiveBadge label={t('plan.active')} />
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {status === 'full' ? (
+          // Everything unlocked — no request to send, just a friendly note.
+          <View style={styles.doneNote}>
+            <Text style={{ fontSize: 16 }}>🎉</Text>
+            <Text style={styles.doneNoteText}>{t('plan.allActiveSub')}</Text>
           </View>
         ) : (
           <>
-            <Text style={styles.sectionTitle}>{t('plan.chooseTitle')}</Text>
-            <Text style={styles.sectionSub}>{t('plan.chooseSub')}</Text>
-
-            <View style={styles.list}>
-              {ALL_FEATURES.map((f) => {
-                const locked = lockedFeatures.includes(f);
-                const m = META[f];
-                const on = selected.has(f);
-                return (
-                  <Pressable
-                    key={f}
-                    onPress={locked ? () => toggle(f) : undefined}
-                    style={[
-                      styles.featRow,
-                      locked && on && { borderColor: m.color, backgroundColor: `${m.color}0a` },
-                      !locked && { opacity: 0.85 },
-                    ]}
-                  >
-                    <View style={[styles.featIcon, { backgroundColor: m.bg }]}>
-                      <Text style={{ fontSize: 20 }}>{m.emoji}</Text>
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.featTitle}>{t(featLabel(f))}</Text>
-                      <Text style={styles.featDesc}>{t(featDesc(f))}</Text>
-                    </View>
-                    {locked ? (
-                      <Check on={on} color={m.color} />
-                    ) : (
-                      <ActiveBadge label={t('plan.active')} />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-
             {/* WhatsApp CTA */}
             <Pressable
               onPress={contactSupport}
@@ -407,22 +415,21 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  doneCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 22,
-    padding: 30,
+  doneNote: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    ...shadows.card,
+    gap: 10,
+    backgroundColor: '#e7f8ef',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 18,
   },
-  doneTitle: { fontFamily: F800, fontSize: 18, color: '#101a2b', marginTop: 12 },
-  doneSub: {
-    fontFamily: F500,
-    fontSize: 13,
-    lineHeight: 19,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginTop: 6,
-    maxWidth: 260,
+  doneNoteText: {
+    flex: 1,
+    fontFamily: F600,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: '#0f7a45',
   },
 });
