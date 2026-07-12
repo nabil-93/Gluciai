@@ -741,5 +741,12 @@
     "glucose": "Glycémie",
     "activity": "Activité",
     "measures": "Mesures"
+  },
+  "timeline": {
+    "title": "Rapport du jour",
+    "entrySub": "Tout ce que vous avez fait, minute par minute",
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "aiNote": "L'IA consulte ce rapport complet (aujourd'hui + hier) avant de proposer une dose d'insuline."
   }
 }

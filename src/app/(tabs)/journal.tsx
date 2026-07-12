@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -28,6 +29,7 @@ interface TimelineItem {
 }
 
 export default function HistoryScreen() {
+  const router = useRouter();
   const { t, i18n } = useTranslation();
   const { meals, glucoseLogs, insulinLogs } = useAppStore();
   const [filter, setFilter] = useState<Filter>('week');
@@ -101,6 +103,21 @@ export default function HistoryScreen() {
     <ScreenContainer withTabBarSpace>
       <Text style={styles.title}>{t('history.title')}</Text>
 
+      {/* Rapport du jour: chronological feed of everything, minute by minute */}
+      <Pressable
+        style={styles.reportCard}
+        onPress={() => router.push('/timeline' as any)}
+      >
+        <View style={styles.reportIcon}>
+          <Text style={{ fontSize: 18 }}>📋</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.reportTitle}>{t('timeline.title')}</Text>
+          <Text style={styles.reportSub}>{t('timeline.entrySub')}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+      </Pressable>
+
       <View style={styles.filters}>
         {(['day', 'week', 'month'] as Filter[]).map((f) => (
           <Pressable
@@ -169,6 +186,25 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     color: colors.text,
   },
+  reportCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.ink,
+    borderRadius: radius.lg,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+  },
+  reportIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportTitle: { fontSize: 15, fontWeight: '800' as any, color: '#fff' },
+  reportSub: { fontSize: 11.5, color: 'rgba(255,255,255,0.65)', marginTop: 2 },
   filters: { flexDirection: 'row', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.lg,

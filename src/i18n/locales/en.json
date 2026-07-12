@@ -741,5 +741,12 @@
     "glucose": "Glucose",
     "activity": "Activity",
     "measures": "Measures"
+  },
+  "timeline": {
+    "title": "Day report",
+    "entrySub": "Everything you did, minute by minute",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "aiNote": "The AI reads this full report (today + yesterday) before proposing an insulin dose."
   }
 }

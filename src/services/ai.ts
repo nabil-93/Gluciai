@@ -3,6 +3,7 @@ import { isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import type { FoodItemResult, NutritionResult, Profile } from '@/types';
 
+import { buildAIDayJournal } from './dayLog';
 import { analyzePlate, resolveFood } from './nutrition/engine';
 import { applyPortionLearning } from './nutrition/learning';
 import type { DetectedFood, Per100g } from './nutrition/types';
@@ -526,7 +527,11 @@ export async function requestBolusReport(
         mode: 'bolus',
         language,
         bolus: engine,
-        healthData: buildHealthContext(),
+        // Health snapshot + the FULL chronological journal of today and
+        // yesterday: every injection (rapid AND long), every meal with its
+        // carbs/sugars, sport, measures — the AI grounds the proposal on
+        // the complete day, not just the current numbers.
+        healthData: buildHealthContext() + '\n\n' + buildAIDayJournal(),
       },
     });
     if (error || !data?.result?.sections) return null;
@@ -544,7 +549,15 @@ export async function checkModifiedDoseAI(
   if (isDemoMode || !supabase) return null;
   try {
     const { data, error } = await supabase.functions.invoke('ai-chat', {
-      body: { mode: 'bolus_check', language, bolus: engine, modifiedDose },
+      body: {
+        mode: 'bolus_check',
+        language,
+        bolus: engine,
+        modifiedDose,
+        // The safety check also sees the whole day (doses already taken,
+        // meals, sport) to judge whether the edited dose is dangerous.
+        healthData: buildAIDayJournal(),
+      },
     });
     if (error || !data?.result?.risk) return null;
     return data.result;

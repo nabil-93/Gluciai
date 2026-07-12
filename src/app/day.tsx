@@ -102,7 +102,16 @@ export default function DayScreen() {
               month: 'long',
             })}
           </Text>
-          <View style={{ width: 36 }} />
+          <Pressable
+            onPress={() =>
+              router.push(
+                `/timeline?date=${date ?? new Date().toISOString().slice(0, 10)}` as any
+              )
+            }
+            style={styles.backBtn}
+          >
+            <Text style={{ fontSize: 15 }}>⏱️</Text>
+          </Pressable>
         </View>
 
         {isEmpty ? (

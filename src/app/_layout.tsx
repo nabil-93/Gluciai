@@ -103,6 +103,7 @@ export default function RootLayout() {
             <Stack.Screen name="nutrition" />
             <Stack.Screen name="glucose" />
             <Stack.Screen name="insulin" />
+            <Stack.Screen name="timeline" />
             <Stack.Screen name="foods" options={{ presentation: 'modal' }} />
             <Stack.Screen name="report" options={{ presentation: 'modal' }} />
             <Stack.Screen name="rappels" options={{ presentation: 'modal' }} />

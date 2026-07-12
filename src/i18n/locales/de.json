@@ -741,5 +741,12 @@
     "glucose": "Blutzucker",
     "activity": "Aktivität",
     "measures": "Messungen"
+  },
+  "timeline": {
+    "title": "Tagesbericht",
+    "entrySub": "Alles, was Sie getan haben — Minute für Minute",
+    "today": "Heute",
+    "yesterday": "Gestern",
+    "aiNote": "Die KI liest diesen vollständigen Bericht (heute + gestern), bevor sie eine Insulindosis vorschlägt."
   }
 }
