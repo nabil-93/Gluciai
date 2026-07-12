@@ -43,6 +43,7 @@ export default function BarcodeScreen() {
   const [grams, setGrams] = useState(100);
   const [saved, setSaved] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
   const scannedRef = useRef(false);
 
   const isWeb = Platform.OS === 'web';
@@ -179,22 +180,39 @@ export default function BarcodeScreen() {
               />
             ) : null}
 
-            {/* Web camera scanner (BarcodeDetector) */}
-            {isWeb && webBarcodeSupported && !camError ? (
-              <WebBarcodeScanner
-                onDetected={(code) => {
-                  if (scannedRef.current || product || loading) return;
-                  scannedRef.current = true;
-                  lookup(code);
-                }}
-                onError={(m) => setCamError(m)}
-              />
+            {/* Web camera scanner — starts on a tap (required by iOS Safari).
+                Camera AND manual entry are both always offered. */}
+            {isWeb && webBarcodeSupported ? (
+              scanning ? (
+                <WebBarcodeScanner
+                  onDetected={(code) => {
+                    if (scannedRef.current || product || loading) return;
+                    scannedRef.current = true;
+                    setScanning(false);
+                    lookup(code);
+                  }}
+                  onError={(m) => {
+                    setCamError(m);
+                    setScanning(false);
+                  }}
+                />
+              ) : (
+                <AppButton
+                  label={`📷 ${t('barcode.scanWithCamera')}`}
+                  onPress={() => {
+                    setCamError(null);
+                    scannedRef.current = false;
+                    setScanning(true);
+                  }}
+                  style={{ marginBottom: 14 }}
+                />
+              )
             ) : null}
 
             {/* Manual input — always available as a fallback */}
             <BevelCard>
               <Text style={styles.manualLabel}>
-                {isWeb && webBarcodeSupported && !camError
+                {isWeb && webBarcodeSupported
                   ? t('barcode.orType')
                   : t('barcode.type')}
               </Text>

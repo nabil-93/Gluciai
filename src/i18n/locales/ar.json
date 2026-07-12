@@ -813,6 +813,7 @@
     "example": "مثلا: 3017620422003",
     "searching": "كنقلب فـ Open Food Facts…",
     "notFound": "المنتج {{code}} ماكاينش فـ Open Food Facts. جرب سكانر الوجبات عوض هادا.",
-    "cameraError": "ما قدرناش نوصلو للكاميرا — دخل الكود بيدك."
+    "cameraError": "ما قدرناش نوصلو للكاميرا — دخل الكود بيدك.",
+    "scanWithCamera": "مسح بالكاميرا"
   }
 }

@@ -813,6 +813,7 @@
     "example": "z. B. 3017620422003",
     "searching": "Suche in Open Food Facts…",
     "notFound": "Produkt {{code}} nicht in Open Food Facts gefunden. Nutze stattdessen den Mahlzeiten-Scanner.",
-    "cameraError": "Kein Kamerazugriff — gib den Code manuell ein."
+    "cameraError": "Kein Kamerazugriff — gib den Code manuell ein.",
+    "scanWithCamera": "Mit der Kamera scannen"
   }
 }

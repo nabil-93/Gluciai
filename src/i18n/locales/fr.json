@@ -813,6 +813,7 @@
     "example": "ex : 3017620422003",
     "searching": "Recherche dans Open Food Facts…",
     "notFound": "Produit {{code}} introuvable dans Open Food Facts. Essayez le scanner de repas à la place.",
-    "cameraError": "Impossible d'accéder à la caméra — saisissez le code manuellement."
+    "cameraError": "Impossible d'accéder à la caméra — saisissez le code manuellement.",
+    "scanWithCamera": "Scanner avec la caméra"
   }
 }

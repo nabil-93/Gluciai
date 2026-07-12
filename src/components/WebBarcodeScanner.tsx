@@ -1,23 +1,32 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import {
+  BrowserMultiFormatReader,
+  DecodeHintType,
+  BarcodeFormat,
+} from '@zxing/library';
 
 /* ────────────────────────────────────────────────────────────
  * WEB BARCODE SCANNER
- * Uses the browser's native BarcodeDetector (Chrome/Edge/Android
- * WebView) to read EAN/UPC codes straight from the camera — the
- * patient just points at the product, no typing. Falls back to
- * nothing (the parent still offers manual entry) when the API or
- * camera isn't available.
+ * Reads EAN/UPC codes straight from the camera on the web. Uses the
+ * browser's native BarcodeDetector when available (Chrome/Edge/
+ * Android — fastest), and otherwise falls back to ZXing, a pure-JS
+ * decoder that works EVERYWHERE, including Safari on iPhone and
+ * Firefox. So the camera option shows on every browser that has a
+ * camera; typing is only ever a manual fallback.
  * ──────────────────────────────────────────────────────────── */
 
-const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'];
-
+// Supported as long as the browser can open a camera — ZXing covers the rest.
 export const webBarcodeSupported =
   Platform.OS === 'web' &&
-  typeof window !== 'undefined' &&
-  'BarcodeDetector' in window &&
+  typeof navigator !== 'undefined' &&
   !!navigator.mediaDevices?.getUserMedia;
+
+const hasNativeDetector =
+  typeof window !== 'undefined' && 'BarcodeDetector' in window;
+
+const NATIVE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'];
 
 export function WebBarcodeScanner({
   onDetected,
@@ -30,28 +39,21 @@ export function WebBarcodeScanner({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
+  const zxingRef = useRef<BrowserMultiFormatReader | null>(null);
   const doneRef = useRef(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
+    const emit = (code: string) => {
+      if (doneRef.current) return;
+      doneRef.current = true;
+      onDetected(code);
+    };
+
     (async () => {
       try {
-        const Detector = (window as any).BarcodeDetector;
-        // Some builds expose the class but support no formats — guard it.
-        let formats = FORMATS;
-        try {
-          const supported: string[] = await Detector.getSupportedFormats?.();
-          if (Array.isArray(supported) && supported.length) {
-            formats = FORMATS.filter((f) => supported.includes(f));
-            if (!formats.length) formats = supported;
-          }
-        } catch {
-          /* keep defaults */
-        }
-        const detector = new Detector({ formats });
-
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment' },
           audio: false,
@@ -68,22 +70,55 @@ export function WebBarcodeScanner({
         await video.play().catch(() => {});
         setReady(true);
 
-        const tick = async () => {
-          if (cancelled || doneRef.current || !videoRef.current) return;
+        // ── Path A: native BarcodeDetector (fast) ──
+        if (hasNativeDetector) {
           try {
-            const codes = await detector.detect(videoRef.current);
-            const hit = codes?.find((c: any) => c.rawValue)?.rawValue;
-            if (hit) {
-              doneRef.current = true;
-              onDetected(String(hit));
-              return;
+            const Detector = (window as any).BarcodeDetector;
+            let formats = NATIVE_FORMATS;
+            try {
+              const supported: string[] = await Detector.getSupportedFormats?.();
+              if (Array.isArray(supported) && supported.length) {
+                const f = NATIVE_FORMATS.filter((x) => supported.includes(x));
+                formats = f.length ? f : supported;
+              }
+            } catch {
+              /* defaults */
             }
+            const detector = new Detector({ formats });
+            const tick = async () => {
+              if (cancelled || doneRef.current || !videoRef.current) return;
+              try {
+                const codes = await detector.detect(videoRef.current);
+                const hit = codes?.find((c: any) => c.rawValue)?.rawValue;
+                if (hit) return emit(String(hit));
+              } catch {
+                /* transient */
+              }
+              rafRef.current = requestAnimationFrame(tick);
+            };
+            rafRef.current = requestAnimationFrame(tick);
+            return;
           } catch {
-            /* transient frame error — keep scanning */
+            /* fall through to ZXing */
           }
-          rafRef.current = requestAnimationFrame(tick);
-        };
-        rafRef.current = requestAnimationFrame(tick);
+        }
+
+        // ── Path B: ZXing (works on every browser) ──
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.CODE_128,
+        ]);
+        const reader = new BrowserMultiFormatReader(hints, 300);
+        zxingRef.current = reader;
+        reader.decodeFromStream(stream, video, (result) => {
+          if (result && !doneRef.current) emit(result.getText());
+        }).catch(() => {
+          /* decode loop stopped on cleanup */
+        });
       } catch {
         onError?.(t('barcode.cameraError'));
       }
@@ -92,6 +127,10 @@ export function WebBarcodeScanner({
     return () => {
       cancelled = true;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      try {
+        zxingRef.current?.reset();
+      } catch {}
+      zxingRef.current = null;
       streamRef.current?.getTracks().forEach((tr) => tr.stop());
       streamRef.current = null;
     };
@@ -103,7 +142,10 @@ export function WebBarcodeScanner({
   const videoEl = React.createElement('video', {
     ref: videoRef,
     muted: true,
+    autoPlay: true,
     playsInline: true,
+    // Safari on iOS only honours inline playback with these lowercase attrs.
+    'webkit-playsinline': 'true',
     style: {
       width: '100%',
       height: '100%',
