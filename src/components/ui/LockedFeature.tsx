@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,33 @@ import { shadows } from '@/theme';
 const F500 = 'PlusJakartaSans_500Medium';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
+
+/** Support WhatsApp — where a locked-out patient asks to unlock a feature. */
+const SUPPORT_WA = '491637606478';
+const SUPPORT_WA_DISPLAY = '+49 163 7606478';
+
+function WhatsAppIcon({ size = 18 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5.1-1.3A10 10 0 1 0 12 2Z"
+        fill="#ffffff"
+      />
+      <Path
+        d="M8.5 7.3c-.2-.4-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.8 2.9 4.5 3.9 2.2.9 2.7.7 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2-.1-.1-.2-.2-.5-.3l-1.6-.8c-.2-.1-.4-.1-.6.1l-.6.8c-.1.2-.3.2-.5.1-.2-.1-.9-.3-1.7-1.1-.6-.6-1.1-1.3-1.2-1.5-.1-.2 0-.4.1-.5l.4-.5c.1-.1.1-.3.2-.4 0-.1 0-.3 0-.4l-.5-1.4Z"
+        fill="#1fbc78"
+      />
+    </Svg>
+  );
+}
+
+function openSupportWhatsApp(message: string) {
+  const encoded = encodeURIComponent(message);
+  const wa = `whatsapp://send?phone=${SUPPORT_WA}&text=${encoded}`;
+  const web = `https://wa.me/${SUPPORT_WA}?text=${encoded}`;
+  // Try the app first; fall back to the browser link.
+  Linking.openURL(wa).catch(() => Linking.openURL(web).catch(() => {}));
+}
 
 function BigLock({ size = 34, color = '#b45309' }: { size?: number; color?: string }) {
   return (
@@ -77,15 +104,32 @@ export function LockedScreen({
           </Text>
         </View>
 
-        <Pressable onPress={close} style={{ alignSelf: 'stretch', marginTop: 22 }}>
-          <LinearGradient
-            colors={['#2ec983', '#1fbc78']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.cta}
+        {/* Contact support on WhatsApp to unlock (not shown for quota). */}
+        {!isQuota ? (
+          <Pressable
+            onPress={() =>
+              openSupportWhatsApp(t('locked.waMessage', { feature: featureLabel }))
+            }
+            style={{ alignSelf: 'stretch', marginTop: 22 }}
           >
-            <Text style={styles.ctaText}>{t('locked.understood')}</Text>
-          </LinearGradient>
+            <LinearGradient
+              colors={['#25D366', '#1ebe5d']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.cta}
+            >
+              <WhatsAppIcon />
+              <Text style={styles.ctaText}>{t('locked.contactWa')}</Text>
+            </LinearGradient>
+          </Pressable>
+        ) : null}
+
+        {!isQuota ? (
+          <Text style={styles.waNumber}>{SUPPORT_WA_DISPLAY}</Text>
+        ) : null}
+
+        <Pressable onPress={close} style={{ marginTop: isQuota ? 22 : 14 }}>
+          <Text style={styles.secondaryText}>{t('locked.understood')}</Text>
         </Pressable>
       </View>
     </View>
@@ -159,14 +203,24 @@ const styles = StyleSheet.create({
   cta: {
     height: 52,
     borderRadius: 16,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1fbc78',
-    shadowOpacity: 0.32,
+    gap: 9,
+    shadowColor: '#25D366',
+    shadowOpacity: 0.35,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
   },
   ctaText: { fontFamily: F700, fontSize: 15.5, color: '#ffffff' },
+  waNumber: {
+    fontFamily: F700,
+    fontSize: 13,
+    color: '#5f6b7a',
+    marginTop: 10,
+    letterSpacing: 0.3,
+  },
+  secondaryText: { fontFamily: F700, fontSize: 14, color: '#98a1af' },
   chip: {
     position: 'absolute',
     top: 10,

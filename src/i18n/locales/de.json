@@ -647,12 +647,14 @@
     "featChat": "KI-Chat",
     "featCall": "KI-Sprachanruf",
     "message": "Diese Funktion ist derzeit nicht in deinem Konto enthalten.",
-    "subscribeNote": "Abo erforderlich — kontaktiere den Support, um sie zu aktivieren.",
+    "subscribeNote": "Abo erforderlich — kontaktiere den Support per WhatsApp zur Freischaltung.",
     "understood": "Verstanden",
     "badge": "Gesperrt",
     "quotaTitle": "Anrufminuten aufgebraucht",
     "quotaMessage": "Du hast diesen Monat alle deine Sprachanruf-Minuten verbraucht.",
-    "quotaNote": "Deine Minuten werden nächsten Monat zurückgesetzt, oder kontaktiere den Support für mehr."
+    "quotaNote": "Deine Minuten werden nächsten Monat zurückgesetzt, oder kontaktiere den Support für mehr.",
+    "contactWa": "Support kontaktieren",
+    "waMessage": "Hallo, ich möchte „{{feature}}“ in der GlucoAI-App freischalten. Danke."
   },
   "glucosePage": {
     "title": "Blutzucker",

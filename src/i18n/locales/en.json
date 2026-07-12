@@ -647,12 +647,14 @@
     "featChat": "AI chat",
     "featCall": "AI voice call",
     "message": "This feature is not included in your account at the moment.",
-    "subscribeNote": "Subscription required — contact support to activate it.",
+    "subscribeNote": "Subscription required — contact support on WhatsApp to activate it.",
     "understood": "Got it",
     "badge": "Locked",
     "quotaTitle": "Call minutes used up",
     "quotaMessage": "You've used all your voice-call minutes for this month.",
-    "quotaNote": "Your minutes reset next month, or contact support to add more."
+    "quotaNote": "Your minutes reset next month, or contact support to add more.",
+    "contactWa": "Contact support",
+    "waMessage": "Hello, I would like to activate \"{{feature}}\" in the GlucoAI app. Thank you."
   },
   "glucosePage": {
     "title": "Blood glucose",

@@ -647,12 +647,14 @@
     "featChat": "Chat avec l'IA",
     "featCall": "Appel vocal IA",
     "message": "Cette fonctionnalité n'est pas incluse dans ton compte pour le moment.",
-    "subscribeNote": "Abonnement requis — contacte le support pour l’activer.",
+    "subscribeNote": "Abonnement requis — contacte le support sur WhatsApp pour l’activer.",
     "understood": "J'ai compris",
     "badge": "Verrouillé",
     "quotaTitle": "Minutes d'appel épuisées",
     "quotaMessage": "Tu as utilisé toutes tes minutes d'appel vocal pour ce mois-ci.",
-    "quotaNote": "Tes minutes se rechargent le mois prochain, ou contacte le support pour en ajouter."
+    "quotaNote": "Tes minutes se rechargent le mois prochain, ou contacte le support pour en ajouter.",
+    "contactWa": "Contacter le support",
+    "waMessage": "Bonjour, je souhaite activer « {{feature}} » dans l'application GlucoAI. Merci."
   },
   "glucosePage": {
     "title": "Glycémie",
