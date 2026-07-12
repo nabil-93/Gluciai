@@ -5,20 +5,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
+import Svg, { Path } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-import {
-  AppButton,
-  Avatar,
-  BevelCard,
-  CloseGlyph,
-  InputField,
-} from '@/components/ui';
+import { Avatar, CloseGlyph } from '@/components/ui';
 import { SUPPORTED_LANGUAGES, setAppLanguage, type LanguageCode } from '@/i18n';
 import {
   changePassword,
@@ -29,15 +26,37 @@ import {
 import { saveProfile } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
-import type {
-  DiabetesType,
-  InsulinType,
-  Profile,
-} from '@/types';
+import type { DiabetesType, InsulinType, Profile } from '@/types';
 
 const GENDERS: Profile['gender'][] = ['male', 'female', 'other'];
 const DIABETES: DiabetesType[] = ['type1', 'type2', 'gestational', 'prediabetes'];
 const INSULINS: InsulinType[] = ['rapid', 'long', 'mixed'];
+
+/* ── Minimal line icons (SVG, not emoji) for the section headers ── */
+function Icon({ name, color = '#19C37D' }: { name: string; color?: string }) {
+  const p: Record<string, string> = {
+    user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 20a7 7 0 0 1 14 0',
+    heart:
+      'M12 20s-7-4.35-9.33-8.2C1.1 9.14 2.2 5.5 5.6 5.05 7.7 4.78 9.2 6 12 8.5c2.8-2.5 4.3-3.72 6.4-3.45 3.4.45 4.5 4.09 2.93 6.75C19 15.65 12 20 12 20Z',
+    shield: 'M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z',
+    globe:
+      'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c-2.5 2-2.5 16 0 18m0-18c2.5 2 2.5 16 0 18M3.5 9h17M3.5 15h17',
+    camera:
+      'M4 8h3l1.5-2h7L17 8h3v11H4V8Zm8 3.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
+  };
+  const strokeW = name === 'shield' || name === 'heart' ? 1.7 : 1.8;
+  return (
+    <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
+      <Path
+        d={p[name]}
+        stroke={color}
+        strokeWidth={strokeW}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -45,12 +64,9 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const profile = useAppStore((s) => s.profile);
 
-  // Editable working copy of the profile.
   const [draft, setDraft] = useState<Profile | null>(() => profile);
   const [savedFlash, setSavedFlash] = useState(false);
   const [busy, setBusy] = useState(false);
-
-  // Password fields
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -73,7 +89,6 @@ export default function ProfileScreen() {
     );
   };
 
-  /* ── Avatar ── */
   const pickAvatar = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -84,13 +99,11 @@ export default function ProfileScreen() {
     });
     const asset = res.assets?.[0];
     if (!asset?.uri) return;
-    // Optimistic local preview, then upload in the background.
     set('avatar_url', asset.uri);
     const url = await uploadAvatar(asset.uri, asset.base64 ?? undefined);
     if (url) set('avatar_url', url);
   };
 
-  /* ── Save profile ── */
   const onSave = async () => {
     setBusy(true);
     try {
@@ -102,7 +115,6 @@ export default function ProfileScreen() {
     }
   };
 
-  /* ── Change password ── */
   const onChangePassword = async () => {
     setPwMsg(null);
     if (pw1.length < 6) {
@@ -128,14 +140,12 @@ export default function ProfileScreen() {
     }
   };
 
-  /* ── Language ── */
   const onLanguage = async (code: LanguageCode) => {
     await setAppLanguage(code);
     set('language', code);
     await saveProfile({ ...draft, language: code });
   };
 
-  /* ── Sign out ── */
   const onSignOut = () => {
     Alert.alert(t('profile.signOut'), t('profile.signOutConfirm'), [
       { text: t('profile.cancel'), style: 'cancel' },
@@ -150,72 +160,80 @@ export default function ProfileScreen() {
     ]);
   };
 
-  /* ── Delete account ── */
   const onDelete = () => {
-    Alert.alert(
-      t('profile.deleteConfirmTitle'),
-      t('profile.deleteConfirmBody'),
-      [
-        { text: t('profile.cancel'), style: 'cancel' },
-        {
-          text: t('profile.deleteAccount'),
-          style: 'destructive',
-          onPress: async () => {
-            setBusy(true);
-            const r = await deleteAccount();
-            setBusy(false);
-            if (r.ok) router.replace('/auth');
-            else Alert.alert(t('profile.error'), r.error ?? '');
-          },
+    Alert.alert(t('profile.deleteConfirmTitle'), t('profile.deleteConfirmBody'), [
+      { text: t('profile.cancel'), style: 'cancel' },
+      {
+        text: t('profile.deleteAccount'),
+        style: 'destructive',
+        onPress: async () => {
+          setBusy(true);
+          const r = await deleteAccount();
+          setBusy(false);
+          if (r.ok) router.replace('/auth');
+          else Alert.alert(t('profile.error'), r.error ?? '');
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
     <View style={styles.root}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.close}>
-          <CloseGlyph size={16} color={colors.text} />
+          <CloseGlyph size={15} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('profile.title')}</Text>
-        <View style={{ width: 36 }} />
+        <View style={{ width: 38 }} />
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{
+          paddingHorizontal: 18,
+          paddingTop: 20,
+          paddingBottom: insets.bottom + 40,
+        }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Avatar */}
+        {/* Avatar with a soft green ring */}
         <View style={styles.avatarWrap}>
           <Pressable onPress={pickAvatar}>
-            <Avatar name={draft.name} uri={draft.avatar_url} size={96} />
+            <LinearGradient
+              colors={['#2ee59d', '#19C37D']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.avatarRing}
+            >
+              <View style={styles.avatarInner}>
+                <Avatar name={draft.name} uri={draft.avatar_url} size={92} />
+              </View>
+            </LinearGradient>
             <View style={styles.avatarEdit}>
-              <Text style={styles.avatarEditIcon}>📷</Text>
+              <Icon name="camera" color="#ffffff" />
             </View>
           </Pressable>
-          <Pressable onPress={pickAvatar}>
+          <Pressable onPress={pickAvatar} hitSlop={6}>
             <Text style={styles.changePhoto}>{t('profile.changePhoto')}</Text>
           </Pressable>
         </View>
 
         {/* Personal info */}
-        <Section title={t('profile.sectionPersonal')}>
-          <InputField
+        <Section icon="user" title={t('profile.sectionPersonal')}>
+          <Field
             label={t('profile.name')}
             value={draft.name ?? ''}
             onChangeText={(v) => set('name', v)}
             autoCapitalize="words"
           />
-          <InputField
+          <Field
             label={t('profile.birthDate')}
             value={draft.birth_date ?? ''}
             onChangeText={(v) => set('birth_date', v)}
             placeholder="1990-01-31"
           />
-          <Text style={styles.fieldLabel}>{t('profile.gender')}</Text>
+          <FieldLabel>{t('profile.gender')}</FieldLabel>
           <View style={styles.chipRow}>
             {GENDERS.map((g) => (
               <Chip
@@ -227,28 +245,26 @@ export default function ProfileScreen() {
             ))}
           </View>
           <View style={styles.row2}>
-            <View style={{ flex: 1 }}>
-              <InputField
-                label={t('profile.height')}
-                value={draft.height != null ? String(draft.height) : ''}
-                onChangeText={(v) => setNum('height', v)}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <InputField
-                label={t('profile.weight')}
-                value={draft.weight != null ? String(draft.weight) : ''}
-                onChangeText={(v) => setNum('weight', v)}
-                keyboardType="numeric"
-              />
-            </View>
+            <Field
+              flex
+              label={t('profile.height')}
+              value={draft.height != null ? String(draft.height) : ''}
+              onChangeText={(v) => setNum('height', v)}
+              keyboardType="numeric"
+            />
+            <Field
+              flex
+              label={t('profile.weight')}
+              value={draft.weight != null ? String(draft.weight) : ''}
+              onChangeText={(v) => setNum('weight', v)}
+              keyboardType="numeric"
+            />
           </View>
         </Section>
 
         {/* Medical info */}
-        <Section title={t('profile.sectionMedical')}>
-          <Text style={styles.fieldLabel}>{t('profile.diabetesType')}</Text>
+        <Section icon="heart" title={t('profile.sectionMedical')}>
+          <FieldLabel>{t('profile.diabetesType')}</FieldLabel>
           <View style={styles.chipRow}>
             {DIABETES.map((d) => (
               <Chip
@@ -259,7 +275,7 @@ export default function ProfileScreen() {
               />
             ))}
           </View>
-          <Text style={styles.fieldLabel}>{t('profile.insulinTypes')}</Text>
+          <FieldLabel>{t('profile.insulinTypes')}</FieldLabel>
           <View style={styles.chipRow}>
             {INSULINS.map((k) => (
               <Chip
@@ -271,56 +287,52 @@ export default function ProfileScreen() {
             ))}
           </View>
           <View style={styles.row2}>
-            <View style={{ flex: 1 }}>
-              <InputField
-                label={t('profile.targetLow')}
-                value={String(draft.target_low ?? '')}
-                onChangeText={(v) => setNum('target_low', v)}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <InputField
-                label={t('profile.targetHigh')}
-                value={String(draft.target_high ?? '')}
-                onChangeText={(v) => setNum('target_high', v)}
-                keyboardType="numeric"
-              />
-            </View>
+            <Field
+              flex
+              label={t('profile.targetLow')}
+              value={String(draft.target_low ?? '')}
+              onChangeText={(v) => setNum('target_low', v)}
+              keyboardType="numeric"
+            />
+            <Field
+              flex
+              label={t('profile.targetHigh')}
+              value={String(draft.target_high ?? '')}
+              onChangeText={(v) => setNum('target_high', v)}
+              keyboardType="numeric"
+            />
           </View>
           <View style={styles.row2}>
-            <View style={{ flex: 1 }}>
-              <InputField
-                label={t('profile.carbRatio')}
-                value={draft.carb_ratio != null ? String(draft.carb_ratio) : ''}
-                onChangeText={(v) => setNum('carb_ratio', v)}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <InputField
-                label={t('profile.correctionFactor')}
-                value={
-                  draft.correction_factor != null
-                    ? String(draft.correction_factor)
-                    : ''
-                }
-                onChangeText={(v) => setNum('correction_factor', v)}
-                keyboardType="numeric"
-              />
-            </View>
+            <Field
+              flex
+              label={t('profile.carbRatio')}
+              value={draft.carb_ratio != null ? String(draft.carb_ratio) : ''}
+              onChangeText={(v) => setNum('carb_ratio', v)}
+              keyboardType="numeric"
+            />
+            <Field
+              flex
+              label={t('profile.correctionFactor')}
+              value={
+                draft.correction_factor != null
+                  ? String(draft.correction_factor)
+                  : ''
+              }
+              onChangeText={(v) => setNum('correction_factor', v)}
+              keyboardType="numeric"
+            />
           </View>
-          <InputField
+          <Field
             label={t('profile.doctorName')}
             value={draft.doctor_name ?? ''}
             onChangeText={(v) => set('doctor_name', v)}
           />
-          <InputField
+          <Field
             label={t('profile.emergencyName')}
             value={draft.emergency_contact_name ?? ''}
             onChangeText={(v) => set('emergency_contact_name', v)}
           />
-          <InputField
+          <Field
             label={t('profile.emergencyPhone')}
             value={draft.emergency_contact_phone ?? ''}
             onChangeText={(v) => set('emergency_contact_phone', v)}
@@ -329,23 +341,23 @@ export default function ProfileScreen() {
         </Section>
 
         {/* Save */}
-        <AppButton
-          label={savedFlash ? t('profile.saved') : t('profile.save')}
+        <PrimaryButton
+          label={savedFlash ? `✓  ${t('profile.saved')}` : t('profile.save')}
           onPress={onSave}
           loading={busy}
           disabled={savedFlash}
         />
 
         {/* Security */}
-        <Section title={t('profile.sectionSecurity')}>
-          <InputField
+        <Section icon="shield" title={t('profile.sectionSecurity')}>
+          <Field
             label={t('profile.newPassword')}
             value={pw1}
             onChangeText={setPw1}
             secureTextEntry
             autoCapitalize="none"
           />
-          <InputField
+          <Field
             label={t('profile.confirmPassword')}
             value={pw2}
             onChangeText={setPw2}
@@ -357,32 +369,27 @@ export default function ProfileScreen() {
               {pwMsg.text}
             </Text>
           ) : null}
-          <AppButton
+          <SecondaryButton
             label={t('profile.changePassword')}
             onPress={onChangePassword}
-            variant="secondary"
           />
         </Section>
 
         {/* App: language + sign out */}
-        <Section title={t('profile.sectionApp')}>
-          <Text style={styles.fieldLabel}>{t('profile.language')}</Text>
+        <Section icon="globe" title={t('profile.sectionApp')}>
+          <FieldLabel>{t('profile.language')}</FieldLabel>
           <View style={styles.chipRow}>
             {SUPPORTED_LANGUAGES.map((l) => (
               <Chip
                 key={l.code}
-                label={`${l.flag} ${l.label}`}
+                label={`${l.flag}  ${l.label}`}
                 active={i18n.language === l.code}
                 onPress={() => onLanguage(l.code)}
               />
             ))}
           </View>
-          <View style={{ height: 8 }} />
-          <AppButton
-            label={t('profile.signOut')}
-            onPress={onSignOut}
-            variant="secondary"
-          />
+          <View style={{ height: 6 }} />
+          <SecondaryButton label={t('profile.signOut')} onPress={onSignOut} />
         </Section>
 
         {/* Danger zone */}
@@ -394,17 +401,56 @@ export default function ProfileScreen() {
   );
 }
 
+/* ─────────────────────────── Pieces ─────────────────────────── */
+
 function Section({
+  icon,
   title,
   children,
 }: {
+  icon: string;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <View style={{ marginTop: 18 }}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <BevelCard style={{ gap: 12 }}>{children}</BevelCard>
+    <View style={{ marginTop: 22 }}>
+      <View style={styles.sectionHead}>
+        <View style={styles.sectionIcon}>
+          <Icon name={icon} />
+        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      <View style={styles.card}>{children}</View>
+    </View>
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <Text style={styles.fieldLabel}>{children}</Text>;
+}
+
+function Field({
+  label,
+  flex,
+  ...props
+}: React.ComponentProps<typeof TextInput> & { label: string; flex?: boolean }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={flex ? { flex: 1 } : undefined}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        {...props}
+        onFocus={(e) => {
+          setFocused(true);
+          props.onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          props.onBlur?.(e);
+        }}
+        placeholderTextColor={colors.textPlaceholder}
+        style={[styles.input, focused && styles.inputFocused]}
+      />
     </View>
   );
 }
@@ -419,13 +465,55 @@ function Chip({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.chip, active && styles.chipActive]}
-    >
+    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
       <Text style={[styles.chipText, active && styles.chipTextActive]}>
         {label}
       </Text>
+    </Pressable>
+  );
+}
+
+function PrimaryButton({
+  label,
+  onPress,
+  loading,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={loading || disabled}
+      style={{ marginTop: 24 }}
+    >
+      <LinearGradient
+        colors={disabled ? ['#8fe0bf', '#8fe0bf'] : ['#2ee59d', '#19C37D']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.primaryBtn}
+      >
+        <Text style={styles.primaryBtnText}>
+          {loading ? '…' : label}
+        </Text>
+      </LinearGradient>
+    </Pressable>
+  );
+}
+
+function SecondaryButton({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.secondaryBtn}>
+      <Text style={styles.secondaryBtnText}>{label}</Text>
     </Pressable>
   );
 }
@@ -440,72 +528,145 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F3',
+    borderBottomColor: '#EEF0F5',
   },
   close: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface2,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F3F0FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
 
-  avatarWrap: { alignItems: 'center', gap: 8, marginTop: 8 },
+  avatarWrap: { alignItems: 'center', gap: 12 },
+  avatarRing: {
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.soft,
+  },
+  avatarInner: {
+    width: 98,
+    height: 98,
+    borderRadius: 49,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatarEdit: {
     position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 2,
+    right: 2,
+    bottom: 2,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#19C37D',
+    borderWidth: 3,
     borderColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.card,
   },
-  avatarEditIcon: { fontSize: 15 },
-  changePhoto: { fontSize: 14, fontWeight: '700', color: colors.ai },
+  changePhoto: { fontSize: 14.5, fontWeight: '700', color: '#19C37D' },
 
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginBottom: 11,
+    marginLeft: 2,
+  },
+  sectionIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: '#E9FBF2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '800',
     color: colors.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 8,
-    marginLeft: 4,
+    letterSpacing: 0.5,
   },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    padding: 16,
+    gap: 14,
+    ...shadows.soft,
+  },
+
   fieldLabel: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
     color: colors.textSecondary,
-    marginBottom: 2,
+    marginBottom: 7,
   },
-  row2: { flexDirection: 'row', gap: 10 },
+  input: {
+    backgroundColor: '#F6F7FB',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#F6F7FB',
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+    fontSize: 15.5,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  inputFocused: {
+    backgroundColor: '#ffffff',
+    borderColor: '#19C37D',
+  },
+  row2: { flexDirection: 'row', gap: 12 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     borderRadius: 999,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    backgroundColor: colors.surface2,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    backgroundColor: '#F3F0FF',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
-  chipActive: { backgroundColor: colors.primary },
-  chipText: { fontSize: 13.5, fontWeight: '700', color: colors.textSecondary },
-  chipTextActive: { color: '#fff' },
+  chipActive: {
+    backgroundColor: '#E9FBF2',
+    borderColor: '#19C37D',
+  },
+  chipText: { fontSize: 13.5, fontWeight: '700', color: '#6B7280' },
+  chipTextActive: { color: '#14A96B' },
 
   pwMsg: { fontSize: 13, fontWeight: '600' },
   pwOk: { color: colors.primary },
   pwErr: { color: colors.danger },
 
-  deleteBtn: {
-    marginTop: 26,
+  primaryBtn: {
+    height: 54,
+    borderRadius: 17,
     alignItems: 'center',
-    paddingVertical: 14,
+    justifyContent: 'center',
+    shadowColor: '#19C37D',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 6,
   },
+  primaryBtnText: { fontSize: 16, fontWeight: '800', color: '#ffffff' },
+
+  secondaryBtn: {
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: '#F3F0FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtnText: { fontSize: 15, fontWeight: '750' as any, color: colors.text },
+
+  deleteBtn: { marginTop: 28, alignItems: 'center', paddingVertical: 14 },
   deleteText: { fontSize: 15, fontWeight: '800', color: colors.danger },
 });

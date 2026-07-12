@@ -200,4 +200,18 @@ export const shadows = {
       elevation: 12,
     },
   }) as object,
+  /** Softer, wider ambient shadow for the redesigned form/settings cards. */
+  soft: Platform.select({
+    web: {
+      boxShadow:
+        '0 2px 4px rgba(17,24,39,0.03), 0 8px 24px rgba(17,24,39,0.05)',
+    },
+    default: {
+      shadowColor: '#111827',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.05,
+      shadowRadius: 18,
+      elevation: 2,
+    },
+  }) as object,
 } as const;
