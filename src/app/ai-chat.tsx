@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -19,6 +20,7 @@ import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { LoggerConfirmCard } from '@/components/LoggerConfirmCard';
 import { VoiceRecorderBar } from '@/components/VoiceRecorderBar';
 import { isRTL } from '@/i18n';
+import { confirmAsync } from '@/lib/confirm';
 import { sendChatMessage, sendChatVoice } from '@/services/ai';
 import {
   actionSummary,
@@ -51,6 +53,39 @@ function SendIcon() {
         fill="#ffffff"
         stroke="#ffffff"
         strokeWidth={1.4}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function PlusIcon({ color = '#19c37d' }: { color?: string }) {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 5v14M5 12h14" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+function ListIcon({ color = '#3b4657' }: { color?: string }) {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 7h16M4 12h16M4 17h10"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+function TrashIcon({ color = '#c0410b' }: { color?: string }) {
+  return (
+    <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v12a1 1 0 01-1 1H7a1 1 0 01-1-1V7"
+        stroke={color}
+        strokeWidth={1.9}
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </Svg>
@@ -110,10 +145,21 @@ function AiChatScreen() {
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
-  const { chatMessages, addChatMessage, profile, addAiJournalEntry } = useAppStore();
+  const addChatMessage = useAppStore((s) => s.addChatMessage);
+  const profile = useAppStore((s) => s.profile);
+  const addAiJournalEntry = useAppStore((s) => s.addAiJournalEntry);
+  const conversations = useAppStore((s) => s.conversations);
+  const activeConversationId = useAppStore((s) => s.activeConversationId);
+  const newConversation = useAppStore((s) => s.newConversation);
+  const selectConversation = useAppStore((s) => s.selectConversation);
+  const deleteConversation = useAppStore((s) => s.deleteConversation);
+  const messages =
+    conversations.find((c) => c.id === activeConversationId)?.messages ?? [];
+
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [pendingAction, setPendingAction] = useState<LoggerAction | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const close = () => {
@@ -121,11 +167,29 @@ function AiChatScreen() {
     else router.replace('/(tabs)');
   };
 
+  const onNew = () => {
+    newConversation();
+    setPendingAction(null);
+    setInput('');
+    setDrawerOpen(false);
+  };
+
+  const onDeleteConv = async (id: string) => {
+    const ok = await confirmAsync({
+      title: t('chat.deleteTitle'),
+      message: t('chat.deleteBody'),
+      confirmLabel: t('chat.delete'),
+      cancelLabel: t('profile.cancel'),
+      destructive: true,
+    });
+    if (ok) deleteConversation(id);
+  };
+
   const scrollDown = () => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
   };
 
-  useEffect(scrollDown, [chatMessages.length, thinking, pendingAction]);
+  useEffect(scrollDown, [messages.length, thinking, pendingAction, activeConversationId]);
 
   const send = async (text: string) => {
     const content = text.trim();
@@ -152,7 +216,7 @@ function AiChatScreen() {
       : Promise.resolve(null);
 
     try {
-      const history = [...chatMessages, userMessage].map((m) => ({
+      const history = [...messages, userMessage].map((m) => ({
         role: m.role,
         content: m.content,
       }));
@@ -216,7 +280,7 @@ function AiChatScreen() {
     setPendingAction(null);
     setThinking(true);
     try {
-      const history = chatMessages.map((m) => ({ role: m.role, content: m.content }));
+      const history = messages.map((m) => ({ role: m.role, content: m.content }));
       const { reply, transcript } = await sendChatVoice(
         history,
         i18n.language,
@@ -278,9 +342,12 @@ function AiChatScreen() {
           <Text style={styles.headerTitle}>{t('chat.headerTitle')}</Text>
           <Text style={styles.headerSub}>{t('chat.headerSub')}</Text>
         </View>
-        <View style={styles.headerRobot}>
-          <AnimatedRobot size={40} mood="happy" />
-        </View>
+        <Pressable onPress={onNew} style={styles.hBtn} hitSlop={6}>
+          <PlusIcon />
+        </Pressable>
+        <Pressable onPress={() => setDrawerOpen(true)} style={styles.hBtn} hitSlop={6}>
+          <ListIcon />
+        </Pressable>
       </View>
 
       {/* ── Conversation ── */}
@@ -307,7 +374,7 @@ function AiChatScreen() {
           </View>
         </View>
 
-        {chatMessages.map((m) =>
+        {messages.map((m) =>
           m.role === 'user' ? (
             <View key={m.id} style={styles.userRow}>
               <View style={styles.userBubble}>
@@ -399,6 +466,68 @@ function AiChatScreen() {
           </Pressable>
         </VoiceRecorderBar>
       </View>
+
+      {/* ── Conversations drawer ── */}
+      <Modal
+        visible={drawerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDrawerOpen(false)}
+      >
+        <Pressable style={styles.drawerBackdrop} onPress={() => setDrawerOpen(false)}>
+          <Pressable style={[styles.drawer, { paddingTop: insets.top + 14 }]} onPress={() => {}}>
+            <Text style={styles.drawerTitle}>{t('chat.conversations')}</Text>
+
+            <Pressable style={styles.newRow} onPress={onNew}>
+              <View style={styles.newRowIcon}>
+                <PlusIcon color="#ffffff" />
+              </View>
+              <Text style={styles.newRowText}>{t('chat.newConversation')}</Text>
+            </Pressable>
+
+            <ScrollView style={{ marginTop: 6 }} showsVerticalScrollIndicator={false}>
+              {conversations.length === 0 ? (
+                <Text style={styles.emptyConv}>{t('chat.noConversations')}</Text>
+              ) : (
+                conversations.map((c) => {
+                  const active = c.id === activeConversationId;
+                  return (
+                    <View
+                      key={c.id}
+                      style={[styles.convRow, active && styles.convRowActive]}
+                    >
+                      <Pressable
+                        style={{ flex: 1, minWidth: 0 }}
+                        onPress={() => {
+                          selectConversation(c.id);
+                          setDrawerOpen(false);
+                        }}
+                      >
+                        <Text style={styles.convTitle} numberOfLines={1}>
+                          {c.title || t('chat.newConversation')}
+                        </Text>
+                        <Text style={styles.convTime}>
+                          {new Date(c.updated_at).toLocaleDateString(i18n.language, {
+                            day: '2-digit',
+                            month: 'short',
+                          })}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => onDeleteConv(c.id)}
+                        hitSlop={8}
+                        style={styles.convDel}
+                      >
+                        <TrashIcon />
+                      </Pressable>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -426,6 +555,84 @@ const styles = StyleSheet.create({
   headerTitle: { fontFamily: F800, fontSize: 16.5, color: '#111827' },
   headerSub: { fontFamily: F500, fontSize: 11.5, color: '#8b93a7', marginTop: 1 },
   headerRobot: { width: 40, alignItems: 'center' },
+  hBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#f1f3f8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+
+  /* Conversations drawer */
+  drawerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(16,24,40,0.42)',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  drawer: {
+    width: '82%',
+    maxWidth: 340,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    borderTopLeftRadius: 22,
+    borderBottomLeftRadius: 22,
+  },
+  drawerTitle: {
+    fontFamily: F800,
+    fontSize: 18,
+    color: '#101a2b',
+    marginBottom: 14,
+    marginTop: 2,
+  },
+  newRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: '#eafaf1',
+    borderRadius: 14,
+  },
+  newRowIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#19c37d',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newRowText: { fontFamily: F700, fontSize: 14, color: '#0f7a45' },
+  emptyConv: {
+    fontFamily: F500,
+    fontSize: 13,
+    color: '#98a1af',
+    textAlign: 'center',
+    paddingVertical: 30,
+  },
+  convRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 13,
+    marginTop: 6,
+  },
+  convRowActive: { backgroundColor: '#f2f4f9' },
+  convTitle: { fontFamily: F600, fontSize: 13.5, color: '#26313f' },
+  convTime: { fontFamily: F500, fontSize: 11, color: '#a6aebc', marginTop: 2 },
+  convDel: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fdeee7',
+  },
 
   /* AI bubbles (left, with avatar) */
   aiRow: {

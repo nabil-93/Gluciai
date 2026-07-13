@@ -17,6 +17,23 @@ import type {
   Profile,
 } from '@/types';
 
+/** One chat thread. Conversations are grouped locally on the device; the
+ *  server keeps a single flat chat_history per patient (for the doctor). */
+export interface Conversation {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  updated_at: string;
+}
+
+/** First user line, trimmed, as the conversation's title. */
+export function titleFromMessages(messages: ChatMessage[]): string {
+  const firstUser = messages.find((m) => m.role === 'user')?.content?.trim();
+  if (!firstUser) return '';
+  const clean = firstUser.replace(/^🎙️\s*/, '').replace(/\s+/g, ' ');
+  return clean.length > 40 ? clean.slice(0, 40) + '…' : clean;
+}
+
 /** Everything hydrateFromServer() pulls back for the signed-in account. */
 export interface ServerSnapshot {
   accountUserId: string;
@@ -49,7 +66,9 @@ interface AppState {
   meals: MealScan[];
   activityLogs: ActivityLog[];
   measureLogs: MeasureLog[];
-  chatMessages: ChatMessage[];
+  /** Chat threads, newest first; the active one is shown in the chat screen */
+  conversations: Conversation[];
+  activeConversationId: string | null;
   /** AI learning: user corrections, stored apart from official values */
   corrections: FoodCorrection[];
   /** AI coach journal: everything the assistant detected, in order */
@@ -103,6 +122,10 @@ interface AppState {
 
   addChatMessage: (message: ChatMessage) => void;
   updateLastChatMessage: (content: string) => void;
+  /** Start a fresh empty conversation and make it active */
+  newConversation: () => void;
+  selectConversation: (id: string) => void;
+  deleteConversation: (id: string) => void;
   /**
    * Replace local data with the account's server snapshot (server = source
    * of truth). `switchedAccount` additionally wipes device-only leftovers
@@ -125,7 +148,8 @@ const initialData = {
   meals: [] as MealScan[],
   activityLogs: [] as ActivityLog[],
   measureLogs: [] as MeasureLog[],
-  chatMessages: [] as ChatMessage[],
+  conversations: [] as Conversation[],
+  activeConversationId: null as string | null,
   corrections: [] as FoodCorrection[],
   aiJournal: [] as AIJournalEntry[],
   aiJournalSeenAt: null as string | null,
@@ -206,30 +230,114 @@ export const useAppStore = create<AppState>()(
         })),
 
       addChatMessage: (message) =>
-        set((s) => ({ chatMessages: [...s.chatMessages, message] })),
+        set((s) => {
+          const now = new Date().toISOString();
+          // Find the active conversation; create one on the first message.
+          let list = s.conversations;
+          let activeId = s.activeConversationId;
+          const idx = list.findIndex((c) => c.id === activeId);
+          if (idx === -1) {
+            const conv: Conversation = {
+              id: `conv-${Date.now()}`,
+              title: '',
+              messages: [message],
+              updated_at: now,
+            };
+            conv.title = titleFromMessages(conv.messages);
+            return {
+              conversations: [conv, ...list],
+              activeConversationId: conv.id,
+            };
+          }
+          const conv = list[idx];
+          const messages = [...conv.messages, message];
+          const updated: Conversation = {
+            ...conv,
+            messages,
+            title: conv.title || titleFromMessages(messages),
+            updated_at: now,
+          };
+          // Bump the touched conversation to the top.
+          const rest = list.filter((_, i) => i !== idx);
+          return { conversations: [updated, ...rest], activeConversationId: activeId };
+        }),
       updateLastChatMessage: (content) =>
         set((s) => {
-          const messages = [...s.chatMessages];
-          const last = messages[messages.length - 1];
-          if (last && last.role === 'assistant') {
-            messages[messages.length - 1] = { ...last, content };
-          }
-          return { chatMessages: messages };
+          const list = s.conversations.map((c) => {
+            if (c.id !== s.activeConversationId) return c;
+            const messages = [...c.messages];
+            const last = messages[messages.length - 1];
+            if (last && last.role === 'assistant') {
+              messages[messages.length - 1] = { ...last, content };
+            }
+            return { ...c, messages };
+          });
+          return { conversations: list };
+        }),
+      newConversation: () =>
+        set((s) => {
+          // Reuse an already-empty active conversation instead of stacking blanks.
+          const active = s.conversations.find(
+            (c) => c.id === s.activeConversationId
+          );
+          if (active && active.messages.length === 0) return s;
+          const conv: Conversation = {
+            id: `conv-${Date.now()}`,
+            title: '',
+            messages: [],
+            updated_at: new Date().toISOString(),
+          };
+          return {
+            conversations: [conv, ...s.conversations],
+            activeConversationId: conv.id,
+          };
+        }),
+      selectConversation: (id) => set({ activeConversationId: id }),
+      deleteConversation: (id) =>
+        set((s) => {
+          const conversations = s.conversations.filter((c) => c.id !== id);
+          const activeConversationId =
+            s.activeConversationId === id
+              ? conversations[0]?.id ?? null
+              : s.activeConversationId;
+          return { conversations, activeConversationId };
         }),
       hydrateServer: (snapshot, switchedAccount) =>
-        set(
-          switchedAccount
+        set((s) => {
+          const { chatMessages: serverChat = [], ...rest } = snapshot;
+          const base = switchedAccount
             ? {
-                ...snapshot,
+                ...rest,
                 corrections: [],
                 aiJournal: [],
                 aiJournalSeenAt: null,
                 lockedFeatures: [],
-                activityStatus: 'active',
+                activityStatus: 'active' as ActivityStatus,
                 planWelcomeShown: false,
               }
-            : snapshot
-        ),
+            : rest;
+          // Seed conversations from the server's flat history only when we
+          // have none yet (fresh login / new device) or when switching
+          // accounts — never wipe locally-created threads on a routine open.
+          let conversations = s.conversations;
+          let activeConversationId = s.activeConversationId;
+          if (switchedAccount || s.conversations.length === 0) {
+            if (serverChat.length) {
+              const conv: Conversation = {
+                id: `conv-${Date.now()}`,
+                title: titleFromMessages(serverChat),
+                messages: serverChat,
+                updated_at: new Date().toISOString(),
+              };
+              conversations = [conv];
+              activeConversationId = conv.id;
+            } else if (switchedAccount) {
+              conversations = [];
+              activeConversationId = null;
+            }
+          }
+          return { ...base, conversations, activeConversationId };
+        }),
       resetAll: () => set({ ...initialData }),
     }),
     {

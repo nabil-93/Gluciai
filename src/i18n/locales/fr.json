@@ -481,7 +481,13 @@
     "chip3Q": "Explique-moi les effets de mes médicaments sur la glycémie.",
     "chip4": "Autres questions",
     "chip4Q": "J'ai une question générale sur le diabète.",
-    "greetingNamed": "Bonjour {{name}} 👋 ! Je suis votre assistant santé. Comment puis-je vous aider aujourd’hui ?"
+    "greetingNamed": "Bonjour {{name}} 👋 ! Je suis votre assistant santé. Comment puis-je vous aider aujourd’hui ?",
+    "conversations": "Conversations",
+    "newConversation": "Nouvelle conversation",
+    "noConversations": "Aucune conversation",
+    "deleteTitle": "Supprimer la conversation ?",
+    "deleteBody": "Cette conversation sera définitivement supprimée.",
+    "delete": "Supprimer"
   },
   "call": {
     "title": "Appel vocal avec l'IA",

@@ -481,7 +481,13 @@
     "chip3Q": "Erkläre mir, wie meine Medikamente den Blutzucker beeinflussen.",
     "chip4": "Andere Fragen",
     "chip4Q": "Ich habe eine allgemeine Frage zum Diabetes.",
-    "greetingNamed": "Hallo {{name}} 👋! Ich bin dein Gesundheitsassistent. Wie kann ich dir heute helfen?"
+    "greetingNamed": "Hallo {{name}} 👋! Ich bin dein Gesundheitsassistent. Wie kann ich dir heute helfen?",
+    "conversations": "Unterhaltungen",
+    "newConversation": "Neue Unterhaltung",
+    "noConversations": "Keine Unterhaltungen",
+    "deleteTitle": "Unterhaltung löschen?",
+    "deleteBody": "Diese Unterhaltung wird endgültig gelöscht.",
+    "delete": "Löschen"
   },
   "call": {
     "title": "Sprachanruf mit der KI",

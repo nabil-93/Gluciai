@@ -481,7 +481,13 @@
     "chip3Q": "Explain how my medications affect my glucose.",
     "chip4": "Other questions",
     "chip4Q": "I have a general question about diabetes.",
-    "greetingNamed": "Hi {{name}} 👋! I’m your health assistant. How can I help you today?"
+    "greetingNamed": "Hi {{name}} 👋! I’m your health assistant. How can I help you today?",
+    "conversations": "Conversations",
+    "newConversation": "New conversation",
+    "noConversations": "No conversations",
+    "deleteTitle": "Delete conversation?",
+    "deleteBody": "This conversation will be permanently deleted.",
+    "delete": "Delete"
   },
   "call": {
     "title": "Voice call with AI",
