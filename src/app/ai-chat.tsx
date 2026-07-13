@@ -191,6 +191,23 @@ function AiChatScreen() {
 
   useEffect(scrollDown, [messages.length, thinking, pendingAction, activeConversationId]);
 
+  // Fresh conversation each new day: if the active thread's last message is
+  // from a previous day, open a new one automatically. Old conversations
+  // stay in the drawer — the patient can reopen any of them to continue it.
+  useEffect(() => {
+    const s = useAppStore.getState();
+    const active = s.conversations.find((c) => c.id === s.activeConversationId);
+    if (!active || active.messages.length === 0) return;
+    const last = active.messages[active.messages.length - 1];
+    if (
+      new Date(last.created_at).toDateString() !== new Date().toDateString()
+    ) {
+      s.newConversation();
+    }
+    // Runs once when the chat opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const send = async (text: string) => {
     const content = text.trim();
     if (!content || thinking) return;
