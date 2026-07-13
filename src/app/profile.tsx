@@ -384,6 +384,25 @@ export default function ProfileScreen() {
             </View>
             <Text style={styles.planArrow}>›</Text>
           </Pressable>
+
+          {/* Doctor code — link to a doctor / see who follows you */}
+          <Pressable
+            onPress={() => router.push('/doctor-code' as any)}
+            style={[styles.planCard, { marginTop: 10 }]}
+          >
+            <View style={[styles.planIcon, { backgroundColor: '#eef0ff' }]}>
+              <Text style={{ fontSize: 20 }}>🩺</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.planTitle}>{t('coupon.rowTitle')}</Text>
+              <Text style={styles.planSub} numberOfLines={2}>
+                {draft.doctor_name
+                  ? `${t('coupon.doctorPrefix')} ${draft.doctor_name}`
+                  : t('coupon.rowSub')}
+              </Text>
+            </View>
+            <Text style={styles.planArrow}>›</Text>
+          </Pressable>
         </View>
 
         {/* Security */}

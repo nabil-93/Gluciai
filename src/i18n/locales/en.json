@@ -879,5 +879,29 @@
     "welcomeManage": "Manage my subscription",
     "welcomeContact": "Contact support",
     "yourFeatures": "Your features"
+  },
+  "coupon": {
+    "title": "Doctor code",
+    "heroTitle": "Link your doctor",
+    "heroSub": "Enter the code your doctor gave you so they can follow up with you.",
+    "rowTitle": "My doctor",
+    "rowSub": "Add your doctor’s code",
+    "doctorPrefix": "Dr",
+    "followedBy": "You’re followed by",
+    "enterLabel": "Your doctor’s code",
+    "changeLabel": "Change doctor code",
+    "placeholder": "e.g. DR-1234",
+    "apply": "Apply",
+    "invalid": "Invalid or expired code.",
+    "success": "You’re now linked to your doctor ✓",
+    "consentTitle": "Followed by your doctor",
+    "consentBody": "By applying this code, you agree that your doctor may view your health data (meals, glucose, insulin, daily report) to better support you. You can remove this at any time.",
+    "consentAccept": "I agree",
+    "seeTitle": "What your doctor will see",
+    "seeMeals": "Your meals and scans",
+    "seeGlucose": "Your glucose readings",
+    "seeInsulin": "Your insulin doses",
+    "seeReport": "Your daily report",
+    "privacyNote": "Your doctor can only view this data to support you. You stay in control."
   }
 }

@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FadeInView } from '@/components/ui';
 import { CONSENT_IDS, CONSENT_META } from '@/data/consent';
 import { isRTL } from '@/i18n';
+import { confirmAsync } from '@/lib/confirm';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { saveProfile } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
@@ -328,6 +329,15 @@ export default function WizardScreen() {
       setPromoState('bad');
       return;
     }
+    // Consent: linking to a doctor gives them read access to the patient's
+    // health data — ask before redeeming the code.
+    const agreed = await confirmAsync({
+      title: t('coupon.consentTitle'),
+      message: t('coupon.consentBody'),
+      confirmLabel: t('coupon.consentAccept'),
+      cancelLabel: t('profile.cancel'),
+    });
+    if (!agreed) return;
     setPromoState('checking');
     try {
       const { data, error } = await supabase.rpc('redeem_promo_code', { p_code: code });

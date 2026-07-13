@@ -879,5 +879,29 @@
     "welcomeManage": "Abo verwalten",
     "welcomeContact": "Support kontaktieren",
     "yourFeatures": "Deine Funktionen"
+  },
+  "coupon": {
+    "title": "Arzt-Code",
+    "heroTitle": "Mit deinem Arzt verbinden",
+    "heroSub": "Gib den Code deines Arztes ein, damit er dich begleiten kann.",
+    "rowTitle": "Mein Arzt",
+    "rowSub": "Code deines Arztes hinzufügen",
+    "doctorPrefix": "Dr.",
+    "followedBy": "Du wirst betreut von",
+    "enterLabel": "Code deines Arztes",
+    "changeLabel": "Arzt-Code ändern",
+    "placeholder": "z. B. DR-1234",
+    "apply": "Bestätigen",
+    "invalid": "Ungültiger oder abgelaufener Code.",
+    "success": "Du bist jetzt mit deinem Arzt verbunden ✓",
+    "consentTitle": "Betreuung durch deinen Arzt",
+    "consentBody": "Mit der Bestätigung dieses Codes stimmst du zu, dass dein Arzt deine Gesundheitsdaten (Mahlzeiten, Blutzucker, Insulin, Tagesbericht) einsieht, um dich besser zu begleiten. Du kannst dies jederzeit widerrufen.",
+    "consentAccept": "Ich stimme zu",
+    "seeTitle": "Was dein Arzt sehen kann",
+    "seeMeals": "Deine Mahlzeiten und Scans",
+    "seeGlucose": "Deine Blutzuckerwerte",
+    "seeInsulin": "Deine Insulingaben",
+    "seeReport": "Deinen Tagesbericht",
+    "privacyNote": "Dein Arzt kann diese Daten nur einsehen, um dich zu begleiten. Du behältst die Kontrolle."
   }
 }

@@ -140,6 +140,7 @@ export default function RootLayout() {
             />
             <Stack.Screen name="profile" options={{ presentation: 'modal' }} />
             <Stack.Screen name="subscription" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="doctor-code" options={{ presentation: 'modal' }} />
           </Stack>
         </View>
       </QueryClientProvider>

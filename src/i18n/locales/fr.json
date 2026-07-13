@@ -879,5 +879,29 @@
     "welcomeManage": "Gérer mon abonnement",
     "welcomeContact": "Contacter le support",
     "yourFeatures": "Vos fonctionnalités"
+  },
+  "coupon": {
+    "title": "Code médecin",
+    "heroTitle": "Reliez votre médecin",
+    "heroSub": "Saisissez le code fourni par votre médecin pour qu’il puisse vous suivre.",
+    "rowTitle": "Mon médecin",
+    "rowSub": "Ajoutez le code de votre médecin",
+    "doctorPrefix": "Dr",
+    "followedBy": "Vous êtes suivi par",
+    "enterLabel": "Code de votre médecin",
+    "changeLabel": "Changer de code médecin",
+    "placeholder": "Ex : DR-1234",
+    "apply": "Valider",
+    "invalid": "Code invalide ou expiré.",
+    "success": "Vous êtes maintenant relié à votre médecin ✓",
+    "consentTitle": "Suivi par votre médecin",
+    "consentBody": "En validant ce code, vous acceptez que votre médecin suive vos données de santé (repas, glycémie, insuline, rapport du jour) pour mieux vous accompagner. Vous pouvez le retirer à tout moment.",
+    "consentAccept": "J’accepte",
+    "seeTitle": "Ce que votre médecin pourra voir",
+    "seeMeals": "Vos repas et scans",
+    "seeGlucose": "Vos glycémies",
+    "seeInsulin": "Vos injections d’insuline",
+    "seeReport": "Votre rapport du jour",
+    "privacyNote": "Votre médecin ne peut que consulter ces données pour vous accompagner. Vous gardez le contrôle."
   }
 }
