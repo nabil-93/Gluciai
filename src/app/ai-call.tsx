@@ -26,7 +26,6 @@ import {
 } from '@/services/aiLogger';
 import {
   GeminiLiveSession,
-  LIVE_LANG_TAGS,
   LIVE_MODELS,
   MicStreamer,
   PcmPlayer,
@@ -354,6 +353,16 @@ function AiCallScreen() {
    * A ceiling timer guarantees we hang up even if no more audio arrives. */
   const hangupPendingRef = useRef(false);
   const hangupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* Belt-and-suspenders: we ALSO listen to the patient's own words (input
+   * transcription). If they clearly said goodbye, the call closes right
+   * after the model's reply finishes — even when the model forgets to
+   * call the end_call tool. */
+  const userFarewellRef = useRef(false);
+  const farewellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userTurnBufRef = useRef('');
+  const FAREWELL_RE =
+    /\b(b['e]?slam+a|bslema|besslama|au revoir|good ?bye|bye+|tsch[üu]ss|auf wiedersehen|thal+a)\b|بالسلامة|بسلامة|مع السلامة|وداعا|تهلا|إلى اللقاء/i;
   const scheduleHangup = () => {
     if (endedRef.current || hangupPendingRef.current) return;
     hangupPendingRef.current = true;
@@ -377,9 +386,11 @@ function AiCallScreen() {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
     if (hangupTimerRef.current) clearTimeout(hangupTimerRef.current);
+    if (farewellTimerRef.current) clearTimeout(farewellTimerRef.current);
     silenceTimerRef.current = null;
     maxTimerRef.current = null;
     hangupTimerRef.current = null;
+    farewellTimerRef.current = null;
   };
   /** Reset the silence countdown — called on any speech (mic or AI). */
   const bumpActivity = () => {
@@ -455,18 +466,31 @@ function AiCallScreen() {
   const buildInstruction = () => {
     const langName = LANGUAGE_NAMES[i18n.language] ?? 'English';
     return `You are GlucoAI, the patient's personal diabetes assistant, on a LIVE PHONE CALL.
-LANGUAGE: open the call in ${langName} (the app language), then AUTOMATICALLY
-match the patient — detect the language or dialect they actually speak (French,
-German, English, Arabic, or Moroccan Darija) and from that point on reply in
-that SAME language/dialect, switching with them if they change mid-call. If the
-patient speaks Darija, answer in Darija; Arabic → Arabic, and so on. You
-understand them all; never say you don't understand, never ask them to switch.
+THE PATIENT SPEAKS FIRST: stay completely SILENT until the patient talks
+(they open with "salam", "bonjour", "hello", "hola", "merhaba"…). NEVER
+speak first. When they do speak, DETECT the language or dialect of THEIR
+words and answer with one short warm greeting in that SAME language,
+calling them by their first name (it is in PATIENT DATA below,
+"Profile: name …"), then help them. Example: patient says "salam" in
+Moroccan Darija → you answer in Darija like "Salam [name], ana GlucoAI.
+Kidayr lyoum?".
+LANGUAGE (critical): ALWAYS mirror whatever language or dialect the
+patient actually speaks — ANY language in the world: French, German,
+English, Spanish, Italian, Turkish, Arabic (any dialect: Moroccan
+DARIJA, Egyptian, Gulf…), Tamazight, or anything else. If they speak
+Darija, reply in Darija (NOT in French, NOT in formal Arabic). If they
+speak Spanish, reply in Spanish — and so on for every language. Switch
+instantly whenever they switch mid-call. ${langName} (the app language)
+is only a last-resort fallback when you truly cannot tell. You
+understand them all; never say you don't understand, never ask them to
+switch language.
 STYLE: natural, warm, short spoken sentences (1-3 per turn), like a caring human
 on the phone. No lists, no markdown. It's OK to ask short follow-up questions.
-NAME: the patient's first name is in PATIENT DATA below (Profile: name ...).
-Greet them BY THEIR FIRST NAME at the start of the call (e.g. "Salam Nabil,
-...") and use it naturally now and then — never say "?" if the name is missing,
-just greet warmly without a name.
+NAME: use the patient's first name naturally now and then — never say "?"
+if the name is missing, just speak warmly without a name.
+CHECK THEIR DATA: when the patient mentions they ate or did something
+today ("klit tajine", "jrit chi chwiya"), look it up in PATIENT DATA — if
+it is not logged there, tell them so and offer to add it (see LOGGING).
 BE CONCRETELY HELPFUL: give real practical suggestions (foods, portions, timing,
 hydration, activity) and analyse the patient's own data when asked — never refuse
 with "I can't judge". Insulin education with their own ratios is fine; just never
@@ -508,6 +532,21 @@ ${LIVE_LOG_INSTRUCTION}`;
         if (statusRef.current !== 'speaking') setStatusSafe('speaking');
       },
       onText: (text) => setAdvice(text),
+      onUserText: (text) => {
+        // The patient's own words (input transcription). Watch for a clear
+        // goodbye so the call ALWAYS hangs up, even if the model forgets
+        // to call the end_call tool.
+        if (endedRef.current) return;
+        bumpActivity();
+        userTurnBufRef.current = (userTurnBufRef.current + ' ' + text).slice(-160);
+        if (!userFarewellRef.current && FAREWELL_RE.test(userTurnBufRef.current)) {
+          userFarewellRef.current = true;
+          // Ceiling: close even if the model never answers the goodbye.
+          farewellTimerRef.current = setTimeout(() => {
+            if (!endedRef.current) endCallRef.current();
+          }, 12_000);
+        }
+      },
       onInterrupted: () => {
         player.clear();
         if (!endedRef.current) {
@@ -515,7 +554,15 @@ ${LIVE_LOG_INSTRUCTION}`;
         }
       },
       onTurnComplete: () => {
-        // Status flips back on player drain; nothing to do here.
+        // Fresh user turn starts after each model turn.
+        userTurnBufRef.current = '';
+        // The patient said goodbye and the model finished its reply →
+        // hang up as soon as the farewell audio finishes playing.
+        if (userFarewellRef.current && !endedRef.current) {
+          hangupPendingRef.current = true;
+          if (!playerRef.current?.isPlaying?.()) endCallRef.current();
+        }
+        // Otherwise status flips back on player drain; nothing to do.
       },
       onToolCall: (calls) => {
         // The model (after confirming verbally with the patient) asks the
@@ -612,22 +659,20 @@ ${LIVE_LOG_INSTRUCTION}`;
     liveRef.current = session;
 
     const instruction = buildInstruction();
-    const liveLang = LIVE_LANG_TAGS[i18n.language] ?? 'en-US';
     for (const model of LIVE_MODELS) {
       if (endedRef.current) return false;
       try {
-        await session.connect(token, model, instruction, liveLang, 8000, LIVE_LOG_TOOLS);
+        // No forced speech languageCode: the patient speaks FIRST and the
+        // model mirrors their language/dialect (Darija included) — a fixed
+        // BCP-47 tag would lock the voice to the app language.
+        await session.connect(token, model, instruction, undefined, 8000, LIVE_LOG_TOOLS);
         // Connected — start streaming the mic (its AudioContext was
-        // created inside the answer tap, so iOS lets it run).
+        // created inside the answer tap, so iOS lets it run). The call is
+        // now silently listening: the PATIENT opens the conversation
+        // ("salam…") and the model greets back in the same language.
         micRef.current = mic;
         await mic.start((b64) => session.sendAudio(b64));
         mic.setMuted(!micOnRef.current);
-        // Make the assistant speak FIRST: push a short directive so it opens
-        // the call itself — greet the patient by name, introduce itself, and
-        // ask how they are, before they say anything.
-        session.sendText(
-          `(The call just connected. YOU speak first, before the patient says anything. In one or two short warm spoken sentences: say hello and greet the patient by their first name, introduce yourself as GlucoAI their diabetes assistant, and ask how they are doing today. Then wait for their reply. Speak ${LANGUAGE_NAMES[i18n.language] ?? 'English'}.)`
-        );
         if (!endedRef.current) {
           setStatusSafe(micOnRef.current ? 'listening' : 'muted');
         }
@@ -740,18 +785,9 @@ ${LIVE_LOG_INSTRUCTION}`;
       setStatusSafe('unsupported');
       return;
     }
-    // Speak first: greet the patient by name, then start listening (the
-    // greeting's onend hands over to startClassicListening).
-    const firstName = profile?.name?.trim().split(/\s+/)[0];
-    const greeting = firstName
-      ? t('call.greetingNamed', { name: firstName })
-      : t('call.greeting');
-    historyRef.current = [
-      ...historyRef.current,
-      { role: 'assistant', content: greeting },
-    ];
-    setAdvice(greeting);
-    speakClassic(greeting);
+    // The patient opens the conversation — start listening right away
+    // (same behaviour as the live engine: the AI never speaks first).
+    startClassicListening();
   };
 
   const cleanupClassic = () => {

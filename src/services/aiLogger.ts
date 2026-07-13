@@ -312,10 +312,23 @@ const LOGGABLE_RE = new RegExp(
     'glyc[ée]mie', 'sokar', 'sokkar', 'سكر', 'blutzucker', 'glucose', 'mg/dl',
     // sport
     'sport', 'marche', 'mchit', 'jrit', 'course', 'v[ée]lo', 'gym', 'الرياضة', 'مشيت', 'جريت', 'gelaufen',
+    // "I did / I took" (Darija & co.)
+    '\\bdert\\b', '\\bdrt\\b', 'khdit', 'درت', 'خديت', 'قست', '9est\\b',
     // measures
     'poids', 'wazn', 'وزن', 'gewicht', 'weight', 'hba1c',
     // reminders
     'rappel', 'rappelle', 'fekerni', 'fakarni', 'fekkerni', 'remind', 'erinner', 'ذكرني', 'فكرني', 'تذكير',
+    // explicit "add/save it for me" requests — the patient asks the AI
+    // to record something ("zid liya...", "ajoute...", "sejjel...")
+    'ajout', '\\bzid', 'zidi', 'sejjel', 'sajjel', 'sjjel', 'enregistr',
+    'sauvegard', '\\badd\\b', '\\bsave\\b', '\\blog\\b', 'hinzufüg', 'notier',
+    'زيد', 'سجل', 'ضيف', 'أضف',
+    // meal-moment answers (the logger asks "which meal was it?" — the
+    // reply alone must re-trigger extraction)
+    'ftour', 'fdour', 'lghda', '\\bghda\\b', 'l3cha', '\\b3cha\\b',
+    'petit[- ]?d[ée]j', 'd[ée]jeuner', 'd[îi]ner', 'souper', 'collation',
+    '\\bsnack\\b', 'breakfast', '\\blunch\\b', '\\bdinner\\b',
+    'fr[üu]hst[üu]ck', 'mittagessen', 'abendessen', 'فطور', 'غداء', 'عشاء',
     // free-text notes: drinking, feelings, routine — anything that can
     // affect glucose/insulin and that the patient wants recorded
     'chrbt', 'chrebt', 'شربت', 'bu\\b', 'getrunken', 'drank', 'drunk',
@@ -462,7 +475,7 @@ export const LIVE_LOG_TOOLS = [
       {
         name: 'end_call',
         description:
-          "Hang up and END the phone call. Call this ONLY when the patient clearly wants to end the call or says goodbye — e.g. \"bslama\", \"beslama\", \"thala f rassek\", \"au revoir\", \"tschüss\", \"bye\", \"salam bye\", \"that's all thanks\", \"c'est bon merci\", \"يالله بسلامة\". FIRST say one short warm goodbye out loud, THEN call end_call. Do NOT call it while the patient is still talking or only thanking you mid-conversation.",
+          "Hang up and END the phone call — the call can ONLY end through this function; it never ends by itself. Call it when the patient clearly wants to end the call or says goodbye — e.g. \"bslama\", \"beslama\", \"thala f rassek\", \"au revoir\", \"tschüss\", \"bye\", \"salam bye\", \"that's all thanks\", \"c'est bon merci\", \"يالله بسلامة\", \"مع السلامة\". Say one short warm goodbye out loud AND call end_call in the SAME turn — never say goodbye without calling it. Do NOT call it while the patient is still talking or only thanking you mid-conversation.",
         parameters: { type: 'OBJECT', properties: {} },
       },
     ],
@@ -472,16 +485,23 @@ export const LIVE_LOG_TOOLS = [
 /** Rules appended to the call's system instruction. */
 export const LIVE_LOG_INSTRUCTION = `
 LOGGING (function calling): when the patient says they DID something —
-took insulin, ate a meal, measured their glucose, did sport, weighed
-themselves — and it is not yet in their data, offer to log it for them
-("do you want me to add it to the app?"). Collect any missing detail
-(dose, value, duration…) by asking. Then REPEAT the exact entry back and
-ask for a clear yes. As SOON as the patient agrees, FIRST say one short
-warm spoken line that you are adding it right now and they should hold on
-a second (e.g. "wait a moment, I'm adding it for you now"), THEN call the
-matching log_* function EXACTLY ONCE. As soon as the tool answers ok, tell
-them it's done and saved (e.g. "done — I've added it, I'll keep it for
-you"). If they decline, don't call anything.
+took insulin, ate a meal, measured their glucose, did sport, drank
+something, weighed themselves — FIRST check PATIENT DATA above:
+- Already logged there → tell them it's already saved; do NOT log again.
+- NOT in their data → tell them you don't see it in the app today and ask
+  if they want you to add it ("ma-l9itch hadchi msejjel lyoum, wach bghiti
+  nzido?"). Collect any missing detail (dose, value, duration, which meal
+  of the day…) by asking, then repeat the entry back and ask for a clear
+  yes.
+WHEN THE PATIENT CONFIRMS ("ah", "wah", "oui", "yes", "ja"): you MUST
+invoke the matching log_* function IMMEDIATELY, IN THAT SAME TURN, while
+saying one short line that you're adding it right now ("sber chwiya,
+ghanzidha daba…"). SPEAKING IS NOT SAVING: the entry is saved ONLY when
+you actually call the function and it answers ok. NEVER say "it's added"
+or "it's saved" unless the function really returned ok. NEVER end a turn
+after the patient's yes without having called the function.
+After the tool answers ok: tell them it's done ("safi, zedtha lik") and
+naturally CONTINUE the conversation.
 CRITICAL — never log the same thing twice: call each log function ONE
 time per entry. Once the tool has answered (ok/already_saved), the entry
 IS saved — do NOT call it again, even if the patient says "yes" again,
@@ -501,11 +521,14 @@ ones, one at a time, and log each (never nag; ask each meal only once).
 NOTES: anything else the patient did that doesn't fit the tools but may
 matter (drank water/coffee/tea/alcohol, felt stressed/tired/ill, skipped
 a meal…) → confirm and call log_note. Never say you can't record it.
-HANG UP: when the patient clearly wants to end the call or says goodbye
-("bslama", "beslama", "thala f rassek", "au revoir", "tschüss", "bye",
-"that's all thanks", "بسلامة") — FIRST say one short warm goodbye out loud,
-THEN call end_call to hang up the phone. Never call end_call while the
-patient is still talking or only thanking you in the middle of the call.`;
+HANG UP: the call does NOT end by itself — hanging up ONLY happens
+through the end_call function. When the patient says goodbye or clearly
+wants to stop ("bslama", "beslama", "thala f rassek", "au revoir",
+"tschüss", "bye", "that's all thanks", "بسلامة", "مع السلامة"): say ONE
+short warm goodbye sentence AND call end_call IN THAT SAME TURN. Never
+skip end_call after your goodbye — without it the line stays open and
+keeps billing the patient. Never call it while the patient is still
+talking or only thanking you in the middle of the call.`;
 
 /** Map a Live-API function call to a validated LoggerAction. */
 export function actionFromFunctionCall(

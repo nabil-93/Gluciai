@@ -162,6 +162,19 @@ function AiChatScreen() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
+  /* The logger sometimes needs ONE more detail before it can build the
+   * entry (e.g. "which meal was it — lunch or dinner?"). While that
+   * question is open, the patient's next message must go through
+   * extraction again even when it doesn't look loggable by itself
+   * ("f l3cha" alone would never match the keyword filter). */
+  const loggerPendingRef = useRef(false);
+
+  /** Last messages (user + assistant) as logger context, oldest first. */
+  const loggerHistory = (extra: { role: 'user' | 'assistant'; content: string }[]) =>
+    [...messages.map((m) => ({ role: m.role, content: m.content })), ...extra]
+      .slice(-6)
+      .map((m) => ({ ...m, content: m.content.replace(/^🎙️\s*/, '') }));
+
   const close = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
@@ -170,6 +183,7 @@ function AiChatScreen() {
   const onNew = () => {
     newConversation();
     setPendingAction(null);
+    loggerPendingRef.current = false;
     setInput('');
     setDrawerOpen(false);
   };
@@ -223,13 +237,18 @@ function AiChatScreen() {
     addChatMessage(userMessage);
     setThinking(true);
 
-    // "rani dert 6 unités", "klit tajine"… — when the message states
-    // something loggable, extract it in parallel with the normal answer
-    // and offer to save it (always behind an explicit confirmation).
-    const extraction = looksLoggable(content)
-      ? sendLoggerMessage([{ role: 'user', content }], i18n.language).catch(
-          () => null
-        )
+    // "rani dert 6 unités", "klit tajine", "zid liya…" — when the message
+    // states something loggable (or the logger is waiting for a missing
+    // detail from the previous turn), extract it in parallel with the
+    // normal answer and offer to save it (always behind an explicit
+    // confirmation). The last few messages go along so answers like
+    // "f l3cha" complete the entry started earlier.
+    const shouldExtract = looksLoggable(content) || loggerPendingRef.current;
+    const extraction = shouldExtract
+      ? sendLoggerMessage(
+          loggerHistory([{ role: 'user', content }]),
+          i18n.language
+        ).catch(() => null)
       : Promise.resolve(null);
 
     try {
@@ -245,7 +264,23 @@ function AiChatScreen() {
         created_at: new Date().toISOString(),
       });
       const extracted = await extraction;
-      if (extracted?.action) setPendingAction(extracted.action);
+      if (extracted?.action) {
+        loggerPendingRef.current = false;
+        setPendingAction(extracted.action);
+      } else if (extracted && extracted.reply && looksLoggable(content)) {
+        // The logger needs one more detail (e.g. which meal of the day):
+        // surface its short question and keep extraction armed so the
+        // patient's next answer finishes the entry.
+        loggerPendingRef.current = true;
+        addChatMessage({
+          id: `${Date.now()}-lq`,
+          role: 'assistant',
+          content: extracted.reply,
+          created_at: new Date().toISOString(),
+        });
+      } else {
+        loggerPendingRef.current = false;
+      }
     } catch {
       addChatMessage({
         id: `${Date.now()}-e`,
@@ -317,11 +352,28 @@ function AiChatScreen() {
         content: reply,
         created_at: new Date().toISOString(),
       });
-      // If the spoken message was loggable, extract + offer the confirm card.
-      if (heard && looksLoggable(heard)) {
-        sendLoggerMessage([{ role: 'user', content: heard }], i18n.language)
+      // If the spoken message was loggable (or the logger is waiting on a
+      // missing detail), extract + offer the confirm card.
+      if (heard && (looksLoggable(heard) || loggerPendingRef.current)) {
+        sendLoggerMessage(
+          loggerHistory([{ role: 'user', content: heard }]),
+          i18n.language
+        )
           .then((ex) => {
-            if (ex?.action) setPendingAction(ex.action);
+            if (ex?.action) {
+              loggerPendingRef.current = false;
+              setPendingAction(ex.action);
+            } else if (ex?.reply && looksLoggable(heard)) {
+              loggerPendingRef.current = true;
+              addChatMessage({
+                id: `${Date.now()}-lq`,
+                role: 'assistant',
+                content: ex.reply,
+                created_at: new Date().toISOString(),
+              });
+            } else {
+              loggerPendingRef.current = false;
+            }
           })
           .catch(() => {});
       }

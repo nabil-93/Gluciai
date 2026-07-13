@@ -57,6 +57,9 @@ export interface LiveEvents {
   onAudio: (base64Pcm24k: string) => void;
   /** Rolling transcription of what the model is saying (per turn). */
   onText?: (text: string) => void;
+  /** Transcription chunk of what the PATIENT is saying (input audio).
+   *  Used to detect goodbyes client-side so the call always hangs up. */
+  onUserText?: (text: string) => void;
   /** The user talked over the model — clear the playback queue. */
   onInterrupted?: () => void;
   /** Model finished its spoken turn. */
@@ -108,7 +111,10 @@ export class GeminiLiveSession {
     token: string,
     model: string,
     systemInstruction: string,
-    languageCode: string,
+    /** Omit to let the model speak WHATEVER language it answers in —
+     *  required for automatic dialect matching (Darija ↔ French ↔ …).
+     *  Forcing a BCP-47 tag here locks the voice to that language. */
+    languageCode?: string,
     timeoutMs = 8000,
     /** Optional function declarations (Live API tools / function calling). */
     tools?: unknown[]
@@ -143,7 +149,7 @@ export class GeminiLiveSession {
               generationConfig: {
                 responseModalities: ['AUDIO'],
                 speechConfig: {
-                  languageCode,
+                  ...(languageCode ? { languageCode } : {}),
                   voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } },
                 },
                 // Verified: accepted by the live model, keeps replies snappy
@@ -152,6 +158,7 @@ export class GeminiLiveSession {
               },
               systemInstruction: { parts: [{ text: systemInstruction }] },
               outputAudioTranscription: {},
+              inputAudioTranscription: {},
               ...(tools && tools.length ? { tools } : {}),
             },
           })
@@ -195,6 +202,8 @@ export class GeminiLiveSession {
 
         const sc = msg.serverContent;
         if (!sc) return;
+        const ut = sc.inputTranscription?.text;
+        if (ut) this.events.onUserText?.(ut);
         if (sc.interrupted) {
           this.turnText = '';
           this.commitUsage();
@@ -434,7 +443,12 @@ export class PcmPlayer {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.connect(this.gain);
-    const at = Math.max(this.ctx.currentTime + 0.02, this.nextTime);
+    // Jitter buffer: when the queue is empty (start of a turn, or after an
+    // under-run) give the network a ~150 ms head start before playing, so
+    // the first words of the AI never stutter. Mid-stream chunks keep the
+    // tight 20 ms scheduling for gapless playback.
+    const lead = this.live.size === 0 ? 0.15 : 0.02;
+    const at = Math.max(this.ctx.currentTime + lead, this.nextTime);
     src.start(at);
     this.nextTime = at + buf.duration;
     this.live.add(src);

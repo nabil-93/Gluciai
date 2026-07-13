@@ -66,6 +66,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const profile = useAppStore((s) => s.profile);
   const lockedFeatures = useAppStore((s) => s.lockedFeatures);
+  const wizardDone = useAppStore((s) => s.wizardDone);
 
   const [draft, setDraft] = useState<Profile | null>(() => profile);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -74,7 +75,13 @@ export default function ProfileScreen() {
   const [pw2, setPw2] = useState('');
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  if (!profile || !draft) return <Redirect href="/(tabs)" />;
+  // No profile: either it isn't loaded (go home) or the user just signed
+  // out — resetAll() clears the profile BEFORE onSignOut can navigate, and
+  // this render used to win the race and bounce them to the HOME tabs
+  // instead of the login screen. wizardDone is false right after sign-out,
+  // so route straight to /auth in that case.
+  if (!profile || !draft)
+    return <Redirect href={wizardDone ? '/(tabs)' : '/auth'} />;
 
   const set = <K extends keyof Profile>(key: K, value: Profile[K]) =>
     setDraft((d) => (d ? { ...d, [key]: value } : d));
