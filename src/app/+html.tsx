@@ -83,4 +83,14 @@ body {
 @media (prefers-color-scheme: dark) {
   body { background-color: #f9fafe; }
 }
+/* Remove the browser's default blue focus ring on inputs and pressables.
+   The app draws its own focus feedback (border colour / background), so the
+   hard blue rectangle around a focused field is unwanted on every screen —
+   including the value inputs and the login email/password fields. */
+* { -webkit-tap-highlight-color: transparent; }
+input, textarea, select, button,
+[contenteditable], [role="button"], [tabindex] { outline: none !important; }
+input:focus, textarea:focus, select:focus, button:focus,
+[contenteditable]:focus, [role="button"]:focus, [tabindex]:focus,
+a:focus, :focus, :focus-visible { outline: none !important; }
 `;

@@ -99,7 +99,17 @@ export default function AuthScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const setWizardDone = useAppStore((s) => s.setWizardDone);
-  const [mode, setMode] = useState<Mode>('register');
+  const deviceOnboarded = useAppStore((s) => s.deviceOnboarded);
+  const markDeviceOnboarded = useAppStore((s) => s.markDeviceOnboarded);
+  // First launch on this phone → default to "create account". Every later
+  // visit (a returning, signed-out user) opens straight on the login form;
+  // they can still switch to sign-up with the link below.
+  const [mode, setMode] = useState<Mode>(deviceOnboarded ? 'login' : 'register');
+
+  React.useEffect(() => {
+    if (!deviceOnboarded) markDeviceOnboarded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');

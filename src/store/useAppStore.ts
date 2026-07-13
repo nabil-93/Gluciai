@@ -58,6 +58,13 @@ interface AppState {
   aiJournalSeenAt: string | null;
   /** True once the "you're on the free plan" welcome has been shown */
   planWelcomeShown: boolean;
+  /**
+   * True after the very first launch on this device. Survives sign-out
+   * (not part of `initialData`, so `resetAll` keeps it) so the auth screen
+   * only defaults to "create account" the first time; afterwards it opens
+   * straight on the login form.
+   */
+  deviceOnboarded: boolean;
   /** Features blocked for this account from the admin dashboard (feature_access) */
   lockedFeatures: string[];
   /** Reminders the patient asked the AI to set */
@@ -88,6 +95,7 @@ interface AppState {
   /** Mark the notifications screen as read (clears the unread badge) */
   markAiJournalSeen: () => void;
   markPlanWelcomeShown: () => void;
+  markDeviceOnboarded: () => void;
 
   addAiReminder: (reminder: AiReminder) => void;
   updateAiReminder: (id: string, patch: Partial<AiReminder>) => void;
@@ -131,6 +139,11 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       ...initialData,
+      // Device-level, deliberately outside `initialData` so `resetAll`
+      // (sign-out) never flips it back — a returning user keeps landing on
+      // the login form, not the sign-up form.
+      deviceOnboarded: false,
+      markDeviceOnboarded: () => set({ deviceOnboarded: true }),
       setLanguageChosen: () => set({ languageChosen: true }),
       setLockedFeatures: (lockedFeatures) => set({ lockedFeatures }),
       setOnboardingDone: () => set({ onboardingDone: true }),

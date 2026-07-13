@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,6 +23,7 @@ import {
   uploadAvatar,
 } from '@/services/account';
 import { saveProfile } from '@/services/data';
+import { confirmAsync, notify } from '@/lib/confirm';
 import { ALL_FEATURES, planStatus } from '@/services/features';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
@@ -149,35 +149,33 @@ export default function ProfileScreen() {
     await saveProfile({ ...draft, language: code });
   };
 
-  const onSignOut = () => {
-    Alert.alert(t('profile.signOut'), t('profile.signOutConfirm'), [
-      { text: t('profile.cancel'), style: 'cancel' },
-      {
-        text: t('profile.signOut'),
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/auth');
-        },
-      },
-    ]);
+  const onSignOut = async () => {
+    const ok = await confirmAsync({
+      title: t('profile.signOut'),
+      message: t('profile.signOutConfirm'),
+      confirmLabel: t('profile.signOut'),
+      cancelLabel: t('profile.cancel'),
+      destructive: true,
+    });
+    if (!ok) return;
+    await signOut();
+    router.replace('/auth');
   };
 
-  const onDelete = () => {
-    Alert.alert(t('profile.deleteConfirmTitle'), t('profile.deleteConfirmBody'), [
-      { text: t('profile.cancel'), style: 'cancel' },
-      {
-        text: t('profile.deleteAccount'),
-        style: 'destructive',
-        onPress: async () => {
-          setBusy(true);
-          const r = await deleteAccount();
-          setBusy(false);
-          if (r.ok) router.replace('/auth');
-          else Alert.alert(t('profile.error'), r.error ?? '');
-        },
-      },
-    ]);
+  const onDelete = async () => {
+    const ok = await confirmAsync({
+      title: t('profile.deleteConfirmTitle'),
+      message: t('profile.deleteConfirmBody'),
+      confirmLabel: t('profile.deleteAccount'),
+      cancelLabel: t('profile.cancel'),
+      destructive: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    const r = await deleteAccount();
+    setBusy(false);
+    if (r.ok) router.replace('/auth');
+    else notify(t('profile.error'), r.error ?? '');
   };
 
   return (

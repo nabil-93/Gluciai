@@ -1,8 +1,28 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
+import Svg, { Path } from 'react-native-svg';
 
 import { colors } from '@/theme';
+
+/** Friendly person silhouette shown when there's no photo and no name. */
+function PersonGlyph({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 12.4a3.7 3.7 0 1 0 0-7.4 3.7 3.7 0 0 0 0 7.4Z"
+        fill="#ffffff"
+      />
+      <Path
+        d="M5 19.2c0-3.4 3.1-5.4 7-5.4s7 2 7 5.4"
+        stroke="#ffffff"
+        strokeWidth={2}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
 
 /**
  * User avatar — shows the uploaded photo when available, otherwise a
@@ -43,7 +63,8 @@ export function Avatar({
   /** Draw a subtle white ring around the avatar (for photo-over-color) */
   ring?: boolean;
 }) {
-  const letter = (name?.trim()?.[0] ?? '?').toUpperCase();
+  const firstChar = name?.trim()?.[0];
+  const letter = firstChar ? firstChar.toUpperCase() : null;
   const bg = colorFor(name || 'user');
   const radius = size / 2;
 
@@ -68,8 +89,10 @@ export function Avatar({
           contentFit="cover"
           transition={150}
         />
-      ) : (
+      ) : letter ? (
         <Text style={[styles.letter, { fontSize: size * 0.42 }]}>{letter}</Text>
+      ) : (
+        <PersonGlyph size={size * 0.62} />
       )}
     </View>
   );
