@@ -159,6 +159,13 @@ export default function ProfileScreen() {
     });
     if (!ok) return;
     await signOut();
+    // Profile is a modal: dismiss it (and anything stacked) first, otherwise
+    // replace() swaps the modal's content and the app can fall back to the
+    // tabs instead of the login screen. Then make /auth the fresh root, so
+    // there's no back-history into the signed-out account.
+    try {
+      router.dismissAll();
+    } catch {}
     router.replace('/auth');
   };
 
@@ -174,8 +181,13 @@ export default function ProfileScreen() {
     setBusy(true);
     const r = await deleteAccount();
     setBusy(false);
-    if (r.ok) router.replace('/auth');
-    else notify(t('profile.error'), r.error ?? '');
+    if (r.ok) {
+      // Same as sign-out: leave the Profile modal, then land on login as root.
+      try {
+        router.dismissAll();
+      } catch {}
+      router.replace('/auth');
+    } else notify(t('profile.error'), r.error ?? '');
   };
 
   return (

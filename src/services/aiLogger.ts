@@ -459,6 +459,12 @@ export const LIVE_LOG_TOOLS = [
           required: ['text'],
         },
       },
+      {
+        name: 'end_call',
+        description:
+          "Hang up and END the phone call. Call this ONLY when the patient clearly wants to end the call or says goodbye — e.g. \"bslama\", \"beslama\", \"thala f rassek\", \"au revoir\", \"tschüss\", \"bye\", \"salam bye\", \"that's all thanks\", \"c'est bon merci\", \"يالله بسلامة\". FIRST say one short warm goodbye out loud, THEN call end_call. Do NOT call it while the patient is still talking or only thanking you mid-conversation.",
+        parameters: { type: 'OBJECT', properties: {} },
+      },
     ],
   },
 ];
@@ -470,9 +476,12 @@ took insulin, ate a meal, measured their glucose, did sport, weighed
 themselves — and it is not yet in their data, offer to log it for them
 ("do you want me to add it to the app?"). Collect any missing detail
 (dose, value, duration…) by asking. Then REPEAT the exact entry back and
-ask for a clear yes. ONLY after the patient agrees, call the matching
-log_* function EXACTLY ONCE. When the tool answers ok, tell them briefly
-it's saved. If they decline, don't call anything.
+ask for a clear yes. As SOON as the patient agrees, FIRST say one short
+warm spoken line that you are adding it right now and they should hold on
+a second (e.g. "wait a moment, I'm adding it for you now"), THEN call the
+matching log_* function EXACTLY ONCE. As soon as the tool answers ok, tell
+them it's done and saved (e.g. "done — I've added it, I'll keep it for
+you"). If they decline, don't call anything.
 CRITICAL — never log the same thing twice: call each log function ONE
 time per entry. Once the tool has answered (ok/already_saved), the entry
 IS saved — do NOT call it again, even if the patient says "yes" again,
@@ -491,7 +500,12 @@ plausible they've eaten them, gently ask what they had for the missing
 ones, one at a time, and log each (never nag; ask each meal only once).
 NOTES: anything else the patient did that doesn't fit the tools but may
 matter (drank water/coffee/tea/alcohol, felt stressed/tired/ill, skipped
-a meal…) → confirm and call log_note. Never say you can't record it.`;
+a meal…) → confirm and call log_note. Never say you can't record it.
+HANG UP: when the patient clearly wants to end the call or says goodbye
+("bslama", "beslama", "thala f rassek", "au revoir", "tschüss", "bye",
+"that's all thanks", "بسلامة") — FIRST say one short warm goodbye out loud,
+THEN call end_call to hang up the phone. Never call end_call while the
+patient is still talking or only thanking you in the middle of the call.`;
 
 /** Map a Live-API function call to a validated LoggerAction. */
 export function actionFromFunctionCall(

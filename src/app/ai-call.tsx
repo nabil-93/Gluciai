@@ -346,12 +346,40 @@ function AiCallScreen() {
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Declared here, assigned after endCall exists (avoids TS use-before-def).
   const endForReasonRef = useRef<(reason: 'silence' | 'max') => void>(() => {});
+  const endCallRef = useRef<() => void>(() => {});
+
+  /* ── Graceful hang-up when the patient says goodbye ──
+   * The model says a short goodbye out loud and calls the end_call tool.
+   * We wait for that farewell to finish playing (player drain), then close.
+   * A ceiling timer guarantees we hang up even if no more audio arrives. */
+  const hangupPendingRef = useRef(false);
+  const hangupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleHangup = () => {
+    if (endedRef.current || hangupPendingRef.current) return;
+    hangupPendingRef.current = true;
+    // The model speaks a short farewell around the end_call tool; the audio
+    // may still be streaming in. Never cut it off: after a short grace, if
+    // it's still playing keep waiting (player.onDrain ends it the instant the
+    // goodbye finishes); only close once nothing is left to play.
+    const tick = () => {
+      if (endedRef.current) return;
+      if (playerRef.current?.isPlaying?.()) {
+        hangupTimerRef.current = setTimeout(tick, 1000);
+        return;
+      }
+      endCallRef.current();
+    };
+    if (hangupTimerRef.current) clearTimeout(hangupTimerRef.current);
+    hangupTimerRef.current = setTimeout(tick, 1500);
+  };
 
   const clearGuardTimers = () => {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
+    if (hangupTimerRef.current) clearTimeout(hangupTimerRef.current);
     silenceTimerRef.current = null;
     maxTimerRef.current = null;
+    hangupTimerRef.current = null;
   };
   /** Reset the silence countdown — called on any speech (mic or AI). */
   const bumpActivity = () => {
@@ -427,9 +455,12 @@ function AiCallScreen() {
   const buildInstruction = () => {
     const langName = LANGUAGE_NAMES[i18n.language] ?? 'English';
     return `You are GlucoAI, the patient's personal diabetes assistant, on a LIVE PHONE CALL.
-LANGUAGE: always speak ${langName} (the app language). The patient may speak any
-language or dialect — French, German, English, Arabic or Moroccan Darija — you
-understand them all; never say you don't understand, never ask to switch language.
+LANGUAGE: open the call in ${langName} (the app language), then AUTOMATICALLY
+match the patient — detect the language or dialect they actually speak (French,
+German, English, Arabic, or Moroccan Darija) and from that point on reply in
+that SAME language/dialect, switching with them if they change mid-call. If the
+patient speaks Darija, answer in Darija; Arabic → Arabic, and so on. You
+understand them all; never say you don't understand, never ask them to switch.
 STYLE: natural, warm, short spoken sentences (1-3 per turn), like a caring human
 on the phone. No lists, no markdown. It's OK to ask short follow-up questions.
 NAME: the patient's first name is in PATIENT DATA below (Profile: name ...).
@@ -458,7 +489,13 @@ ${LIVE_LOG_INSTRUCTION}`;
 
     playerRef.current = player;
     player.onDrain = () => {
-      if (!endedRef.current && statusRef.current === 'speaking') {
+      if (endedRef.current) return;
+      // The patient said goodbye: once the farewell has finished playing, close.
+      if (hangupPendingRef.current) {
+        endCallRef.current();
+        return;
+      }
+      if (statusRef.current === 'speaking') {
         setStatusSafe(micOnRef.current ? 'listening' : 'muted');
       }
     };
@@ -487,6 +524,16 @@ ${LIVE_LOG_INSTRUCTION}`;
         if (endedRef.current) return;
         bumpActivity();
         for (const c of calls) {
+          // The patient said goodbye → the model asks to hang up. Ack the
+          // tool so it can finish its spoken farewell, then close gracefully.
+          if (c.name === 'end_call') {
+            liveRef.current?.sendToolResponse([
+              { id: c.id, name: c.name, response: { ok: true } },
+            ]);
+            scheduleHangup();
+            continue;
+          }
+
           const action = actionFromFunctionCall(c.name, c.args);
           if (!action) {
             liveRef.current?.sendToolResponse([
@@ -576,9 +623,10 @@ ${LIVE_LOG_INSTRUCTION}`;
         await mic.start((b64) => session.sendAudio(b64));
         mic.setMuted(!micOnRef.current);
         // Make the assistant speak FIRST: push a short directive so it opens
-        // the call by greeting the patient by name before they say anything.
+        // the call itself — greet the patient by name, introduce itself, and
+        // ask how they are, before they say anything.
         session.sendText(
-          `(The call just connected. Greet the patient now by their first name in one short warm spoken sentence, then ask how you can help. Speak ${LANGUAGE_NAMES[i18n.language] ?? 'English'}.)`
+          `(The call just connected. YOU speak first, before the patient says anything. In one or two short warm spoken sentences: say hello and greet the patient by their first name, introduce yourself as GlucoAI their diabetes assistant, and ask how they are doing today. Then wait for their reply. Speak ${LANGUAGE_NAMES[i18n.language] ?? 'English'}.)`
         );
         if (!endedRef.current) {
           setStatusSafe(micOnRef.current ? 'listening' : 'muted');
@@ -816,6 +864,9 @@ ${LIVE_LOG_INSTRUCTION}`;
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
   };
+  // Assigned after endCall exists so the goodbye handler / player drain can
+  // reach the latest version without a forward reference.
+  endCallRef.current = endCall;
 
   /** Auto-hang-up from a cost guard: shows a short reason, then closes.
    *  Kept behind a ref so the guard timers (set up before this line) can

@@ -338,7 +338,16 @@ export const useAppStore = create<AppState>()(
           }
           return { ...base, conversations, activeConversationId };
         }),
-      resetAll: () => set({ ...initialData }),
+      // Sign-out wipes the ACCOUNT (data + wizardDone/session), but keeps
+      // device-level onboarding — language and the intro carousel — just like
+      // `deviceOnboarded`. Otherwise a signed-out user routed through index
+      // lands back on the language/onboarding intro instead of the login page.
+      resetAll: () =>
+        set((s) => ({
+          ...initialData,
+          languageChosen: s.languageChosen,
+          onboardingDone: s.onboardingDone,
+        })),
     }),
     {
       name: 'glucoai.store',

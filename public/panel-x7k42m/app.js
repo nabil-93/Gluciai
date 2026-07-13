@@ -265,7 +265,21 @@ function shell(active, title, sub, bodyHTML) {
         <div class="content" id="page">${bodyHTML || ''}</div>
       </div>
     </div>`;
-  document.getElementById('logoutBtn').addEventListener('click', async () => { await db.auth.signOut(); location.hash = ''; renderLogin(); });
+  document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    // Drop our in-memory identity FIRST so any stray route() call bails out.
+    me = null;
+    // Clear the local session even if the server revoke fails or throws
+    // (offline / already-expired token) — otherwise a stale session lingers
+    // and boot() bounces us back into the dashboard.
+    try { await db.auth.signOut(); } catch (_) { /* local session is cleared regardless */ }
+    // Reset the URL WITHOUT firing hashchange → route → boot (that re-entry
+    // races renderLogin and can re-render the dashboard on a stale read).
+    // replaceState does not emit hashchange, so we land on login deterministically.
+    history.replaceState(null, '', location.pathname);
+    renderLogin();
+  });
   const burger = document.getElementById('burger');
   burger?.addEventListener('click', () => {
     const sb = document.getElementById('sidebar');
