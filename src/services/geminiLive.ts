@@ -246,6 +246,21 @@ export class GeminiLiveSession {
     );
   }
 
+  /** Send a text turn. Used to make the model speak FIRST — right after the
+   *  call connects we push a short directive so it greets the patient by name
+   *  before they say anything. */
+  sendText(text: string) {
+    if (!this.ready || this.ws?.readyState !== WebSocket.OPEN) return;
+    this.ws.send(
+      JSON.stringify({
+        clientContent: {
+          turns: [{ role: 'user', parts: [{ text }] }],
+          turnComplete: true,
+        },
+      })
+    );
+  }
+
   /** Answer a toolCall so the model can confirm out loud to the patient. */
   sendToolResponse(
     responses: { id?: string; name: string; response: Record<string, unknown> }[]

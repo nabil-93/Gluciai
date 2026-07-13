@@ -480,7 +480,8 @@
     "chip3": "Medication effects",
     "chip3Q": "Explain how my medications affect my glucose.",
     "chip4": "Other questions",
-    "chip4Q": "I have a general question about diabetes."
+    "chip4Q": "I have a general question about diabetes.",
+    "greetingNamed": "Hi {{name}} 👋! I’m your health assistant. How can I help you today?"
   },
   "call": {
     "title": "Voice call with AI",
@@ -500,7 +501,9 @@
     "incoming": "AI call ready",
     "answer": "Answer",
     "endedSilence": "Call ended (extended silence).",
-    "endedMax": "Maximum call duration reached."
+    "endedMax": "Maximum call duration reached.",
+    "greeting": "Hi! I’m your GlucoAI assistant. How can I help you?",
+    "greetingNamed": "Hi {{name}}! I’m your GlucoAI assistant. How can I help you?"
   },
   "history": {
     "title": "History",

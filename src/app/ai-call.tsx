@@ -432,6 +432,10 @@ language or dialect — French, German, English, Arabic or Moroccan Darija — y
 understand them all; never say you don't understand, never ask to switch language.
 STYLE: natural, warm, short spoken sentences (1-3 per turn), like a caring human
 on the phone. No lists, no markdown. It's OK to ask short follow-up questions.
+NAME: the patient's first name is in PATIENT DATA below (Profile: name ...).
+Greet them BY THEIR FIRST NAME at the start of the call (e.g. "Salam Nabil,
+...") and use it naturally now and then — never say "?" if the name is missing,
+just greet warmly without a name.
 BE CONCRETELY HELPFUL: give real practical suggestions (foods, portions, timing,
 hydration, activity) and analyse the patient's own data when asked — never refuse
 with "I can't judge". Insulin education with their own ratios is fine; just never
@@ -571,6 +575,11 @@ ${LIVE_LOG_INSTRUCTION}`;
         micRef.current = mic;
         await mic.start((b64) => session.sendAudio(b64));
         mic.setMuted(!micOnRef.current);
+        // Make the assistant speak FIRST: push a short directive so it opens
+        // the call by greeting the patient by name before they say anything.
+        session.sendText(
+          `(The call just connected. Greet the patient now by their first name in one short warm spoken sentence, then ask how you can help. Speak ${LANGUAGE_NAMES[i18n.language] ?? 'English'}.)`
+        );
         if (!endedRef.current) {
           setStatusSafe(micOnRef.current ? 'listening' : 'muted');
         }
@@ -679,8 +688,22 @@ ${LIVE_LOG_INSTRUCTION}`;
   };
 
   const startClassicLoop = () => {
-    if (canClassic) startClassicListening();
-    else setStatusSafe('unsupported');
+    if (!canClassic) {
+      setStatusSafe('unsupported');
+      return;
+    }
+    // Speak first: greet the patient by name, then start listening (the
+    // greeting's onend hands over to startClassicListening).
+    const firstName = profile?.name?.trim().split(/\s+/)[0];
+    const greeting = firstName
+      ? t('call.greetingNamed', { name: firstName })
+      : t('call.greeting');
+    historyRef.current = [
+      ...historyRef.current,
+      { role: 'assistant', content: greeting },
+    ];
+    setAdvice(greeting);
+    speakClassic(greeting);
   };
 
   const cleanupClassic = () => {

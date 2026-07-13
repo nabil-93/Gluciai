@@ -296,7 +296,14 @@ function AiChatScreen() {
             <AnimatedRobot size={30} mood="happy" />
           </View>
           <View style={styles.aiBubble}>
-            <Text style={styles.aiText}>{t('chat.greeting')}</Text>
+            <Text style={styles.aiText}>
+              {(() => {
+                const firstName = profile?.name?.trim().split(/\s+/)[0];
+                return firstName
+                  ? t('chat.greetingNamed', { name: firstName })
+                  : t('chat.greeting');
+              })()}
+            </Text>
           </View>
         </View>
 
