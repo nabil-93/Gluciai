@@ -42,6 +42,9 @@ export default function BiologyScreen() {
   const { t, i18n } = useTranslation();
   const { onScroll } = useTabBarScroll();
   const { measureLogs, profile } = useAppStore();
+  // Labs is a HIDDEN feature: the card exists only for accounts the admin
+  // explicitly granted (feature_access labs allowed=true). No trace otherwise.
+  const labsGranted = useAppStore((s) => s.grantedFeatures.includes('labs'));
   const locale = i18n.language;
 
   const [openKind, setOpenKind] = useState<MeasureKind | null>(null);
@@ -88,18 +91,21 @@ export default function BiologyScreen() {
             : t('biology.subtitle')}
         </Text>
 
-        {/* Lab analyses — photo → AI extraction, graphs & spoken report */}
-        <BevelCard
-          style={styles.integrationsCard}
-          onPress={() => router.push('/labs')}
-        >
-          <Text style={{ fontSize: 24 }}>🧪</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.integrationsTitle}>{t('labs.title')}</Text>
-            <Text style={styles.integrationsSub}>{t('labs.entrySub')}</Text>
-          </View>
-          <ChevronRight />
-        </BevelCard>
+        {/* Lab analyses — photo → AI extraction, graphs & spoken report.
+            Rendered ONLY when the admin granted this hidden feature. */}
+        {labsGranted ? (
+          <BevelCard
+            style={styles.integrationsCard}
+            onPress={() => router.push('/labs')}
+          >
+            <Text style={{ fontSize: 24 }}>🧪</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.integrationsTitle}>{t('labs.title')}</Text>
+              <Text style={styles.integrationsSub}>{t('labs.entrySub')}</Text>
+            </View>
+            <ChevronRight />
+          </BevelCard>
+        ) : null}
 
         {/* Health platform integrations */}
         <BevelCard

@@ -88,6 +88,9 @@ interface AppState {
   deviceOnboarded: boolean;
   /** Features blocked for this account from the admin dashboard (feature_access) */
   lockedFeatures: string[];
+  /** HIDDEN features explicitly granted to this account by the admin
+   *  (feature_access allowed=true). Invisible everywhere unless granted. */
+  grantedFeatures: string[];
   /** Reminders the patient asked the AI to set */
   aiReminders: AiReminder[];
   /** Account events (status changes, parameter edits) — part of the history */
@@ -97,6 +100,7 @@ interface AppState {
 
   setLanguageChosen: () => void;
   setLockedFeatures: (features: string[]) => void;
+  setGrantedFeatures: (features: string[]) => void;
   setOnboardingDone: () => void;
   setWizardDone: () => void;
   setConsentAccepted: () => void;
@@ -163,6 +167,7 @@ const initialData = {
   aiJournalSeenAt: null as string | null,
   planWelcomeShown: false,
   lockedFeatures: [] as string[],
+  grantedFeatures: [] as string[],
   aiReminders: [] as AiReminder[],
   eventLogs: [] as AppEvent[],
   labReports: [] as LabReport[],
@@ -179,6 +184,7 @@ export const useAppStore = create<AppState>()(
       markDeviceOnboarded: () => set({ deviceOnboarded: true }),
       setLanguageChosen: () => set({ languageChosen: true }),
       setLockedFeatures: (lockedFeatures) => set({ lockedFeatures }),
+      setGrantedFeatures: (grantedFeatures) => set({ grantedFeatures }),
       setOnboardingDone: () => set({ onboardingDone: true }),
       setWizardDone: () => set({ wizardDone: true }),
       setConsentAccepted: () =>

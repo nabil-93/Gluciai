@@ -7,6 +7,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActivityGlyph, CloseGlyph } from '@/components/ui';
+import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
 
 function ScanGlyph() {
@@ -130,6 +131,9 @@ const ITEMS: Item[] = [
 export default function AddMenuScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Hidden feature: the labs shortcut only exists for granted accounts.
+  const labsGranted = useAppStore((s) => s.grantedFeatures.includes('labs'));
+  const items = ITEMS.filter((i) => i.href !== '/labs' || labsGranted);
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -153,7 +157,7 @@ export default function AddMenuScreen() {
 
       <View style={[styles.sheet, { bottom: Math.max(insets.bottom, 12) + 96 }]}>
         <View style={styles.grid}>
-          {ITEMS.map((item) => (
+          {items.map((item) => (
             <Pressable
               key={item.label}
               style={({ pressed }) => [styles.item, pressed && { opacity: 0.7 }]}

@@ -46,6 +46,14 @@ const FEATURES = [
   { key: 'ai_call', label: 'Appel vocal IA', desc: "Appel téléphonique avec l'IA", icon: '📞', bg: '#e9fbf2' },
 ];
 
+/* Fonctions CACHÉES : l'inverse des locks ci-dessus. Elles n'existent pour
+ * PERSONNE (aucune icône, aucune demande d'accès, aucune trace dans l'app)
+ * tant que l'admin ne les active pas explicitement pour un compte
+ * (feature_access allowed=true). Visibles uniquement par l'admin ici. */
+const HIDDEN_FEATURES = [
+  { key: 'labs', label: 'Analyses biologiques', desc: 'Photo du bilan → IA : valeurs, graphiques, rapport, docteur vocal', icon: '🧪', bg: '#fdf2ff' },
+];
+
 const PLAN_LABEL = { free: 'Gratuit', monthly: 'Mensuel', yearly: 'Annuel' };
 const AVATAR_COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
@@ -621,6 +629,19 @@ async function pagePatient(pid, initTab) {
                 <button class="switch ${on ? 'on' : ''}" data-feat="${f.key}" ${me.role !== 'admin' ? 'disabled' : ''}></button>
               </div>`;
             }).join('')}
+            ${me.role === 'admin' ? `
+            <div style="margin:14px 0 6px;padding-top:12px;border-top:1px dashed var(--border);font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted-2)">
+              🕶️ Fonctions cachées — invisibles pour le patient tant que vous ne les activez pas
+            </div>
+            ${HIDDEN_FEATURES.map((f) => {
+              const on = locks[f.key] === true;
+              return `<div class="feature-row">
+                <div class="fic" style="background:${f.bg}">${f.icon}</div>
+                <div class="ft"><div class="t">${f.label}</div><div class="d">${f.desc}</div></div>
+                ${on ? '<span class="badge green">👁️ Activée</span>' : '<span class="badge">🕶️ Cachée</span>'}
+                <button class="switch ${on ? 'on' : ''}" data-feat="${f.key}" data-hidden="1"></button>
+              </div>`;
+            }).join('')}` : ''}
           </div>
         </div>
       </div>
@@ -767,14 +788,18 @@ async function pagePatient(pid, initTab) {
     document.querySelectorAll('#featList .switch').forEach((sw) =>
       sw.addEventListener('click', async () => {
         const feat = sw.dataset.feat;
+        const hidden = sw.dataset.hidden === '1';
         const nowOn = !sw.classList.contains('on');
         sw.classList.toggle('on', nowOn);
         const { error } = await db.from('feature_access').upsert({ user_id: pid, feature: feat, allowed: nowOn, updated_at: new Date().toISOString() });
         if (error) { sw.classList.toggle('on', !nowOn); toast('Erreur: ' + error.message, true); return; }
-        toast(nowOn ? 'Fonctionnalité débloquée ✓' : 'Fonctionnalité bloquée 🔒');
+        toast(hidden
+          ? (nowOn ? 'Fonction cachée activée pour ce patient 👁️' : 'Fonction cachée désactivée 🕶️')
+          : (nowOn ? 'Fonctionnalité débloquée ✓' : 'Fonctionnalité bloquée 🔒'));
         const row = sw.closest('.feature-row');
         row.querySelector('.badge')?.remove();
-        if (!nowOn) sw.insertAdjacentHTML('beforebegin', '<span class="badge red">🔒 Bloqué</span>');
+        if (hidden) sw.insertAdjacentHTML('beforebegin', nowOn ? '<span class="badge green">👁️ Activée</span>' : '<span class="badge">🕶️ Cachée</span>');
+        else if (!nowOn) sw.insertAdjacentHTML('beforebegin', '<span class="badge red">🔒 Bloqué</span>');
       }));
 
     document.getElementById('editSub')?.addEventListener('click', () => subModal(pid, sub, () => pagePatient(pid)));

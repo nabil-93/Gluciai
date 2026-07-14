@@ -12,13 +12,13 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, Path, Polygon, Text as SvgText } from 'react-native-svg';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
-import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import { confirmAsync } from '@/lib/confirm';
 import { deleteLabReport, saveLabReport, updateLabReport } from '@/services/data';
@@ -363,11 +363,13 @@ function SpeakingBars({ active }: { active: boolean }) {
   );
 }
 
-/* Gate: labs is an AI feature — reuse the chat lock switch. */
+/* Gate: labs is a HIDDEN feature. Only accounts the admin explicitly
+ * granted (feature_access labs allowed=true) can even see this screen —
+ * everyone else is silently sent home, with no locked-screen teaser and
+ * no hint that the feature exists. */
 export default function LabsScreenGate() {
-  const locked = useAppStore((s) => s.lockedFeatures.includes('ai_chat'));
-  const { t } = useTranslation();
-  if (locked) return <LockedScreen featureLabel={t('locked.featChat')} />;
+  const granted = useAppStore((s) => s.grantedFeatures.includes('labs'));
+  if (!granted) return <Redirect href="/(tabs)" />;
   return <LabsScreen />;
 }
 

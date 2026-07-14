@@ -7,6 +7,15 @@ export type FeatureKey = 'scanner' | 'ai_chat' | 'ai_call';
 /** Every premium feature, in the order shown on the subscription screen. */
 export const ALL_FEATURES: FeatureKey[] = ['scanner', 'ai_chat', 'ai_call'];
 
+/**
+ * HIDDEN features work the opposite way of the lockable ones above: they
+ * exist for NOBODY unless the admin explicitly grants them (a
+ * feature_access row with allowed=true). They never appear on the
+ * subscription screen, never show a "locked" teaser, and leave no trace
+ * in the UI for non-granted accounts. Currently: 'labs' (lab analyses).
+ */
+export const HIDDEN_FEATURES = ['labs'] as const;
+
 export type PlanStatus = 'free' | 'partial' | 'full';
 
 /**
@@ -42,6 +51,16 @@ export async function refreshFeatureLocks() {
       .filter((r) => r.allowed === false)
       .map((r) => r.feature as string);
     useAppStore.getState().setLockedFeatures(locked);
+    // Hidden features (allowlist): only an explicit allowed=true row from
+    // the admin dashboard reveals them.
+    const granted = (data ?? [])
+      .filter(
+        (r) =>
+          r.allowed === true &&
+          (HIDDEN_FEATURES as readonly string[]).includes(r.feature)
+      )
+      .map((r) => r.feature as string);
+    useAppStore.getState().setGrantedFeatures(granted);
   } catch {
     // offline — keep the persisted state
   }
