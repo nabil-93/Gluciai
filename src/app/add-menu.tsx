@@ -65,6 +65,21 @@ function GridGlyph() {
     </Svg>
   );
 }
+function LabGlyph() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24">
+      <Path
+        d="M9 3h6M10 3v6.5L4.8 18a2 2 0 001.7 3h11a2 2 0 001.7-3L14 9.5V3"
+        stroke="#8a3ffc"
+        strokeWidth={2}
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M7.5 15h9" stroke="#8a3ffc" strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
 
 interface Item {
   label: string;
@@ -99,6 +114,7 @@ const ITEMS: Item[] = [
     icon: <ActivityGlyph size={24} color={colors.primary} />,
   },
   { label: 'Poids & mesures', href: '/(tabs)/biology', icon: <ScaleGlyph /> },
+  { label: 'Mes analyses', href: '/labs', icon: <LabGlyph /> },
   {
     label: 'Rapport médecin',
     href: '/report',
