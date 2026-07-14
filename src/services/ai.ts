@@ -1,3 +1,4 @@
+import { healthyFoodAIIndex } from '@/data/healthyFoods';
 import { searchMoroccanFood } from '@/data/moroccanFoods';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
@@ -507,6 +508,16 @@ export function buildHealthContext(): string {
   return lines.join('\n');
 }
 
+/** Health snapshot + the healthy-food index so the chat AI can coach the
+ *  patient and deep-link entries with [[food:id]] tokens. */
+function chatHealthData(): string {
+  return (
+    buildHealthContext() +
+    '\n\nHEALTHY FOOD LIST (the app has a detail page for EACH entry — photo, nutrition, cooking steps. Link one with a [[food:id]] token on its own line):\n' +
+    healthyFoodAIIndex()
+  );
+}
+
 const DEMO_REPLIES: Record<string, string> = {
   ar: 'هذا رد تجريبي. اربط Supabase ومفتاح الذكاء الاصطناعي للحصول على إجابات حقيقية مخصصة لك. تذكر دائمًا استشارة طبيبك في القرارات العلاجية.',
   fr: "Ceci est une réponse de démonstration. Connectez Supabase et la clé IA pour obtenir de vraies réponses personnalisées. Pensez toujours à consulter votre médecin pour les décisions médicales.",
@@ -557,7 +568,7 @@ export async function sendChatMessage(
   }
 
   const { data, error } = await supabase.functions.invoke('ai-chat', {
-    body: { messages, language, profile, mode, healthData: buildHealthContext() },
+    body: { messages, language, profile, mode, healthData: chatHealthData() },
   });
   if (error) throw error;
   if (data.error) throw new Error(data.error);
@@ -604,7 +615,7 @@ export async function sendChatVoice(
       language,
       profile,
       mode: 'chat',
-      healthData: buildHealthContext(),
+      healthData: chatHealthData(),
       audio,
     },
   });

@@ -542,7 +542,7 @@ async function pagePatient(pid, initTab) {
   const sub = subRes.data;
   const locks = Object.fromEntries((featRes.data ?? []).map((f) => [f.feature, f.allowed]));
 
-  const [meals, glys, insus, acts, meas, payments, chats, calls] = await Promise.all([
+  const [meals, glys, insus, acts, meas, payments, chats, calls, labReports] = await Promise.all([
     db.from('meal_scans').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(60).then((r) => r.data ?? []),
     db.from('glucose_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(80).then((r) => r.data ?? []),
     db.from('insulin_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(80).then((r) => r.data ?? []),
@@ -551,6 +551,7 @@ async function pagePatient(pid, initTab) {
     db.from('payments').select('*').eq('user_id', pid).order('period', { ascending: false }).then((r) => r.data ?? []),
     db.from('chat_history').select('*').eq('user_id', pid).order('created_at', { ascending: true }).limit(300).then((r) => r.data ?? []),
     db.from('call_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(100).then((r) => r.data ?? []),
+    db.from('lab_reports').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(50).then((r) => r.data ?? []),
   ]);
   const aiUsage = (await db.from('ai_usage').select('kind, input_tokens, output_tokens, audio_input_tokens, audio_output_tokens, cost_usd').eq('user_id', pid)).data ?? [];
   // Voice-call minutes consumed this calendar month (quota tracking).
@@ -664,6 +665,20 @@ async function pagePatient(pid, initTab) {
 
       <div class="card fade-up">
         <div class="card-head">
+          <h3>📆 Rapport du jour</h3>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn" id="dayPrev" title="Jour précédent" style="padding:6px 12px">‹</button>
+            <input type="date" id="dayPick" style="height:34px;border:1.5px solid var(--border);border-radius:9px;padding:0 8px;font-size:12.5px;background:#fbfcfe" />
+            <button class="btn" id="dayNext" title="Jour suivant" style="padding:6px 12px">›</button>
+          </div>
+        </div>
+        <div id="dayPanel" style="padding:14px 18px 18px">
+          <div style="color:var(--muted);font-size:12.5px">Chargement…</div>
+        </div>
+      </div>
+
+      <div class="card fade-up">
+        <div class="card-head">
           <div class="tabs" id="dataTabs">
             ${[
               ['meals', `🍽️ Repas (${meals.length})`],
@@ -671,6 +686,7 @@ async function pagePatient(pid, initTab) {
               ['insu', `💉 Insuline (${insus.length})`],
               ['act', `🏃 Activité (${acts.length})`],
               ['meas', `📏 Mesures (${meas.length})`],
+              ['labs', `🧪 Analyses (${labReports.length})`],
               ['chat', `💬 Chat IA (${Math.ceil(chats.length / 2)})`],
               ['calls', `📞 Appels (${calls.length})`],
             ].map(([k, label]) => `<button class="tab ${k === (initTab || 'meals') ? 'active' : ''}" data-tab="${k}">${label}</button>`).join('')}
@@ -731,6 +747,48 @@ async function pagePatient(pid, initTab) {
       }).join('');
       return `<div class="chat-box" id="chatBox">${rows}</div>`;
     },
+    labs: () => {
+      if (!labReports.length) return emptyData('🧪', 'Aucune analyse biologique envoyée');
+      const S = { ok: ['#10b981', 'Normal'], warn: ['#f59e0b', 'Attention'], danger: ['#ef4444', 'Critique'] };
+      return `<div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
+        ${labReports.map((rep) => {
+          const vals = Array.isArray(rep.values) ? rep.values : [];
+          const ok = vals.filter((v) => v.status === 'ok').length;
+          const warn = vals.filter((v) => v.status === 'warn').length;
+          const danger = vals.filter((v) => v.status === 'danger').length;
+          const thumb = rep.image_thumb
+            ? `<img class="meal-thumb" src="${esc(rep.image_thumb)}" data-photo="${esc(rep.image_thumb)}" data-cap="${esc(rep.lab_name || 'Analyse')}" style="width:56px;height:56px" alt="" />`
+            : `<div class="meal-thumb ph" style="width:56px;height:56px">🧪</div>`;
+          return `<div style="border:1.5px solid var(--border);border-radius:14px;overflow:hidden">
+            <div style="display:flex;gap:12px;align-items:center;padding:12px 14px;background:#fbfcfe">
+              ${thumb}
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:13px">${esc(rep.lab_name || 'Analyse biologique')}</div>
+                <div style="font-size:11px;color:var(--muted)">${rep.report_date ? 'Rapport du ' + fmtDate(rep.report_date) + ' · ' : ''}envoyée le ${fmtDT(rep.created_at)}</div>
+                ${rep.summary ? `<div style="font-size:11.5px;color:var(--muted);font-style:italic;margin-top:3px">${esc(rep.summary)}</div>` : ''}
+              </div>
+              <div style="display:flex;gap:4px;flex-shrink:0">
+                ${danger ? `<span class="badge red">${danger} crit.</span>` : ''}
+                ${warn ? `<span class="badge amber">${warn} att.</span>` : ''}
+                <span class="badge green">${ok} norm.</span>
+              </div>
+            </div>
+            ${vals.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Examen</th><th>Valeur</th><th>Référence</th><th>Statut</th><th>Catégorie</th></tr></thead><tbody>
+              ${vals.map((v) => `<tr>
+                <td><b>${esc(v.label || '—')}</b></td>
+                <td><b style="color:${(S[v.status] || S.ok)[0]}">${esc(String(v.value ?? ''))} ${esc(v.unit || '')}</b></td>
+                <td style="color:var(--muted);font-size:12px">${v.refMin ?? '?'} – ${v.refMax ?? '?'} ${esc(v.unit || '')}</td>
+                <td><span class="badge ${v.status === 'danger' ? 'red' : v.status === 'warn' ? 'amber' : 'green'}">${(S[v.status] || S.ok)[1]}</span></td>
+                <td style="color:var(--muted);font-size:12px">${esc(v.category || '—')}</td>
+              </tr>`).join('')}</tbody></table></div>` : ''}
+            ${rep.medical_report ? `<details style="border-top:1px solid var(--border)">
+              <summary style="cursor:pointer;padding:10px 14px;font-size:12.5px;font-weight:700;color:var(--muted)">🩺 Rapport médical généré par l'IA</summary>
+              <div style="padding:4px 16px 14px;font-size:12.5px;line-height:1.65;white-space:pre-wrap">${esc(rep.medical_report)}</div>
+            </details>` : ''}
+          </div>`;
+        }).join('')}
+      </div>`;
+    },
     calls: () => {
       if (!calls.length) return emptyData('📞', 'Aucun appel vocal avec l’IA');
       const total = calls.reduce((a, c) => a + (c.duration_sec || 0), 0);
@@ -759,6 +817,83 @@ async function pagePatient(pid, initTab) {
     const ph = e.target.closest('[data-photo]');
     if (ph) lightbox(ph.dataset.photo, ph.dataset.cap);
   });
+
+  /* ── Rapport du jour: everything the patient did on ONE day, with
+     ‹ › navigation to walk back through the previous days. ── */
+  const dayPanel = document.getElementById('dayPanel');
+  const dayPick = document.getElementById('dayPick');
+  const toIso = (d) => d.toISOString().slice(0, 10);
+  dayPick.value = toIso(new Date());
+  dayPick.max = toIso(new Date());
+
+  async function loadDayReport(dateStr) {
+    dayPanel.innerHTML = '<div style="color:var(--muted);font-size:12.5px">Chargement…</div>';
+    const from = dateStr + 'T00:00:00';
+    const d2 = new Date(dateStr + 'T00:00:00');
+    d2.setDate(d2.getDate() + 1);
+    const to = toIso(d2) + 'T00:00:00';
+    const between = (q) => q.gte('created_at', from).lt('created_at', to).order('created_at', { ascending: true });
+    const [dm, dg, di, da, dx, de_] = await Promise.all([
+      between(db.from('meal_scans').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
+      between(db.from('glucose_logs').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
+      between(db.from('insulin_logs').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
+      between(db.from('activity_logs').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
+      between(db.from('measure_logs').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
+      between(db.from('event_logs').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
+    ]);
+    const time = (iso) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const totCarbs = dm.reduce((a, m) => a + Number(m.carbs ?? m.result?.carbohydrates ?? 0), 0);
+    const totKcal = dm.reduce((a, m) => a + Number(m.calories ?? m.result?.calories ?? 0), 0);
+    const totIns = di.reduce((a, x) => a + Number(x.dose || 0), 0);
+    const notes = de_.filter((ev) => ev.kind === 'note');
+    const sec = (title, inner) => inner
+      ? `<div style="margin-top:12px"><div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted-2);margin-bottom:6px">${title}</div>${inner}</div>`
+      : '';
+    const empty = !dm.length && !dg.length && !di.length && !da.length && !dx.length && !notes.length;
+    dayPanel.innerHTML = empty
+      ? '<div style="text-align:center;color:var(--muted);font-size:13px;padding:18px 0">📭 Rien d\'enregistré ce jour-là</div>'
+      : `
+      <div class="pay-stats" style="padding:0 0 4px">
+        <span class="badge indigo">🍽️ ${dm.length} repas · ${Math.round(totCarbs)} g gluc. · ${Math.round(totKcal)} kcal</span>
+        <span class="badge violet">💉 ${totIns} U</span>
+        <span class="badge gray">🩸 ${dg.length} mesure${dg.length > 1 ? 's' : ''}</span>
+      </div>
+      ${sec('🍽️ Repas', dm.length ? dm.map((m) => {
+        const r = m.result || {};
+        const names = r.food_name || (r.items || []).map((i) => i.name).join(', ') || 'Repas';
+        const hasPhoto = m.image_url && /^https?:/i.test(m.image_url);
+        const photo = hasPhoto
+          ? `<img class="meal-thumb" src="${esc(m.image_url)}" data-photo="${esc(m.image_url)}" data-cap="${esc(names)}" loading="lazy" alt="" />`
+          : `<div class="meal-thumb ph">🍽️</div>`;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed var(--border)">
+          ${photo}
+          <div style="flex:1;min-width:0"><b style="font-size:12.5px">${esc(names)}</b>
+            <div style="font-size:11px;color:var(--muted)">${m.meal_type ? esc(m.meal_type) + ' · ' : ''}${Math.round(m.carbs ?? r.carbohydrates ?? 0)} g glucides · ${Math.round(m.calories ?? r.calories ?? 0)} kcal</div>
+          </div>
+          <span style="font-size:11px;color:var(--muted);white-space:nowrap">${time(m.created_at)}</span>
+        </div>`;
+      }).join('') : '') }
+      ${sec('🩸 Glycémie', dg.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${dg.map((g) => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--border);border-radius:999px;padding:4px 10px">${time(g.created_at)} ${glyBadge(g.value)}</span>`).join('')}</div>` : '')}
+      ${sec('💉 Insuline', di.length ? di.map((x) => `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0"><span><span class="badge violet">${esc(x.insulin_type || '—')}</span> <b>${x.dose} U</b></span><span style="color:var(--muted);font-size:11px">${time(x.created_at)}</span></div>`).join('') : '')}
+      ${sec('🏃 Activité', da.length ? da.map((a) => `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0"><span><b>${esc(a.kind || '—')}</b> ${a.duration_min ?? '—'} min (${esc(a.intensity || '—')})</span><span style="color:var(--muted);font-size:11px">${time(a.created_at)}</span></div>`).join('') : '')}
+      ${sec('📏 Mesures', dx.length ? dx.map((x) => `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0"><span><b>${esc(x.kind)}</b> ${x.value} ${esc(x.unit || '')}</span><span style="color:var(--muted);font-size:11px">${time(x.created_at)}</span></div>`).join('') : '')}
+      ${sec('📝 Notes du patient', notes.length ? notes.map((ev) => `<div style="font-size:12.5px;padding:4px 0;color:var(--muted)">"${esc(ev.payload?.text || '')}" <span style="font-size:11px">· ${time(ev.created_at)}</span></div>`).join('') : '')}`;
+  }
+  const shiftDay = (n) => {
+    const d = new Date(dayPick.value + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    if (toIso(d) > dayPick.max) return;
+    dayPick.value = toIso(d);
+    loadDayReport(dayPick.value);
+  };
+  document.getElementById('dayPrev').addEventListener('click', () => shiftDay(-1));
+  document.getElementById('dayNext').addEventListener('click', () => shiftDay(1));
+  dayPick.addEventListener('change', () => dayPick.value && loadDayReport(dayPick.value));
+  dayPanel.addEventListener('click', (e) => {
+    const ph = e.target.closest('[data-photo]');
+    if (ph) lightbox(ph.dataset.photo, ph.dataset.cap);
+  });
+  loadDayReport(dayPick.value);
   document.querySelectorAll('#dataTabs .tab').forEach((t) =>
     t.addEventListener('click', () => {
       document.querySelectorAll('#dataTabs .tab').forEach((x) => x.classList.remove('active'));

@@ -954,5 +954,39 @@
     "saveOnly": "Enregistrer les valeurs",
     "chatIntro": "J'ai bien lu votre analyse 🧪 Qu'est-ce que vous voulez savoir ? Posez-moi toutes vos questions.",
     "callIntro": "J'ai lu votre analyse. Qu'est-ce que vous voulez me demander ?"
+  },
+  "hf": {
+    "title": "Makla saine",
+    "subtitle": "Plats adaptés à votre diabète",
+    "search": "Rechercher un plat…",
+    "all": "Tout",
+    "count": "{{count}} plats adaptés au diabète",
+    "empty": "Aucun plat trouvé. Essayez un autre mot.",
+    "cat": {
+      "breakfast": "Petit-déj",
+      "salad": "Salades",
+      "soup": "Soupes",
+      "main": "Plats",
+      "seafood": "Poissons",
+      "snack": "Collations",
+      "drink": "Boissons",
+      "dessert": "Desserts"
+    },
+    "giLow": "IG bas",
+    "giMedium": "IG modéré",
+    "giHigh": "IG élevé",
+    "whyTitle": "Pourquoi c'est bon pour vous",
+    "nutritionTitle": "Valeurs nutritionnelles",
+    "perServing": "Pour {{serving}}",
+    "calories": "Calories",
+    "carbs": "Glucides",
+    "sugar": "Sucre",
+    "protein": "Protéines",
+    "fat": "Lipides",
+    "fiber": "Fibres",
+    "stepsTitle": "Préparation",
+    "askAi": "Demander à l'IA à propos de ce plat",
+    "disclaimer": "Valeurs estimées à titre éducatif. Adaptez les portions avec votre médecin ou diététicien.",
+    "openCard": "Voir la fiche"
   }
 }

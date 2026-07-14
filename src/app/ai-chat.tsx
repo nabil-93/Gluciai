@@ -19,6 +19,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { LoggerConfirmCard } from '@/components/LoggerConfirmCard';
 import { VoiceRecorderBar } from '@/components/VoiceRecorderBar';
+import {
+  getHealthyFood,
+  healthyCategoryColors,
+  healthyFoodName,
+} from '@/data/healthyFoods';
 import { isRTL } from '@/i18n';
 import { confirmAsync } from '@/lib/confirm';
 import { sendChatMessage, sendChatVoice } from '@/services/ai';
@@ -128,6 +133,66 @@ function TypingDots() {
           }}
         />
       ))}
+    </View>
+  );
+}
+
+/**
+ * Assistant message body: renders plain text, and turns [[food:id]]
+ * tokens (the AI's healthy-food recommendations) into tappable cards
+ * that open the food's detail page (photo, nutrition, cooking steps).
+ */
+function AiMessageBody({
+  content,
+  lang,
+  openLabel,
+  onOpenFood,
+}: {
+  content: string;
+  lang: string;
+  openLabel: string;
+  onOpenFood: (id: string) => void;
+}) {
+  const parts = content.split(/\[\[food:([a-z0-9-]+)(?:\|[^\]]*)?\]\]/g);
+  if (parts.length === 1) {
+    return <Text style={styles.aiText}>{content}</Text>;
+  }
+  return (
+    <View style={{ gap: 8 }}>
+      {parts.map((p, i) => {
+        if (i % 2 === 1) {
+          const food = getHealthyFood(p);
+          if (!food) return null;
+          const [c1] = healthyCategoryColors(food.category);
+          return (
+            <Pressable
+              key={i}
+              style={[styles.foodLink, { backgroundColor: c1 }]}
+              onPress={() => onOpenFood(food.id)}
+            >
+              <Text style={{ fontSize: 26 }}>{food.emoji}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.foodLinkName} numberOfLines={1}>
+                  {healthyFoodName(food, lang)}
+                </Text>
+                <Text style={styles.foodLinkStats}>
+                  🔥 {food.calories} kcal · 🍞 {food.carbs} g · IG {food.gi}
+                </Text>
+              </View>
+              <View style={styles.foodLinkBtn}>
+                <Text style={styles.foodLinkBtnText}>{openLabel}</Text>
+              </View>
+            </Pressable>
+          );
+        }
+        const txt = p.trim();
+        if (!txt) return null;
+        return (
+          <Text key={i} style={styles.aiText}>
+            {txt}
+          </Text>
+        );
+      })}
     </View>
   );
 }
@@ -474,7 +539,14 @@ function AiChatScreen() {
                 <AnimatedRobot size={30} mood="happy" />
               </View>
               <View style={styles.aiBubble}>
-                <Text style={styles.aiText}>{m.content}</Text>
+                <AiMessageBody
+                  content={m.content}
+                  lang={i18n.language}
+                  openLabel={t('hf.openCard')}
+                  onOpenFood={(id) =>
+                    router.push({ pathname: '/healthy-food', params: { id } })
+                  }
+                />
                 <Text style={styles.aiTime}>{fmtTime(m.created_at)}</Text>
               </View>
             </View>
@@ -756,6 +828,25 @@ const styles = StyleSheet.create({
   },
   aiText: { fontFamily: F500, fontSize: 13.5, lineHeight: 19.5, color: '#26313f' },
   aiTime: { fontFamily: F500, fontSize: 10, color: '#a6aebc', marginTop: 5 },
+
+  /* Healthy-food recommendation card inside an AI bubble */
+  foodLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  foodLinkName: { fontFamily: F700, fontSize: 12.5, color: '#111827' },
+  foodLinkStats: { fontFamily: F600, fontSize: 10, color: '#5b6472', marginTop: 2 },
+  foodLinkBtn: {
+    backgroundColor: '#19c37d',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 11,
+  },
+  foodLinkBtnText: { fontFamily: F800, fontSize: 10.5, color: '#ffffff' },
 
   /* User bubbles (right, green) */
   userRow: { alignItems: 'flex-end', marginBottom: 12, paddingLeft: 40 },

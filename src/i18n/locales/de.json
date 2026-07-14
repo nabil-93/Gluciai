@@ -954,5 +954,39 @@
     "saveOnly": "Werte speichern",
     "chatIntro": "Ich habe deine Analyse gelesen 🧪 Was möchtest du wissen? Frag mich alles.",
     "callIntro": "Ich habe deine Analyse gelesen. Was möchtest du mich fragen?"
+  },
+  "hf": {
+    "title": "Gesunde Küche",
+    "subtitle": "Gerichte, die zu deinem Diabetes passen",
+    "search": "Gericht suchen…",
+    "all": "Alle",
+    "count": "{{count}} diabetesfreundliche Gerichte",
+    "empty": "Kein Gericht gefunden. Versuche ein anderes Wort.",
+    "cat": {
+      "breakfast": "Frühstück",
+      "salad": "Salate",
+      "soup": "Suppen",
+      "main": "Hauptgerichte",
+      "seafood": "Fisch",
+      "snack": "Snacks",
+      "drink": "Getränke",
+      "dessert": "Desserts"
+    },
+    "giLow": "niedriger GI",
+    "giMedium": "mittlerer GI",
+    "giHigh": "hoher GI",
+    "whyTitle": "Warum es gut für dich ist",
+    "nutritionTitle": "Nährwerte",
+    "perServing": "Pro {{serving}}",
+    "calories": "Kalorien",
+    "carbs": "Kohlenhydrate",
+    "sugar": "Zucker",
+    "protein": "Eiweiß",
+    "fat": "Fett",
+    "fiber": "Ballaststoffe",
+    "stepsTitle": "Zubereitung",
+    "askAi": "Die KI zu diesem Gericht fragen",
+    "disclaimer": "Geschätzte Werte zu Bildungszwecken. Portionen mit Arzt oder Ernährungsberater anpassen.",
+    "openCard": "Ansehen"
   }
 }

@@ -114,6 +114,8 @@ export default function RootLayout() {
             <Stack.Screen name="ai-chat" options={{ presentation: 'modal' }} />
             <Stack.Screen name="ai-log" options={{ presentation: 'modal' }} />
             <Stack.Screen name="labs" />
+            <Stack.Screen name="healthy-foods" />
+            <Stack.Screen name="healthy-food" />
             <Stack.Screen
               name="consent-detail"
               options={{ presentation: 'modal' }}

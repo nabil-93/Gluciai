@@ -954,5 +954,39 @@
     "saveOnly": "Save the values",
     "chatIntro": "I've read your lab results 🧪 What would you like to know? Ask me anything.",
     "callIntro": "I've read your lab results. What would you like to ask me?"
+  },
+  "hf": {
+    "title": "Healthy food",
+    "subtitle": "Meals that fit your diabetes",
+    "search": "Search a dish…",
+    "all": "All",
+    "count": "{{count}} diabetes-friendly dishes",
+    "empty": "No dish found. Try another word.",
+    "cat": {
+      "breakfast": "Breakfast",
+      "salad": "Salads",
+      "soup": "Soups",
+      "main": "Mains",
+      "seafood": "Fish",
+      "snack": "Snacks",
+      "drink": "Drinks",
+      "dessert": "Desserts"
+    },
+    "giLow": "low GI",
+    "giMedium": "medium GI",
+    "giHigh": "high GI",
+    "whyTitle": "Why it's good for you",
+    "nutritionTitle": "Nutrition facts",
+    "perServing": "Per {{serving}}",
+    "calories": "Calories",
+    "carbs": "Carbs",
+    "sugar": "Sugar",
+    "protein": "Protein",
+    "fat": "Fat",
+    "fiber": "Fiber",
+    "stepsTitle": "Preparation",
+    "askAi": "Ask the AI about this dish",
+    "disclaimer": "Estimated values for education. Adjust portions with your doctor or dietitian.",
+    "openCard": "Open"
   }
 }

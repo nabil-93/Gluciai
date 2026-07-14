@@ -100,6 +100,11 @@ const ITEMS: Item[] = [
     icon: <Text style={{ fontSize: 24 }}>🇲🇦</Text>,
   },
   {
+    label: 'Makla saine',
+    href: '/healthy-foods',
+    icon: <Text style={{ fontSize: 22 }}>🥗</Text>,
+  },
+  {
     label: 'Code-barres',
     href: '/barcode',
     icon: <Text style={{ fontSize: 22 }}>🏷️</Text>,
