@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -248,10 +248,13 @@ function CallQuotaSplash() {
 
 function AiCallScreen() {
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
   const profile = useAppStore((s) => s.profile);
+  /** Opened from the lab-analysis screen → the AI opens the call itself. */
+  const fromLab = from === 'lab';
 
   const [status, setStatus] = useState<CallStatus>('incoming');
   const [advice, setAdvice] = useState<string | null>(null);
@@ -465,15 +468,23 @@ function AiCallScreen() {
    *  full health snapshot + phone-call speaking style. */
   const buildInstruction = () => {
     const langName = LANGUAGE_NAMES[i18n.language] ?? 'English';
-    return `You are GlucoAI, the patient's personal diabetes assistant, on a LIVE PHONE CALL.
-THE PATIENT SPEAKS FIRST: stay completely SILENT until the patient talks
+    const opening = fromLab
+      ? `THIS CALL WAS OPENED FROM THE PATIENT'S LAB-ANALYSIS SCREEN: their
+blood-test results are in PATIENT DATA below (LAB REPORT). YOU open the
+call (you will receive a directive): tell them you have read their
+analysis and ask what they want to know. After that, mirror their
+language as described below and answer their questions about the
+results, honestly and simply.`
+      : `THE PATIENT SPEAKS FIRST: stay completely SILENT until the patient talks
 (they open with "salam", "bonjour", "hello", "hola", "merhaba"…). NEVER
 speak first. When they do speak, DETECT the language or dialect of THEIR
 words and answer with one short warm greeting in that SAME language,
 calling them by their first name (it is in PATIENT DATA below,
 "Profile: name …"), then help them. Example: patient says "salam" in
 Moroccan Darija → you answer in Darija like "Salam [name], ana GlucoAI.
-Kidayr lyoum?".
+Kidayr lyoum?".`;
+    return `You are GlucoAI, the patient's personal diabetes assistant, on a LIVE PHONE CALL.
+${opening}
 LANGUAGE (critical): ALWAYS mirror whatever language or dialect the
 patient actually speaks — ANY language in the world: French, German,
 English, Spanish, Italian, Turkish, Arabic (any dialect: Moroccan
@@ -673,6 +684,19 @@ ${LIVE_LOG_INSTRUCTION}`;
         micRef.current = mic;
         await mic.start((b64) => session.sendAudio(b64));
         mic.setMuted(!micOnRef.current);
+        // From the lab screen the AI opens the call itself: "I've read your
+        // analysis — what would you like to ask?" (normal calls stay silent
+        // until the patient speaks first).
+        if (fromLab) {
+          session.sendText(
+            `(The call just connected from the patient's lab-analysis screen. ` +
+              `YOU speak first: in 1-2 short warm spoken sentences in ` +
+              `${LANGUAGE_NAMES[i18n.language] ?? 'English'}, greet the patient by ` +
+              `their first name, tell them you have read their blood-test ` +
+              `analysis, and ask what they would like to know about it. Then wait ` +
+              `for their reply and switch to THEIR language/dialect from then on.)`
+          );
+        }
         if (!endedRef.current) {
           setStatusSafe(micOnRef.current ? 'listening' : 'muted');
         }
@@ -785,8 +809,16 @@ ${LIVE_LOG_INSTRUCTION}`;
       setStatusSafe('unsupported');
       return;
     }
-    // The patient opens the conversation — start listening right away
-    // (same behaviour as the live engine: the AI never speaks first).
+    // From the lab screen the AI opens the call ("I've read your analysis…");
+    // otherwise the patient opens the conversation — start listening right
+    // away (same behaviour as the live engine: the AI never speaks first).
+    if (fromLab) {
+      const intro = t('labs.callIntro');
+      historyRef.current = [...historyRef.current, { role: 'assistant', content: intro }];
+      setAdvice(intro);
+      speakClassic(intro);
+      return;
+    }
     startClassicListening();
   };
 

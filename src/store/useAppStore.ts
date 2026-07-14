@@ -12,6 +12,7 @@ import type {
   FoodCorrection,
   GlucoseLog,
   InsulinLog,
+  LabReport,
   MealScan,
   MeasureLog,
   Profile,
@@ -46,6 +47,7 @@ export interface ServerSnapshot {
   chatMessages: ChatMessage[];
   aiReminders: AiReminder[];
   eventLogs: AppEvent[];
+  labReports: LabReport[];
 }
 
 interface AppState {
@@ -90,6 +92,8 @@ interface AppState {
   aiReminders: AiReminder[];
   /** Account events (status changes, parameter edits) — part of the history */
   eventLogs: AppEvent[];
+  /** Lab (blood test) reports photographed & analyzed by the AI */
+  labReports: LabReport[];
 
   setLanguageChosen: () => void;
   setLockedFeatures: (features: string[]) => void;
@@ -119,6 +123,10 @@ interface AppState {
   addAiReminder: (reminder: AiReminder) => void;
   updateAiReminder: (id: string, patch: Partial<AiReminder>) => void;
   addEventLog: (event: AppEvent) => void;
+
+  addLabReport: (report: LabReport) => void;
+  updateLabReport: (id: string, patch: Partial<LabReport>) => void;
+  removeLabReport: (id: string) => void;
 
   addChatMessage: (message: ChatMessage) => void;
   updateLastChatMessage: (content: string) => void;
@@ -157,6 +165,7 @@ const initialData = {
   lockedFeatures: [] as string[],
   aiReminders: [] as AiReminder[],
   eventLogs: [] as AppEvent[],
+  labReports: [] as LabReport[],
 };
 
 export const useAppStore = create<AppState>()(
@@ -217,6 +226,17 @@ export const useAppStore = create<AppState>()(
       markAiJournalSeen: () =>
         set({ aiJournalSeenAt: new Date().toISOString() }),
       markPlanWelcomeShown: () => set({ planWelcomeShown: true }),
+
+      addLabReport: (report) =>
+        set((s) => ({ labReports: [report, ...s.labReports] })),
+      updateLabReport: (id, patch) =>
+        set((s) => ({
+          labReports: s.labReports.map((r) =>
+            r.id === id ? { ...r, ...patch } : r
+          ),
+        })),
+      removeLabReport: (id) =>
+        set((s) => ({ labReports: s.labReports.filter((r) => r.id !== id) })),
 
       addAiReminder: (reminder) =>
         set((s) => ({ aiReminders: [reminder, ...s.aiReminders] })),

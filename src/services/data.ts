@@ -9,6 +9,7 @@ import type {
   GlucoseLog,
   InsulinLog,
   InsulinType,
+  LabReport,
   MealScan,
   MealType,
   MeasureKind,
@@ -336,6 +337,65 @@ export async function saveMeasure(
   };
   useAppStore.getState().addMeasureLog(log);
   return log;
+}
+
+/**
+ * Save a freshly-analyzed lab report (store + Supabase mirror). The report
+ * arrives fully built by the labs screen (values extracted, options chosen).
+ */
+export async function saveLabReport(
+  report: Omit<LabReport, 'id' | 'user_id' | 'created_at'>
+): Promise<LabReport> {
+  const user_id = await currentUserId();
+  let row: { id: string; created_at: string } | null = null;
+  if (user_id !== 'demo-user') {
+    row = await insertReturning('lab_reports', {
+      user_id,
+      lab_name: report.lab_name ?? null,
+      report_date: report.report_date ?? null,
+      summary: report.summary ?? null,
+      values: report.values,
+      medical_report: report.medical_report ?? null,
+      voice_script: report.voice_script ?? null,
+      has_graphs: report.has_graphs ?? true,
+      image_thumb: report.image_thumb ?? null,
+    });
+  }
+  const saved: LabReport = {
+    ...report,
+    id: row?.id ?? id(),
+    user_id,
+    created_at: row?.created_at ?? new Date().toISOString(),
+  };
+  useAppStore.getState().addLabReport(saved);
+  return saved;
+}
+
+/** Patch a lab report locally + on the server (medical report / voice script
+ *  generated after the initial save). */
+export function updateLabReport(rowId: string, patch: Partial<LabReport>) {
+  useAppStore.getState().updateLabReport(rowId, patch);
+  if (isDemoMode || !supabase || !UUID_RE.test(rowId)) return;
+  const server: Record<string, unknown> = {};
+  if (patch.medical_report !== undefined) server.medical_report = patch.medical_report;
+  if (patch.voice_script !== undefined) server.voice_script = patch.voice_script;
+  if (patch.has_graphs !== undefined) server.has_graphs = patch.has_graphs;
+  if (patch.summary !== undefined) server.summary = patch.summary;
+  if (patch.values !== undefined) server.values = patch.values;
+  if (!Object.keys(server).length) return;
+  supabase
+    .from('lab_reports')
+    .update(server)
+    .eq('id', rowId)
+    .then(
+      () => {},
+      () => {}
+    );
+}
+
+export function deleteLabReport(rowId: string) {
+  useAppStore.getState().removeLabReport(rowId);
+  remoteDelete('lab_reports', rowId);
 }
 
 /* ─────────────────────────── DELETES ───────────────────────────

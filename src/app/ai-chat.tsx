@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -142,6 +142,7 @@ export default function AiChatScreenGate() {
 
 function AiChatScreen() {
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
@@ -219,6 +220,22 @@ function AiChatScreen() {
       s.newConversation();
     }
     // Runs once when the chat opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Opened from the lab-analysis screen: the assistant opens the exchange —
+  // "I've read your analysis, what would you like to ask?" (The lab values
+  // themselves ride along in the health context of every chat request.)
+  const labIntroRef = useRef(false);
+  useEffect(() => {
+    if (from !== 'lab' || labIntroRef.current) return;
+    labIntroRef.current = true;
+    addChatMessage({
+      id: `${Date.now()}-lab`,
+      role: 'assistant',
+      content: t('labs.chatIntro'),
+      created_at: new Date().toISOString(),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

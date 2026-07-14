@@ -30,7 +30,7 @@ export async function callerUserId(req: Request): Promise<string | null> {
 /** Insert one ai_usage row (service role, bypasses RLS). */
 export async function logUsage(row: {
   user_id: string;
-  kind: 'chat' | 'voice' | 'scan' | 'bolus';
+  kind: 'chat' | 'voice' | 'scan' | 'bolus' | 'lab';
   model: string;
   input_tokens: number;
   output_tokens: number;

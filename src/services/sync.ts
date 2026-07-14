@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   GlucoseLog,
   InsulinLog,
+  LabReport,
   MealScan,
   MeasureLog,
   Profile,
@@ -105,6 +106,8 @@ const ACTIVITY_COLS = 'id,user_id,kind,duration_min,intensity,notes,created_at';
 const MEASURE_COLS = 'id,user_id,kind,value,unit,created_at';
 const REMINDER_COLS = 'id,user_id,message,due_at,follow_kind,status,created_at';
 const EVENT_COLS = 'id,user_id,kind,payload,created_at';
+const LAB_COLS =
+  'id,user_id,lab_name,report_date,summary,values,medical_report,voice_script,has_graphs,image_thumb,created_at';
 
 const mapGlucose = (r: any): GlucoseLog => ({
   id: r.id,
@@ -171,6 +174,20 @@ const mapEvent = (r: any): AppEvent => ({
   created_at: r.created_at,
 });
 
+const mapLabReport = (r: any): LabReport => ({
+  id: r.id,
+  user_id: r.user_id,
+  lab_name: r.lab_name ?? undefined,
+  report_date: r.report_date ?? undefined,
+  summary: r.summary ?? undefined,
+  values: Array.isArray(r.values) ? r.values : [],
+  medical_report: r.medical_report ?? undefined,
+  voice_script: r.voice_script ?? undefined,
+  has_graphs: r.has_graphs ?? true,
+  image_thumb: r.image_thumb ?? undefined,
+  created_at: r.created_at,
+});
+
 /**
  * Pull the signed-in user's complete history from Supabase and replace the
  * local store with it. Returns true when the store was hydrated. Safe to
@@ -194,7 +211,7 @@ export async function hydrateFromServer(): Promise<boolean> {
     prevState.accountUserId !== null && prevState.accountUserId !== uid;
 
   try {
-    const [prof, glu, ins, meals, act, meas, chat, rem, evts] = await Promise.all([
+    const [prof, glu, ins, meals, act, meas, chat, rem, evts, labs] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
       supabase
         .from('glucose_logs')
@@ -244,6 +261,12 @@ export async function hydrateFromServer(): Promise<boolean> {
         .eq('user_id', uid)
         .order('created_at', { ascending: false })
         .limit(1000),
+      supabase
+        .from('lab_reports')
+        .select(LAB_COLS)
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+        .limit(200),
     ]);
 
     // Never replace local data from a partial read (flaky network / RLS
@@ -257,7 +280,8 @@ export async function hydrateFromServer(): Promise<boolean> {
       meas.error ||
       chat.error ||
       rem.error ||
-      evts.error
+      evts.error ||
+      labs.error
     ) {
       return false;
     }
@@ -269,12 +293,13 @@ export async function hydrateFromServer(): Promise<boolean> {
     let measureRows = meas.data ?? [];
     let reminderRows = rem.data ?? [];
     let eventRows = evts.data ?? [];
+    let labRows = labs.data ?? [];
 
     // Offline saves from THIS account get pushed before the store is
     // replaced (another account's leftovers are wiped, never re-pushed).
     // Dedup against the pull so nothing lands on the server twice.
     if (!switched) {
-      const [g2, i2, m2, a2, x2, r2, e2] = await Promise.all([
+      const [g2, i2, m2, a2, x2, r2, e2, l2] = await Promise.all([
         pushRows(
           'glucose_logs',
           missingOnServer(
@@ -392,6 +417,26 @@ export async function hydrateFromServer(): Promise<boolean> {
           })),
           EVENT_COLS
         ),
+        pushRows(
+          'lab_reports',
+          missingOnServer(
+            prevState.labReports,
+            labRows,
+            (l, s) => (s.summary ?? '') === (l.summary ?? '')
+          ).map((r) => ({
+            user_id: uid,
+            lab_name: r.lab_name ?? null,
+            report_date: r.report_date ?? null,
+            summary: r.summary ?? null,
+            values: r.values,
+            medical_report: r.medical_report ?? null,
+            voice_script: r.voice_script ?? null,
+            has_graphs: r.has_graphs ?? true,
+            image_thumb: r.image_thumb ?? null,
+            created_at: r.created_at,
+          })),
+          LAB_COLS
+        ),
       ]);
 
       glucoseRows = [...glucoseRows, ...g2].sort(desc);
@@ -401,6 +446,7 @@ export async function hydrateFromServer(): Promise<boolean> {
       measureRows = [...measureRows, ...x2].sort(desc);
       reminderRows = [...reminderRows, ...r2];
       eventRows = [...eventRows, ...e2].sort(desc);
+      labRows = [...labRows, ...l2].sort(desc);
     }
 
     const state = useAppStore.getState();
@@ -421,6 +467,7 @@ export async function hydrateFromServer(): Promise<boolean> {
         measureLogs: measureRows.map(mapMeasure),
         aiReminders: reminderRows.map(mapReminder),
         eventLogs: eventRows.map(mapEvent),
+        labReports: labRows.map(mapLabReport),
         chatMessages: (chat.data ?? [])
           .reverse()
           .map(

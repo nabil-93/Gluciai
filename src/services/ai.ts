@@ -480,6 +480,30 @@ export function buildHealthContext(): string {
     lines.push(`Recent account changes: ${recentEvents.join('; ')}.`);
   }
 
+  // Latest lab (blood test) report — so the assistant can discuss the
+  // patient's analyses in the chat and on the call ("I saw your results…").
+  const lab = (s.labReports ?? [])[0];
+  if (lab) {
+    const abnormal = lab.values.filter((v) => v.status !== 'ok');
+    const okCount = lab.values.length - abnormal.length;
+    lines.push(
+      `LAB REPORT (latest, ${lab.report_date ?? lab.created_at.slice(0, 10)}` +
+        (lab.lab_name ? `, ${lab.lab_name}` : '') +
+        `): ${lab.summary ?? ''} ${okCount}/${lab.values.length} values normal.` +
+        (abnormal.length
+          ? ` Out-of-range values: ` +
+            abnormal
+              .slice(0, 12)
+              .map(
+                (v) =>
+                  `${v.label} ${v.value} ${v.unit} [ref ${v.refMin ?? '?'}-${v.refMax ?? '?'}] (${v.status})`
+              )
+              .join('; ') +
+            '.'
+          : ' All values are within range.')
+    );
+  }
+
   return lines.join('\n');
 }
 

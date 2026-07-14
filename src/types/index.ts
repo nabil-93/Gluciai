@@ -265,6 +265,48 @@ export interface AIJournalEntry {
   created_at: string;
 }
 
+/** Status of one biological value against its reference range. */
+export type LabValueStatus = 'ok' | 'warn' | 'danger';
+
+/** One biological value extracted from a lab report photo by the AI. */
+export interface LabValue {
+  label: string;
+  /** Raw value as printed on the report (string keeps "1.2", "<0.5"…). */
+  value: string;
+  unit: string;
+  refMin: number | null;
+  refMax: number | null;
+  status: LabValueStatus;
+  /** Grouping ("NFS", "Bilan rénal", "Bilan lipidique"…). */
+  category: string;
+}
+
+/**
+ * A lab (blood test) report the patient photographed. The AI extracts
+ * every value, then optionally generates a patient-friendly medical
+ * report and a spoken doctor-style explanation. Mirrored to Supabase
+ * (lab_reports) like every other log.
+ */
+export interface LabReport {
+  id: string;
+  user_id: string;
+  lab_name?: string;
+  /** Date printed on the report (YYYY-MM-DD), if readable. */
+  report_date?: string;
+  /** One-line AI summary of the whole report. */
+  summary?: string;
+  values: LabValue[];
+  /** Full patient-friendly medical report (markdown-lite). */
+  medical_report?: string;
+  /** Short spoken doctor-style explanation (plain text for TTS). */
+  voice_script?: string;
+  /** The patient chose to show the charts section. */
+  has_graphs?: boolean;
+  /** Small base64 thumbnail of the photographed report. */
+  image_thumb?: string;
+  created_at: string;
+}
+
 /**
  * A user correction of an AI prediction. Stored separately —
  * official database values are NEVER overwritten. The learning

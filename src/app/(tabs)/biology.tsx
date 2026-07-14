@@ -88,6 +88,19 @@ export default function BiologyScreen() {
             : t('biology.subtitle')}
         </Text>
 
+        {/* Lab analyses — photo → AI extraction, graphs & spoken report */}
+        <BevelCard
+          style={styles.integrationsCard}
+          onPress={() => router.push('/labs')}
+        >
+          <Text style={{ fontSize: 24 }}>🧪</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.integrationsTitle}>{t('labs.title')}</Text>
+            <Text style={styles.integrationsSub}>{t('labs.entrySub')}</Text>
+          </View>
+          <ChevronRight />
+        </BevelCard>
+
         {/* Health platform integrations */}
         <BevelCard
           style={styles.integrationsCard}
