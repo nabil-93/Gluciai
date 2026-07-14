@@ -131,6 +131,29 @@ export const HEALTHY_FOODS: HealthyFood[] = [
     aliases: ['msemen sain'],
   },
 
+  {
+    id: 'harcha-avoine',
+    name_fr: "Harcha à l'avoine", name_ar: 'حرشة بالشوفان', name_en: 'Oat harcha',
+    category: 'breakfast', emoji: '🌕', serving: '1 pièce (80 g)', grams: 80,
+    calories: 190, carbs: 24, sugar: 2, protein: 6, fat: 8, fiber: 4, gi: 50,
+    why_fr: "La harcha revisitée : moitié semoule, moitié flocons d'avoine. Même goût du bled, mais l'IG chute de 65 à 50 et les fibres doublent. Avec jben, pas avec miel.",
+    why_ar: 'الحرشة بطريقة جديدة: نص سميدة ونص شوفان. نفس ذوق البلاد، ولكن المؤشر كيهبط من 65 ل50 والألياف كتضاعف. مع الجبن، ماشي مع العسل.',
+    steps_fr: ["Mélangez 60 g de semoule + 60 g de flocons d'avoine mixés.", "Ajoutez 1 c.s. d'huile d'olive, sel, levure et lait pour lier.", 'Cuisez à la poêle à feu doux, 4 min par face.', 'Servez avec fromage frais — jamais miel + beurre.'],
+    steps_ar: ['خلط 60 غ سميدة مع 60 غ شوفان مطحون.', 'زيد معلقة زيت زيتون، ملح، خميرة وحليب باش يتلم.', 'طيبها فالمقلة على نار هادية، 4 دقايق لكل جهة.', 'كولها مع الجبن الطري — عمرك مع العسل والزبدة.'],
+    aliases: ['harcha', 'حرشة صحية'],
+  },
+  {
+    id: 'batbout-complet',
+    name_fr: 'Batbout complet (mini)', name_ar: 'بطبوط بالقمح الكامل (صغير)', name_en: 'Whole-wheat mini batbout',
+    category: 'breakfast', emoji: '🫓', serving: '1 mini (50 g)', grams: 50,
+    calories: 120, carbs: 22, sugar: 1, protein: 4, fat: 1.5, fiber: 3, gi: 55,
+    why_fr: 'Le batbout cuit à la poêle (sans friture) en version farine complète et format MINI : le plaisir du pain marocain chaud, en portion qui ne fait pas exploser la glycémie.',
+    why_ar: 'البطبوط مطيب فالمقلة (بلا قلي) بالدقيق الكامل وبحجم صغير: متعة الخبز المغربي السخون، بكمية ما كتفجرش السكر.',
+    steps_fr: ['Pétrissez farine complète + levure + sel + eau tiède.', 'Formez des MINI boules (50 g), laissez lever 45 min.', 'Cuisez à la poêle sèche en retournant souvent.', 'Farcissez de légumes, œuf ou fromage — 1 seul mini.'],
+    steps_ar: ['عجن دقيق كامل مع الخميرة والملح والماء الدافي.', 'دير كريات صغار (50 غ) وخليهم يخمرو 45 دقيقة.', 'طيبهم فمقلة ناشفة مع التقليب.', 'عمرو بالخضرة ولا البيض ولا الجبن — واحد صغير برك.'],
+    aliases: ['batbout', 'بطبوط'],
+  },
+
   /* ───────────── Salades ───────────── */
   {
     id: 'zaalouk',
@@ -199,6 +222,40 @@ export const HEALTHY_FOODS: HealthyFood[] = [
     aliases: ['thon avocat'],
   },
 
+  {
+    id: 'bakoula',
+    name_fr: 'Bakoula (mauve sautée)', name_ar: 'البقولة', name_en: 'Bakoula (sautéed mallow)',
+    category: 'salad', emoji: '🌿', serving: '1 portion (200 g)', grams: 200,
+    calories: 110, carbs: 9, sugar: 2, protein: 4, fat: 7, fiber: 6, gi: 20,
+    why_fr: 'Le trésor vert des grands-mères : quasi zéro glucide, bourrée de fibres, fer et vitamines. Un des plats marocains les PLUS adaptés au diabète — mangez-en souvent.',
+    why_ar: 'الكنز الأخضر ديال الجدات: تقريباً بلا نشويات، عامرة بالألياف والحديد والفيتامينات. من أحسن الماكلات المغربية للسكري — كول منها بزاف.',
+    steps_fr: ['Faites cuire la mauve (ou épinards) à la vapeur, hachez-la.', "Faites revenir ail, persil, coriandre dans l'huile d'olive.", 'Ajoutez la bakoula, cumin, paprika, olives et citron confit.', 'Laissez mijoter 10 min à feu doux.'],
+    steps_ar: ['طيب البقولة (ولا السبانخ) فالبخار وقطعها.', 'قلي الثوم والمعدنوس والقزبر فزيت الزيتون.', 'زيد البقولة والكامون والتحميرة والزيتون والحامض المصير.', 'خليها تطيب 10 دقايق على نار هادية.'],
+    aliases: ['khoubiza', 'بقولة', 'خبيزة'],
+  },
+  {
+    id: 'foul-cumin',
+    name_fr: 'Fèves bouillies au cumin (foul)', name_ar: 'الفول المسلوق بالكامون', name_en: 'Boiled fava beans with cumin',
+    category: 'salad', emoji: '🫛', serving: '1 bol (200 g)', grams: 200,
+    calories: 180, carbs: 24, sugar: 3, protein: 12, fat: 4, fiber: 8, gi: 30,
+    why_fr: 'Le foul du souk, version santé : protéines végétales, IG bas, ultra rassasiant. En plat ou en entrée — avec cumin et huile d’olive, sans pain blanc à côté.',
+    why_ar: 'الفول ديال السوق، بالنسخة الصحية: بروتين نباتي، مؤشر منخفض، وكيشبع بزاف. طبق ولا مقبلات — بالكامون وزيت الزيتون، بلا خبز أبيض معاه.',
+    steps_fr: ['Faites bouillir 200 g de fèves fraîches ou trempées 25 min.', 'Égouttez, arrosez d’huile d’olive et citron.', 'Saupoudrez généreusement de cumin et sel.', 'Mangez chaud, à la cuillère — pas de pain blanc.'],
+    steps_ar: ['سلق 200 غرام فول طري ولا منقوع 25 دقيقة.', 'صفيه وزيد زيت الزيتون والحامض.', 'رش الكامون والملح بلا حساب.', 'كولو سخون بالمعلقة — بلا خبز أبيض.'],
+    aliases: ['foul', 'fèves', 'الفول'],
+  },
+  {
+    id: 'loubia-khadra-ail',
+    name_fr: "Haricots verts sautés à l'ail", name_ar: 'اللوبيا الخضراء المقلية بالثوم', name_en: 'Garlic green beans',
+    category: 'salad', emoji: '🫛', serving: '1 portion (200 g)', grams: 200,
+    calories: 90, carbs: 10, sugar: 4, protein: 4, fat: 5, fiber: 5, gi: 20,
+    why_fr: "L'accompagnement marocain parfait : remplace frites, riz et pâtes à côté de n'importe quel tajine ou grillade. Quasi zéro impact sur la glycémie.",
+    why_ar: 'المرافق المغربي المثالي: كيعوض الفريت والروز والمعكرونة مع أي طاجين ولا مشوي. تقريباً بلا تأثير على السكر.',
+    steps_fr: ['Équeutez 300 g de haricots verts, cuisez 8 min vapeur.', "Faites revenir 3 gousses d'ail dans l'huile d'olive.", 'Ajoutez les haricots, cumin, paprika, 3 min à feu vif.', 'Filet de citron avant de servir.'],
+    steps_ar: ['نقي 300 غرام لوبيا خضراء وطيبها 8 دقايق فالبخار.', 'قلي 3 حبات ثوم فزيت الزيتون.', 'زيد اللوبيا والكامون والتحميرة، 3 دقايق على نار قوية.', 'عصرة حامض قبل التقديم.'],
+    aliases: ['haricots verts', 'لوبيا خضرا'],
+  },
+
   /* ───────────── Soupes ───────────── */
   {
     id: 'harira-legere',
@@ -243,6 +300,18 @@ export const HEALTHY_FOODS: HealthyFood[] = [
     steps_fr: ['Faites revenir oignon, ail, tomate et épices.', 'Ajoutez 300 g de poisson blanc en morceaux et 1 L d’eau.', 'Ajoutez carotte et céleri, cuisez 20 min.', 'Coriandre et citron pour finir.'],
     steps_ar: ['قلي البصلة والثوم والطماطم والعطرية.', 'زيد 300 غرام حوت أبيض مقطع ولتر ماء.', 'زيد الخيزو والكرافس وطيب 20 دقيقة.', 'كمل بالقزبر والحامض.'],
     aliases: ['soupe poisson', 'شوربة'],
+  },
+
+  {
+    id: 'tchicha-belboula',
+    name_fr: "Tchicha (soupe d'orge)", name_ar: 'التشيشة (حساء الشعير)', name_en: 'Tchicha (barley soup)',
+    category: 'soup', emoji: '🌾', serving: '1 bol (300 ml)', grams: 300,
+    calories: 170, carbs: 28, sugar: 3, protein: 6, fat: 4, fiber: 6, gi: 45,
+    why_fr: "L'orge est la céréale marocaine à l'IG le plus bas : bien meilleure que la semoule de blé. La tchicha du matin ou du soir cale sans faire grimper le sucre.",
+    why_ar: 'الشعير هو الحبوب المغربية بأقل مؤشر جلايسيمي: أحسن بكثير من سميدة القمح. تشيشة الصباح ولا العشية كتشبع بلا ما تطلع السكر.',
+    steps_fr: ["Faites revenir tomate râpée, ail et épices dans un peu d'huile d'olive.", "Ajoutez 60 g d'orge concassée (tchicha) et 500 ml d'eau.", 'Cuisez 25 min à feu doux en remuant.', 'Cumin et coriandre pour servir.'],
+    steps_ar: ['قلي الطماطم المحكوكة والثوم والعطرية فشوية زيت زيتون.', 'زيد 60 غرام تشيشة و500 مل ماء.', 'طيب 25 دقيقة على نار هادية مع التحريك.', 'الكامون والقزبر فالتقديم.'],
+    aliases: ['belboula', 'dchicha', 'تشيشة', 'بلبولة'],
   },
 
   /* ───────────── Plats principaux ───────────── */
@@ -368,6 +437,51 @@ export const HEALTHY_FOODS: HealthyFood[] = [
     aliases: ['steak'],
   },
 
+  {
+    id: 'couscous-belboula',
+    name_fr: "Couscous d'orge (belboula) aux légumes", name_ar: 'كسكس بلبولة بالخضرة', name_en: 'Barley couscous with vegetables',
+    category: 'main', emoji: '🥘', serving: '1 assiette moyenne (300 g)', grams: 300,
+    calories: 380, carbs: 55, sugar: 8, protein: 13, fat: 9, fiber: 9, gi: 50,
+    why_fr: "Le vendredi reste sacré ! La belboula (orge) a un IG bien plus bas que la semoule blanche (50 vs 65), et 2× plus de fibres. Assiette MOYENNE, beaucoup de légumes, peu de grains.",
+    why_ar: 'الجمعة كتبقى مقدسة! البلبولة (الشعير) عندها مؤشر أقل بكثير من السميدة البيضاء (50 مقابل 65)، وضعف الألياف. طبسيل متوسط، خضرة بزاف، وشوية ديال الكسكس.',
+    steps_fr: ["Cuisez la belboula à la vapeur comme un couscous classique (2 passages).", 'Préparez un bouillon riche en légumes : courgettes, carottes, navets, chou, pois chiches.', 'Servez : ⅓ de grains, ⅔ de légumes — arrosez de bouillon.', 'Évitez le sucre-oignons caramélisés (tfaya) et le raisin sec.'],
+    steps_ar: ['بخر البلبولة بحال الكسكس العادي (جوج تبخيرات).', 'وجد مرقة عامرة بالخضرة: قرعة، خيزو، لفت، كرومب وحمص.', 'التقديم: ثلث كسكس وثلثين خضرة — وزيد المرقة.', 'تجنب التفاية بالسكر والزبيب.'],
+    aliases: ['belboula', 'couscous orge', 'بلبولة'],
+  },
+  {
+    id: 'kebda-mchermla',
+    name_fr: 'Foie mchermel (kebda)', name_ar: 'الكبدة المشرملة', name_en: 'Chermoula liver (kebda)',
+    category: 'main', emoji: '🥩', serving: '1 portion (150 g)', grams: 150,
+    calories: 240, carbs: 6, sugar: 2, protein: 32, fat: 10, fiber: 1, gi: 10,
+    why_fr: "La kebda est une bombe de fer et de vitamine B12 — parfaite contre la fatigue du diabétique — avec quasi zéro glucide. Poêlée, pas frite, 1×/semaine.",
+    why_ar: 'الكبدة قنبلة ديال الحديد وفيتامين B12 — مثالية ضد التعب ديال السكري — وتقريباً بلا نشويات. فالمقلة، ماشي مقلية فالزيت، مرة فالسيمانة.',
+    steps_fr: ['Coupez 200 g de foie en lamelles.', 'Marinez 20 min : ail, cumin, paprika, coriandre, citron.', "Saisissez 3-4 min dans 1 c.s. d'huile d'olive — le foie doit rester rosé.", 'Servez avec salade ou légumes, pas de frites.'],
+    steps_ar: ['قطع 200 غرام كبدة شرائح.', 'شرملها 20 دقيقة: ثوم، كامون، تحميرة، قزبر وحامض.', 'اقليها 3-4 دقايق فمعلقة زيت زيتون — الكبدة تبقى وردية.', 'كولها مع شلاضة ولا خضرة، بلا فريت.'],
+    aliases: ['kebda', 'foie', 'كبدة'],
+  },
+  {
+    id: 'poulet-roti-four',
+    name_fr: 'Poulet rôti au four (sans peau)', name_ar: 'دجاج محمر فالفرن (بلا جلدة)', name_en: 'Oven-roasted chicken (skinless)',
+    category: 'main', emoji: '🍗', serving: '1 cuisse + légumes (300 g)', grams: 300,
+    calories: 310, carbs: 9, sugar: 4, protein: 38, fat: 14, fiber: 3, gi: 15,
+    why_fr: "Le djaj m'hamer des fêtes, version santé : au four avec citron confit et olives, SANS la peau (là où se cache le gras). Le goût du Maroc, la glycémie en paix.",
+    why_ar: 'دجاج محمر ديال الأعراس، بالنسخة الصحية: فالفرن مع الحامض المصير والزيتون، بلا الجلدة (فين مخبية الدهون). ذوق المغرب، والسكر هاني.',
+    steps_fr: ['Frottez le poulet : ail, gingembre, curcuma, citron, un peu de smen ou huile d’olive.', 'Entourez d’oignons, citron confit et olives.', 'Four 200°C environ 1 h en arrosant.', 'RETIREZ la peau avant de manger ; légumes ou salade à côté.'],
+    steps_ar: ['دلك الدجاج: ثوم، سكينجبير، خرقوم، حامض وشوية سمن ولا زيت زيتون.', 'حوطو بالبصلة والحامض المصير والزيتون.', 'الفرن 200 درجة حوالي ساعة مع السقي.', 'حيد الجلدة قبل الماكلة؛ وخضرة ولا شلاضة معاه.'],
+    aliases: ['djaj mhamer', 'دجاج محمر'],
+  },
+  {
+    id: 'choufleur-mchermel',
+    name_fr: 'Chou-fleur rôti mchermel', name_ar: 'الشيفلور المحمر المشرمل', name_en: 'Roasted chermoula cauliflower',
+    category: 'main', emoji: '🥦', serving: '1 portion (250 g)', grams: 250,
+    calories: 140, carbs: 12, sugar: 5, protein: 5, fat: 8, fiber: 6, gi: 15,
+    why_fr: 'Rôti au four avec chermoula, le chou-fleur devient doré et savoureux — un "faux couscous" ou un accompagnement à volonté, avec 5× moins de glucides que le riz.',
+    why_ar: 'محمر فالفرن بالشرمولة، الشيفلور كيولي مذهب وبنين — "كسكس مزور" ولا مرافق بلا حساب، ب5 مرات أقل نشويات من الروز.',
+    steps_fr: ['Détaillez un chou-fleur en bouquets.', 'Enrobez de chermoula (ail, cumin, paprika, coriandre, huile d’olive).', 'Four 210°C, 25-30 min jusqu’à coloration.', 'En accompagnement, ou mixé cru en "semoule" vapeur 5 min.'],
+    steps_ar: ['قطع الشيفلور زهرات.', 'غلفو بالشرمولة (ثوم، كامون، تحميرة، قزبر وزيت زيتون).', 'الفرن 210 درجة، 25-30 دقيقة حتى يتحمر.', 'مرافق، ولا مطحون خضر بحال السميدة ومبخر 5 دقايق.'],
+    aliases: ['choufleur', 'شيفلور'],
+  },
+
   /* ───────────── Poissons & mer ───────────── */
   {
     id: 'sardines-grillees',
@@ -423,6 +537,18 @@ export const HEALTHY_FOODS: HealthyFood[] = [
     steps_fr: ['Égouttez une boîte de thon au naturel (pas à l’huile).', 'Ajoutez tomates, concombre, ½ poivron, olives.', '1 œuf dur, filet d’huile d’olive et citron.'],
     steps_ar: ['صفي علبة طون فالماء (ماشي فالزيت).', 'زيد الطماطم والخيار ونص فلفلة والزيتون.', 'بيضة مسلوقة، خيط زيت زيتون والحامض.'],
     aliases: ['thon'],
+  },
+
+  {
+    id: 'tajine-kwar-sardine',
+    name_fr: 'Tajine de boulettes de sardines', name_ar: 'طاجين كوار السردين', name_en: 'Sardine ball tagine',
+    category: 'seafood', emoji: '🍲', serving: '1 assiette (300 g)', grams: 300,
+    calories: 310, carbs: 12, sugar: 6, protein: 30, fat: 16, fiber: 3, gi: 25,
+    why_fr: "Le plat doukkali par excellence : les oméga-3 de la sardine dans une sauce tomate épicée, presque sans glucides. Un des meilleurs tajines possibles pour un diabétique.",
+    why_ar: 'الطبق الدكالي بامتياز: أوميغا 3 ديال السردين فصلصة طماطم حارة، تقريباً بلا نشويات. من أحسن الطواجن الممكنة للسكري.',
+    steps_fr: ['Hachez la chair de sardines avec riz TRÈS réduit ou sans, ail, cumin, paprika, coriandre.', 'Formez des boulettes (kwar).', 'Plongez dans une sauce tomate-poivron-ail qui mijote.', '15 min à feu doux — piment selon le goût.'],
+    steps_ar: ['اطحن لحم السردين مع الثوم والكامون والتحميرة والقزبر (بلا روز ولا شوية برك).', 'دير الكوار.', 'حطهم فصلصة طماطم وفلفلة وثوم كتغلي.', '15 دقيقة على نار هادية — والفلفلة الحارة على حسب الذوق.'],
+    aliases: ['kwar sardine', 'boulettes sardine', 'كوار'],
   },
 
   /* ───────────── Collations ───────────── */
@@ -493,6 +619,18 @@ export const HEALTHY_FOODS: HealthyFood[] = [
     aliases: ['lben', 'لبن', 'raib'],
   },
 
+  {
+    id: 'zitoun',
+    name_fr: 'Olives (poignée)', name_ar: 'الزيتون (قبضة)', name_en: 'Olives (handful)',
+    category: 'snack', emoji: '🫒', serving: '10 olives (40 g)', grams: 40,
+    calories: 60, carbs: 2, sugar: 0, protein: 0, fat: 6, fiber: 1, gi: 0,
+    why_fr: "Zéro sucre, bonnes graisses méditerranéennes : l'apéritif marocain qui ne touche pas la glycémie. Attention seulement au sel si tension élevée.",
+    why_ar: 'بلا سكر، ودهون متوسطية صحية: المقبلات المغربية اللي ما كتقيسش السكر. رد البال غير من الملح إلا كانت التونسيو مرتفعة.',
+    steps_fr: ['10 olives vertes ou violettes, rincées si très salées.', 'Avec un thé sans sucre ou en entrée du repas.'],
+    steps_ar: ['10 حبات زيتون خضر ولا مسلوقين، مغسولين إلا كانو مالحين بزاف.', 'مع أتاي بلا سكر ولا فبداية الماكلة.'],
+    aliases: ['olives', 'زيتون'],
+  },
+
   /* ───────────── Boissons ───────────── */
   {
     id: 'the-menthe-sans-sucre',
@@ -537,6 +675,18 @@ export const HEALTHY_FOODS: HealthyFood[] = [
     steps_fr: ['Mixez : 1 concombre, 1 poignée d’épinards, ½ pomme verte.', 'Ajoutez jus de ½ citron et 150 ml d’eau froide.', 'Buvez immédiatement, sans filtrer (gardez les fibres !).'],
     steps_ar: ['طحن: خيارة، قبضة سبانخ، ونص تفاحة خضراء.', 'زيد عصير نص حامضة و150 مل ماء بارد.', 'شربو دغيا وبلا تصفية (خلي الألياف!).'],
     aliases: ['smoothie'],
+  },
+
+  {
+    id: 'louiza',
+    name_fr: 'Infusion de verveine (louiza)', name_ar: 'اللويزة', name_en: 'Verbena infusion (louiza)',
+    category: 'drink', emoji: '🌿', serving: '1 tasse (200 ml)', grams: 200,
+    calories: 2, carbs: 0, sugar: 0, protein: 0, fat: 0, fiber: 0, gi: 0,
+    why_fr: "La louiza du soir : apaise, aide à digérer et à dormir — sans une goutte de sucre. Le stress et le mauvais sommeil font monter la glycémie ; la louiza travaille pour vous.",
+    why_ar: 'لويزة الليل: كتهدن، كتعاون على الهضم والنعاس — بلا قطرة سكر. الستريس والنعاس الخايب كيطلعو السكر؛ اللويزة كتخدم معاك.',
+    steps_fr: ['Infusez une poignée de feuilles de verveine fraîche ou séchée 5 min.', 'Sans sucre — le parfum suffit.', 'Chaque soir après le dîner.'],
+    steps_ar: ['خمر قبضة ديال ورق اللويزة الطرية ولا اليابسة 5 دقايق.', 'بلا سكر — الريحة كافية.', 'كل ليلة من بعد العشا.'],
+    aliases: ['verveine', 'لويزة'],
   },
 
   /* ───────────── Desserts légers ───────────── */

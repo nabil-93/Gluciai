@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +21,7 @@ import {
   healthyFoodSteps,
   healthyFoodWhy,
 } from '@/data/healthyFoods';
+import { HEALTHY_FOOD_IMAGES } from '@/data/healthyFoodImages';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -38,8 +40,12 @@ export default function HealthyFoodDetailScreen() {
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
 
+  const [imgBroken, setImgBroken] = useState(false);
+
   const food = getHealthyFood(String(id ?? ''));
   if (!food) return <Redirect href="/healthy-foods" />;
+  const photo = HEALTHY_FOOD_IMAGES[food.id];
+  const showPhoto = !!photo && !imgBroken;
 
   const [c1, c2] = healthyCategoryColors(food.category);
   const name = healthyFoodName(food, i18n.language);
@@ -86,7 +92,18 @@ export default function HealthyFoodDetailScreen() {
               <ChevronLeft size={16} />
             </View>
           </Pressable>
-          <Text style={styles.heroEmoji}>{food.emoji}</Text>
+          {showPhoto ? (
+            <View style={styles.heroPhotoWrap}>
+              <Image
+                source={{ uri: photo }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
+                onError={() => setImgBroken(true)}
+              />
+            </View>
+          ) : (
+            <Text style={styles.heroEmoji}>{food.emoji}</Text>
+          )}
           <Text style={styles.heroName}>{name}</Text>
           <Text style={styles.heroServing}>{food.serving}</Text>
           <View style={styles.heroBadges}>
@@ -180,6 +197,21 @@ const styles = StyleSheet.create({
     marginTop: 46,
   },
   heroEmoji: { fontSize: 64, marginTop: 14 },
+  heroPhotoWrap: {
+    width: 168,
+    height: 168,
+    borderRadius: 84,
+    overflow: 'hidden',
+    marginTop: 14,
+    borderWidth: 4,
+    borderColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: '#ffffff',
+    shadowColor: 'rgba(30,50,70,1)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 5,
+  },
   heroName: {
     fontFamily: F800,
     fontSize: 19,

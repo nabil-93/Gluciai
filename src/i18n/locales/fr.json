@@ -987,6 +987,21 @@
     "stepsTitle": "Préparation",
     "askAi": "Demander à l'IA à propos de ce plat",
     "disclaimer": "Valeurs estimées à titre éducatif. Adaptez les portions avec votre médecin ou diététicien.",
-    "openCard": "Voir la fiche"
+    "openCard": "Voir la fiche",
+    "curatedTab": "Sélection santé",
+    "worldTab": "Base mondiale",
+    "searchWorld": "Cherchez parmi des millions d'aliments…",
+    "worldTitle": "Base alimentaire mondiale",
+    "worldHint": "Tapez le nom d'un aliment ou d'un produit (yaourt, dattes, chocolat, pain…) — photos réelles, valeurs pour 100 g et indicateur diabète.",
+    "worldSearching": "Recherche dans la base mondiale…",
+    "worldEmpty": "Aucun produit trouvé. Essayez un autre nom.",
+    "worldDown": "La base mondiale est momentanément indisponible. Réessayez dans un instant.",
+    "loadMore": "Afficher plus de résultats",
+    "per100g": "Valeurs pour 100 g",
+    "per100gNote": "Valeurs pour 100 g · point vert = adapté au diabète",
+    "ds_ok": "✅ Adapté au diabète",
+    "ds_warn": "⚠️ Avec modération",
+    "ds_danger": "🚫 À éviter (trop sucré)",
+    "worldSource": "Source : Open Food Facts (base collaborative mondiale)"
   }
 }

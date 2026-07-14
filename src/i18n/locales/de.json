@@ -987,6 +987,21 @@
     "stepsTitle": "Zubereitung",
     "askAi": "Die KI zu diesem Gericht fragen",
     "disclaimer": "Geschätzte Werte zu Bildungszwecken. Portionen mit Arzt oder Ernährungsberater anpassen.",
-    "openCard": "Ansehen"
+    "openCard": "Ansehen",
+    "curatedTab": "Gesunde Auswahl",
+    "worldTab": "Weltdatenbank",
+    "searchWorld": "Millionen Lebensmittel durchsuchen…",
+    "worldTitle": "Welt-Lebensmitteldatenbank",
+    "worldHint": "Tippe einen Lebensmittel- oder Produktnamen (Joghurt, Datteln, Schokolade, Brot…) — echte Fotos, Werte pro 100 g und Diabetes-Indikator.",
+    "worldSearching": "Suche in der Weltdatenbank…",
+    "worldEmpty": "Kein Produkt gefunden. Versuche einen anderen Namen.",
+    "worldDown": "Die Weltdatenbank ist vorübergehend nicht erreichbar. Versuche es gleich nochmal.",
+    "loadMore": "Mehr Ergebnisse anzeigen",
+    "per100g": "Werte pro 100 g",
+    "per100gNote": "Werte pro 100 g · grüner Punkt = diabetesfreundlich",
+    "ds_ok": "✅ Diabetesfreundlich",
+    "ds_warn": "⚠️ In Maßen",
+    "ds_danger": "🚫 Meiden (zu zuckerhaltig)",
+    "worldSource": "Quelle: Open Food Facts (weltweite Gemeinschaftsdatenbank)"
   }
 }

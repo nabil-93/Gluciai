@@ -987,6 +987,21 @@
     "stepsTitle": "Preparation",
     "askAi": "Ask the AI about this dish",
     "disclaimer": "Estimated values for education. Adjust portions with your doctor or dietitian.",
-    "openCard": "Open"
+    "openCard": "Open",
+    "curatedTab": "Healthy picks",
+    "worldTab": "World database",
+    "searchWorld": "Search millions of foods…",
+    "worldTitle": "World food database",
+    "worldHint": "Type any food or product name (yogurt, dates, chocolate, bread…) — real photos, per-100 g values and a diabetes indicator.",
+    "worldSearching": "Searching the world database…",
+    "worldEmpty": "No product found. Try another name.",
+    "worldDown": "The world database is temporarily unavailable. Try again in a moment.",
+    "loadMore": "Show more results",
+    "per100g": "Values per 100 g",
+    "per100gNote": "Values per 100 g · green dot = diabetes-friendly",
+    "ds_ok": "✅ Diabetes-friendly",
+    "ds_warn": "⚠️ In moderation",
+    "ds_danger": "🚫 Avoid (too sugary)",
+    "worldSource": "Source: Open Food Facts (global collaborative database)"
   }
 }
