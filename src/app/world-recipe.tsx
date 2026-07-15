@@ -44,7 +44,11 @@ const RATING: Record<RecipeRating, { color: string; bg: string; key: string }> =
  */
 export default function WorldRecipeScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, name, mealId } = useLocalSearchParams<{
+    id?: string;
+    name?: string;
+    mealId?: string;
+  }>();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
@@ -58,7 +62,12 @@ export default function WorldRecipeScreen() {
     setLoading(true);
     setFailed(false);
     (async () => {
-      const r = await recipeDetail(String(id ?? ''), i18n.language);
+      // Reached either by TheMealDB id (browse) or by dish NAME (AI
+      // suggestion) — the edge function handles both.
+      const r = await recipeDetail(
+        { mealId: String(mealId || id || ''), name: String(name || '') },
+        i18n.language
+      );
       if (!alive) return;
       if (!r) setFailed(true);
       setRecipe(r);
@@ -67,7 +76,7 @@ export default function WorldRecipeScreen() {
     return () => {
       alive = false;
     };
-  }, [id, i18n.language]);
+  }, [id, name, mealId, i18n.language]);
 
   const close = () => {
     if (router.canGoBack()) router.back();

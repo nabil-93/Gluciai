@@ -1,21 +1,31 @@
 import { isDemoMode, supabase } from '@/lib/supabase';
+import { buildHealthContext } from '@/services/ai';
 
 /* ────────────────────────────────────────────────────────────
- * WORLD RECIPES — ready-made international dishes with big photos
- * (TheMealDB), enriched by Gemini with per-serving nutrition, a
- * diabetes rating + advice, and steps translated to the patient's
- * language. All fetches go through the `world-recipes` edge function
- * (server-side proxy + shared AI cache).
+ * WORLD RECIPES — AI-driven. The assistant knows the patient and
+ * recommends dishes eaten in a chosen country for a chosen meal
+ * moment (diabetes-appropriate). Every dish gets a real photo when
+ * one exists; its full recipe (nutrition, translated steps, advice)
+ * is generated on demand and cached. All calls go through the
+ * `world-recipes` edge function.
  * ──────────────────────────────────────────────────────────── */
 
 export type RecipeRating = 'ok' | 'warn' | 'danger';
+export type MealMoment = 'any' | 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
-export interface RecipeSummary {
-  id: string;
+export interface DishSuggestion {
   name: string;
-  thumb: string;
-  area?: string;
-  category?: string;
+  note: string;
+  image: string;
+  /** TheMealDB id when the dish exists there (richer detail). */
+  mealId: string;
+}
+
+export interface SuggestResult {
+  reply: string;
+  ready: boolean;
+  question: string;
+  dishes: DishSuggestion[];
 }
 
 export interface RecipeDetail {
@@ -26,7 +36,6 @@ export interface RecipeDetail {
   category: string;
   youtube: string;
   ingredients: string[];
-  /** True once Gemini enrichment succeeded. */
   enriched?: boolean;
   title?: string;
   servings?: number;
@@ -44,26 +53,29 @@ export interface RecipeDetail {
   steps?: string[];
 }
 
-/** Cuisines shown as filter chips (TheMealDB areas). */
-export const RECIPE_CUISINES: { area: string; emoji: string }[] = [
-  { area: 'Moroccan', emoji: '🇲🇦' },
-  { area: 'Italian', emoji: '🇮🇹' },
-  { area: 'French', emoji: '🇫🇷' },
-  { area: 'Spanish', emoji: '🇪🇸' },
-  { area: 'Turkish', emoji: '🇹🇷' },
-  { area: 'Egyptian', emoji: '🇪🇬' },
-  { area: 'Tunisian', emoji: '🇹🇳' },
-  { area: 'Greek', emoji: '🇬🇷' },
-  { area: 'Indian', emoji: '🇮🇳' },
-  { area: 'Chinese', emoji: '🇨🇳' },
-  { area: 'Japanese', emoji: '🇯🇵' },
-  { area: 'Thai', emoji: '🇹🇭' },
-  { area: 'Mexican', emoji: '🇲🇽' },
-  { area: 'American', emoji: '🇺🇸' },
-  { area: 'British', emoji: '🇬🇧' },
+/** Countries shown as chips. Morocco/Maghreb first (most patients). */
+export const RECIPE_COUNTRIES: { key: string; emoji: string }[] = [
+  { key: 'Morocco', emoji: '🇲🇦' },
+  { key: 'Algeria', emoji: '🇩🇿' },
+  { key: 'Tunisia', emoji: '🇹🇳' },
+  { key: 'France', emoji: '🇫🇷' },
+  { key: 'Italy', emoji: '🇮🇹' },
+  { key: 'Spain', emoji: '🇪🇸' },
+  { key: 'Turkey', emoji: '🇹🇷' },
+  { key: 'Lebanon', emoji: '🇱🇧' },
+  { key: 'Egypt', emoji: '🇪🇬' },
+  { key: 'Greece', emoji: '🇬🇷' },
+  { key: 'India', emoji: '🇮🇳' },
+  { key: 'China', emoji: '🇨🇳' },
+  { key: 'Japan', emoji: '🇯🇵' },
+  { key: 'Thailand', emoji: '🇹🇭' },
+  { key: 'Mexico', emoji: '🇲🇽' },
+  { key: 'USA', emoji: '🇺🇸' },
 ];
 
-/** TheMealDB thumbnails accept a size suffix — /large for HD grids. */
+export const MEAL_MOMENTS: MealMoment[] = ['any', 'breakfast', 'lunch', 'dinner', 'snack'];
+
+/** TheMealDB thumbnails accept a size suffix — /large for HD. */
 export function recipeImage(
   thumb: string,
   size: 'small' | 'medium' | 'large' = 'large'
@@ -72,36 +84,55 @@ export function recipeImage(
   return /\/(small|medium|large)$/.test(thumb) ? thumb : `${thumb}/${size}`;
 }
 
-/** Browse recipes by cuisine or free-text search (min 2 chars). */
-export async function browseRecipes(opts: {
-  area?: string;
-  query?: string;
-}): Promise<RecipeSummary[]> {
-  if (isDemoMode || !supabase) return [];
+/**
+ * Ask the AI to recommend dishes. Pass `country` + `moment` for a direct
+ * browse, or `messages` for the conversational recommender (the AI asks
+ * about allergies/dislikes before it recommends). Health context is
+ * attached automatically so recommendations fit the patient.
+ */
+export async function suggestDishes(opts: {
+  country?: string;
+  moment?: MealMoment;
+  messages?: { role: 'user' | 'assistant'; content: string }[];
+}): Promise<SuggestResult | null> {
+  if (isDemoMode || !supabase) return null;
   try {
     const { data, error } = await supabase.functions.invoke('world-recipes', {
       body: {
-        action: 'browse',
-        area: opts.query ? '' : opts.area ?? '',
-        query: opts.query ?? '',
+        action: 'suggest',
+        country: opts.country ?? '',
+        moment: opts.moment ?? 'any',
+        messages: opts.messages ?? [],
+        healthData: buildHealthContext(),
       },
     });
-    if (error || data?.error) return [];
-    return Array.isArray(data?.result?.items) ? data.result.items : [];
+    if (error || data?.error) return null;
+    const r = data?.result ?? {};
+    return {
+      reply: typeof r.reply === 'string' ? r.reply : '',
+      ready: r.ready !== false,
+      question: typeof r.question === 'string' ? r.question : '',
+      dishes: Array.isArray(r.dishes) ? r.dishes : [],
+    };
   } catch {
-    return [];
+    return null;
   }
 }
 
-/** Full recipe with AI enrichment (nutrition, translated steps, advice). */
+/** Full recipe by TheMealDB id OR by dish name (AI-generated if unknown). */
 export async function recipeDetail(
-  mealId: string,
+  opts: { mealId?: string; name?: string },
   lang: string
 ): Promise<RecipeDetail | null> {
   if (isDemoMode || !supabase) return null;
   try {
     const { data, error } = await supabase.functions.invoke('world-recipes', {
-      body: { action: 'detail', mealId, lang },
+      body: {
+        action: 'detail',
+        mealId: opts.mealId ?? '',
+        name: opts.name ?? '',
+        lang,
+      },
     });
     if (error || data?.error) return null;
     return (data?.result as RecipeDetail) ?? null;

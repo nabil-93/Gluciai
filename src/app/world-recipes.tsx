@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
+  Animated,
   Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,13 +13,16 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChevronLeft, FadeInView, PressableScale, Skeleton } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, FadeInView, PressableScale, Skeleton } from '@/components/ui';
+import { RecipeAIPanel } from '@/components/RecipeAIPanel';
 import { isRTL } from '@/i18n';
 import {
-  RECIPE_CUISINES,
-  browseRecipes,
+  MEAL_MOMENTS,
+  RECIPE_COUNTRIES,
   recipeImage,
-  type RecipeSummary,
+  suggestDishes,
+  type DishSuggestion,
+  type MealMoment,
 } from '@/services/worldRecipes';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -28,10 +30,19 @@ const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
+const MOMENT_EMOJI: Record<MealMoment, string> = {
+  any: '🍴',
+  breakfast: '🌅',
+  lunch: '☀️',
+  dinner: '🌙',
+  snack: '🍎',
+};
+
 /**
- * "Plats du monde" — hundreds of ready-made international dishes with big
- * professional photos. Filter by cuisine or search; tap a card for the
- * full recipe (photo, AI nutrition, ingredients, translated steps).
+ * "Plats du monde" — AI-driven. Pick a country and a meal moment and the
+ * assistant (which knows the patient) proposes dishes actually eaten there
+ * for that moment, diabetes-appropriate, with real photos. The floating
+ * robot opens a chat that asks about allergies/dislikes then recommends.
  */
 export default function WorldRecipesScreen() {
   const router = useRouter();
@@ -39,30 +50,32 @@ export default function WorldRecipesScreen() {
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
 
-  const [area, setArea] = useState('Moroccan');
-  const [query, setQuery] = useState('');
-  const [items, setItems] = useState<RecipeSummary[]>([]);
+  const [country, setCountry] = useState('Morocco');
+  const [moment, setMoment] = useState<MealMoment>('any');
+  const [dishes, setDishes] = useState<DishSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const seq = useRef(0);
 
-  const q = query.trim();
-
+  // Load suggestions whenever country or moment changes.
   useEffect(() => {
     const mine = ++seq.current;
     setLoading(true);
-    const timer = setTimeout(
-      async () => {
-        const res = await browseRecipes(
-          q.length >= 2 ? { query: q } : { area }
-        );
-        if (seq.current !== mine) return;
-        setItems(res);
-        setLoading(false);
-      },
-      q.length >= 2 ? 400 : 0
-    );
-    return () => clearTimeout(timer);
-  }, [area, q]);
+    (async () => {
+      const res = await suggestDishes({ country, moment });
+      if (seq.current !== mine) return;
+      setDishes(res?.dishes ?? []);
+      setLoading(false);
+    })();
+  }, [country, moment]);
+
+  const openDish = (d: DishSuggestion) => {
+    setPanelOpen(false);
+    router.push({
+      pathname: '/world-recipe',
+      params: { name: d.name, mealId: d.mealId || '' },
+    });
+  };
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -85,112 +98,162 @@ export default function WorldRecipesScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* ── Search ── */}
-      <View style={styles.searchWrap}>
-        <Text style={{ fontSize: 15 }}>🔍</Text>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t('wr.search')}
-          placeholderTextColor="#98a1af"
-          style={styles.searchInput}
-        />
-        {query ? (
-          <Pressable onPress={() => setQuery('')} hitSlop={8}>
-            <Text style={{ fontSize: 13, color: '#8b93a7' }}>✕</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingBottom: Math.max(insets.bottom, 12) + 90,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── AI advisor banner ── */}
+        <Pressable style={styles.aiBanner} onPress={() => setPanelOpen(true)}>
+          <LinearGradient
+            colors={['#6d5ef9', '#8b3ffc']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.aiBannerBg}
+          >
+            <View style={styles.aiBannerRobot}>
+              <AnimatedRobot size={42} mood="happy" />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.aiBannerTitle}>{t('wr.aiBannerTitle')}</Text>
+              <Text style={styles.aiBannerSub}>{t('wr.aiBannerSub')}</Text>
+            </View>
+            <View style={styles.aiBannerCta}>
+              <Text style={styles.aiBannerCtaText}>{t('wr.aiBannerCta')}</Text>
+            </View>
+          </LinearGradient>
+        </Pressable>
 
-      {/* ── Cuisine chips (hidden while searching) ── */}
-      {q.length < 2 ? (
+        {/* ── Country chips ── */}
+        <Text style={styles.pickLabel}>{t('wr.pickCountry')}</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0, marginTop: 10 }}
           contentContainerStyle={{ paddingHorizontal: 18, gap: 8 }}
         >
-          {RECIPE_CUISINES.map((c) => {
-            const on = area === c.area;
+          {RECIPE_COUNTRIES.map((c) => {
+            const on = country === c.key;
             return (
               <Pressable
-                key={c.area}
-                onPress={() => setArea(c.area)}
+                key={c.key}
+                onPress={() => setCountry(c.key)}
                 style={[styles.chip, on && styles.chipOn]}
               >
-                <Text style={{ fontSize: 14 }}>{c.emoji}</Text>
+                <Text style={{ fontSize: 15 }}>{c.emoji}</Text>
                 <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                  {t(`wr.area.${c.area}`)}
+                  {t(`wr.country.${c.key}`)}
                 </Text>
               </Pressable>
             );
           })}
         </ScrollView>
-      ) : null}
 
-      {/* ── Recipe grid ── */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{
-          paddingHorizontal: 18,
-          paddingTop: 14,
-          paddingBottom: Math.max(insets.bottom, 12) + 20,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        {loading ? (
-          <View style={styles.grid}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <View key={i} style={styles.gridItem}>
-                <Skeleton height={200} radius={22} />
-              </View>
-            ))}
-          </View>
-        ) : !items.length ? (
-          <View style={{ alignItems: 'center', paddingVertical: 44, gap: 6 }}>
-            <Text style={{ fontSize: 38 }}>🍽️</Text>
-            <Text style={styles.emptyText}>{t('wr.empty')}</Text>
-          </View>
-        ) : (
-          <View style={styles.grid}>
-            {items.map((r, i) => (
-              <FadeInView
-                key={r.id}
-                delay={Math.min(i, 10) * 45}
-                style={styles.gridItem}
+        {/* ── Meal moment ── */}
+        <Text style={styles.pickLabel}>{t('wr.pickMoment')}</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 18, gap: 8 }}
+        >
+          {MEAL_MOMENTS.map((m) => {
+            const on = moment === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => setMoment(m)}
+                style={[styles.momentChip, on && styles.momentChipOn]}
               >
-                <PressableScale
-                  style={styles.card}
-                  haptic={false}
-                  onPress={() =>
-                    router.push({ pathname: '/world-recipe', params: { id: r.id } })
-                  }
-                >
-                  <View style={styles.cardHero}>
-                    <Image
-                      source={{ uri: recipeImage(r.thumb, 'large') }}
-                      style={StyleSheet.absoluteFill}
-                      resizeMode="cover"
-                    />
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.55)']}
-                      style={styles.cardShade}
-                    />
-                    {r.area ? (
-                      <View style={styles.areaBadge}>
-                        <Text style={styles.areaBadgeText}>{r.area}</Text>
-                      </View>
+                <Text style={{ fontSize: 14 }}>{MOMENT_EMOJI[m]}</Text>
+                <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                  {t(`wr.moment.${m}`)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* ── Dish grid ── */}
+        <View style={{ paddingHorizontal: 18, paddingTop: 16 }}>
+          {loading ? (
+            <View style={styles.grid}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <View key={i} style={styles.gridItem}>
+                  <Skeleton height={176} radius={22} />
+                </View>
+              ))}
+            </View>
+          ) : !dishes.length ? (
+            <View style={{ alignItems: 'center', paddingVertical: 40, gap: 6 }}>
+              <Text style={{ fontSize: 36 }}>🍽️</Text>
+              <Text style={styles.emptyText}>{t('wr.empty')}</Text>
+            </View>
+          ) : (
+            <View style={styles.grid}>
+              {dishes.map((d, i) => (
+                <FadeInView key={`${d.name}-${i}`} delay={Math.min(i, 10) * 50} style={styles.gridItem}>
+                  <PressableScale style={styles.card} haptic={false} onPress={() => openDish(d)}>
+                    <View style={styles.cardHero}>
+                      {d.image ? (
+                        <Image
+                          source={{ uri: recipeImage(d.image, 'large') }}
+                          style={StyleSheet.absoluteFill}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <LinearGradient
+                          colors={['#fde68a', '#fbbf24']}
+                          style={StyleSheet.absoluteFill}
+                        >
+                          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                            <Text style={{ fontSize: 42 }}>🍽️</Text>
+                          </View>
+                        </LinearGradient>
+                      )}
+                      <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.6)']}
+                        style={styles.cardShade}
+                      />
+                      <Text style={styles.cardName} numberOfLines={2}>
+                        {d.name}
+                      </Text>
+                    </View>
+                    {d.note ? (
+                      <Text style={styles.cardNote} numberOfLines={2}>
+                        {d.note}
+                      </Text>
                     ) : null}
-                    <Text style={styles.cardNameOnPhoto} numberOfLines={2}>
-                      {r.name}
-                    </Text>
-                  </View>
-                </PressableScale>
-              </FadeInView>
-            ))}
-          </View>
-        )}
+                  </PressableScale>
+                </FadeInView>
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
+
+      {/* ── Floating AI robot ── */}
+      <Pressable
+        style={[styles.fab, { bottom: Math.max(insets.bottom, 12) + 16 }]}
+        onPress={() => setPanelOpen(true)}
+      >
+        <LinearGradient
+          colors={['#6d5ef9', '#8b3ffc']}
+          style={styles.fabBg}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <AnimatedRobot size={38} mood="happy" />
+        </LinearGradient>
+      </Pressable>
+
+      <RecipeAIPanel
+        visible={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        onPickDish={openDish}
+        country={country}
+        moment={moment}
+      />
     </View>
   );
 }
@@ -220,29 +283,45 @@ const styles = StyleSheet.create({
   headerTitle: { fontFamily: F800, fontSize: 16.5, color: '#111827' },
   headerSub: { fontFamily: F500, fontSize: 11.5, color: '#8b93a7', marginTop: 1 },
 
-  searchWrap: {
+  aiBanner: { marginHorizontal: 18, marginBottom: 4, borderRadius: 20, overflow: 'hidden' },
+  aiBannerBg: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    marginHorizontal: 18,
-    height: 46,
-    shadowColor: 'rgba(30,50,70,1)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    gap: 12,
+    padding: 14,
   },
-  searchInput: {
-    flex: 1,
+  aiBannerRobot: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiBannerTitle: { fontFamily: F800, fontSize: 14.5, color: '#ffffff' },
+  aiBannerSub: {
     fontFamily: F500,
-    fontSize: 13.5,
-    color: '#111827',
-    height: '100%',
+    fontSize: 11.5,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 2,
+    lineHeight: 15,
   },
+  aiBannerCta: {
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+  },
+  aiBannerCtaText: { fontFamily: F800, fontSize: 11.5, color: '#6d5ef9' },
 
+  pickLabel: {
+    fontFamily: F700,
+    fontSize: 12.5,
+    color: '#5b6472',
+    marginTop: 16,
+    marginBottom: 8,
+    paddingHorizontal: 18,
+  },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -251,44 +330,74 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e6e9f0',
     borderRadius: 999,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 13,
   },
   chipOn: { backgroundColor: '#111827', borderColor: '#111827' },
-  chipText: { fontFamily: F600, fontSize: 12, color: '#3b4657' },
+  chipText: { fontFamily: F600, fontSize: 12.5, color: '#3b4657' },
   chipTextOn: { color: '#ffffff' },
+  momentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e6e9f0',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 13,
+  },
+  momentChipOn: { backgroundColor: '#19c37d', borderColor: '#19c37d' },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   gridItem: { width: '47%', flexGrow: 1 },
   card: {
     borderRadius: 22,
     overflow: 'hidden',
-    backgroundColor: '#e8ebf2',
+    backgroundColor: '#ffffff',
     shadowColor: 'rgba(30,50,70,1)',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.14,
+    shadowOpacity: 0.13,
     shadowRadius: 16,
     elevation: 4,
   },
-  cardHero: { height: 176, justifyContent: 'flex-end' },
-  cardShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '65%' },
-  areaBadge: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 999,
-    paddingVertical: 3,
-    paddingHorizontal: 9,
-  },
-  areaBadgeText: { fontFamily: F800, fontSize: 9.5, color: '#111827' },
-  cardNameOnPhoto: {
+  cardHero: { height: 158, justifyContent: 'flex-end' },
+  cardShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
+  cardName: {
     fontFamily: F800,
-    fontSize: 14,
+    fontSize: 13.5,
     color: '#ffffff',
-    padding: 12,
-    lineHeight: 18,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    lineHeight: 17,
+  },
+  cardNote: {
+    fontFamily: F600,
+    fontSize: 10.5,
+    color: '#5b6472',
+    padding: 10,
+    lineHeight: 14,
   },
 
   emptyText: { fontFamily: F600, fontSize: 13, color: '#8b93a7' },
+
+  fab: {
+    position: 'absolute',
+    right: 18,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    shadowColor: '#6d5ef9',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  fabBg: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
