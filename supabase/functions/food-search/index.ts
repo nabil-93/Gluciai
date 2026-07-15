@@ -30,22 +30,32 @@ Deno.serve(async (req) => {
   try {
     const { q = '', page = 1 } = await req.json();
     const query = String(q).trim().slice(0, 80);
-    if (query.length < 2) return json({ result: { items: [], hasMore: false } });
-
     const pg = Math.max(1, Number(page) || 1);
-    const legacyUrl =
-      `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
-      `&search_simple=1&action=process&json=1&page_size=24&page=${pg}` +
-      `&fields=code,product_name,product_name_fr,brands,image_front_url,image_front_small_url,nutriments`;
-    const saliciousUrl =
-      `https://search.openfoodfacts.org/search?q=${encodeURIComponent(query)}` +
-      `&page_size=24&page=${pg}` +
-      `&fields=code,product_name,product_name_fr,brands,image_front_url,image_front_small_url,nutriments`;
+    const FIELDS =
+      'code,product_name,product_name_fr,brands,image_front_url,image_front_small_url,nutriments';
+
+    // Endpoints to try in order. With a query: both search backends.
+    // WITHOUT a query (the browse view shown when the tab opens): the most
+    // scanned products in MOROCCO first — that's who uses the app — then
+    // the global bestsellers as fallback.
+    const attempts =
+      query.length >= 2
+        ? [
+            `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
+              `&search_simple=1&action=process&json=1&page_size=24&page=${pg}&fields=${FIELDS}`,
+            `https://search.openfoodfacts.org/search?q=${encodeURIComponent(query)}&page_size=24&page=${pg}&fields=${FIELDS}`,
+            `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
+              `&search_simple=1&action=process&json=1&page_size=24&page=${pg}&fields=${FIELDS}`,
+          ]
+        : [
+            `https://world.openfoodfacts.org/api/v2/search?countries_tags_en=morocco&sort_by=unique_scans_n` +
+              `&page_size=24&page=${pg}&fields=${FIELDS}`,
+            `https://world.openfoodfacts.org/api/v2/search?sort_by=unique_scans_n&page_size=24&page=${pg}&fields=${FIELDS}`,
+          ];
 
     // OFF endpoints are individually flaky (intermittent 502/503) — walk
-    // through both, retrying the legacy one once, and take the first that
-    // answers. `hits` (search-a-licious) and `products` (legacy) are
-    // normalized to one list below.
+    // through the attempts and take the first that answers. `hits`
+    // (search-a-licious) and `products` (legacy/v2) are normalized below.
     let data: {
       products?: any[];
       hits?: any[];
@@ -53,7 +63,7 @@ Deno.serve(async (req) => {
       page?: number;
       page_size?: number;
     } | null = null;
-    for (const attempt of [legacyUrl, saliciousUrl, legacyUrl]) {
+    for (const attempt of attempts) {
       try {
         const res = await fetch(attempt, {
           headers: { 'User-Agent': UA },
@@ -82,6 +92,8 @@ Deno.serve(async (req) => {
           name: name.slice(0, 80),
           brand: String(p.brands || '').split(',')[0]?.trim() || undefined,
           imageUrl: p.image_front_small_url || p.image_front_url || undefined,
+          /** Full-resolution front photo for the detail modal. */
+          imageLarge: p.image_front_url || p.image_front_small_url || undefined,
           per100g: {
             calories: Math.round(calories),
             carbs: Math.round(num(n['carbohydrates_100g']) * 10) / 10,

@@ -27,6 +27,7 @@ export {
   FadeInView,
   PressableScale,
   AnimatedCounter,
+  GaugeRing,
   Skeleton,
   useReduceMotion,
 } from './motion';

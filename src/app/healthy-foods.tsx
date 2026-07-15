@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Image,
   Modal,
   Pressable,
@@ -15,7 +16,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChevronLeft } from '@/components/ui';
+import { ChevronLeft, FadeInView, PressableScale } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import {
   HEALTHY_CATEGORIES,
@@ -26,6 +27,7 @@ import {
 } from '@/data/healthyFoods';
 import { HEALTHY_FOOD_IMAGES } from '@/data/healthyFoodImages';
 import {
+  biggerOffImage,
   searchWorldFoods,
   type DiabetesRating,
   type WorldFood,
@@ -58,6 +60,18 @@ export default function HealthyFoodsScreen() {
 
   const [mode, setMode] = useState<'curated' | 'world'>('curated');
   const [query, setQuery] = useState('');
+  /* Sliding pill of the segmented control (iOS-style). */
+  const [segW, setSegW] = useState(0);
+  const segAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(segAnim, {
+      toValue: mode === 'curated' ? 0 : 1,
+      speed: 22,
+      bounciness: 7,
+      useNativeDriver: true,
+    }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
   const [category, setCategory] = useState<HealthyCategory | null>(null);
   /** Curated photos that failed to load fall back to the emoji hero. */
   const [brokenImgs, setBrokenImgs] = useState<Set<string>>(new Set());
@@ -76,35 +90,35 @@ export default function HealthyFoodsScreen() {
     [query, category]
   );
 
-  // Debounced world search whenever the query changes in world mode.
+  // World tab: with an EMPTY query the list is pre-loaded with the most
+  // popular products in Morocco; from 2 typed characters, live
+  // type-ahead suggestions replace it (350 ms debounce). Previous
+  // results stay on screen while the next ones load.
+  const worldQuery = query.trim().length >= 2 ? query.trim() : '';
   useEffect(() => {
     if (mode !== 'world') return;
-    const q = query.trim();
-    if (q.length < 2) {
-      setWorldItems([]);
-      setWorldHasMore(false);
-      return;
-    }
     const seq = ++worldSeq.current;
     setWorldLoading(true);
-    const timer = setTimeout(async () => {
-      const { items, hasMore, failed } = await searchWorldFoods(q, 1);
-      if (worldSeq.current !== seq) return; // a newer search took over
-      setWorldItems(items);
-      setWorldPage(1);
-      setWorldHasMore(hasMore);
-      setWorldFailed(!!failed);
-      setWorldLoading(false);
-    }, 600);
+    const timer = setTimeout(
+      async () => {
+        const { items, hasMore, failed } = await searchWorldFoods(worldQuery, 1);
+        if (worldSeq.current !== seq) return; // a newer search took over
+        setWorldItems(items);
+        setWorldPage(1);
+        setWorldHasMore(hasMore);
+        setWorldFailed(!!failed);
+        setWorldLoading(false);
+      },
+      worldQuery ? 350 : 0
+    );
     return () => clearTimeout(timer);
-  }, [query, mode]);
+  }, [worldQuery, mode]);
 
   const loadMoreWorld = async () => {
-    const q = query.trim();
-    if (!q || worldLoading) return;
+    if (worldLoading) return;
     setWorldLoading(true);
     const next = worldPage + 1;
-    const { items, hasMore } = await searchWorldFoods(q, next);
+    const { items, hasMore } = await searchWorldFoods(worldQuery, next);
     setWorldItems((prev) => [...prev, ...items]);
     setWorldPage(next);
     setWorldHasMore(hasMore);
@@ -132,20 +146,35 @@ export default function HealthyFoodsScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* ── Mode toggle ── */}
-      <View style={styles.modeRow}>
-        <Pressable
-          onPress={() => setMode('curated')}
-          style={[styles.modeBtn, mode === 'curated' && styles.modeBtnOn]}
-        >
+      {/* ── Mode toggle (iOS segmented control with sliding pill) ── */}
+      <View
+        style={styles.modeRow}
+        onLayout={(e) => setSegW(e.nativeEvent.layout.width)}
+      >
+        {segW > 0 ? (
+          <Animated.View
+            style={[
+              styles.modePill,
+              {
+                width: (segW - 8) / 2,
+                transform: [
+                  {
+                    translateX: segAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, (segW - 8) / 2],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        ) : null}
+        <Pressable onPress={() => setMode('curated')} style={styles.modeBtn}>
           <Text style={[styles.modeText, mode === 'curated' && styles.modeTextOn]}>
             🥗 {t('hf.curatedTab')}
           </Text>
         </Pressable>
-        <Pressable
-          onPress={() => setMode('world')}
-          style={[styles.modeBtn, mode === 'world' && styles.modeBtnOn]}
-        >
+        <Pressable onPress={() => setMode('world')} style={styles.modeBtn}>
           <Text style={[styles.modeText, mode === 'world' && styles.modeTextOn]}>
             🌍 {t('hf.worldTab')}
           </Text>
@@ -215,55 +244,57 @@ export default function HealthyFoodsScreen() {
           >
             <Text style={styles.countText}>{t('hf.count', { count: foods.length })}</Text>
             <View style={styles.grid}>
-              {foods.map((f) => {
+              {foods.map((f, i) => {
                 const [c1, c2] = healthyCategoryColors(f.category);
                 const photo = HEALTHY_FOOD_IMAGES[f.id];
                 const showPhoto = photo && !brokenImgs.has(f.id);
                 return (
-                  <Pressable
-                    key={f.id}
-                    style={styles.card}
-                    onPress={() =>
-                      router.push({ pathname: '/healthy-food', params: { id: f.id } })
-                    }
-                  >
-                    {showPhoto ? (
-                      <View style={styles.cardHero}>
-                        <Image
-                          source={{ uri: photo }}
-                          style={StyleSheet.absoluteFill}
-                          resizeMode="cover"
-                          onError={() =>
-                            setBrokenImgs((s) => new Set(s).add(f.id))
-                          }
-                        />
-                        <View style={styles.giBadge}>
-                          <Text style={styles.giBadgeText}>IG {f.gi}</Text>
+                  <FadeInView key={f.id} delay={Math.min(i, 10) * 50} style={styles.gridItem}>
+                    <PressableScale
+                      style={styles.card}
+                      haptic={false}
+                      onPress={() =>
+                        router.push({ pathname: '/healthy-food', params: { id: f.id } })
+                      }
+                    >
+                      {showPhoto ? (
+                        <View style={styles.cardHero}>
+                          <Image
+                            source={{ uri: photo }}
+                            style={StyleSheet.absoluteFill}
+                            resizeMode="cover"
+                            onError={() =>
+                              setBrokenImgs((s) => new Set(s).add(f.id))
+                            }
+                          />
+                          <View style={styles.giBadge}>
+                            <Text style={styles.giBadgeText}>IG {f.gi}</Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <LinearGradient
+                          colors={[c1, c2]}
+                          start={{ x: 0.1, y: 0.1 }}
+                          end={{ x: 0.9, y: 1 }}
+                          style={styles.cardHero}
+                        >
+                          <Text style={{ fontSize: 46 }}>{f.emoji}</Text>
+                          <View style={styles.giBadge}>
+                            <Text style={styles.giBadgeText}>IG {f.gi}</Text>
+                          </View>
+                        </LinearGradient>
+                      )}
+                      <View style={styles.cardBody}>
+                        <Text style={styles.cardName} numberOfLines={2}>
+                          {healthyFoodName(f, i18n.language)}
+                        </Text>
+                        <View style={styles.cardStats}>
+                          <Text style={styles.cardStat}>🔥 {f.calories} kcal</Text>
+                          <Text style={styles.cardStat}>🍞 {f.carbs} g</Text>
                         </View>
                       </View>
-                    ) : (
-                      <LinearGradient
-                        colors={[c1, c2]}
-                        start={{ x: 0.1, y: 0.1 }}
-                        end={{ x: 0.9, y: 1 }}
-                        style={styles.cardHero}
-                      >
-                        <Text style={{ fontSize: 44 }}>{f.emoji}</Text>
-                        <View style={styles.giBadge}>
-                          <Text style={styles.giBadgeText}>IG {f.gi}</Text>
-                        </View>
-                      </LinearGradient>
-                    )}
-                    <View style={styles.cardBody}>
-                      <Text style={styles.cardName} numberOfLines={2}>
-                        {healthyFoodName(f, i18n.language)}
-                      </Text>
-                      <View style={styles.cardStats}>
-                        <Text style={styles.cardStat}>🔥 {f.calories} kcal</Text>
-                        <Text style={styles.cardStat}>🍞 {f.carbs} g</Text>
-                      </View>
-                    </View>
-                  </Pressable>
+                    </PressableScale>
+                  </FadeInView>
                 );
               })}
             </View>
@@ -286,13 +317,7 @@ export default function HealthyFoodsScreen() {
           }}
           showsVerticalScrollIndicator={false}
         >
-          {query.trim().length < 2 ? (
-            <View style={{ alignItems: 'center', paddingVertical: 40, gap: 8 }}>
-              <Text style={{ fontSize: 40 }}>🌍</Text>
-              <Text style={styles.worldHintTitle}>{t('hf.worldTitle')}</Text>
-              <Text style={styles.worldHint}>{t('hf.worldHint')}</Text>
-            </View>
-          ) : worldLoading && !worldItems.length ? (
+          {worldLoading && !worldItems.length ? (
             <View style={{ alignItems: 'center', paddingVertical: 40 }}>
               <ActivityIndicator color="#19c37d" />
               <Text style={styles.emptyText}>{t('hf.worldSearching')}</Text>
@@ -306,49 +331,62 @@ export default function HealthyFoodsScreen() {
             </View>
           ) : (
             <>
-              <Text style={styles.countText}>{t('hf.per100gNote')}</Text>
+              <View style={styles.worldHead}>
+                <Text style={styles.countText}>
+                  {worldQuery ? t('hf.per100gNote') : `🇲🇦 ${t('hf.worldPopular')}`}
+                </Text>
+                {worldLoading ? (
+                  <ActivityIndicator color="#19c37d" size="small" />
+                ) : null}
+              </View>
               <View style={styles.grid}>
                 {worldItems.map((w, idx) => {
                   const r = RATING[w.rating];
                   return (
-                    <Pressable
+                    <FadeInView
                       key={`${w.code}-${idx}`}
-                      style={styles.card}
-                      onPress={() => setWorldSelected(w)}
+                      delay={Math.min(idx % 24, 10) * 45}
+                      style={styles.gridItem}
                     >
-                      <View style={[styles.cardHero, { backgroundColor: '#f2f4f9' }]}>
-                        {w.imageUrl ? (
-                          <Image
-                            source={{ uri: w.imageUrl }}
-                            style={StyleSheet.absoluteFill}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <Text style={{ fontSize: 38 }}>🛒</Text>
-                        )}
-                        <View style={[styles.ratingDot, { backgroundColor: r.color }]} />
-                      </View>
-                      <View style={styles.cardBody}>
-                        <Text style={styles.cardName} numberOfLines={2}>
-                          {w.name}
-                        </Text>
-                        <View style={styles.cardStats}>
-                          <Text style={styles.cardStat}>🔥 {w.per100g.calories}</Text>
-                          <Text style={styles.cardStat}>🍬 {w.per100g.sugar} g</Text>
+                      <PressableScale
+                        style={styles.card}
+                        haptic={false}
+                        onPress={() => setWorldSelected(w)}
+                      >
+                        <View style={[styles.cardHero, { backgroundColor: '#f6f8fc' }]}>
+                          {w.imageUrl ? (
+                            <Image
+                              source={{ uri: biggerOffImage(w.imageUrl) ?? w.imageUrl }}
+                              style={StyleSheet.absoluteFill}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <Text style={{ fontSize: 38 }}>🛒</Text>
+                          )}
+                          <View style={[styles.ratingDot, { backgroundColor: r.color }]} />
                         </View>
-                      </View>
-                    </Pressable>
+                        <View style={styles.cardBody}>
+                          <Text style={styles.cardName} numberOfLines={2}>
+                            {w.name}
+                          </Text>
+                          <View style={styles.cardStats}>
+                            <Text style={styles.cardStat}>🔥 {w.per100g.calories}</Text>
+                            <Text style={styles.cardStat}>🍬 {w.per100g.sugar} g</Text>
+                          </View>
+                        </View>
+                      </PressableScale>
+                    </FadeInView>
                   );
                 })}
               </View>
               {worldHasMore ? (
-                <Pressable style={styles.moreBtn} onPress={loadMoreWorld}>
+                <PressableScale style={styles.moreBtn} haptic={false} onPress={loadMoreWorld}>
                   {worldLoading ? (
                     <ActivityIndicator color="#ffffff" size="small" />
                   ) : (
                     <Text style={styles.moreBtnText}>{t('hf.loadMore')}</Text>
                   )}
-                </Pressable>
+                </PressableScale>
               ) : null}
             </>
           )}
@@ -370,9 +408,14 @@ export default function HealthyFoodsScreen() {
                   <View style={styles.modalImgWrap}>
                     {worldSelected.imageUrl ? (
                       <Image
-                        source={{ uri: worldSelected.imageUrl }}
+                        source={{
+                          uri:
+                            biggerOffImage(
+                              worldSelected.imageLarge ?? worldSelected.imageUrl
+                            ) ?? worldSelected.imageUrl,
+                        }}
                         style={{ width: '100%', height: '100%' }}
-                        resizeMode="cover"
+                        resizeMode="contain"
                       />
                     ) : (
                       <Text style={{ fontSize: 34 }}>🛒</Text>
@@ -463,24 +506,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginHorizontal: 18,
     backgroundColor: '#eef0f6',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 4,
-    gap: 4,
     marginBottom: 10,
+    position: 'relative',
+  },
+  modePill: {
+    position: 'absolute',
+    left: 4,
+    top: 4,
+    bottom: 4,
+    borderRadius: 13,
+    backgroundColor: '#ffffff',
+    shadowColor: 'rgba(30,50,70,1)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   modeBtn: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 9,
-    borderRadius: 11,
-  },
-  modeBtnOn: {
-    backgroundColor: '#ffffff',
-    shadowColor: 'rgba(30,50,70,1)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
+    paddingVertical: 10,
+    borderRadius: 13,
   },
   modeText: { fontFamily: F700, fontSize: 12, color: '#8b93a7' },
   modeTextOn: { color: '#111827' },
@@ -526,20 +574,26 @@ const styles = StyleSheet.create({
   countText: { fontFamily: F500, fontSize: 11, color: '#a6aebc', marginBottom: 8 },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  gridItem: { width: '48%', flexGrow: 1 },
+  worldHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    gap: 8,
+  },
   card: {
-    width: '48%',
-    flexGrow: 1,
     backgroundColor: '#ffffff',
-    borderRadius: 18,
+    borderRadius: 22,
     overflow: 'hidden',
     shadowColor: 'rgba(30,50,70,1)',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.09,
+    shadowRadius: 14,
+    elevation: 3,
   },
   cardHero: {
-    height: 108,
+    height: 122,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',

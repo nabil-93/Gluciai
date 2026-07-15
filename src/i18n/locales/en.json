@@ -996,6 +996,8 @@
     "worldSearching": "Searching the world database…",
     "worldEmpty": "No product found. Try another name.",
     "worldDown": "The world database is temporarily unavailable. Try again in a moment.",
+    "worldPopular": "Popular products in Morocco",
+"worldPopular": "Popular products in Morocco",
     "loadMore": "Show more results",
     "per100g": "Values per 100 g",
     "per100gNote": "Values per 100 g · green dot = diabetes-friendly",

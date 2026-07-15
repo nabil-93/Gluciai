@@ -18,7 +18,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
-import { AnimatedRobot, ChevronLeft } from '@/components/ui';
+import {
+  AnimatedCounter,
+  AnimatedRobot,
+  ChevronLeft,
+  FadeInView,
+} from '@/components/ui';
 import { isRTL } from '@/i18n';
 import { confirmAsync } from '@/lib/confirm';
 import { deleteLabReport, saveLabReport, updateLabReport } from '@/services/data';
@@ -126,7 +131,8 @@ function ValueCard({ v, onPress }: { v: LabValue; onPress: () => void }) {
   );
 }
 
-/* ── Donut: ok / warn / danger distribution + global score ── */
+/* ── Donut: ok / warn / danger distribution + global score.
+ * The ring spins/fades in and the score COUNTS UP in the middle. ── */
 function DonutChart({ values, score }: { values: LabValue[]; score: number }) {
   const ok = values.filter((v) => v.status === 'ok').length;
   const warn = values.filter((v) => v.status === 'warn').length;
@@ -135,6 +141,18 @@ function DonutChart({ values, score }: { values: LabValue[]; score: number }) {
   const R = 52;
   const C = 2 * Math.PI * R;
   const seg = (n: number) => (n / total) * C;
+
+  const spin = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(spin, {
+      toValue: 1,
+      speed: 4,
+      bounciness: 6,
+      useNativeDriver: true,
+    }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Segments drawn as stroked circles with dash offsets (gapless ring).
   let offset = C * 0.25; // start at 12 o'clock
   const rings = (
@@ -153,6 +171,7 @@ function DonutChart({ values, score }: { values: LabValue[]; score: number }) {
           r={R}
           stroke={r.color}
           strokeWidth={16}
+          strokeLinecap="butt"
           fill="none"
           strokeDasharray={`${seg(r.n)} ${C - seg(r.n)}`}
           strokeDashoffset={offset}
@@ -163,23 +182,39 @@ function DonutChart({ values, score }: { values: LabValue[]; score: number }) {
   });
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-      <Svg width={140} height={140}>
-        <Circle cx={70} cy={70} r={R} stroke="#eef0f5" strokeWidth={16} fill="none" />
-        {rings}
-        <SvgText
-          x={70}
-          y={66}
-          textAnchor="middle"
-          fontSize={24}
-          fontWeight="bold"
-          fill="#111827"
+      <View style={{ width: 140, height: 140 }}>
+        <Animated.View
+          style={{
+            opacity: spin,
+            transform: [
+              {
+                rotate: spin.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['-80deg', '0deg'],
+                }),
+              },
+            ],
+          }}
         >
-          {`${score}%`}
-        </SvgText>
-        <SvgText x={70} y={84} textAnchor="middle" fontSize={10} fill="#8b93a7">
-          score
-        </SvgText>
-      </Svg>
+          <Svg width={140} height={140}>
+            <Circle cx={70} cy={70} r={R} stroke="#eef0f5" strokeWidth={16} fill="none" />
+            {rings}
+          </Svg>
+        </Animated.View>
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <AnimatedCounter
+              value={score}
+              duration={1100}
+              format={(n) => `${Math.round(n)}%`}
+              style={{ fontFamily: F800, fontSize: 25, color: '#111827' }}
+            />
+            <Text style={{ fontFamily: F500, fontSize: 10, color: '#8b93a7' }}>
+              score
+            </Text>
+          </View>
+        </View>
+      </View>
       <View style={{ flex: 1, gap: 8 }}>
         {(
           [
@@ -187,8 +222,10 @@ function DonutChart({ values, score }: { values: LabValue[]; score: number }) {
             ['labs.watch', warn, STATUS.warn.color],
             ['labs.critical', danger, STATUS.danger.color],
           ] as const
-        ).map(([key, n, color]) => (
-          <LegendRow key={key} labelKey={key} n={n} color={color} />
+        ).map(([key, n, color], i) => (
+          <FadeInView key={key} delay={200 + i * 120}>
+            <LegendRow labelKey={key} n={n} color={color} />
+          </FadeInView>
         ))}
       </View>
     </View>

@@ -12,7 +12,7 @@ import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChevronLeft } from '@/components/ui';
+import { ChevronLeft, FadeInView, GaugeRing } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import {
   getHealthyFood,
@@ -64,13 +64,22 @@ export default function HealthyFoodDetailScreen() {
         ? { bg: '#fdf4e3', text: '#a16207', label: t('hf.giMedium') }
         : { bg: '#fdeaea', text: '#b91c1c', label: t('hf.giHigh') };
 
-  const NUTRIENTS: { icon: string; labelKey: string; value: string }[] = [
-    { icon: '🔥', labelKey: 'hf.calories', value: `${food.calories} kcal` },
-    { icon: '🍞', labelKey: 'hf.carbs', value: `${food.carbs} g` },
-    { icon: '🍬', labelKey: 'hf.sugar', value: `${food.sugar} g` },
-    { icon: '🥩', labelKey: 'hf.protein', value: `${food.protein} g` },
-    { icon: '🧈', labelKey: 'hf.fat', value: `${food.fat} g` },
-    { icon: '🌾', labelKey: 'hf.fiber', value: `${food.fiber} g` },
+  /* Nutrition as animated gauge rings: each arc = share of an indicative
+   * daily reference (2000 kcal · 250 g carbs · 50 g sugar · 100 g protein
+   * · 70 g fat · 30 g fiber), value in the middle, one color per nutrient. */
+  const RINGS: {
+    labelKey: string;
+    value: string;
+    unit: string;
+    progress: number;
+    color: string;
+  }[] = [
+    { labelKey: 'hf.calories', value: `${food.calories}`, unit: 'kcal', progress: food.calories / 2000, color: '#f97316' },
+    { labelKey: 'hf.carbs', value: `${food.carbs}`, unit: 'g', progress: food.carbs / 250, color: '#6366f1' },
+    { labelKey: 'hf.sugar', value: `${food.sugar}`, unit: 'g', progress: food.sugar / 50, color: '#ef4444' },
+    { labelKey: 'hf.protein', value: `${food.protein}`, unit: 'g', progress: food.protein / 100, color: '#8b5cf6' },
+    { labelKey: 'hf.fat', value: `${food.fat}`, unit: 'g', progress: food.fat / 70, color: '#f59e0b' },
+    { labelKey: 'hf.fiber', value: `${food.fiber}`, unit: 'g', progress: food.fiber / 30, color: '#10b981' },
   ];
 
   return (
@@ -127,22 +136,30 @@ export default function HealthyFoodDetailScreen() {
             <Text style={styles.whyText}>{why}</Text>
           </View>
 
-          {/* ── Nutrition ── */}
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>📊 {t('hf.nutritionTitle')}</Text>
-            <Text style={styles.servingNote}>
-              {t('hf.perServing', { serving: food.serving })}
-            </Text>
-            <View style={styles.nutriGrid}>
-              {NUTRIENTS.map((n) => (
-                <View key={n.labelKey} style={styles.nutriCell}>
-                  <Text style={{ fontSize: 18 }}>{n.icon}</Text>
-                  <Text style={styles.nutriValue}>{n.value}</Text>
-                  <Text style={styles.nutriLabel}>{t(n.labelKey)}</Text>
-                </View>
-              ))}
+          {/* ── Nutrition — animated gauge rings ── */}
+          <FadeInView delay={80}>
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>📊 {t('hf.nutritionTitle')}</Text>
+              <Text style={styles.servingNote}>
+                {t('hf.perServing', { serving: food.serving })}
+              </Text>
+              <View style={styles.ringGrid}>
+                {RINGS.map((n, i) => (
+                  <GaugeRing
+                    key={n.labelKey}
+                    size={92}
+                    stroke={9}
+                    progress={n.progress}
+                    color={n.color}
+                    value={n.value}
+                    unit={n.unit}
+                    label={t(n.labelKey)}
+                    delay={i * 110}
+                  />
+                ))}
+              </View>
             </View>
-          </View>
+          </FadeInView>
 
           {/* ── Preparation ── */}
           <View style={styles.card}>
@@ -242,18 +259,13 @@ const styles = StyleSheet.create({
 
   sectionTitle: { fontFamily: F800, fontSize: 13.5, color: '#111827', marginBottom: 6 },
   servingNote: { fontFamily: F500, fontSize: 10.5, color: '#8b93a7', marginBottom: 10 },
-  nutriGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  nutriCell: {
-    width: '31%',
-    flexGrow: 1,
-    backgroundColor: '#f6f8fc',
-    borderRadius: 14,
-    alignItems: 'center',
-    paddingVertical: 10,
-    gap: 2,
+  ringGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    rowGap: 18,
+    paddingVertical: 6,
   },
-  nutriValue: { fontFamily: F800, fontSize: 13, color: '#111827' },
-  nutriLabel: { fontFamily: F500, fontSize: 9.5, color: '#8b93a7' },
 
   stepRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   stepNum: {

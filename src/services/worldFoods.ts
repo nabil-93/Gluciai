@@ -17,6 +17,8 @@ export interface WorldFood {
   name: string;
   brand?: string;
   imageUrl?: string;
+  /** Bigger front photo for the detail view (falls back to imageUrl). */
+  imageLarge?: string;
   per100g: {
     calories: number;
     carbs: number;
@@ -45,10 +47,17 @@ export function diabetesRating(p: WorldFood['per100g']): DiabetesRating {
   return 'ok';
 }
 
+/** OFF image URLs embed their size (….200.jpg) — swap in the 400px rev. */
+export function biggerOffImage(url?: string): string | undefined {
+  return url?.replace(/\.200\.jpg$/i, '.400.jpg');
+}
+
 /**
- * Search the world database. The fetch goes through the `food-search`
- * edge function (server-side proxy to Open Food Facts — browsers get
- * blocked by OFF's bot protection when calling it directly).
+ * Search the world database — or, with an EMPTY query, browse the most
+ * popular products in Morocco (that's the default list the tab shows).
+ * The fetch goes through the `food-search` edge function (server-side
+ * proxy to Open Food Facts — browsers get blocked by OFF's bot
+ * protection when calling it directly).
  */
 export async function searchWorldFoods(
   query: string,
@@ -71,6 +80,7 @@ export async function searchWorldFoods(
         name: String(p.name ?? ''),
         brand: p.brand || undefined,
         imageUrl: p.imageUrl || undefined,
+        imageLarge: p.imageLarge || p.imageUrl || undefined,
         per100g: {
           calories: num(p.per100g?.calories),
           carbs: num(p.per100g?.carbs),
