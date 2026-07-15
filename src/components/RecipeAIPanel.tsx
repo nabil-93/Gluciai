@@ -112,7 +112,10 @@ export function RecipeAIPanel({
     setMsgs((s) => [...s, userMsg]);
     setThinking(true);
     try {
-      const res = await suggestDishes({ country, moment: moment as any, messages: history });
+      const res = await suggestDishes(
+        { country, moment: moment as any, messages: history },
+        i18n.language
+      );
       if (res) {
         setMsgs((s) => [
           ...s,
@@ -213,9 +216,14 @@ export function RecipeAIPanel({
                             )}
                           </View>
                           <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.dishName} numberOfLines={2}>
-                              {d.name}
-                            </Text>
+                            <View style={styles.dishNameRow}>
+                              <Text style={styles.dishName} numberOfLines={2}>
+                                {d.name}
+                              </Text>
+                              <Text style={d.ready ? styles.tagReady : styles.tagAi}>
+                                {d.ready ? '✓' : '✨'}
+                              </Text>
+                            </View>
                             {d.note ? (
                               <Text style={styles.dishNote} numberOfLines={2}>
                                 {d.note}
@@ -378,7 +386,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dishName: { fontFamily: F700, fontSize: 12.5, color: '#111827', lineHeight: 16 },
+  dishNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dishName: { flex: 1, fontFamily: F700, fontSize: 12.5, color: '#111827', lineHeight: 16 },
+  tagReady: { fontSize: 11, color: '#19c37d' },
+  tagAi: { fontSize: 11, color: '#6d5ef9' },
   dishNote: { fontFamily: F500, fontSize: 10.5, color: '#8b93a7', marginTop: 2 },
   dishArrow: { fontFamily: F700, fontSize: 20, color: '#c4cad6', paddingHorizontal: 4 },
 

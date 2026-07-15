@@ -1054,6 +1054,8 @@
       "lunch": "Lunch",
       "dinner": "Dinner",
       "snack": "Snack"
-    }
+    },
+    "ready": "Ready",
+    "aiMade": "AI"
   }
 }

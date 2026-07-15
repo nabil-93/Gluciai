@@ -1054,6 +1054,8 @@
       "lunch": "Déjeuner",
       "dinner": "Dîner",
       "snack": "Collation"
-    }
+    },
+    "ready": "Prêt",
+    "aiMade": "IA"
   }
 }

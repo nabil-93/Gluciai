@@ -106,6 +106,52 @@ async function mealdbSearch(name: string): Promise<{ id: string; thumb: string }
   return null;
 }
 
+/**
+ * DISH-SPECIFIC real photo from Wikimedia Commons. Unlike TheMealDB
+ * (which collapses "fish tagine" and "chicken tagine" to the same match),
+ * Wikimedia honours the full phrase, so each dish gets its OWN correct
+ * high-resolution image. Returns a ~1600 px thumbnail URL or null.
+ */
+async function wikimediaImage(term: string): Promise<string | null> {
+  try {
+    const url =
+      `https://commons.wikimedia.org/w/api.php?action=query&generator=search` +
+      `&gsrsearch=${encodeURIComponent(term)}` +
+      `&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url|size&iiurlwidth=1600&format=json`;
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'GlucoAI/1.0 (diabetes education app)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const pages = Object.values(data?.query?.pages ?? {}) as any[];
+    // RELEVANCE: the file title must contain a word from the search term
+    // so the photo really is THIS dish (not a random collapse).
+    const words = term.toLowerCase().replace(/[()]/g, ' ').split(/\s+/).filter((w) => w.length > 3);
+    const relevant = (p: any) => {
+      const title = String(p.title ?? '').toLowerCase();
+      return words.length === 0 || words.some((w) => title.includes(w));
+    };
+    const cands = pages
+      .filter(relevant)
+      .map((p) => p.imageinfo?.[0])
+      .filter((i) => i && /\.(jpe?g|png)$/i.test(i.url ?? ''))
+      .filter((i) => (i.width ?? 0) >= 500 && (i.height ?? 0) >= 350);
+    const best = cands.find((i) => (i.width ?? 0) >= (i.height ?? 1)) ?? cands[0];
+    return best?.thumburl ?? best?.url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Correct dish photo: Wikimedia (dish-specific) first, TheMealDB fallback. */
+async function dishPhoto(searchEn: string): Promise<string> {
+  const wiki = await wikimediaImage(searchEn);
+  if (wiki) return wiki;
+  const meal = await mealdbSearch(searchEn);
+  return meal?.thumb ?? '';
+}
+
 async function gemini(prompt: string, maxTokens = 1400): Promise<any | null> {
   if (!GEMINI_API_KEY) return null;
   try {
@@ -192,7 +238,9 @@ Deno.serve(async (req) => {
       const country = String(body.country ?? '').slice(0, 40);
       const moment = MOMENT_NAMES[body.moment] ? body.moment : 'any';
       const momentName = MOMENT_NAMES[moment];
-      const healthData = String(body.healthData ?? '').slice(0, 3000);
+      const healthData = String(body.healthData ?? '').slice(0, 3500);
+      const dayJournal = String(body.dayJournal ?? '').slice(0, 3000);
+      const catalog = String(body.catalog ?? '').slice(0, 6000);
       const messages: { role: string; content: string }[] = Array.isArray(body.messages)
         ? body.messages.slice(-8)
         : [];
@@ -203,39 +251,49 @@ Deno.serve(async (req) => {
             .join('\n')
         : '';
 
-      const prompt = `You are GlucoAI, a warm dietitian assistant helping a DIABETIC patient
-choose what to eat. Default language is ${langName}, BUT if the patient
+      const prompt = `You are GlucoAI, an EXPERT DIABETES DOCTOR + dietitian recommending
+meals to YOUR patient. Default language is ${langName}, BUT if the patient
 writes in another language or dialect (French, Darija, Arabic, English…),
-answer "reply"/"question" in THAT same language. Dish "name" fields should
-be in ${langName}.
+answer "reply"/"note" in THAT same language. Dish "name" fields in
+${langName}.
 
-PATIENT HEALTH DATA (their real numbers — use them; never ignore an
-allergy or a high glucose):
+═══ PATIENT PROFILE & TODAY'S NUMBERS (their REAL data — reason on them
+like a doctor, exactly like when deciding an insulin dose): ═══
 ${healthData || 'none'}
 
-TASK: recommend real dishes the patient could cook/eat.
-${country ? `COUNTRY / CUISINE CONTEXT: dishes people actually eat in ${country} — include BOTH traditional local dishes AND popular international dishes eaten there (e.g. in Morocco: tajine, couscous, harira… but also pizza, pasta, etc. that Moroccans commonly eat).` : ''}
+═══ FULL DAY JOURNAL (today + yesterday: what they already ate, sugar so
+far, insulin taken, glucose evolution, sport): ═══
+${dayJournal || 'none'}
+
+TASK: recommend real dishes for this patient RIGHT NOW, reasoning on their
+day like a professional doctor.
+${country ? `COUNTRY / CUISINE: dishes people actually eat in ${country} — BOTH traditional local dishes AND popular international dishes eaten there (Morocco: tajine, couscous, harira… but also pizza, sandwich, pasta, etc.).` : ''}
 MEAL MOMENT: ${momentName}.
 
 ${convo ? `CONVERSATION SO FAR:\n${convo}\n` : ''}
+${catalog ? `READY CATALOG (dishes that already have a photo + data — PREFER these; format id|name|moments):\n${catalog}\n` : ''}
 
 Return ONLY valid JSON (no markdown), all text in ${langName} EXCEPT the
-"search" field which MUST be a simple ENGLISH dish name for photo lookup:
+"search" field which MUST be a PRECISE ENGLISH dish name for a photo:
 {
-  "reply": "one short warm sentence to the patient",
+  "reply": "2-4 warm, professional sentences like a doctor: reference their ACTUAL numbers (today's glucose, how much sugar/carbs they already ate today, insulin taken) and explain your overall plan for this meal. E.g. if glucose is high or they already ate sugary, say so and steer to low-GI light options.",
   "ready": true | false,
-  "question": "if NOT ready, ONE short question to ask (allergies? dislikes? something you avoid?). Empty when ready.",
-  "dishes": [ { "name": "dish name in ${langName}", "search": "generic ENGLISH dish name, e.g. 'chicken tagine', 'grilled sardines', 'vegetable pizza'", "note": "3-6 word reason it fits a diabetic" } ]
+  "question": "if NOT ready, ONE short question (allergies? dislikes?). Empty when ready.",
+  "dishes": [ { "id": "catalog id if in the catalog, else empty string", "name": "dish name in ${langName}", "search": "PRECISE ENGLISH dish name unique to THIS dish, e.g. 'fish tagine' vs 'chicken tagine' vs 'vegetable tagine' — never just 'tagine'", "note": "one doctor-style sentence in ${langName}: WHY this dish fits THEM now (portion in grams, carbs, and the reason vs their glucose/what they already ate)" } ]
 }
 
 Rules:
-- ${convo ? 'If you do NOT yet know the patient\'s allergies and dislikes, set ready=false, dishes=[], and ask ONE short question. Once you know enough (or they say "no allergies"), set ready=true and recommend.' : 'This is a direct browse (no conversation): set ready=true and recommend right away.'}
-- When ready: recommend 6 to 9 dishes suited to a diabetic for this
-  country + meal moment. Favor lower-GI, balanced options; you may include
-  a popular treat but note moderation. Respect every stated allergy/dislike
-  and the patient's glucose trend.
-- "name" must be a REAL, searchable dish name (so a photo can be found).
-- Keep notes very short.`;
+- ${convo ? 'If you do NOT yet know the patient\'s allergies and dislikes, set ready=false, dishes=[], ask ONE short question. Once known (or "no allergies"), set ready=true and recommend.' : 'Direct browse: set ready=true and recommend right away.'}
+- PERSONALIZE HARD: if their glucose today is HIGH → recommend low-GI,
+  low-sugar, vegetable/protein-forward dishes that help bring it down, and
+  say so with grams. If they ALREADY ate something sugary/heavy today →
+  do NOT stack another; balance the day. Factor insulin already taken and
+  their diabetes type. Never recommend something an allergy forbids.
+- Each "note" must be concrete and personal (grams of carbs, portion, and
+  the clinical reason) — like a doctor explaining, not a generic label.
+- When ready: 6 to 9 dishes. ${catalog ? 'STRONGLY PREFER catalog dishes (fill "id"); invent a NEW dish (id:"") only when the catalog has nothing fitting.' : ''}
+- "name"/"search" must be a REAL dish; "search" precise so the photo is
+  the RIGHT dish.`;
 
       const out = await gemini(prompt, 1200);
       if (!out || typeof out !== 'object') {
@@ -246,17 +304,19 @@ Rules:
         .filter((d: any) => d && typeof d.name === 'string' && d.name.trim())
         .slice(0, 9)
         .map((d: any) => ({
+          id: String(d.id ?? '').slice(0, 40),
           name: String(d.name).slice(0, 70),
           search: String(d.search ?? d.name).slice(0, 70),
           note: String(d.note ?? '').slice(0, 60),
         }));
 
-      // Resolve a real photo (+ mealId for a richer detail) per dish, using
-      // the English search term (TheMealDB is English-only).
+      // Resolve a DISH-SPECIFIC real photo per dish (Wikimedia first, so
+      // fish/chicken/vegetable tagine each get their OWN correct image).
+      // Catalog dishes already carry a local image — the client overrides.
       const withImages = await Promise.all(
-        dishes.map(async (d: { name: string; search: string; note: string }) => {
-          const hit = (await mealdbSearch(d.search)) ?? (await mealdbSearch(d.name));
-          return { name: d.name, note: d.note, image: hit?.thumb ?? '', mealId: hit?.id ?? '' };
+        dishes.map(async (d: { id: string; name: string; search: string; note: string }) => {
+          const image = d.id ? '' : await dishPhoto(d.search);
+          return { id: d.id, name: d.name, note: d.note, image, mealId: '' };
         })
       );
 
@@ -272,63 +332,36 @@ Rules:
 
     /* ─────────────────────────── DETAIL ─────────────────────────── */
     if (action === 'detail') {
-      const mealId = String(body.mealId ?? '');
       const name = String(body.name ?? '').slice(0, 70);
-      if (!mealId && !name) return json({ error: 'mealId or name required' }, 400);
+      const searchEn = String(body.search ?? name).slice(0, 70);
+      const passedImage = String(body.image ?? '').slice(0, 400);
+      if (!name) return json({ error: 'name required' }, 400);
 
-      // Resolve a raw TheMealDB meal (by id, or by searching the name).
-      let m: MealRaw | undefined;
-      if (mealId) {
-        const raw = await mealdb(`lookup.php?i=${encodeURIComponent(mealId)}`);
-        m = raw.meals?.[0];
-      } else {
-        const raw = await mealdb(`search.php?s=${encodeURIComponent(name)}`);
-        m = raw.meals?.[0];
-      }
-
-      const cacheKey = m?.idMeal ? `id:${m.idMeal}` : `name:${name.toLowerCase()}`;
+      const cacheKey = `name:${name.toLowerCase()}`;
       const cached = await cacheGet(cacheKey, lang);
 
-      // Base info: from TheMealDB when available, otherwise minimal.
-      const base = m
-        ? {
-            id: m.idMeal,
-            name: m.strMeal,
-            thumb: m.strMealThumb,
-            area: m.strArea ?? '',
-            category: m.strCategory ?? '',
-            youtube: m.strYoutube ?? '',
-            ingredients: ingredientLines(m),
-          }
-        : { id: '', name, thumb: '', area: '', category: '', youtube: '', ingredients: [] };
+      // The photo: the card already has the correct dish-specific image →
+      // reuse it; otherwise resolve one (Wikimedia first) so the hero is
+      // the RIGHT dish, not a generic collapse.
+      let thumb = passedImage;
+      if (!thumb) thumb = await dishPhoto(searchEn || name);
+
+      const base = {
+        id: '',
+        name,
+        thumb,
+        area: '',
+        category: '',
+        youtube: '',
+        ingredients: [] as string[],
+      };
 
       if (cached) return json({ result: { ...base, ...cached } });
 
-      // Enrich (nutrition + translation + advice, and — when the dish is
-      // not in TheMealDB — the whole authentic recipe).
-      const known = !!m;
-      const prompt = known
-        ? `You are a dietitian for a DIABETIC patient. Here is a recipe from a
-database. Reply ONLY valid JSON, all text in ${langName}.
-
-TITLE: ${m!.strMeal}
-CUISINE: ${m!.strArea ?? '?'} / ${m!.strCategory ?? '?'}
-INGREDIENTS:
-${base.ingredients.map((x) => `- ${x}`).join('\n')}
-INSTRUCTIONS:
-${(m!.strInstructions ?? '').slice(0, 2500)}
-
-{
- "title":"dish name in ${langName}",
- "servings":N,
- "per_serving":{"calories":N,"carbs":N,"sugar":N,"protein":N,"fat":N,"fiber":N},
- "gi":N,
- "rating":"ok"|"warn"|"danger",
- "advice":"one honest warm sentence in ${langName} for a diabetic (portion/swap/what to serve with)",
- "steps":["4-10 short numbered steps in ${langName}"]
-}
-Estimate nutrition PER SERVING realistically; never zeros for a real dish.`
-        : `You are a chef + dietitian for a DIABETIC patient. Write an AUTHENTIC
+      // Always write the authentic recipe with the AI (great for Moroccan
+      // dishes TheMealDB doesn't have), translated, per-serving nutrition,
+      // diabetes verdict + advice.
+      const prompt = `You are a chef + dietitian for a DIABETIC patient. Write an AUTHENTIC
 recipe for the dish "${name}". Reply ONLY valid JSON, all text in ${langName}.
 
 {
@@ -338,18 +371,13 @@ recipe for the dish "${name}". Reply ONLY valid JSON, all text in ${langName}.
  "per_serving":{"calories":N,"carbs":N,"sugar":N,"protein":N,"fat":N,"fiber":N},
  "gi":N,
  "rating":"ok"|"warn"|"danger",
- "advice":"one honest warm sentence in ${langName} for a diabetic",
+ "advice":"one honest warm sentence in ${langName} for a diabetic (portion/swap/what to serve with)",
  "steps":["6-10 short numbered preparation steps in ${langName}"]
 }
 Make it authentic and realistic; estimate nutrition PER SERVING; never zeros.`;
 
       const enrich = await gemini(prompt, 1600);
       if (!enrich || typeof enrich !== 'object') {
-        // No image yet for name-only dishes → try a search thumbnail.
-        if (!base.thumb && name) {
-          const hit = await mealdbSearch(name);
-          if (hit) base.thumb = hit.thumb;
-        }
         return json({ result: { ...base, enriched: false } });
       }
       const ps = enrich.per_serving ?? {};
@@ -371,21 +399,13 @@ Make it authentic and realistic; estimate nutrition PER SERVING; never zeros.`;
         steps: Array.isArray(enrich.steps)
           ? enrich.steps.filter((s: unknown) => typeof s === 'string').slice(0, 12)
           : [],
-        // Only AI-generated recipes bring their own ingredients.
-        ...(!known && Array.isArray(enrich.ingredients)
-          ? { ingredients: enrich.ingredients.filter((s: unknown) => typeof s === 'string').slice(0, 20) }
-          : {}),
+        ingredients: Array.isArray(enrich.ingredients)
+          ? enrich.ingredients.filter((s: unknown) => typeof s === 'string').slice(0, 20)
+          : [],
       };
-
-      // Fetch a photo for name-only dishes if we still have none.
-      if (!base.thumb && name) {
-        const hit = await mealdbSearch(name);
-        if (hit) base.thumb = hit.thumb;
-      }
-
-      const merged = { ...base, ...clean };
+      // Cache the recipe (NOT the image — images can be revisited cheaply).
       await cacheSet(cacheKey, lang, clean);
-      return json({ result: merged });
+      return json({ result: { ...base, ...clean } });
     }
 
     /* ─────────────────────────── BROWSE ─────────────────────────── */

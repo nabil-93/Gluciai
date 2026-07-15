@@ -21,6 +21,7 @@ import {
 } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import {
+  catalogSearch,
   recipeDetail,
   recipeImage,
   type RecipeDetail,
@@ -44,10 +45,10 @@ const RATING: Record<RecipeRating, { color: string; bg: string; key: string }> =
  */
 export default function WorldRecipeScreen() {
   const router = useRouter();
-  const { id, name, mealId } = useLocalSearchParams<{
-    id?: string;
+  const { name, dishId, image } = useLocalSearchParams<{
     name?: string;
-    mealId?: string;
+    dishId?: string;
+    image?: string;
   }>();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -62,10 +63,14 @@ export default function WorldRecipeScreen() {
     setLoading(true);
     setFailed(false);
     (async () => {
-      // Reached either by TheMealDB id (browse) or by dish NAME (AI
-      // suggestion) — the edge function handles both.
+      // The AI writes the authentic recipe by dish name; the correct
+      // dish-specific photo (from the card) is reused as the hero.
       const r = await recipeDetail(
-        { mealId: String(mealId || id || ''), name: String(name || '') },
+        {
+          name: String(name || ''),
+          search: catalogSearch(String(dishId || '')),
+          image: String(image || ''),
+        },
         i18n.language
       );
       if (!alive) return;
@@ -76,7 +81,7 @@ export default function WorldRecipeScreen() {
     return () => {
       alive = false;
     };
-  }, [id, name, mealId, i18n.language]);
+  }, [name, dishId, image, i18n.language]);
 
   const close = () => {
     if (router.canGoBack()) router.back();

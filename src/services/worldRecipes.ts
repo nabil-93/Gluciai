@@ -1,5 +1,15 @@
+import {
+  catalogIndex,
+  dishName,
+  filterCatalog,
+  getDish,
+  type Moment,
+  type WorldDish,
+} from '@/data/worldDishes';
+import { WORLD_DISH_IMAGES } from '@/data/worldDishImages';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { buildHealthContext } from '@/services/ai';
+import { buildAIDayJournal } from '@/services/dayLog';
 
 /* ────────────────────────────────────────────────────────────
  * WORLD RECIPES — AI-driven. The assistant knows the patient and
@@ -19,6 +29,10 @@ export interface DishSuggestion {
   image: string;
   /** TheMealDB id when the dish exists there (richer detail). */
   mealId: string;
+  /** Set when the dish comes from the local catalog (a "ready" card). */
+  dishId?: string;
+  /** True → shown with a "ready" badge (catalog, real photo & data). */
+  ready?: boolean;
 }
 
 export interface SuggestResult {
@@ -75,13 +89,48 @@ export const RECIPE_COUNTRIES: { key: string; emoji: string }[] = [
 
 export const MEAL_MOMENTS: MealMoment[] = ['any', 'breakfast', 'lunch', 'dinner', 'snack'];
 
-/** TheMealDB thumbnails accept a size suffix — /large for HD. */
+/** Only TheMealDB thumbnails accept a size suffix (/large for HD). Wikimedia
+ *  URLs are already full-resolution and must be returned untouched — adding
+ *  a suffix would break them. */
 export function recipeImage(
   thumb: string,
   size: 'small' | 'medium' | 'large' = 'large'
 ): string {
-  if (!thumb) return thumb;
+  if (!thumb || !thumb.includes('themealdb.com')) return thumb;
   return /\/(small|medium|large)$/.test(thumb) ? thumb : `${thumb}/${size}`;
+}
+
+/** Map a local catalog dish → a suggestion card (ready, real photo). */
+function catalogToSuggestion(d: WorldDish, lang: string): DishSuggestion {
+  const img = WORLD_DISH_IMAGES[d.id];
+  return {
+    name: dishName(d, lang),
+    note: '',
+    image: img?.thumb ?? '',
+    mealId: '',
+    dishId: d.id,
+    ready: true,
+  };
+}
+
+/**
+ * Browse dishes for a country + meal moment. Reads the LOCAL catalog
+ * first (zero AI tokens) and only falls back to an AI suggestion when the
+ * catalog is thin for that country. This is what keeps the rubric cheap.
+ */
+export async function browseDishes(
+  country: string,
+  moment: 'any' | Moment,
+  lang: string
+): Promise<{ dishes: DishSuggestion[]; fromCatalog: boolean }> {
+  const local = filterCatalog(country, moment).map((d) => catalogToSuggestion(d, lang));
+  if (local.length >= 4) return { dishes: local, fromCatalog: true };
+
+  // Thin catalog for this country/moment → ask the AI, and prepend any
+  // local matches we do have.
+  const ai = await suggestDishes({ country, moment: moment === 'any' ? 'any' : moment });
+  const aiDishes = ai?.dishes ?? [];
+  return { dishes: [...local, ...aiDishes], fromCatalog: local.length > 0 && !aiDishes.length };
 }
 
 /**
@@ -90,11 +139,14 @@ export function recipeImage(
  * about allergies/dislikes before it recommends). Health context is
  * attached automatically so recommendations fit the patient.
  */
-export async function suggestDishes(opts: {
-  country?: string;
-  moment?: MealMoment;
-  messages?: { role: 'user' | 'assistant'; content: string }[];
-}): Promise<SuggestResult | null> {
+export async function suggestDishes(
+  opts: {
+    country?: string;
+    moment?: MealMoment;
+    messages?: { role: 'user' | 'assistant'; content: string }[];
+  },
+  lang = 'fr'
+): Promise<SuggestResult | null> {
   if (isDemoMode || !supabase) return null;
   try {
     const { data, error } = await supabase.functions.invoke('world-recipes', {
@@ -103,25 +155,48 @@ export async function suggestDishes(opts: {
         country: opts.country ?? '',
         moment: opts.moment ?? 'any',
         messages: opts.messages ?? [],
+        // Same personalization the insulin-dose AI uses: the health
+        // snapshot PLUS the full today+yesterday journal (meals already
+        // eaten, sugar so far, insulin taken, glucose trend, sport).
         healthData: buildHealthContext(),
+        dayJournal: buildAIDayJournal(),
+        // Send the catalog so the AI recommends READY dishes first (cheap).
+        catalog: catalogIndex(opts.country || undefined),
       },
     });
     if (error || data?.error) return null;
     const r = data?.result ?? {};
+    const dishes: DishSuggestion[] = (Array.isArray(r.dishes) ? r.dishes : []).map(
+      (d: any) => {
+        const cat = d.id ? getDish(String(d.id)) : null;
+        const catImg = cat ? WORLD_DISH_IMAGES[cat.id] : undefined;
+        return {
+          name: cat ? dishName(cat, lang) : String(d.name ?? ''),
+          note: String(d.note ?? ''),
+          // Prefer the catalog's own (correct, dish-specific) photo.
+          image: catImg?.thumb || String(d.image ?? ''),
+          mealId: '',
+          dishId: cat?.id,
+          ready: !!cat,
+        };
+      }
+    );
     return {
       reply: typeof r.reply === 'string' ? r.reply : '',
       ready: r.ready !== false,
       question: typeof r.question === 'string' ? r.question : '',
-      dishes: Array.isArray(r.dishes) ? r.dishes : [],
+      dishes,
     };
   } catch {
     return null;
   }
 }
 
-/** Full recipe by TheMealDB id OR by dish name (AI-generated if unknown). */
+/** Full recipe by dish name — the AI writes an authentic recipe (nutrition,
+ *  translated steps, diabetes advice). `image` (the card's correct
+ *  dish-specific photo) is reused as the hero so it always matches. */
 export async function recipeDetail(
-  opts: { mealId?: string; name?: string },
+  opts: { name: string; search?: string; image?: string },
   lang: string
 ): Promise<RecipeDetail | null> {
   if (isDemoMode || !supabase) return null;
@@ -129,8 +204,9 @@ export async function recipeDetail(
     const { data, error } = await supabase.functions.invoke('world-recipes', {
       body: {
         action: 'detail',
-        mealId: opts.mealId ?? '',
-        name: opts.name ?? '',
+        name: opts.name,
+        search: opts.search ?? '',
+        image: opts.image ?? '',
         lang,
       },
     });
@@ -139,4 +215,11 @@ export async function recipeDetail(
   } catch {
     return null;
   }
+}
+
+/** English search term for a catalog dish (for detail image resolution). */
+export function catalogSearch(dishId?: string): string {
+  if (!dishId) return '';
+  const d = getDish(dishId);
+  return d?.search ?? '';
 }

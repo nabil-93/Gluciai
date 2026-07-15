@@ -19,8 +19,8 @@ import { isRTL } from '@/i18n';
 import {
   MEAL_MOMENTS,
   RECIPE_COUNTRIES,
+  browseDishes,
   recipeImage,
-  suggestDishes,
   type DishSuggestion,
   type MealMoment,
 } from '@/services/worldRecipes';
@@ -57,23 +57,29 @@ export default function WorldRecipesScreen() {
   const [panelOpen, setPanelOpen] = useState(false);
   const seq = useRef(0);
 
-  // Load suggestions whenever country or moment changes.
+  // Load dishes whenever country or moment changes — the local catalog
+  // answers instantly (no tokens); the AI only fills thin countries.
   useEffect(() => {
     const mine = ++seq.current;
     setLoading(true);
     (async () => {
-      const res = await suggestDishes({ country, moment });
+      const res = await browseDishes(country, moment, i18n.language);
       if (seq.current !== mine) return;
-      setDishes(res?.dishes ?? []);
+      setDishes(res.dishes);
       setLoading(false);
     })();
-  }, [country, moment]);
+  }, [country, moment, i18n.language]);
 
   const openDish = (d: DishSuggestion) => {
     setPanelOpen(false);
     router.push({
       pathname: '/world-recipe',
-      params: { name: d.name, mealId: d.mealId || '' },
+      params: {
+        name: d.name,
+        dishId: d.dishId || '',
+        // Pass the correct card photo so the detail hero matches exactly.
+        image: d.image || '',
+      },
     });
   };
 
@@ -215,6 +221,15 @@ export default function WorldRecipesScreen() {
                         colors={['transparent', 'rgba(0,0,0,0.6)']}
                         style={styles.cardShade}
                       />
+                      {d.ready ? (
+                        <View style={styles.readyBadge}>
+                          <Text style={styles.readyBadgeText}>✓ {t('wr.ready')}</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.aiBadge}>
+                          <Text style={styles.aiBadgeText}>✨ {t('wr.aiMade')}</Text>
+                        </View>
+                      )}
                       <Text style={styles.cardName} numberOfLines={2}>
                         {d.name}
                       </Text>
@@ -363,6 +378,26 @@ const styles = StyleSheet.create({
   },
   cardHero: { height: 158, justifyContent: 'flex-end' },
   cardShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
+  readyBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(25,195,125,0.95)',
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+  },
+  readyBadgeText: { fontFamily: F800, fontSize: 9.5, color: '#ffffff' },
+  aiBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(109,94,249,0.95)',
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+  },
+  aiBadgeText: { fontFamily: F800, fontSize: 9.5, color: '#ffffff' },
   cardName: {
     fontFamily: F800,
     fontSize: 13.5,

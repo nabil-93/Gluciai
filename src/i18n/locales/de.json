@@ -1054,6 +1054,8 @@
       "lunch": "Mittag",
       "dinner": "Abend",
       "snack": "Snack"
-    }
+    },
+    "ready": "Fertig",
+    "aiMade": "KI"
   }
 }
