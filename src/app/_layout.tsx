@@ -116,6 +116,8 @@ export default function RootLayout() {
             <Stack.Screen name="labs" />
             <Stack.Screen name="healthy-foods" />
             <Stack.Screen name="healthy-food" />
+            <Stack.Screen name="world-recipes" />
+            <Stack.Screen name="world-recipe" />
             <Stack.Screen
               name="consent-detail"
               options={{ presentation: 'modal' }}

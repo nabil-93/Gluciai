@@ -997,7 +997,6 @@
     "worldEmpty": "No product found. Try another name.",
     "worldDown": "The world database is temporarily unavailable. Try again in a moment.",
     "worldPopular": "Popular products in Morocco",
-"worldPopular": "Popular products in Morocco",
     "loadMore": "Show more results",
     "per100g": "Values per 100 g",
     "per100gNote": "Values per 100 g · green dot = diabetes-friendly",
@@ -1005,5 +1004,40 @@
     "ds_warn": "⚠️ In moderation",
     "ds_danger": "🚫 Avoid (too sugary)",
     "worldSource": "Source: Open Food Facts (global collaborative database)"
+  },
+  "wr": {
+    "title": "World dishes",
+    "subtitle": "Hundreds of international recipes",
+    "search": "Search a recipe…",
+    "empty": "No recipe found. Try another word.",
+    "preparing": "Reading the recipe and computing values…",
+    "failed": "Recipe temporarily unavailable. Try again.",
+    "nutritionTitle": "Nutrition facts",
+    "perServing": "Per serving",
+    "ingredients": "Ingredients",
+    "steps": "Preparation",
+    "askAi": "Ask the AI about this dish",
+    "disclaimer": "Recipe and values are indicative. Adjust portions with your doctor or dietitian.",
+    "servings": "{{count}} servings",
+    "ratingOk": "Good choice for you",
+    "ratingWarn": "Have occasionally",
+    "ratingDanger": "Avoid / rarely",
+    "area": {
+      "Moroccan": "Morocco",
+      "Italian": "Italy",
+      "French": "France",
+      "Spanish": "Spain",
+      "Turkish": "Turkey",
+      "Egyptian": "Egypt",
+      "Tunisian": "Tunisia",
+      "Greek": "Greece",
+      "Indian": "India",
+      "Chinese": "China",
+      "Japanese": "Japan",
+      "Thai": "Thailand",
+      "Mexican": "Mexico",
+      "American": "USA",
+      "British": "UK"
+    }
   }
 }

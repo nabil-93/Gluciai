@@ -107,6 +107,32 @@ export default function BiologyScreen() {
           </BevelCard>
         ) : null}
 
+        {/* Healthy food library */}
+        <BevelCard
+          style={styles.integrationsCard}
+          onPress={() => router.push('/healthy-foods')}
+        >
+          <Text style={{ fontSize: 24 }}>🥗</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.integrationsTitle}>{t('hf.title')}</Text>
+            <Text style={styles.integrationsSub}>{t('hf.subtitle')}</Text>
+          </View>
+          <ChevronRight />
+        </BevelCard>
+
+        {/* World recipes */}
+        <BevelCard
+          style={styles.integrationsCard}
+          onPress={() => router.push('/world-recipes')}
+        >
+          <Text style={{ fontSize: 24 }}>🌍</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.integrationsTitle}>{t('wr.title')}</Text>
+            <Text style={styles.integrationsSub}>{t('wr.subtitle')}</Text>
+          </View>
+          <ChevronRight />
+        </BevelCard>
+
         {/* Health platform integrations */}
         <BevelCard
           style={styles.integrationsCard}

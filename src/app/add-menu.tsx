@@ -105,6 +105,11 @@ const ITEMS: Item[] = [
     icon: <Text style={{ fontSize: 22 }}>🥗</Text>,
   },
   {
+    label: 'Plats du monde',
+    href: '/world-recipes',
+    icon: <Text style={{ fontSize: 22 }}>🌍</Text>,
+  },
+  {
     label: 'Code-barres',
     href: '/barcode',
     icon: <Text style={{ fontSize: 22 }}>🏷️</Text>,

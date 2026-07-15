@@ -997,7 +997,6 @@
     "worldEmpty": "Kein Produkt gefunden. Versuche einen anderen Namen.",
     "worldDown": "Die Weltdatenbank ist vorübergehend nicht erreichbar. Versuche es gleich nochmal.",
     "worldPopular": "Beliebte Produkte in Marokko",
-"worldPopular": "Beliebte Produkte in Marokko",
     "loadMore": "Mehr Ergebnisse anzeigen",
     "per100g": "Werte pro 100 g",
     "per100gNote": "Werte pro 100 g · grüner Punkt = diabetesfreundlich",
@@ -1005,5 +1004,40 @@
     "ds_warn": "⚠️ In Maßen",
     "ds_danger": "🚫 Meiden (zu zuckerhaltig)",
     "worldSource": "Quelle: Open Food Facts (weltweite Gemeinschaftsdatenbank)"
+  },
+  "wr": {
+    "title": "Weltgerichte",
+    "subtitle": "Hunderte internationale Rezepte",
+    "search": "Rezept suchen…",
+    "empty": "Kein Rezept gefunden. Versuche ein anderes Wort.",
+    "preparing": "Rezept wird gelesen und Werte berechnet…",
+    "failed": "Rezept vorübergehend nicht verfügbar. Versuche es erneut.",
+    "nutritionTitle": "Nährwerte",
+    "perServing": "Pro Portion",
+    "ingredients": "Zutaten",
+    "steps": "Zubereitung",
+    "askAi": "Die KI zu diesem Gericht fragen",
+    "disclaimer": "Rezept und Werte sind Richtwerte. Portionen mit Arzt oder Ernährungsberater anpassen.",
+    "servings": "{{count}} Portionen",
+    "ratingOk": "Gute Wahl für dich",
+    "ratingWarn": "Gelegentlich genießen",
+    "ratingDanger": "Meiden / selten",
+    "area": {
+      "Moroccan": "Marokko",
+      "Italian": "Italien",
+      "French": "Frankreich",
+      "Spanish": "Spanien",
+      "Turkish": "Türkei",
+      "Egyptian": "Ägypten",
+      "Tunisian": "Tunesien",
+      "Greek": "Griechenland",
+      "Indian": "Indien",
+      "Chinese": "China",
+      "Japanese": "Japan",
+      "Thai": "Thailand",
+      "Mexican": "Mexiko",
+      "American": "USA",
+      "British": "UK"
+    }
   }
 }
