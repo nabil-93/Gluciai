@@ -31,6 +31,12 @@ function loadModule(relPath) {
 
 const { HEALTHY_FOODS } = loadModule('src/data/healthyFoods.ts');
 const { HEALTHY_FOOD_IMAGES } = loadModule('src/data/healthyFoodImages.ts');
+// Detailed recipes (quantified ingredients + granular steps) override the
+// terse inline ones when present — same rule the app uses.
+let DETAILS = {};
+try {
+  DETAILS = loadModule('src/data/healthyFoodDetails.ts').HEALTHY_FOOD_DETAILS ?? {};
+} catch {}
 
 const q = (s) => `'${String(s ?? '').replace(/'/g, "''")}'`;
 const qNull = (s) => (s == null ? 'null' : q(s));
@@ -40,14 +46,19 @@ const num = (n) => (n == null ? 'null' : Number(n));
 
 const rows = HEALTHY_FOODS.map((f) => {
   const img = HEALTHY_FOOD_IMAGES[f.id] ?? null;
+  const d = DETAILS[f.id] ?? {};
+  const ingFr = d.ingredients_fr ?? f.ingredients_fr;
+  const ingAr = d.ingredients_ar ?? f.ingredients_ar;
+  const stFr = d.steps_fr ?? f.steps_fr;
+  const stAr = d.steps_ar ?? f.steps_ar;
   return `  (${q(f.id)}, ${q(f.name_fr)}, ${q(f.name_ar)}, ${q(f.name_en)}, ${q(f.category)}, ${arr(
     f.moments
   )}, ${q(f.emoji)}, ${q(f.serving)}, ${num(f.grams)}, ${num(f.calories)}, ${num(f.carbs)}, ${num(
     f.sugar
   )}, ${num(f.protein)}, ${num(f.fat)}, ${num(f.fiber)}, ${num(f.gi)}, ${qNull(f.why_fr)}, ${qNull(
     f.why_ar
-  )}, ${jsonb(f.ingredients_fr)}, ${jsonb(f.ingredients_ar)}, ${jsonb(f.steps_fr)}, ${jsonb(
-    f.steps_ar
+  )}, ${jsonb(ingFr)}, ${jsonb(ingAr)}, ${jsonb(stFr)}, ${jsonb(
+    stAr
   )}, ${qNull(img)}, ${arr(f.aliases)})`;
 }).join(',\n');
 

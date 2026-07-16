@@ -23,6 +23,8 @@
  * and links entries with [[food:id]] tokens rendered as tappable cards.
  */
 
+import { HEALTHY_FOOD_DETAILS } from './healthyFoodDetails';
+
 /** WHAT kind of food — drives the hero gradient + a secondary badge. */
 export type HealthyCategory =
   | 'breakfast'
@@ -102,10 +104,40 @@ export const HEALTHY_FOODS: HealthyFood[] = [
     calories: 300, carbs: 7, sugar: 1, protein: 15, fat: 24, fiber: 5, gi: 15,
     why_fr: "Presque zéro sucre : la glycémie reste stable toute la matinée. Les bonnes graisses de l'avocat et les protéines des œufs coupent la faim et évitent le grignotage.",
     why_ar: 'تقريباً بلا سكر: السكر فالدم كيبقى مستقر الصباح كامل. الدهون الصحية ديال الأفوكادو والبروتين ديال البيض كيشبعو وكيمنعو التسناك.',
-    ingredients_fr: ['2 œufs', '½ avocat mûr', 'Jus de citron', 'Sel, poivre', 'Quelques feuilles de salade ou tomates cerises'],
-    ingredients_ar: ['جوج بيضات', 'نص أفوكادو ناضج', 'عصير الحامض', 'ملح وإبزار', 'شوية خس ولا طماطم صغيرة'],
-    steps_fr: ['Faites bouillir 2 œufs 9 minutes, puis écalez-les.', 'Coupez ½ avocat en tranches.', 'Ajoutez une pincée de sel, du poivre et un filet de citron.', "Servez avec quelques feuilles de salade ou tomates cerises."],
-    steps_ar: ['سلق جوج بيضات 9 دقايق وقشرهم.', 'قطع نص أفوكادو شرائح.', 'زيد شوية ملح وإبزار وعصير الحامض.', 'قدمهم مع شوية خس ولا طماطم صغيرة.'],
+    ingredients_fr: [
+      '2 œufs',
+      '½ avocat bien mûr',
+      '1 c. à café de jus de citron',
+      "1 filet (1 c. à café) d'huile d'olive",
+      '1 pincée de sel, poivre',
+      'Quelques feuilles de salade ou 4-5 tomates cerises',
+    ],
+    ingredients_ar: [
+      'جوج بيضات',
+      'نص أفوكادو ناضج مزيان',
+      'معلقة صغيرة عصير الحامض',
+      'خيط (معلقة صغيرة) ديال زيت الزيتون',
+      'شوية ملح وإبزار',
+      'شوية خس ولا 4-5 طماطم صغيرة',
+    ],
+    steps_fr: [
+      'Plongez 2 œufs dans une casserole d’eau froide (juste couverts). Portez à ébullition, puis comptez exactement 9 min à petits bouillons pour un jaune bien cuit.',
+      'Égouttez et transvasez aussitôt les œufs dans un bol d’eau glacée 2-3 min : la coquille se retire mieux et le jaune ne verdit pas.',
+      'Écalez les œufs sous un filet d’eau, puis coupez-les en deux dans la longueur.',
+      'Coupez ½ avocat mûr en lamelles ou en dés ; arrosez-le tout de suite de jus de citron pour l’empêcher de noircir.',
+      'Dressez les œufs et l’avocat dans l’assiette. Salez très légèrement (prudence avec le sel si tension), poivrez, et ajoutez un filet d’huile d’olive.',
+      'Ajoutez quelques feuilles de salade verte ou des tomates cerises à côté, pour les fibres et le volume.',
+      '💡 Astuce diabète : commencez par l’avocat et la salade (fibres + bonnes graisses) AVANT le jaune d’œuf — la glycémie monte encore moins. Sans pain, ou ¼ de pain complet au maximum.',
+    ],
+    steps_ar: [
+      'حط جوج بيضات فطنجرة فيها ماء بارد (غير يغطيهم). خلّيه يغلي، ومن بعد حسب بالضبط 9 دقايق على غليان هادي باش الصفار يطيب مزيان.',
+      'صفّي البيض ودخّلو دغيا فبول فيه ماء بارد بالجليد 2-3 دقايق: القشرة كتخرج بسهولة والصفار ما يخضرش.',
+      'قشّر البيض تحت خيط الماء، ومن بعد قطّعو نصين بالطول.',
+      'قطّع نص أفوكادو ناضج شرائح ولا مكعبات؛ زيد عليه دغيا عصير الحامض باش ما يكحلش.',
+      'رتّب البيض والأفوكادو فالطبسيل. ملّح شوية برك (رد البال للملح إلا عندك الضغط)، زيد الإبزار وخيط ديال زيت الزيتون.',
+      'زيد حداهم شوية خس أخضر ولا طماطم صغيرة، للألياف والحجم.',
+      '💡 نصيحة للسكري: بدا بالأفوكادو والخس (ألياف + دهون صحية) قبل صفار البيض — السكر كيطلع أقل. بلا خبز، ولا ربع خبزة كاملة على الأكثر.',
+    ],
     aliases: ['oeuf avocat', 'بيض أفوكادو'],
   },
   {
@@ -180,10 +212,42 @@ export const HEALTHY_FOODS: HealthyFood[] = [
     calories: 190, carbs: 24, sugar: 2, protein: 6, fat: 8, fiber: 4, gi: 50,
     why_fr: "La harcha revisitée : moitié semoule, moitié flocons d'avoine. Même goût du bled, mais l'IG chute de 65 à 50 et les fibres doublent. Avec jben, pas avec miel.",
     why_ar: 'الحرشة بطريقة جديدة: نص سميدة ونص شوفان. نفس ذوق البلاد، ولكن المؤشر كيهبط من 65 ل50 والألياف كتضاعف. مع الجبن، ماشي مع العسل.',
-    ingredients_fr: ['60 g de semoule', "60 g de flocons d'avoine mixés", "1 c.s. d'huile d'olive", 'Sel, levure', 'Lait pour lier', 'Fromage frais'],
-    ingredients_ar: ['60 غ سميدة', '60 غ شوفان مطحون', 'معلقة زيت زيتون', 'ملح وخميرة', 'حليب باش يتلم', 'جبن طري'],
-    steps_fr: ["Mélangez 60 g de semoule + 60 g de flocons d'avoine mixés.", "Ajoutez 1 c.s. d'huile d'olive, sel, levure et lait pour lier.", 'Cuisez à la poêle à feu doux, 4 min par face.', 'Servez avec fromage frais — jamais miel + beurre.'],
-    steps_ar: ['خلط 60 غ سميدة مع 60 غ شوفان مطحون.', 'زيد معلقة زيت زيتون، ملح، خميرة وحليب باش يتلم.', 'طيبها فالمقلة على نار هادية، 4 دقايق لكل جهة.', 'كولها مع الجبن الطري — عمرك مع العسل والزبدة.'],
+    ingredients_fr: [
+      '120 g de semoule de blé moyenne',
+      "60 g de flocons d'avoine mixés (farine d'avoine)",
+      "2 c. à soupe (30 ml) d'huile d'olive",
+      '½ c. à café de sel',
+      '1 c. à café de levure chimique',
+      '≈ 120 ml de lait tiède (ou lben)',
+      'Fromage frais (jben) pour servir',
+    ],
+    ingredients_ar: [
+      '120 غ سميدة القمح المتوسطة',
+      '60 غ شوفان مطحون (دقيق الشوفان)',
+      'معلقتين كبار (30 مل) ديال زيت الزيتون',
+      'نص معلقة صغيرة ملح',
+      'معلقة صغيرة خميرة كيميائية',
+      '≈ 120 مل حليب دافي (ولا لبن)',
+      'جبن طري للتقديم',
+    ],
+    steps_fr: [
+      'Dans un grand saladier, mélangez à sec la semoule (120 g), les flocons d’avoine mixés (60 g), le sel et la levure chimique.',
+      'Ajoutez l’huile d’olive et sablez du bout des doigts 2-3 min, jusqu’à ce que tout le mélange soit humide et sableux.',
+      'Versez le lait tiède petit à petit en pétrissant légèrement — juste assez pour obtenir une pâte souple qui se tient (ne la travaillez pas trop, sinon la harcha devient dure).',
+      'Laissez reposer la pâte 10 min à couvert : la semoule et l’avoine absorbent le liquide et gonflent.',
+      'Les mains humides, façonnez des galettes de ~1,5 cm d’épaisseur et lissez la surface.',
+      'Cuisez à la poêle antiadhésive SANS huile, à feu doux-moyen, 4-5 min par face, jusqu’à une croûte dorée (à feu vif l’extérieur brûle avant que l’intérieur cuise).',
+      'Servez tiède, ouverte en deux, avec du fromage frais (jben) — jamais miel + beurre.',
+    ],
+    steps_ar: [
+      'فبول كبير، خلّط ناشف السميدة (120 غ)، الشوفان المطحون (60 غ)، الملح والخميرة الكيميائية.',
+      'زيد زيت الزيتون وافرك برؤوس صباعك 2-3 دقايق حتى يولي الخليط كامل رطب ومرمّل.',
+      'صبّ الحليب الدافي بشوية بشوية مع عجن خفيف — غير باش يتجمّع العجين ويولي طري (ما تعجنش بزاف وإلا الحرشة تقساح).',
+      'غطّي العجين وخلّيه يرتاح 10 دقايق: السميدة والشوفان كيشربو الحليب وكينتفخو.',
+      'بلّل يديك ودير قريصات بسمك ~1.5 سم وملّس الوجه.',
+      'طيّب فمقلة ناشفة بلا زيت، على نار هادية-متوسطة، 4-5 دقايق لكل جهة، حتى تولي قشرة ذهبية (على نار قوية كيتحرق البرّا قبل ما يطيب الداخل).',
+      'قدّمها دافية، محلولة على جوج، مع الجبن الطري — عمرك مع العسل والزبدة.',
+    ],
     aliases: ['harcha', 'حرشة صحية'],
   },
   {
@@ -1542,6 +1606,138 @@ export const HEALTHY_FOODS: HealthyFood[] = [
     steps_ar: ['شرمل الطون 20 دقيقة فالشرمولة.', 'شويه 2 دقيقة على كل جهة (وردي فالوسط).', 'قدمو مع شلاضة ولا خضرة مشوية.'],
     aliases: ['thon frais', 'steak thon', 'طون طري'],
   },
+
+  /* ═══════════════ ➕ VERS 120 ═══════════════ */
+  {
+    id: 'mloukhiya',
+    name_fr: 'Mloukhiya (corète)', name_ar: 'الملوخية', name_en: 'Mloukhiya (jute leaves)',
+    category: 'main', moments: ['ghda', '3cha'], emoji: '🌿', serving: '1 assiette (320 g)', grams: 320,
+    calories: 260, carbs: 12, sugar: 3, protein: 26, fat: 12, fiber: 6, gi: 20,
+    why_fr: 'La mloukhiya (feuilles de corète) est un légume-feuille très riche en fibres et en fer, à IG très bas. Avec un peu de viande maigre, un plat mijoté qui rassasie sans faire monter le sucre.',
+    why_ar: 'الملوخية خضرة ورقية عامرة بالألياف والحديد، وبمؤشر منخفض بزاف. مع شوية ديال اللحم المزوق، طبق مطيب كيشبع بلا ما يطلع السكر.',
+    ingredients_fr: ['Feuilles de corète (mloukhiya)', 'Viande maigre ou poulet', 'Ail, coriandre', 'Cumin, un peu d’huile d’olive'],
+    ingredients_ar: ['ورق الملوخية', 'لحم مزوق ولا دجاج', 'ثوم، قزبر', 'كامون، شوية زيت زيتون'],
+    steps_fr: ['Faites cuire la viande avec ail et épices.', 'Ajoutez la mloukhiya hachée et un peu d’eau, mijotez 30-40 min.', 'Rectifiez en cumin et coriandre. Servez avec ¼ de pain seulement.'],
+    steps_ar: ['طيب اللحم مع الثوم والعطرية.', 'زيد الملوخية المقطعة وشوية ماء، طيب 30-40 دقيقة.', 'عدّل الكامون والقزبر. قدمو مع ربع خبزة برك.'],
+    aliases: ['mloukhia', 'ملوخية'],
+  },
+  {
+    id: 'tajine-gnaoua-gombo',
+    name_fr: 'Tajine de gombo (gnaouiya)', name_ar: 'طاجين الملوخية الخضراء (القناوية)', name_en: 'Okra tagine',
+    category: 'main', moments: ['ghda', '3cha'], emoji: '🫒', serving: '1 assiette (320 g)', grams: 320,
+    calories: 230, carbs: 16, sugar: 6, protein: 20, fat: 10, fiber: 6, gi: 25,
+    why_fr: 'Le gombo (gnaoua) est pauvre en glucides et riche en fibres solubles qui ralentissent l’absorption du sucre. Mijoté en tajine avec de la viande maigre, un plat sudiste léger et sûr pour la glycémie.',
+    why_ar: 'القناوية (الملوخية الخضراء) قليلة النشويات وعامرة بالألياف اللي كتبطئ امتصاص السكر. مطيبة فطاجين مع لحم مزوق، طبق جنوبي خفيف وآمن للسكر.',
+    ingredients_fr: ['Gombos (gnaoua) frais', 'Viande maigre ou poulet', 'Tomate, ail', 'Coriandre, citron'],
+    ingredients_ar: ['قناوية طرية', 'لحم مزوق ولا دجاج', 'مطيشة، ثوم', 'قزبر، حامض'],
+    steps_fr: ['Faites revenir la viande avec oignon, ail et tomate.', 'Ajoutez les gombos et un peu d’eau, mijotez 25 min à feu doux.', 'Filet de citron et coriandre. Servez avec salade.'],
+    steps_ar: ['حمّر اللحم مع البصلة والثوم والمطيشة.', 'زيد القناوية وشوية ماء، طيب 25 دقيقة على نار هادية.', 'خيط حامض وقزبر. قدمو مع شلاضة.'],
+    aliases: ['gombo', 'gnaoua', 'قناوية'],
+  },
+  {
+    id: 'besbas-mchermel',
+    name_fr: 'Salade de fenouil (besbas)', name_ar: 'شلاضة البسباس', name_en: 'Fennel salad',
+    category: 'salad', moments: ['ghda', '3cha'], emoji: '🥬', serving: '1 portion (180 g)', grams: 180,
+    calories: 80, carbs: 9, sugar: 5, protein: 2, fat: 4, fiber: 4, gi: 15,
+    why_fr: 'Le fenouil (besbas) cru est croquant, très pauvre en calories et à IG bas. Une entrée fraîche et digestive, parfaite avant un plat, qui n’a quasiment aucun effet sur la glycémie.',
+    why_ar: 'البسباس ني مقرمش، قليل الكالوري بزاف وبمؤشر منخفض. مقبلات منعشة وكتعاون على الهضم، مثالية قبل الطبق، وما عندها تقريباً حتى تأثير على السكر.',
+    ingredients_fr: ['1 bulbe de fenouil', 'Citron', "Huile d'olive", 'Sel, persil', 'Olives (optionnel)'],
+    ingredients_ar: ['بصلة بسباس', 'حامض', 'زيت زيتون', 'ملح، معدنوس', 'زيتون (اختياري)'],
+    steps_fr: ['Émincez finement le fenouil.', 'Assaisonnez de citron, huile d’olive, sel et persil.', 'Laissez reposer 10 min. Servez frais.'],
+    steps_ar: ['قطّع البسباس رقيق.', 'تبّل بالحامض وزيت الزيتون والملح والمعدنوس.', 'خليها ترتاح 10 دقايق. قدمها باردة.'],
+    aliases: ['fenouil', 'besbas', 'بسباس'],
+  },
+  {
+    id: 'brochettes-kebda',
+    name_fr: 'Brochettes de foie (boulfaf léger)', name_ar: 'قطبان الكبدة (بولفاف خفيف)', name_en: 'Liver skewers (light boulfaf)',
+    category: 'main', moments: ['ghda', '3cha', 'snack'], emoji: '🍢', serving: '2 brochettes (150 g)', grams: 150,
+    calories: 220, carbs: 5, sugar: 1, protein: 30, fat: 9, fiber: 1, gi: 10,
+    why_fr: 'Le boulfaf de l’Aïd, version légère : foie grillé (sans l’envelopper de gras de mouton), cumin et citron. Bombe de fer et de B12, presque zéro glucide. Grillé, jamais frit.',
+    why_ar: 'بولفاف العيد، بالنسخة الخفيفة: كبدة مشوية (بلا ما نلفوها بالشحمة)، كامون وحامض. قنبلة ديال الحديد وB12، تقريباً بلا نشويات. مشوي، عمرو مقلي.',
+    ingredients_fr: ['Foie en cubes', 'Cumin, sel, paprika', 'Citron', 'Persil'],
+    ingredients_ar: ['كبدة مكعبات', 'كامون، ملح، تحميرة', 'حامض', 'معدنوس'],
+    steps_fr: ['Coupez le foie en cubes, assaisonnez de cumin, sel et paprika.', 'Enfilez sur brochettes, grillez 4-5 min (le foie reste rosé).', 'Citron et persil. Servez avec salade — sans pain.'],
+    steps_ar: ['قطّع الكبدة مكعبات، تبّلها بالكامون والملح والتحميرة.', 'دخّلها فالقطبان، شويها 4-5 دقايق (الكبدة تبقى وردية).', 'حامض ومعدنوس. قدمها مع شلاضة — بلا خبز.'],
+    aliases: ['boulfaf', 'kebda mechwiya', 'بولفاف'],
+  },
+  {
+    id: 'soupe-lentilles-corail',
+    name_fr: 'Soupe de lentilles corail au cumin', name_ar: 'شوربة العدس الأحمر بالكامون', name_en: 'Red lentil cumin soup',
+    category: 'soup', moments: ['3cha', 'ghda'], emoji: '🍲', serving: '1 bol (320 ml)', grams: 320,
+    calories: 200, carbs: 30, sugar: 4, protein: 12, fat: 4, fiber: 8, gi: 30,
+    why_fr: 'Les lentilles corail cuisent vite et gardent un IG bas. Cette soupe veloutée, protéinée et riche en fibres, est un dîner d’hiver rassasiant qui stabilise la glycémie toute la nuit.',
+    why_ar: 'العدس الأحمر كيطيب بزربة وكيبقى بمؤشر منخفض. هاد الشوربة الدسمة، الغنية بالبروتين والألياف، عشا ديال الشتا كيشبع وكيثبت السكر الليل كامل.',
+    ingredients_fr: ['150 g de lentilles corail', 'Oignon, ail, carotte', 'Cumin, curcuma, gingembre', 'Citron, coriandre'],
+    ingredients_ar: ['150 غ عدس أحمر', 'بصلة، ثوم، خيزو', 'كامون، خرقوم، سكينجبير', 'حامض، قزبر'],
+    steps_fr: ['Faites revenir oignon, ail, carotte et épices.', 'Ajoutez les lentilles corail et de l’eau, cuisez 20 min.', 'Mixez, ajoutez citron et coriandre. Servez chaud.'],
+    steps_ar: ['قلي البصلة والثوم والخيزو والعطرية.', 'زيد العدس الأحمر والماء، طيب 20 دقيقة.', 'اطحن، زيد الحامض والقزبر. قدمها سخونة.'],
+    aliases: ['lentilles corail', 'عدس أحمر'],
+  },
+  {
+    id: 'tajine-poulet-champignons',
+    name_fr: 'Tajine de poulet aux champignons', name_ar: 'طاجين الدجاج بالفطر', name_en: 'Chicken & mushroom tagine',
+    category: 'main', moments: ['ghda', '3cha'], emoji: '🍄', serving: '1 assiette (320 g)', grams: 320,
+    calories: 300, carbs: 8, sugar: 4, protein: 36, fat: 14, fiber: 3, gi: 15,
+    why_fr: 'Les champignons sont presque sans glucides et riches en fibres. Mijotés avec du poulet sans peau, olives et citron confit, ils font un tajine savoureux et très léger pour la glycémie.',
+    why_ar: 'الفطر تقريباً بلا نشويات وعامر بالألياف. مطيب مع دجاج بلا جلدة وزيتون وحامض مصير، كيدير طاجين بنين وخفيف بزاف على السكر.',
+    ingredients_fr: ['Poulet sans peau', 'Champignons', 'Oignon, ail, gingembre', 'Olives, citron confit', 'Coriandre'],
+    ingredients_ar: ['دجاج بلا جلدة', 'فطر', 'بصلة، ثوم، سكينجبير', 'زيتون، حامض مصير', 'قزبر'],
+    steps_fr: ['Faites revenir le poulet avec oignon, ail et gingembre.', 'Ajoutez les champignons émincés, un peu d’eau, cuisez 25 min.', 'Olives, citron confit, coriandre. Servez avec salade.'],
+    steps_ar: ['حمّر الدجاج مع البصلة والثوم والسكينجبير.', 'زيد الفطر مقطع وشوية ماء، طيب 25 دقيقة.', 'زيتون، حامض مصير، قزبر. قدمو مع شلاضة.'],
+    aliases: ['champignons', 'فطر'],
+  },
+  {
+    id: 'poisson-charmoula-grille',
+    name_fr: 'Poisson entier grillé à la chermoula', name_ar: 'حوت كامل مشوي بالشرمولة', name_en: 'Whole grilled chermoula fish',
+    category: 'seafood', moments: ['ghda', '3cha'], emoji: '🐟', serving: '1 poisson (300 g)', grams: 300,
+    calories: 290, carbs: 2, sugar: 0, protein: 42, fat: 12, fiber: 0, gi: 5,
+    why_fr: 'Un poisson blanc entier (loup, dorade), mariné à la chermoula et grillé : protéines pures, oméga-3, zéro glucide. Le plat côtier le plus sûr pour la glycémie, meilleur que toute viande.',
+    why_ar: 'حوت أبيض كامل (لوب، دورادة)، مشرمل ومشوي: بروتين صافي، أوميغا 3، بلا نشويات. أأمن طبق ساحلي للسكر، أحسن من أي لحم.',
+    ingredients_fr: ['1 poisson blanc entier', 'Chermoula : coriandre, ail, cumin, paprika, citron', "Huile d'olive"],
+    ingredients_ar: ['حوت أبيض كامل', 'شرمولة: قزبر، ثوم، كامون، تحميرة، حامض', 'زيت زيتون'],
+    steps_fr: ['Entaillez le poisson, enrobez de chermoula, laissez mariner 30 min.', 'Grillez 6-8 min par face (braise ou plancha).', 'Servez avec salade marocaine et citron.'],
+    steps_ar: ['شرّط الحوت، غلّفو بالشرمولة، خليه يتشرمل 30 دقيقة.', 'شويه 6-8 دقايق على كل جهة (جمر ولا بلانشة).', 'قدمو مع شلاضة مغربية والحامض.'],
+    aliases: ['poisson grillé', 'حوت مشوي'],
+  },
+  {
+    id: 'salade-pois-chiches',
+    name_fr: 'Salade de pois chiches', name_ar: 'شلاضة الحمص', name_en: 'Chickpea salad',
+    category: 'salad', moments: ['ghda', '3cha', 'snack'], emoji: '🫛', serving: '1 assiette (220 g)', grams: 220,
+    calories: 240, carbs: 30, sugar: 4, protein: 12, fat: 8, fiber: 9, gi: 30,
+    why_fr: 'Pois chiches (IG 30) + crudités + huile d’olive : une salade-repas complète, riche en protéines végétales et en fibres, qui rassasie longtemps sans pic de glycémie.',
+    why_ar: 'الحمص (مؤشر 30) + خضرة نية + زيت زيتون: شلاضة-ماكلة كاملة، غنية بالبروتين النباتي والألياف، كتشبع مدة طويلة بلا طلعة سكر.',
+    ingredients_fr: ['200 g de pois chiches cuits', 'Tomate, concombre, oignon', 'Persil, coriandre', "Citron, huile d'olive, cumin"],
+    ingredients_ar: ['200 غ حمص مطيب', 'مطيشة، خيار، بصلة', 'معدنوس، قزبر', 'حامض، زيت زيتون، كامون'],
+    steps_fr: ['Mélangez les pois chiches avec tomate, concombre et oignon en dés.', 'Ajoutez persil et coriandre.', 'Assaisonnez de citron, huile d’olive et cumin.'],
+    steps_ar: ['خلط الحمص مع المطيشة والخيار والبصلة مكعبات.', 'زيد المعدنوس والقزبر.', 'تبّل بالحامض وزيت الزيتون والكامون.'],
+    aliases: ['pois chiches salade', 'شلاضة حمص'],
+  },
+  {
+    id: 'jus-betterave-carotte',
+    name_fr: 'Jus betterave-carotte-gingembre', name_ar: 'عصير البربة والخيزو والسكينجبير', name_en: 'Beet-carrot-ginger juice',
+    category: 'drink', moments: ['drink', 'ftour'], emoji: '🥤', serving: '1 verre (250 ml)', grams: 250,
+    calories: 90, carbs: 18, sugar: 13, protein: 2, fat: 0, fiber: 4, gi: 40,
+    why_fr: 'Contrairement aux jus de fruits sucrés, ce jus de légumes (betterave + carotte + gingembre) garde plus de fibres si non filtré, et apporte des nitrates bons pour la circulation. Petit verre, non filtré, sans sucre.',
+    why_ar: 'عكس عصير الفواكه المسكر، هاد عصير الخضرة (بربة + خيزو + سكينجبير) كيحتفظ بألياف أكثر إلا ما صفيتيهش، وفيه نترات مزيانة للدورة الدموية. كاس صغير، بلا تصفية، بلا سكر.',
+    ingredients_fr: ['1 petite betterave cuite', '2 carottes', 'Gingembre frais', 'Citron'],
+    ingredients_ar: ['بربة صغيرة مطيبة', 'جوج خيزوات', 'سكينجبير طري', 'حامض'],
+    steps_fr: ['Passez betterave, carottes et gingembre à l’extracteur (ou mixez + peu filtré).', 'Ajoutez un filet de citron.', 'Petit verre, sans sucre ajouté.'],
+    steps_ar: ['دوّز البربة والخيزو والسكينجبير فالعصارة (ولا اطحن + صفي شوية).', 'زيد خيط حامض.', 'كاس صغير، بلا سكر مزيود.'],
+    aliases: ['jus betterave', 'عصير بربة'],
+  },
+  {
+    id: 'jben-tmatem-zit',
+    name_fr: 'Jben, tomate & huile d’olive', name_ar: 'جبن بلدي بالمطيشة وزيت الزيتون', name_en: 'Fresh cheese, tomato & olive oil',
+    category: 'breakfast', moments: ['ftour', '3cha'], emoji: '🍅', serving: '1 assiette (200 g)', grams: 200,
+    calories: 210, carbs: 8, sugar: 6, protein: 13, fat: 14, fiber: 2, gi: 20,
+    why_fr: 'Un ftour salé à la marocaine : jben baladi, tomate en tranches, huile d’olive et zaatar. Protéines et bonnes graisses, presque pas de glucides — idéal quand la glycémie du matin est déjà haute.',
+    why_ar: 'فطور مالح على الطريقة المغربية: جبن بلدي، مطيشة شرائح، زيت زيتون وزعتر. بروتين ودهون صحية، تقريباً بلا نشويات — مثالي ملي السكر ديال الصباح مرتفع.',
+    ingredients_fr: ['100 g de jben baladi', '1 tomate', "Huile d'olive", 'Zaatar ou origan', 'Olives'],
+    ingredients_ar: ['100 غ جبن بلدي', 'مطيشة', 'زيت زيتون', 'زعتر ولا أوريغانو', 'زيتون'],
+    steps_fr: ['Disposez le jben et la tomate en tranches.', 'Arrosez d’huile d’olive, saupoudrez de zaatar.', 'Quelques olives à côté — avec un thé sans sucre.'],
+    steps_ar: ['رتّب الجبن والمطيشة شرائح.', 'زيد زيت الزيتون ورش الزعتر.', 'شوية زيتون معاه — مع أتاي بلا سكر.'],
+    aliases: ['jben tomate', 'جبن بلدي'],
+  },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -1572,9 +1768,13 @@ export function healthyFoodWhy(f: HealthyFood, lang: string): string {
   return lang === 'ar' ? f.why_ar : f.why_fr;
 }
 export function healthyFoodIngredients(f: HealthyFood, lang: string): string[] {
+  const detail = HEALTHY_FOOD_DETAILS[f.id];
+  if (detail) return lang === 'ar' ? detail.ingredients_ar : detail.ingredients_fr;
   return lang === 'ar' ? f.ingredients_ar : f.ingredients_fr;
 }
 export function healthyFoodSteps(f: HealthyFood, lang: string): string[] {
+  const detail = HEALTHY_FOOD_DETAILS[f.id];
+  if (detail) return lang === 'ar' ? detail.steps_ar : detail.steps_fr;
   return lang === 'ar' ? f.steps_ar : f.steps_fr;
 }
 

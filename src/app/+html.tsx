@@ -14,13 +14,14 @@ export default function Root({ children }: PropsWithChildren) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        {/* initial-scale < 1 renders the whole app slightly smaller (more CSS
-            px across the screen) so the oversized design feels native-sized.
-            A STATIC initial-scale is honored by iOS Safari (unlike JS changes
-            to it) and reflows content to fill the width. */}
+        {/* initial-scale keeps the layout at native size and reflows to fill
+            the width. maximum-scale=1 + user-scalable=no KILL the iOS/Safari
+            auto-zoom that fires when a small-font input is focused (the
+            keyboard-opens-and-zooms bug on the "Add to Home Screen" PWA) and
+            also disable pinch-zoom entirely, so the app never zooms. */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover"
         />
         <meta name="theme-color" content="#19c37d" />
 
@@ -59,6 +60,9 @@ body {
   min-height: 100dvh;
   background-color: #f9fafe;
   overflow: hidden;
+  /* Kill double-tap-to-zoom (leaves taps/scroll working). Together with the
+     viewport maximum-scale=1 this removes every kind of zoom on the PWA. */
+  touch-action: manipulation;
 }
 #root {
   display: flex;
