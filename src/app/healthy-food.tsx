@@ -59,16 +59,16 @@ export default function HealthyFoodDetailScreen() {
     else router.replace('/healthy-foods');
   };
 
+  // Standard GI cut-offs (low ≤55 · medium 56-69 · high ≥70) so the hero
+  // badge, the bar's colour/value and the one-line explanation all agree.
+  const igKey = glycemicTone(food.gi).key;
   const giTone =
-    food.gi <= 40
+    igKey === 'low'
       ? { bg: '#e9fbf2', text: '#0f7a45', label: t('hf.giLow') }
-      : food.gi <= 55
+      : igKey === 'medium'
         ? { bg: '#fdf4e3', text: '#a16207', label: t('hf.giMedium') }
         : { bg: '#fdeaea', text: '#b91c1c', label: t('hf.giHigh') };
 
-  // Standard GI cut-offs (low ≤55 · medium 56-69 · high ≥70) → the bar's
-  // colour, value and the one-line explanation all agree.
-  const igKey = glycemicTone(food.gi).key;
   const igDesc = t(
     igKey === 'low'
       ? 'hf.igDescLow'
