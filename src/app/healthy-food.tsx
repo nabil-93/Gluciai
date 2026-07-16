@@ -12,7 +12,7 @@ import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChevronLeft, FadeInView, GaugeRing } from '@/components/ui';
+import { ChevronLeft, FadeInView, GaugeRing, GlycemicBar, glycemicTone } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import {
   getHealthyFood,
@@ -65,6 +65,22 @@ export default function HealthyFoodDetailScreen() {
       : food.gi <= 55
         ? { bg: '#fdf4e3', text: '#a16207', label: t('hf.giMedium') }
         : { bg: '#fdeaea', text: '#b91c1c', label: t('hf.giHigh') };
+
+  // Standard GI cut-offs (low ≤55 · medium 56-69 · high ≥70) → the bar's
+  // colour, value and the one-line explanation all agree.
+  const igKey = glycemicTone(food.gi).key;
+  const igDesc = t(
+    igKey === 'low'
+      ? 'hf.igDescLow'
+      : igKey === 'medium'
+        ? 'hf.igDescMedium'
+        : 'hf.igDescHigh'
+  );
+  const igScale: [string, string, string] = [
+    t('hf.igScaleLow'),
+    t('hf.igScaleMedium'),
+    t('hf.igScaleHigh'),
+  ];
 
   /* Nutrition as animated gauge rings: each arc = share of an indicative
    * daily reference (2000 kcal · 250 g carbs · 50 g sugar · 100 g protein
@@ -145,6 +161,18 @@ export default function HealthyFoodDetailScreen() {
             <Text style={styles.whyTitle}>💚 {t('hf.whyTitle')}</Text>
             <Text style={styles.whyText}>{why}</Text>
           </View>
+
+          {/* ── Glycemic index — segmented bar + what it means ── */}
+          <FadeInView delay={60}>
+            <View style={styles.card}>
+              <GlycemicBar
+                value={food.gi}
+                title={t('hf.igBarTitle')}
+                description={igDesc}
+                scale={igScale}
+              />
+            </View>
+          </FadeInView>
 
           {/* ── Nutrition — animated gauge rings ── */}
           <FadeInView delay={80}>
