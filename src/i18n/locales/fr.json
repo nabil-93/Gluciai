@@ -985,6 +985,15 @@
     "fat": "Lipides",
     "fiber": "Fibres",
     "stepsTitle": "Préparation",
+    "ingredientsTitle": "Ingrédients",
+    "moment": {
+      "ftour": "Petit-déj",
+      "ghda": "Déjeuner",
+      "3cha": "Dîner",
+      "snack": "Collation",
+      "drink": "Boissons",
+      "dessert": "Desserts"
+    },
     "askAi": "Demander à l'IA à propos de ce plat",
     "disclaimer": "Valeurs estimées à titre éducatif. Adaptez les portions avec votre médecin ou diététicien.",
     "openCard": "Voir la fiche",

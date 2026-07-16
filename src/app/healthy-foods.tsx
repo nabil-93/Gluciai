@@ -19,11 +19,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, FadeInView, PressableScale } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import {
-  HEALTHY_CATEGORIES,
+  MOMENTS,
   filterHealthyFoods,
   healthyCategoryColors,
   healthyFoodName,
-  type HealthyCategory,
+  momentCounts,
+  type Moment,
 } from '@/data/healthyFoods';
 import { HEALTHY_FOOD_IMAGES } from '@/data/healthyFoodImages';
 import {
@@ -72,7 +73,9 @@ export default function HealthyFoodsScreen() {
     }).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
-  const [category, setCategory] = useState<HealthyCategory | null>(null);
+  /** Meal-time "folder" filter (ftour / ghda / 3cha / snack / drink / dessert). */
+  const [moment, setMoment] = useState<Moment | null>(null);
+  const counts = useMemo(() => momentCounts(), []);
   /** Curated photos that failed to load fall back to the emoji hero. */
   const [brokenImgs, setBrokenImgs] = useState<Set<string>>(new Set());
 
@@ -86,8 +89,8 @@ export default function HealthyFoodsScreen() {
   const worldSeq = useRef(0);
 
   const foods = useMemo(
-    () => filterHealthyFoods(query, category),
-    [query, category]
+    () => filterHealthyFoods(query, moment),
+    [query, moment]
   );
 
   // World tab: with an EMPTY query the list is pre-loaded with the most
@@ -208,24 +211,26 @@ export default function HealthyFoodsScreen() {
             contentContainerStyle={{ paddingHorizontal: 18, gap: 8 }}
           >
             <Pressable
-              onPress={() => setCategory(null)}
-              style={[styles.catChip, category === null && styles.catChipOn]}
+              onPress={() => setMoment(null)}
+              style={[styles.catChip, moment === null && styles.catChipOn]}
             >
-              <Text style={[styles.catChipText, category === null && styles.catChipTextOn]}>
+              <Text style={[styles.catChipText, moment === null && styles.catChipTextOn]}>
                 {t('hf.all')}
               </Text>
             </Pressable>
-            {HEALTHY_CATEGORIES.map((c) => {
-              const on = category === c.key;
+            {MOMENTS.map((m) => {
+              const on = moment === m.key;
+              const count = counts[m.key];
+              if (!count) return null;
               return (
                 <Pressable
-                  key={c.key}
-                  onPress={() => setCategory(on ? null : c.key)}
+                  key={m.key}
+                  onPress={() => setMoment(on ? null : m.key)}
                   style={[styles.catChip, on && styles.catChipOn]}
                 >
-                  <Text style={{ fontSize: 13 }}>{c.emoji}</Text>
+                  <Text style={{ fontSize: 13 }}>{m.emoji}</Text>
                   <Text style={[styles.catChipText, on && styles.catChipTextOn]}>
-                    {t(`hf.cat.${c.key}`)}
+                    {t(`hf.moment.${m.key}`)}
                   </Text>
                 </Pressable>
               );

@@ -17,6 +17,7 @@ import { isRTL } from '@/i18n';
 import {
   getHealthyFood,
   healthyCategoryColors,
+  healthyFoodIngredients,
   healthyFoodName,
   healthyFoodSteps,
   healthyFoodWhy,
@@ -50,6 +51,7 @@ export default function HealthyFoodDetailScreen() {
   const [c1, c2] = healthyCategoryColors(food.category);
   const name = healthyFoodName(food, i18n.language);
   const why = healthyFoodWhy(food, i18n.language);
+  const ingredients = healthyFoodIngredients(food, i18n.language);
   const steps = healthyFoodSteps(food, i18n.language);
 
   const close = () => {
@@ -127,6 +129,14 @@ export default function HealthyFoodDetailScreen() {
               </Text>
             </View>
           </View>
+          {/* Meal-time folders this dish belongs to */}
+          <View style={styles.momentRow}>
+            {food.moments.map((m) => (
+              <View key={m} style={styles.momentPill}>
+                <Text style={styles.momentPillText}>{t(`hf.moment.${m}`)}</Text>
+              </View>
+            ))}
+          </View>
         </LinearGradient>
 
         <View style={{ paddingHorizontal: 18 }}>
@@ -160,6 +170,19 @@ export default function HealthyFoodDetailScreen() {
               </View>
             </View>
           </FadeInView>
+
+          {/* ── Ingredients ── */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>🧺 {t('hf.ingredientsTitle')}</Text>
+            <View style={{ gap: 8, marginTop: 4 }}>
+              {ingredients.map((ing, i) => (
+                <View key={i} style={styles.ingRow}>
+                  <View style={styles.ingDot} />
+                  <Text style={styles.ingText}>{ing}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
 
           {/* ── Preparation ── */}
           <View style={styles.card}>
@@ -241,6 +264,21 @@ const styles = StyleSheet.create({
   heroBadges: { flexDirection: 'row', gap: 8, marginTop: 12 },
   badge: { borderRadius: 999, paddingVertical: 5, paddingHorizontal: 12 },
   badgeText: { fontFamily: F700, fontSize: 11 },
+  momentRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 24,
+  },
+  momentPill: {
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  momentPillText: { fontFamily: F700, fontSize: 10.5, color: '#2b3a2f' },
 
   card: {
     backgroundColor: '#ffffff',
@@ -265,6 +303,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     rowGap: 18,
     paddingVertical: 6,
+  },
+
+  ingRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  ingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#19c37d',
+    marginTop: 6,
+  },
+  ingText: {
+    flex: 1,
+    fontFamily: F500,
+    fontSize: 12.5,
+    lineHeight: 19,
+    color: '#3b4657',
   },
 
   stepRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },

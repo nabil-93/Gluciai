@@ -985,6 +985,15 @@
     "fat": "Fat",
     "fiber": "Fiber",
     "stepsTitle": "Preparation",
+    "ingredientsTitle": "Ingredients",
+    "moment": {
+      "ftour": "Breakfast",
+      "ghda": "Lunch",
+      "3cha": "Dinner",
+      "snack": "Snack",
+      "drink": "Drinks",
+      "dessert": "Desserts"
+    },
     "askAi": "Ask the AI about this dish",
     "disclaimer": "Estimated values for education. Adjust portions with your doctor or dietitian.",
     "openCard": "Open",

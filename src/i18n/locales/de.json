@@ -985,6 +985,15 @@
     "fat": "Fett",
     "fiber": "Ballaststoffe",
     "stepsTitle": "Zubereitung",
+    "ingredientsTitle": "Zutaten",
+    "moment": {
+      "ftour": "Frühstück",
+      "ghda": "Mittag",
+      "3cha": "Abend",
+      "snack": "Snack",
+      "drink": "Getränke",
+      "dessert": "Desserts"
+    },
     "askAi": "Die KI zu diesem Gericht fragen",
     "disclaimer": "Geschätzte Werte zu Bildungszwecken. Portionen mit Arzt oder Ernährungsberater anpassen.",
     "openCard": "Ansehen",
