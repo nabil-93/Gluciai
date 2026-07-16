@@ -47,12 +47,20 @@ export async function getStoredLanguage(): Promise<LanguageCode | null> {
   return stored && SUPPORTED_LANGUAGES.some((l) => l.code === stored) ? stored : null;
 }
 
+/** Device locales we auto-adopt on first launch. The app is Moroccan and
+ *  French/Arabic-first, so only these two are picked up from the OS. Any other
+ *  locale (German, English, Spanish…) starts in French rather than surprising
+ *  the user — de/en stay available through the in-app language selector. */
+const AUTO_DETECT_LANGUAGES: LanguageCode[] = ['ar', 'fr'];
+
 export async function initI18n() {
   const stored = await getStoredLanguage();
-  const device = Localization.getLocales()[0]?.languageCode ?? 'en';
-  const fallback = SUPPORTED_LANGUAGES.some((l) => l.code === device)
+  const device = Localization.getLocales()[0]?.languageCode ?? 'fr';
+  const fallback: LanguageCode = AUTO_DETECT_LANGUAGES.includes(
+    device as LanguageCode
+  )
     ? (device as LanguageCode)
-    : 'en';
+    : 'fr';
   const lng = stored ?? fallback;
 
   await i18n.use(initReactI18next).init({
@@ -63,7 +71,7 @@ export async function initI18n() {
       de: { translation: de },
     },
     lng,
-    fallbackLng: 'en',
+    fallbackLng: 'fr',
     interpolation: { escapeValue: false },
   });
   applyDirection(lng);
