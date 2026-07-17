@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -98,13 +98,23 @@ export default function AuthScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
   const setWizardDone = useAppStore((s) => s.setWizardDone);
+  const setLanguageChosen = useAppStore((s) => s.setLanguageChosen);
+  const setOnboardingDone = useAppStore((s) => s.setOnboardingDone);
   const deviceOnboarded = useAppStore((s) => s.deviceOnboarded);
   const markDeviceOnboarded = useAppStore((s) => s.markDeviceOnboarded);
-  // First launch on this phone → default to "create account". Every later
-  // visit (a returning, signed-out user) opens straight on the login form;
-  // they can still switch to sign-up with the link below.
-  const [mode, setMode] = useState<Mode>(deviceOnboarded ? 'login' : 'register');
+  // The welcome screen's "Log in" link forces the login form (?mode=login).
+  // Otherwise: first launch on this phone → default to "create account";
+  // every later visit (a returning, signed-out user) opens straight on the
+  // login form. Both can still switch with the link below.
+  const [mode, setMode] = useState<Mode>(
+    modeParam === 'login' || modeParam === 'register'
+      ? modeParam
+      : deviceOnboarded
+        ? 'login'
+        : 'register'
+  );
 
   React.useEffect(() => {
     if (!deviceOnboarded) markDeviceOnboarded();
@@ -121,9 +131,14 @@ export default function AuthScreen() {
   const isRegister = mode === 'register';
 
   // New sign-ups fill their medical profile first; returning users who log
-  // in already have one, so they skip straight to the dashboard.
+  // in already have one, so they skip straight to the dashboard. A returning
+  // login also marks the language/intro steps done — users arriving through
+  // the welcome screen's "Log in" shortcut never saw the intro carousel and
+  // shouldn't be routed back into it on the next launch.
   const goAfterAuth = (returning: boolean) => {
     if (returning) {
+      setLanguageChosen();
+      setOnboardingDone();
       setWizardDone();
       router.replace('/(tabs)');
     } else {

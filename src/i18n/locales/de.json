@@ -22,6 +22,25 @@
     "title": "Wähle deine Sprache",
     "subtitle": "Jederzeit in den Einstellungen änderbar"
   },
+  "welcome": {
+    "todayScore": "Tages-Score",
+    "goodJob": "Gut gemacht!",
+    "dailyProgress": "Tagesfortschritt",
+    "nutrition": "Ernährung",
+    "activity": "Aktivität",
+    "sleep": "Schlaf",
+    "nutritionTag": "Ernährung\nausgewogen",
+    "title": "Bessere Gewohnheiten,\nein besseres Ich.",
+    "subtitle": "Verfolge deine Gesundheit, baue gesunde Gewohnheiten auf und erreiche deine Ziele Schritt für Schritt.",
+    "getStarted": "Loslegen",
+    "login": "Anmelden",
+    "track": "Verfolgen",
+    "trackDesc": "Behalte deinen täglichen Fortschritt im Blick",
+    "improve": "Verbessern",
+    "improveDesc": "Gesündere Routinen für jeden Tag",
+    "achieve": "Erreichen",
+    "achieveDesc": "Erreiche deine Ziele und bleib motiviert"
+  },
   "onboarding": {
     "slide1Title": "Scanne Mahlzeiten mit KI",
     "slide1Desc": "Mach ein Foto und erhalte sofort Kohlenhydrate, Zucker und Kalorien.",
@@ -392,7 +411,8 @@
       "finalizing": "Analyse abschließen"
     },
     "rateLimited": "Die KI hat ihr momentanes Limit erreicht. Versuche es in Kürze erneut.",
-    "scanFailed": "Analyse momentan nicht möglich. Prüfe deine Verbindung und versuche es erneut."
+    "scanFailed": "Analyse momentan nicht möglich. Prüfe deine Verbindung und versuche es erneut.",
+    "noDetect": "Wir konnten diese Mahlzeit nicht sicher erkennen. Mache ein näheres, gut beleuchtetes Foto."
   },
   "result": {
     "title": "Mahlzeiten-Analyse",
@@ -587,7 +607,9 @@
     "planRowSub": "Kostenlose Version · alle Funktionen freischalten",
     "planRowSubFree": "Kostenlose Version · alle Funktionen freischalten",
     "planRowSubPartial": "{{active}}/{{total}} Funktionen aktiv · Rest freischalten",
-    "planRowSubFull": "Alle Funktionen sind aktiv"
+    "planRowSubFull": "Alle Funktionen sind aktiv",
+    "disclaimerRowTitle": "Medizinischer Hinweis",
+    "disclaimerRowSub": "Die KI kann sich irren — GlucoAI ersetzt niemals deinen Arzt"
   },
   "log": {
     "glucoseTitle": "Blutzucker erfassen",
@@ -677,6 +699,9 @@
     "planNote": "Auf die Vollversion upgraden — kontaktiere den Support per WhatsApp."
   },
   "glucosePage": {
+    "low": "Niedrig",
+    "inRange": "Im Zielbereich",
+    "high": "Hoch",
     "title": "Blutzucker",
     "hello": "Hallo {{name}} 👋",
     "helloNoName": "Hallo 👋",
@@ -1073,5 +1098,185 @@
     },
     "ready": "Fertig",
     "aiMade": "KI"
+  },
+  "addMenu": {
+    "scan": "Mahlzeit scannen",
+    "glucose": "Blutzucker",
+    "insulin": "Insulin",
+    "bolus": "Bolusrechner",
+    "moroccanFood": "Marokkanische Küche",
+    "healthyFood": "Gesundes Essen",
+    "worldDishes": "Gerichte der Welt",
+    "barcode": "Barcode",
+    "menuScan": "Restaurantmenü",
+    "activity": "Aktivität",
+    "measures": "Gewicht & Messwerte",
+    "labs": "Meine Analysen",
+    "report": "Arztbericht",
+    "emergency": "Notfall SOS"
+  },
+  "insulinPage": {
+    "title": "Insulin",
+    "totalToday": "Heute gesamt",
+    "units": "Einheiten",
+    "rapid": "Schnell",
+    "long": "Langsam",
+    "mixed": "Misch",
+    "last7days": "Letzte 7 Tage",
+    "calcBolus": "Bolus berechnen",
+    "injections": "Injektionen",
+    "emptyTitle": "Keine Injektion erfasst",
+    "emptyMessage": "Füge eine Dosis mit dem +‑Button hinzu oder lass den Bolusrechner eine vorschlagen."
+  },
+  "foodsPage": {
+    "title": "Marokkanische Küche",
+    "subtitle": "Geschätzte Kohlenhydrate pro Portion — füge ein Gericht ohne Foto hinzu 🇲🇦",
+    "searchPlaceholder": "Tajine, Harira, Couscous…",
+    "carbs": "Kohlenhydrate",
+    "portion": "Portion:",
+    "unitCarbs": "g KH",
+    "unitSugar": "g Zucker",
+    "added": "✓ Hinzugefügt",
+    "add": "Hinzufügen",
+    "noResults": "Kein Gericht gefunden.",
+    "highGiWarning": "Hoher glykämischer Index — miss deinen Blutzucker 2 h nach dem Essen."
+  },
+  "integrations": {
+    "title": "Sensoren & Gesundheit",
+    "subtitle": "Verbinde deine Sensoren und Gesundheitsplattformen — deine Messwerte fließen automatisch in GlucoAI.",
+    "connect": "Verbinden",
+    "soon": "Bald",
+    "note": "Native Verbindungen (HealthKit, Health Connect, LibreLinkUp, Dexcom Share) werden in der im App Store und bei Google Play veröffentlichten App aktiviert — die Architektur steht bereits.",
+    "appleHealthDesc": "Synchronisiert Blutzucker, Aktivität und Gewicht mit der Health-App deines iPhones.",
+    "googleFitDesc": "Synchronisiert deine Gesundheitsdaten auf Android über Health Connect.",
+    "libreDesc": "Importiert automatisch die Messwerte deines Libre-Sensors (LibreLinkUp).",
+    "dexcomDesc": "Empfängt kontinuierliche Messwerte deines Dexcom-CGM (Share)."
+  },
+  "rappelsPage": {
+    "title": "Intelligente Erinnerungen",
+    "subtitle": "GlucoAI lernt deine Routine (Messungen, Injektionen, Mahlzeiten) und erinnert dich im richtigen Moment — nicht zu willkürlichen Zeiten.",
+    "everyDay": "täglich",
+    "webNote": "📱 Benachrichtigungen werden auf iPhone und Android aktiviert — im Web zeigt diese Vorschau, was geplant wird.",
+    "activated": "✓ Erinnerungen aktiv",
+    "activate": "Benachrichtigungen aktivieren",
+    "footNote": "Die Zeiten passen sich automatisch an, je mehr du erfasst."
+  },
+  "nutritionPage": {
+    "title": "Ernährung",
+    "carbsToday": "Kohlenhydrate heute",
+    "ratioHint": "Insulin-Kohlenhydrat-Verhältnis: 1 E pro {{ratio}} g",
+    "ratioMissing": "Lege dein Verhältnis im medizinischen Profil fest",
+    "dailyGoals": "Tagesziele",
+    "calories": "Kalorien",
+    "carbs": "Kohlenhydrate",
+    "protein": "Eiweiß",
+    "fat": "Fett",
+    "sugar": "Zucker",
+    "gi": "GI",
+    "sugarWarn": "⚠️ {{sugar}} g Zucker heute — beobachte deinen Blutzucker nach dem Essen.",
+    "recommendations": "Persönliche Empfehlungen",
+    "recDisclaimer": "Persönliche Bildungstipps — sie ersetzen nicht deine Ernährungsberatung.",
+    "mealsOfDay": "Mahlzeiten heute ({{count}})",
+    "emptyTitle": "Keine Mahlzeit gescannt",
+    "emptyMessage": "Scanne deine Mahlzeit, um Kohlenhydrate, Zucker und Kalorien zu schätzen — dann deinen Bolus.",
+    "scanMeal": "Mahlzeit scannen",
+    "scanAnother": "Weitere Mahlzeit scannen",
+    "bolusLink": "Bolus für diese Mahlzeit berechnen →"
+  },
+  "menuScanPage": {
+    "title": "Restaurantmenü",
+    "introTitle": "Scanne die Speisekarte",
+    "introSub": "Die KI liest jedes Gericht der Karte, berechnet die Nährwerte und zeigt dir die beste Wahl für deinen Blutzucker.",
+    "photograph": "📷 Speisekarte fotografieren",
+    "reading": "Karte wird gelesen, Nährwerte werden berechnet…",
+    "resultCount": "{{count}} Gerichte analysiert — sortiert vom besten zum schlechtesten für deinen Diabetes",
+    "bestChoice": "⭐ Beste Wahl bei Diabetes",
+    "unreadable": "Wir konnten diese Karte nicht lesen. Mache ein schärferes Foto.",
+    "analysisError": "Fehler bei der Menüanalyse. Bitte erneut versuchen.",
+    "savedToJournal": "✓ Zu deinem Tagebuch hinzugefügt",
+    "orderedSave": "Ich habe dieses Gericht bestellt — speichern",
+    "scanAnother": "Weitere Karte scannen",
+    "unitProt": "g Eiweiß",
+    "unitFat": "g Fett"
+  },
+  "emergencyPage": {
+    "title": "Notfall",
+    "contact": "Kontakt",
+    "noContact": "Kein Kontakt",
+    "addToProfile": "Im Profil hinzufügen",
+    "hypoTitle": "🧃 Bei Unterzuckerung",
+    "hypoStep1": "Gib 15 g schnellen Zucker (3 Stück Würfelzucker, ½ Glas Saft).",
+    "hypoStep2": "Warte 15 Minuten und miss den Blutzucker erneut.",
+    "hypoStep3": "Ist die Person bewusstlos: NICHTS über den Mund geben, ruf die 141 an.",
+    "hypoStep4": "Bringe die Person in die stabile Seitenlage.",
+    "doctor": "Behandelnder Arzt: {{name}}"
+  },
+  "barcodePage": {
+    "sugarWarning": "{{sugar}} g Zucker — achte auf deinen Blutzucker.",
+    "portionTitle": "Verzehrte Menge",
+    "fiber": "Ballaststoffe",
+    "verdictQ": "Für Diabetes geeignet?",
+    "verdictGood": "✅ Gute Wahl für deinen Blutzucker.",
+    "verdictOkay": "⚠️ In kleinen Mengen akzeptabel — beobachte deinen Blutzucker.",
+    "verdictAvoid": "❌ Besser meiden — hohe Kohlenhydrat-/Zuckerlast.",
+    "saved": "✓ Gespeichert",
+    "save": "Dieses Produkt speichern",
+    "scanAnother": "Weiteres Produkt scannen"
+  },
+  "scanResultPage": {
+    "nutritionSource": "Nährwertquelle:",
+    "giTitle": "Glykämischer Index",
+    "giHint": "Dieses Lebensmittel kann deinen Blutzucker schnell erhöhen — miss am besten 2 h nach der Mahlzeit.",
+    "bolusLabel": "Geschätzte Dosis für diese Mahlzeit",
+    "bolusCorrection": " + Korrektur {{correction}} E (Blutzucker {{glucose}})",
+    "bolusDisclaimer": "Nur eine KI-Bildungsschätzung — dies ist KEIN medizinischer Rat. Bestätige die Dosis immer mit deinem Arzt."
+  },
+  "recs": {
+    "bmiHigh": "Dein BMI liegt bei {{bmi}} — 5 % Gewichtsverlust verbessert die Insulinempfindlichkeit deutlich. Bevorzuge Gemüse-Tajines und gegrillten Fisch.",
+    "bmiLow": "BMI {{bmi}} — denke an eiweißreiche Snacks (etwas Sellou, Mandeln) zwischen den Mahlzeiten.",
+    "favorite": "Du magst „{{name}}“ ({{count}}× diese Woche). Iss vorher einen Salat (Zaalouk, marokkanischer Salat): Ballaststoffe bremsen die Blutzuckerspitze.",
+    "sugarWeek": "{{sugar}} g Zucker diese Woche. Minztee ohne oder mit wenig Zucker würde einen echten Unterschied machen.",
+    "fiber": "Deinen Mahlzeiten fehlen Ballaststoffe. Gute marokkanische Optionen mit niedrigem GI: {{foods}}.",
+    "glucoseHigh": "Aktueller Blutzucker hoch ({{value}}) — ziele bei der nächsten Mahlzeit auf < 40 g Kohlenhydrate: gegrillte Kefta, Fisch, Gemüse.",
+    "walk": "10–15 Min. Gehen nach der Hauptmahlzeit senken die Blutzuckerspitze um 20–30 %.",
+    "gestational": "Schwangerschaftsdiabetes: teile auf 3 Mahlzeiten + 2 Snacks auf und meide Fruchtsäfte, auch frische.",
+    "fallback": "Scanne weiter deine Mahlzeiten — je mehr du erfasst, desto genauer werden die Empfehlungen."
+  },
+  "mealScore": {
+    "giHigh": "Hoher glykämischer Index ({{gi}}) — schneller Blutzuckeranstieg",
+    "giModerate": "Mittlerer glykämischer Index ({{gi}})",
+    "giLowBonus": "Niedriger GI ({{gi}}) — sanfte Blutzuckerwirkung",
+    "sugarHigh": "Viel Zucker ({{g}} g)",
+    "sugarNotable": "Beachtlicher Zucker ({{g}} g)",
+    "carbsVeryHigh": "Sehr hohe Kohlenhydratlast ({{g}} g)",
+    "carbsHigh": "Hohe Kohlenhydrate ({{g}} g)",
+    "fiberRich": "Reich an Ballaststoffen ({{g}} g) — verlangsamt die Zuckeraufnahme",
+    "fiberPoor": "Wenig Ballaststoffe für seine Kohlenhydratlast",
+    "proteinGood": "Guter Eiweißgehalt ({{g}} g)",
+    "salty": "Sehr salzig ({{mg}} mg Natrium)",
+    "caloric": "Sehr kalorienreiche Mahlzeit ({{kcal}} kcal)",
+    "balanced": "Ausgewogene Mahlzeit für deinen Blutzucker",
+    "labelExcellent": "Exzellent",
+    "labelGood": "Gut",
+    "labelModerate": "Mäßig",
+    "labelPoor": "Schwach"
+  },
+  "sources": {
+    "internalDb": "Interne Datenbank",
+    "aiEstimate": "KI-Schätzung"
+  },
+  "activityStatus": {
+    "title": "Aktivitätsstatus",
+    "intro": "Lege deinen Status auf Aktiv, Krank, Verletzt oder Pausiert fest. GlucoAI passt seine Insulinempfehlungen an deinen Zustand an.",
+    "continue": "Weiter",
+    "update": "Aktualisieren",
+    "activeLabel": "Aktiv",
+    "activeDesc": "Standard-Insulinempfehlungen",
+    "sickLabel": "Krank",
+    "sickDesc": "Angepasste Insulinempfindlichkeit",
+    "injuredLabel": "Verletzt",
+    "injuredDesc": "Reduzierte Aktivität berücksichtigt",
+    "pausedLabel": "Pausiert",
+    "pausedDesc": "Vereinfachte Nachverfolgung"
   }
 }

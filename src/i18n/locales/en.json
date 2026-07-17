@@ -22,6 +22,25 @@
     "title": "Choose your language",
     "subtitle": "You can change it anytime in Settings"
   },
+  "welcome": {
+    "todayScore": "Today Score",
+    "goodJob": "Good Job!",
+    "dailyProgress": "Daily Progress",
+    "nutrition": "Nutrition",
+    "activity": "Activity",
+    "sleep": "Sleep",
+    "nutritionTag": "Nutrition\nBalanced",
+    "title": "Better habits,\nBetter you.",
+    "subtitle": "Track your health, build healthy habits and reach your goals step by step.",
+    "getStarted": "Get Started",
+    "login": "Log in",
+    "track": "Track",
+    "trackDesc": "Monitor your daily progress easily",
+    "improve": "Improve",
+    "improveDesc": "Build better habits for a healthier life",
+    "achieve": "Achieve",
+    "achieveDesc": "Reach your goals and stay motivated"
+  },
   "onboarding": {
     "slide1Title": "Scan your meals with AI",
     "slide1Desc": "Take a photo and instantly get carbs, sugar and calories.",
@@ -392,7 +411,8 @@
       "finalizing": "Finalizing analysis"
     },
     "rateLimited": "The AI hit its momentary limit. Please try again shortly.",
-    "scanFailed": "Analysis unavailable right now. Check your connection and try again."
+    "scanFailed": "Analysis unavailable right now. Check your connection and try again.",
+    "noDetect": "We couldn't identify this meal with confidence. Take a closer, well-lit photo."
   },
   "result": {
     "title": "Meal analysis",
@@ -587,7 +607,9 @@
     "planRowSub": "Free plan · unlock every feature",
     "planRowSubFree": "Free plan · unlock every feature",
     "planRowSubPartial": "{{active}}/{{total}} features active · unlock the rest",
-    "planRowSubFull": "All features are active"
+    "planRowSubFull": "All features are active",
+    "disclaimerRowTitle": "Medical disclaimer",
+    "disclaimerRowSub": "The AI can be wrong — GlucoAI never replaces your doctor"
   },
   "log": {
     "glucoseTitle": "Log glucose",
@@ -677,6 +699,9 @@
     "planNote": "Upgrade to the full version — contact support on WhatsApp."
   },
   "glucosePage": {
+    "low": "Low",
+    "inRange": "In range",
+    "high": "High",
     "title": "Blood glucose",
     "hello": "Hello {{name}} 👋",
     "helloNoName": "Hello 👋",
@@ -1073,5 +1098,185 @@
     },
     "ready": "Ready",
     "aiMade": "AI"
+  },
+  "addMenu": {
+    "scan": "Scan a meal",
+    "glucose": "Glucose",
+    "insulin": "Insulin",
+    "bolus": "Bolus calculator",
+    "moroccanFood": "Moroccan cuisine",
+    "healthyFood": "Healthy food",
+    "worldDishes": "World dishes",
+    "barcode": "Barcode",
+    "menuScan": "Restaurant menu",
+    "activity": "Activity",
+    "measures": "Weight & measures",
+    "labs": "My lab results",
+    "report": "Doctor report",
+    "emergency": "Emergency SOS"
+  },
+  "insulinPage": {
+    "title": "Insulin",
+    "totalToday": "Total today",
+    "units": "units",
+    "rapid": "Rapid",
+    "long": "Long",
+    "mixed": "Mixed",
+    "last7days": "Last 7 days",
+    "calcBolus": "Calculate a bolus",
+    "injections": "Injections",
+    "emptyTitle": "No injection recorded",
+    "emptyMessage": "Add a dose with the + button, or let the bolus calculator suggest one."
+  },
+  "foodsPage": {
+    "title": "Moroccan cuisine",
+    "subtitle": "Estimated carbs per serving — add a dish without a photo 🇲🇦",
+    "searchPlaceholder": "Tagine, harira, couscous…",
+    "carbs": "carbs",
+    "portion": "Serving:",
+    "unitCarbs": "g carbs",
+    "unitSugar": "g sugar",
+    "added": "✓ Added",
+    "add": "Add",
+    "noResults": "No dish found.",
+    "highGiWarning": "High glycemic index — check your glucose 2 h after eating."
+  },
+  "integrations": {
+    "title": "Sensors & health",
+    "subtitle": "Connect your sensors and health platforms — your readings flow into GlucoAI automatically.",
+    "connect": "Connect",
+    "soon": "Soon",
+    "note": "Native connections (HealthKit, Health Connect, LibreLinkUp, Dexcom Share) activate in the app published on the App Store and Google Play — the architecture is already in place.",
+    "appleHealthDesc": "Syncs glucose, activity and weight with your iPhone's Health app.",
+    "googleFitDesc": "Syncs your health data on Android via Health Connect.",
+    "libreDesc": "Automatically imports readings from your Libre sensor (LibreLinkUp).",
+    "dexcomDesc": "Receives continuous readings from your Dexcom CGM (Share)."
+  },
+  "rappelsPage": {
+    "title": "Smart reminders",
+    "subtitle": "GlucoAI learns your routine (readings, injections, meals) and reminds you at the right moment — not at arbitrary times.",
+    "everyDay": "every day",
+    "webNote": "📱 Notifications activate on iPhone and Android — on the web, this preview shows what will be scheduled.",
+    "activated": "✓ Reminders on",
+    "activate": "Enable notifications",
+    "footNote": "The times readjust automatically as you keep logging."
+  },
+  "nutritionPage": {
+    "title": "Nutrition",
+    "carbsToday": "Carbs today",
+    "ratioHint": "Insulin-to-carb ratio: 1 U per {{ratio}} g",
+    "ratioMissing": "Set your ratio in the medical profile",
+    "dailyGoals": "Today's goals",
+    "calories": "Calories",
+    "carbs": "Carbs",
+    "protein": "Protein",
+    "fat": "Fat",
+    "sugar": "Sugar",
+    "gi": "GI",
+    "sugarWarn": "⚠️ {{sugar}} g of sugar today — watch your post-meal glucose.",
+    "recommendations": "Personalized recommendations",
+    "recDisclaimer": "Personalized educational tips — they don't replace your dietitian.",
+    "mealsOfDay": "Today's meals ({{count}})",
+    "emptyTitle": "No meal scanned",
+    "emptyMessage": "Scan your meal to estimate carbs, sugar and calories — then your bolus.",
+    "scanMeal": "Scan a meal",
+    "scanAnother": "Scan another meal",
+    "bolusLink": "Calculate the bolus for this meal →"
+  },
+  "menuScanPage": {
+    "title": "Restaurant menu",
+    "introTitle": "Scan the restaurant menu",
+    "introSub": "The AI reads every dish on the menu, computes its nutrition and shows you the best choice for your glucose.",
+    "photograph": "📷 Photograph the menu",
+    "reading": "Reading the menu and computing nutrition…",
+    "resultCount": "{{count}} dishes analyzed — ranked from best to worst for your diabetes",
+    "bestChoice": "⭐ Best choice for diabetes",
+    "unreadable": "We couldn't read this menu. Take a sharper photo of the card.",
+    "analysisError": "Error while analyzing the menu. Please try again.",
+    "savedToJournal": "✓ Added to your journal",
+    "orderedSave": "I ordered this dish — save it",
+    "scanAnother": "Scan another menu",
+    "unitProt": "g prot.",
+    "unitFat": "g fat"
+  },
+  "emergencyPage": {
+    "title": "Emergency",
+    "contact": "Contact",
+    "noContact": "No contact",
+    "addToProfile": "Add one in your profile",
+    "hypoTitle": "🧃 In case of hypoglycemia",
+    "hypoStep1": "Give 15 g of fast sugar (3 sugar cubes, ½ glass of juice).",
+    "hypoStep2": "Wait 15 minutes, then re-check the glucose.",
+    "hypoStep3": "If the person is unconscious: give NOTHING by mouth, call 141.",
+    "hypoStep4": "Place the person in the recovery position.",
+    "doctor": "Treating doctor: {{name}}"
+  },
+  "barcodePage": {
+    "sugarWarning": "{{sugar}} g of sugar — watch your glucose.",
+    "portionTitle": "Amount eaten",
+    "fiber": "Fiber",
+    "verdictQ": "Suitable for diabetes?",
+    "verdictGood": "✅ Good choice for your glucose.",
+    "verdictOkay": "⚠️ Acceptable in small amounts — watch your glucose.",
+    "verdictAvoid": "❌ Avoid — heavy carb/sugar load.",
+    "saved": "✓ Saved",
+    "save": "Save this product",
+    "scanAnother": "Scan another product"
+  },
+  "scanResultPage": {
+    "nutritionSource": "Nutrition source:",
+    "giTitle": "Glycemic index",
+    "giHint": "This food can raise your glucose quickly — consider checking 2 h after the meal.",
+    "bolusLabel": "Estimated dose for this meal",
+    "bolusCorrection": " + correction {{correction}} U (glucose {{glucose}})",
+    "bolusDisclaimer": "AI educational estimate only — this is NOT medical advice. Always confirm the dose with your doctor."
+  },
+  "recs": {
+    "bmiHigh": "Your BMI is {{bmi}} — losing 5% of body weight clearly improves insulin sensitivity. Favor vegetable tagines and grilled fish.",
+    "bmiLow": "BMI {{bmi}} — consider protein-rich snacks (a little sellou, almonds) between meals.",
+    "favorite": "You love \"{{name}}\" ({{count}}× this week). Add a salad (zaalouk, Moroccan salad) first: fiber slows the glucose spike.",
+    "sugarWeek": "{{sugar}} g of sugar this week. Mint tea with little or no sugar would make a real difference.",
+    "fiber": "Your meals lack fiber. Good low-GI Moroccan picks: {{foods}}.",
+    "glucoseHigh": "Current glucose is high ({{value}}) — for the next meal aim for < 40 g of carbs: grilled kefta, fish, vegetables.",
+    "walk": "10–15 min of walking after the main meal cuts the glucose spike by 20–30%.",
+    "gestational": "Gestational diabetes: split into 3 meals + 2 snacks and avoid fruit juice, even fresh.",
+    "fallback": "Keep scanning your meals — the more you log, the more precise the recommendations get."
+  },
+  "mealScore": {
+    "giHigh": "High glycemic index ({{gi}}) — fast glucose rise",
+    "giModerate": "Moderate glycemic index ({{gi}})",
+    "giLowBonus": "Low GI ({{gi}}) — gentle glucose impact",
+    "sugarHigh": "A lot of sugar ({{g}} g)",
+    "sugarNotable": "Notable sugar ({{g}} g)",
+    "carbsVeryHigh": "Very high carb load ({{g}} g)",
+    "carbsHigh": "High carbs ({{g}} g)",
+    "fiberRich": "Rich in fiber ({{g}} g) — slows sugar absorption",
+    "fiberPoor": "Low in fiber for its carb load",
+    "proteinGood": "Good protein content ({{g}} g)",
+    "salty": "Very salty ({{mg}} mg of sodium)",
+    "caloric": "Very caloric meal ({{kcal}} kcal)",
+    "balanced": "Balanced meal for your glucose",
+    "labelExcellent": "Excellent",
+    "labelGood": "Good",
+    "labelModerate": "Moderate",
+    "labelPoor": "Poor"
+  },
+  "sources": {
+    "internalDb": "Internal database",
+    "aiEstimate": "AI estimate"
+  },
+  "activityStatus": {
+    "title": "Activity status",
+    "intro": "Set your status to Active, Sick, Injured or Paused. GlucoAI will adjust its insulin recommendations to your condition.",
+    "continue": "Continue",
+    "update": "Update",
+    "activeLabel": "Active",
+    "activeDesc": "Standard insulin recommendations",
+    "sickLabel": "Sick",
+    "sickDesc": "Adjusted insulin sensitivity",
+    "injuredLabel": "Injured",
+    "injuredDesc": "Reduced activity taken into account",
+    "pausedLabel": "Paused",
+    "pausedDesc": "Lighter tracking"
   }
 }

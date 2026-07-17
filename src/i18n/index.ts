@@ -47,11 +47,11 @@ export async function getStoredLanguage(): Promise<LanguageCode | null> {
   return stored && SUPPORTED_LANGUAGES.some((l) => l.code === stored) ? stored : null;
 }
 
-/** Device locales we auto-adopt on first launch. The app is Moroccan and
- *  French/Arabic-first, so only these two are picked up from the OS. Any other
- *  locale (German, English, Spanish…) starts in French rather than surprising
- *  the user — de/en stay available through the in-app language selector. */
-const AUTO_DETECT_LANGUAGES: LanguageCode[] = ['ar', 'fr'];
+/** Device locales we auto-adopt on first launch: the app starts in the
+ *  phone's language whenever we support it (ar/fr/de/en). Anything else
+ *  (Spanish, Italian…) falls back to French — the app is Moroccan-first —
+ *  and stays changeable from the welcome screen's language selector. */
+const AUTO_DETECT_LANGUAGES: LanguageCode[] = ['ar', 'fr', 'de', 'en'];
 
 export async function initI18n() {
   const stored = await getStoredLanguage();

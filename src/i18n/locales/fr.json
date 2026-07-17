@@ -22,6 +22,25 @@
     "title": "Choisissez votre langue",
     "subtitle": "Modifiable à tout moment dans les réglages"
   },
+  "welcome": {
+    "todayScore": "Score du jour",
+    "goodJob": "Bien joué !",
+    "dailyProgress": "Progrès du jour",
+    "nutrition": "Nutrition",
+    "activity": "Activité",
+    "sleep": "Sommeil",
+    "nutritionTag": "Nutrition\néquilibrée",
+    "title": "De meilleures habitudes,\nun meilleur vous.",
+    "subtitle": "Suivez votre santé, adoptez de bonnes habitudes et atteignez vos objectifs pas à pas.",
+    "getStarted": "Commencer",
+    "login": "Se connecter",
+    "track": "Suivre",
+    "trackDesc": "Suivez vos progrès quotidiens facilement",
+    "improve": "Progresser",
+    "improveDesc": "De meilleures habitudes pour une vie plus saine",
+    "achieve": "Réussir",
+    "achieveDesc": "Atteignez vos objectifs et restez motivé"
+  },
   "onboarding": {
     "slide1Title": "Scannez vos repas avec l'IA",
     "slide1Desc": "Prenez une photo et obtenez glucides, sucre et calories instantanément.",
@@ -392,7 +411,8 @@
       "finalizing": "Finalisation de l’analyse"
     },
     "rateLimited": "L'IA a atteint sa limite momentanée. Réessayez dans quelques instants.",
-    "scanFailed": "Analyse impossible pour le moment. Vérifiez votre connexion et réessayez."
+    "scanFailed": "Analyse impossible pour le moment. Vérifiez votre connexion et réessayez.",
+    "noDetect": "Nous n'avons pas pu identifier ce repas avec certitude. Reprenez une photo plus proche et bien éclairée."
   },
   "result": {
     "title": "Analyse du repas",
@@ -587,7 +607,9 @@
     "planRowSub": "Version gratuite · débloquez toutes les fonctionnalités",
     "planRowSubFree": "Version gratuite · débloquez toutes les fonctionnalités",
     "planRowSubPartial": "{{active}}/{{total}} fonctionnalités actives · débloquez le reste",
-    "planRowSubFull": "Toutes les fonctionnalités sont actives"
+    "planRowSubFull": "Toutes les fonctionnalités sont actives",
+    "disclaimerRowTitle": "Avertissement médical",
+    "disclaimerRowSub": "L'IA peut se tromper — GlucoAI ne remplace jamais ton médecin"
   },
   "log": {
     "glucoseTitle": "Enregistrer la glycémie",
@@ -677,6 +699,9 @@
     "planNote": "Passez à la version complète — contactez le support sur WhatsApp."
   },
   "glucosePage": {
+    "low": "Bas",
+    "inRange": "Dans la cible",
+    "high": "Élevé",
     "title": "Glycémie",
     "hello": "Bonjour {{name}} 👋",
     "helloNoName": "Bonjour 👋",
@@ -1073,5 +1098,185 @@
     },
     "ready": "Prêt",
     "aiMade": "IA"
+  },
+  "addMenu": {
+    "scan": "Scanner un repas",
+    "glucose": "Glycémie",
+    "insulin": "Insuline",
+    "bolus": "Calculateur de bolus",
+    "moroccanFood": "Cuisine marocaine",
+    "healthyFood": "Makla saine",
+    "worldDishes": "Plats du monde",
+    "barcode": "Code-barres",
+    "menuScan": "Menu restaurant",
+    "activity": "Activité",
+    "measures": "Poids & mesures",
+    "labs": "Mes analyses",
+    "report": "Rapport médecin",
+    "emergency": "Urgence SOS"
+  },
+  "insulinPage": {
+    "title": "Insuline",
+    "totalToday": "Total aujourd'hui",
+    "units": "unités",
+    "rapid": "Rapide",
+    "long": "Lente",
+    "mixed": "Mixte",
+    "last7days": "7 derniers jours",
+    "calcBolus": "Calculer un bolus",
+    "injections": "Injections",
+    "emptyTitle": "Aucune injection enregistrée",
+    "emptyMessage": "Ajoutez une dose avec le bouton + ou laissez le calculateur de bolus la proposer."
+  },
+  "foodsPage": {
+    "title": "Cuisine marocaine",
+    "subtitle": "Glucides estimés par portion — ajoutez un plat sans photo 🇲🇦",
+    "searchPlaceholder": "Tajine, harira, couscous…",
+    "carbs": "glucides",
+    "portion": "Portion :",
+    "unitCarbs": "g gluc.",
+    "unitSugar": "g sucre",
+    "added": "✓ Ajouté",
+    "add": "Ajouter",
+    "noResults": "Aucun plat trouvé.",
+    "highGiWarning": "Index glycémique élevé — mesurez votre glycémie 2 h après."
+  },
+  "integrations": {
+    "title": "Capteurs & santé",
+    "subtitle": "Connectez vos capteurs et plateformes santé — vos mesures arrivent automatiquement dans GlucoAI.",
+    "connect": "Connecter",
+    "soon": "Bientôt",
+    "note": "Les connexions natives (HealthKit, Health Connect, LibreLinkUp, Dexcom Share) s'activent dans l'application publiée sur l'App Store et Google Play — l'architecture est déjà prête.",
+    "appleHealthDesc": "Synchronise glycémie, activité et poids avec l'app Santé de votre iPhone.",
+    "googleFitDesc": "Synchronise vos données santé sur Android via Health Connect.",
+    "libreDesc": "Importe automatiquement les mesures de votre capteur Libre (LibreLinkUp).",
+    "dexcomDesc": "Reçoit les mesures en continu de votre CGM Dexcom (Share)."
+  },
+  "rappelsPage": {
+    "title": "Rappels intelligents",
+    "subtitle": "GlucoAI apprend vos horaires (mesures, injections, repas) et vous rappelle au bon moment — pas à des heures arbitraires.",
+    "everyDay": "chaque jour",
+    "webNote": "📱 Les notifications s'activent sur iPhone et Android — sur le web, cet aperçu montre ce qui sera programmé.",
+    "activated": "✓ Rappels activés",
+    "activate": "Activer les notifications",
+    "footNote": "Les horaires se réajustent automatiquement au fil de vos enregistrements."
+  },
+  "nutritionPage": {
+    "title": "Nutrition",
+    "carbsToday": "Glucides aujourd'hui",
+    "ratioHint": "Ratio insuline/glucides : 1 U pour {{ratio}} g",
+    "ratioMissing": "Configurez votre ratio dans le profil médical",
+    "dailyGoals": "Objectifs du jour",
+    "calories": "Calories",
+    "carbs": "Glucides",
+    "protein": "Protéines",
+    "fat": "Lipides",
+    "sugar": "Sucre",
+    "gi": "IG",
+    "sugarWarn": "⚠️ {{sugar}} g de sucre aujourd'hui — surveillez votre glycémie post-repas.",
+    "recommendations": "Recommandations personnalisées",
+    "recDisclaimer": "Conseils éducatifs personnalisés — ne remplacent pas votre diététicien(ne).",
+    "mealsOfDay": "Repas du jour ({{count}})",
+    "emptyTitle": "Aucun repas scanné",
+    "emptyMessage": "Scannez votre repas pour estimer glucides, sucre et calories — puis votre bolus.",
+    "scanMeal": "Scanner un repas",
+    "scanAnother": "Scanner un autre repas",
+    "bolusLink": "Calculer le bolus pour ce repas →"
+  },
+  "menuScanPage": {
+    "title": "Menu restaurant",
+    "introTitle": "Scannez la carte du restaurant",
+    "introSub": "L'IA lit tous les plats du menu, calcule leurs valeurs nutritionnelles et vous indique le meilleur choix pour votre glycémie.",
+    "photograph": "📷 Photographier le menu",
+    "reading": "Lecture du menu et calcul nutritionnel…",
+    "resultCount": "{{count}} plats analysés — classés du meilleur au moins bon pour votre diabète",
+    "bestChoice": "⭐ Meilleur choix pour le diabète",
+    "unreadable": "Nous n'avons pas pu lire ce menu. Prenez une photo plus nette de la carte.",
+    "analysisError": "Erreur pendant l'analyse du menu. Réessayez.",
+    "savedToJournal": "✓ Ajouté à votre journal",
+    "orderedSave": "J'ai commandé ce plat — enregistrer",
+    "scanAnother": "Scanner un autre menu",
+    "unitProt": "g prot.",
+    "unitFat": "g lip."
+  },
+  "emergencyPage": {
+    "title": "Urgence",
+    "contact": "Contact",
+    "noContact": "Aucun contact",
+    "addToProfile": "Ajoutez-le au profil",
+    "hypoTitle": "🧃 En cas d'hypoglycémie",
+    "hypoStep1": "Donnez 15 g de sucre rapide (3 morceaux de sucre, ½ verre de jus).",
+    "hypoStep2": "Attendez 15 minutes puis re-mesurez la glycémie.",
+    "hypoStep3": "Si la personne est inconsciente : NE RIEN donner par la bouche, appelez le 141.",
+    "hypoStep4": "Placez la personne en position latérale de sécurité.",
+    "doctor": "Médecin traitant : {{name}}"
+  },
+  "barcodePage": {
+    "sugarWarning": "{{sugar}} g de sucre — attention à la glycémie.",
+    "portionTitle": "Quantité consommée",
+    "fiber": "Fibres",
+    "verdictQ": "Convient au diabète ?",
+    "verdictGood": "✅ Bon choix pour votre glycémie.",
+    "verdictOkay": "⚠️ Acceptable en petite quantité — surveillez votre glycémie.",
+    "verdictAvoid": "❌ À éviter — forte charge glucidique/sucrée.",
+    "saved": "✓ Enregistré",
+    "save": "Enregistrer ce produit",
+    "scanAnother": "Scanner un autre produit"
+  },
+  "scanResultPage": {
+    "nutritionSource": "Source nutritionnelle :",
+    "giTitle": "Index glycémique",
+    "giHint": "Cet aliment peut faire monter votre glycémie rapidement — pensez à mesurer 2 h après le repas.",
+    "bolusLabel": "Dose estimée pour ce repas",
+    "bolusCorrection": " + correction {{correction}} U (glycémie {{glucose}})",
+    "bolusDisclaimer": "Estimation éducative IA uniquement — ceci n'est PAS un avis médical. Vérifiez toujours la dose avec votre médecin."
+  },
+  "recs": {
+    "bmiHigh": "Votre IMC est de {{bmi}} — une perte de 5 % du poids améliore nettement la sensibilité à l'insuline. Privilégiez tajines de légumes et poisson grillé.",
+    "bmiLow": "IMC {{bmi}} — pensez à des collations riches en protéines (sellou en petite quantité, amandes) entre les repas.",
+    "favorite": "Vous aimez « {{name}} » ({{count}}× cette semaine). Ajoutez une salade (zaalouk, salade marocaine) avant : les fibres ralentissent le pic glycémique.",
+    "sugarWeek": "{{sugar}} g de sucre cette semaine. Le thé à la menthe non sucré ou peu sucré ferait une vraie différence.",
+    "fiber": "Vos repas manquent de fibres. Bons choix marocains à IG bas : {{foods}}.",
+    "glucoseHigh": "Glycémie actuelle élevée ({{value}}) — pour le prochain repas, visez < 40 g de glucides : kefta grillée, poisson, légumes.",
+    "walk": "10–15 min de marche après le repas principal réduisent le pic glycémique de 20 à 30 %.",
+    "gestational": "Diabète gestationnel : fractionnez en 3 repas + 2 collations et évitez les jus de fruits, même frais.",
+    "fallback": "Continuez à scanner vos repas — plus vous enregistrez, plus les recommandations deviennent précises."
+  },
+  "mealScore": {
+    "giHigh": "Index glycémique élevé ({{gi}}) — montée rapide de la glycémie",
+    "giModerate": "Index glycémique modéré ({{gi}})",
+    "giLowBonus": "IG bas ({{gi}}) — impact glycémique doux",
+    "sugarHigh": "Beaucoup de sucre ({{g}} g)",
+    "sugarNotable": "Sucre notable ({{g}} g)",
+    "carbsVeryHigh": "Charge glucidique très élevée ({{g}} g)",
+    "carbsHigh": "Glucides élevés ({{g}} g)",
+    "fiberRich": "Riche en fibres ({{g}} g) — ralentit l'absorption du sucre",
+    "fiberPoor": "Pauvre en fibres pour sa charge glucidique",
+    "proteinGood": "Bon apport en protéines ({{g}} g)",
+    "salty": "Très salé ({{mg}} mg de sodium)",
+    "caloric": "Repas très calorique ({{kcal}} kcal)",
+    "balanced": "Repas équilibré pour votre glycémie",
+    "labelExcellent": "Excellent",
+    "labelGood": "Bon",
+    "labelModerate": "Modéré",
+    "labelPoor": "Faible"
+  },
+  "sources": {
+    "internalDb": "Base interne",
+    "aiEstimate": "Estimation IA"
+  },
+  "activityStatus": {
+    "title": "Statut d'activité",
+    "intro": "Définissez votre statut sur Actif(ve), Malade, Blessé(e) ou En pause. GlucoAI ajustera ses recommandations d'insuline en fonction de votre état.",
+    "continue": "Continuer",
+    "update": "Mettre à jour",
+    "activeLabel": "Actif(ve)",
+    "activeDesc": "Recommandations d'insuline standards",
+    "sickLabel": "Malade",
+    "sickDesc": "Sensibilité à l'insuline ajustée",
+    "injuredLabel": "Blessé(e)",
+    "injuredDesc": "Activité réduite prise en compte",
+    "pausedLabel": "En pause",
+    "pausedDesc": "Suivi allégé"
   }
 }
