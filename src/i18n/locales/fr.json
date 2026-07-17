@@ -41,6 +41,14 @@
     "achieve": "Réussir",
     "achieveDesc": "Atteignez vos objectifs et restez motivé"
   },
+  "install": {
+    "title": "Installer GlucoAI",
+    "androidBody": "Ajoutez l'app à votre écran d'accueil pour un accès plus rapide.",
+    "installCta": "Installer",
+    "iosBody": "Ajoutez GlucoAI à votre écran d'accueil pour l'ouvrir comme une vraie app.",
+    "iosStep": "Appuyez sur Partager, puis « Sur l'écran d'accueil »",
+    "notNow": "Plus tard"
+  },
   "onboarding": {
     "slide1Title": "Scannez vos repas avec l'IA",
     "slide1Desc": "Prenez une photo et obtenez glucides, sucre et calories instantanément.",

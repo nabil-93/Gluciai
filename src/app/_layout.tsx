@@ -25,6 +25,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { InstallPrompt } from '@/components/InstallPrompt';
 
 import { initI18n } from '@/i18n';
 import { colors } from '@/theme';
@@ -147,6 +148,7 @@ export default function RootLayout() {
             <Stack.Screen name="subscription" options={{ presentation: 'modal' }} />
             <Stack.Screen name="doctor-code" options={{ presentation: 'modal' }} />
           </Stack>
+          <InstallPrompt />
         </View>
       </QueryClientProvider>
       </SafeAreaProvider>

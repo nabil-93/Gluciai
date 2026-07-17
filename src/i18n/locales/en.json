@@ -41,6 +41,14 @@
     "achieve": "Achieve",
     "achieveDesc": "Reach your goals and stay motivated"
   },
+  "install": {
+    "title": "Install GlucoAI",
+    "androidBody": "Add the app to your home screen for faster access.",
+    "installCta": "Install",
+    "iosBody": "Add GlucoAI to your home screen to open it like a real app.",
+    "iosStep": "Tap Share, then \"Add to Home Screen\"",
+    "notNow": "Not now"
+  },
   "onboarding": {
     "slide1Title": "Scan your meals with AI",
     "slide1Desc": "Take a photo and instantly get carbs, sugar and calories.",

@@ -41,6 +41,14 @@
     "achieve": "Erreichen",
     "achieveDesc": "Erreiche deine Ziele und bleib motiviert"
   },
+  "install": {
+    "title": "GlucoAI installieren",
+    "androidBody": "Füge die App zu deinem Startbildschirm hinzu für schnelleren Zugriff.",
+    "installCta": "Installieren",
+    "iosBody": "Füge GlucoAI zu deinem Startbildschirm hinzu, um es wie eine echte App zu öffnen.",
+    "iosStep": "Tippe auf Teilen, dann „Zum Home-Bildschirm“",
+    "notNow": "Später"
+  },
   "onboarding": {
     "slide1Title": "Scanne Mahlzeiten mit KI",
     "slide1Desc": "Mach ein Foto und erhalte sofort Kohlenhydrate, Zucker und Kalorien.",
