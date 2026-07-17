@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Svg, { Path, Rect } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, radius, shadows, spacing } from '@/theme';
 
@@ -36,19 +37,69 @@ function wasRecentlyDismissed(): boolean {
   return elapsedDays < DISMISS_DAYS;
 }
 
-function ShareGlyph() {
+function DownloadGlyph() {
   return (
-    <Svg width={18} height={18} viewBox="0 0 24 24">
+    <Svg width={28} height={28} viewBox="0 0 24 24">
       <Path
-        d="M12 3v12M7 8l5-5 5 5"
-        stroke={colors.primary}
-        strokeWidth={2}
+        d="M12 3v11M7 10l5 5 5-5"
+        stroke="#fff"
+        strokeWidth={2.4}
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
       />
-      <Rect x={4} y={13} width={16} height={8} rx={2} stroke={colors.primary} strokeWidth={2} fill="none" />
+      <Path d="M5 19h14" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" fill="none" />
     </Svg>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24">
+      <Path d="M5 5l14 14M19 5L5 19" stroke={colors.textTertiary} strokeWidth={2.4} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+function ShareGlyph({ color = colors.primary, size = 16 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path
+        d="M12 3v12M7 8l5-5 5 5"
+        stroke={color}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <Rect x={4} y={13} width={16} height={8} rx={2} stroke={color} strokeWidth={2.2} fill="none" />
+    </Svg>
+  );
+}
+
+/* Mimics Safari's real toolbar (the row of icons around the address bar) so
+ * the user can match it to what they actually see on their screen, with the
+ * Share button ringed and an arrow pointing down at it — since on iPhone
+ * that toolbar sits right below this banner, at the very bottom. */
+function SafariToolbarHint() {
+  return (
+    <View style={styles.toolbarHint}>
+      <View style={styles.toolbarBar}>
+        <Svg width={16} height={16} viewBox="0 0 24 24">
+          <Path d="M15 5l-7 7 7 7" stroke={colors.textTertiary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </Svg>
+        <View style={styles.toolbarAddress} />
+        <View style={styles.toolbarShareRing}>
+          <ShareGlyph color={colors.primary} size={15} />
+        </View>
+        <Svg width={16} height={16} viewBox="0 0 24 24">
+          <Rect x={4} y={4} width={16} height={16} rx={3} stroke={colors.textTertiary} strokeWidth={2} fill="none" />
+        </Svg>
+      </View>
+      <Svg width={14} height={10} viewBox="0 0 14 10" style={styles.toolbarArrow}>
+        <Path d="M1 1l6 6 6-6" stroke={colors.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </Svg>
+    </View>
   );
 }
 
@@ -93,69 +144,138 @@ export function InstallPrompt() {
   if (!visible || Platform.OS !== 'web') return null;
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={styles.overlay}>
       <View style={styles.card}>
+        <Pressable onPress={dismiss} hitSlop={10} style={styles.closeBtn}>
+          <CloseGlyph />
+        </Pressable>
+
+        <LinearGradient
+          colors={[colors.primary, colors.inkStrong]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.badge}
+        >
+          <DownloadGlyph />
+        </LinearGradient>
+
         <Text style={styles.title}>{t('install.title')}</Text>
         <Text style={styles.body}>
           {mode === 'ios' ? t('install.iosBody') : t('install.androidBody')}
         </Text>
-        <View style={styles.actions}>
-          {mode === 'android' ? (
-            <Pressable onPress={install} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>{t('install.installCta')}</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.iosStep}>
-              <ShareGlyph />
-              <Text style={styles.iosStepText}>{t('install.iosStep')}</Text>
-            </View>
-          )}
-          <Pressable onPress={dismiss} hitSlop={8} style={styles.dismissBtn}>
-            <Text style={styles.dismissText}>{t('install.notNow')}</Text>
+
+        {mode === 'ios' ? <SafariToolbarHint /> : null}
+
+        {mode === 'android' ? (
+          <Pressable onPress={install} style={styles.primaryBtn}>
+            <Text style={styles.primaryBtnText}>{t('install.installCta')}</Text>
           </Pressable>
-        </View>
+        ) : (
+          <View style={styles.iosStepBox}>
+            <Text style={styles.iosStepText}>{t('install.iosStep')}</Text>
+          </View>
+        )}
+
+        <Pressable onPress={dismiss} hitSlop={8} style={styles.dismissBtn}>
+          <Text style={styles.dismissText}>{t('install.notNow')}</Text>
+        </Pressable>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  overlay: {
     position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
     zIndex: 100,
     alignItems: 'center',
-    padding: spacing.md,
+    justifyContent: 'center',
+    padding: spacing.xl,
+    backgroundColor: 'rgba(10,20,16,0.55)',
   },
   card: {
     width: '100%',
-    maxWidth: 420,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+    maxWidth: 380,
+    alignItems: 'center',
+    backgroundColor: colors.primaryDim,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
     gap: spacing.sm,
     ...shadows.floating,
   },
-  title: { fontSize: 15, fontWeight: '700', color: colors.text },
-  body: { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
-  actions: {
-    marginTop: spacing.xs,
-    flexDirection: 'row',
+  closeBtn: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
   },
+  badge: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+    ...shadows.card,
+  },
+  title: { fontSize: 18, fontWeight: '800', color: colors.text, textAlign: 'center' },
+  body: { fontSize: 13.5, color: colors.textSecondary, lineHeight: 19, textAlign: 'center' },
   primaryBtn: {
+    marginTop: spacing.xs,
+    width: '100%',
     backgroundColor: colors.primary,
     borderRadius: radius.full,
+    paddingVertical: 14,
+    alignItems: 'center',
+    ...shadows.card,
+  },
+  primaryBtnText: { color: colors.textOnPrimary, fontWeight: '700', fontSize: 15 },
+  iosStepBox: {
+    marginTop: spacing.xs,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+  },
+  iosStepText: { fontSize: 12.5, color: colors.text, fontWeight: '600', textAlign: 'center' },
+  dismissBtn: { marginTop: spacing.xs, paddingVertical: 6, paddingHorizontal: spacing.sm },
+  dismissText: { fontSize: 13, color: colors.textTertiary, fontWeight: '600' },
+
+  toolbarHint: { alignItems: 'center', alignSelf: 'stretch', marginTop: spacing.xs },
+  toolbarBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    alignSelf: 'stretch',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     paddingVertical: 10,
     paddingHorizontal: spacing.lg,
   },
-  primaryBtnText: { color: colors.textOnPrimary, fontWeight: '700', fontSize: 13 },
-  iosStep: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flex: 1 },
-  iosStepText: { fontSize: 12.5, color: colors.text, flex: 1 },
-  dismissBtn: { paddingVertical: 8, paddingHorizontal: spacing.sm },
-  dismissText: { fontSize: 13, color: colors.textTertiary, fontWeight: '600' },
+  toolbarAddress: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.glassBorder,
+  },
+  toolbarShareRing: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryDim,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  toolbarArrow: { marginTop: 2 },
 });

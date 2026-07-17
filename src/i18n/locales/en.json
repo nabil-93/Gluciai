@@ -46,7 +46,7 @@
     "androidBody": "Add the app to your home screen for faster access.",
     "installCta": "Install",
     "iosBody": "Add GlucoAI to your home screen to open it like a real app.",
-    "iosStep": "Tap Share, then \"Add to Home Screen\"",
+    "iosStep": "Tap this Share icon, at the bottom of your screen, then \"Add to Home Screen\"",
     "notNow": "Not now"
   },
   "onboarding": {
