@@ -102,6 +102,15 @@ export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
+    // Registering the SW is what makes Chrome actually finish the "Add to
+    // Home screen" install (not just show the prompt) — without it the
+    // native dialog can appear and be accepted, yet no icon gets created.
+    if (Platform.OS === 'web' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
     if (Platform.OS !== 'web' || isStandalone() || wasRecentlyDismissed()) return;
 
     if (isIOS()) {
