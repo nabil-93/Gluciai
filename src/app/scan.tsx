@@ -198,35 +198,48 @@ function ScanScreen() {
     }
   };
 
+  // Freeze the shot on screen, then run it through prepare + analyze.
+  const runOn = async (uri: string, rawBase64?: string) => {
+    setCaptured(uri);
+    const prepared = await prepareImage(uri);
+    if (prepared) {
+      await analyze(prepared.base64, uri, { width: prepared.width, height: prepared.height });
+    } else if (rawBase64) {
+      await analyze(rawBase64, uri);
+    }
+  };
+
+  // Native live camera → snap a frame.
   const capture = async () => {
     if (!cameraRef.current || analyzing) return;
     const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 1 });
     if (!photo?.uri) return;
-    setCaptured(photo.uri); // freeze the shot; the scan plays over it
-    const prepared = await prepareImage(photo.uri);
-    if (prepared) {
-      await analyze(prepared.base64, photo.uri, { width: prepared.width, height: prepared.height });
-    } else if (photo.base64) {
-      await analyze(photo.base64, photo.uri);
+    await runOn(photo.uri, photo.base64);
+  };
+
+  // Web (PWA/browser): open the phone's OS camera directly; fall back to the
+  // library if the camera capture isn't available on this platform.
+  const captureWeb = async () => {
+    if (analyzing) return;
+    try {
+      const shot = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], base64: true, quality: 1 });
+      const asset = shot.assets?.[0];
+      if (asset?.uri) {
+        await runOn(asset.uri, asset.base64 ?? undefined);
+        return;
+      }
+      if (!shot.canceled) await pickImage();
+    } catch {
+      await pickImage();
     }
   };
 
   const pickImage = async () => {
     if (analyzing) return;
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      base64: true,
-      quality: 1,
-    });
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], base64: true, quality: 1 });
     const asset = picked.assets?.[0];
     if (!asset?.uri) return;
-    setCaptured(asset.uri);
-    const prepared = await prepareImage(asset.uri);
-    if (prepared) {
-      await analyze(prepared.base64, asset.uri, { width: prepared.width, height: prepared.height });
-    } else if (asset.base64) {
-      await analyze(asset.base64, asset.uri);
-    }
+    await runOn(asset.uri, asset.base64 ?? undefined);
   };
 
   const close = () => {
@@ -234,8 +247,12 @@ function ScanScreen() {
     else router.replace('/(tabs)');
   };
 
-  /* ── Waiting on permission state ── */
-  if (!permission) {
+  // Live camera only on native once granted; web renders the dark scanner
+  // design and captures via the OS camera / gallery.
+  const liveCamera = !isWeb && !!permission?.granted;
+
+  /* ── Native: waiting on permission state ── */
+  if (!isWeb && !permission) {
     return (
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator color={ACCENT} />
@@ -243,8 +260,8 @@ function ScanScreen() {
     );
   }
 
-  /* ── Permission not granted → dark themed prompt / upload ── */
-  if (!permission.granted) {
+  /* ── Native: permission not granted → dark themed prompt ── */
+  if (!isWeb && !permission?.granted) {
     return (
       <View style={[styles.container, styles.centered]}>
         <Pressable onPress={close} style={[styles.circleBtn, styles.closeAbs, { top: insets.top + 16 }]}>
@@ -275,11 +292,14 @@ function ScanScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Full-bleed camera, or the frozen shot once a picture is taken */}
+      {/* Full-bleed camera (native), the frozen shot, or the dark scanner
+          backdrop on web where the grid + laser stand in for a live feed. */}
       {captured ? (
         <Image source={{ uri: captured }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
-      ) : (
+      ) : liveCamera ? (
         <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} enableTorch={torch} />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: BG }]} />
       )}
 
       {/* Top & bottom scrims for legibility (46% / 52%, like the reference) */}
@@ -384,7 +404,7 @@ function ScanScreen() {
         {/* ── Controls dock ── */}
         <Glass style={styles.dock} radius={26} tint="rgba(12,18,15,0.62)">
           <DockButton icon="images-outline" label={t('scanner.gallery')} onPress={pickImage} disabled={analyzing} />
-          <Pressable onPress={capture} disabled={analyzing} style={styles.shutter}>
+          <Pressable onPress={isWeb ? captureWeb : capture} disabled={analyzing} style={styles.shutter}>
             <View style={styles.shutterCore} />
           </Pressable>
           <DockButton
