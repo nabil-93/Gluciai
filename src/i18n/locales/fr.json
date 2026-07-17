@@ -46,7 +46,8 @@
     "androidBody": "Ajoutez l'app à votre écran d'accueil pour un accès plus rapide.",
     "installCta": "Installer",
     "iosBody": "Ajoutez GlucoAI à votre écran d'accueil pour l'ouvrir comme une vraie app.",
-    "iosStep": "Appuyez sur cette icône Partager, en bas de votre écran, puis sur « Sur l'écran d'accueil »",
+    "iosStep1": "Appuyez sur ⋯ (ou l'icône Partager), en bas de votre écran",
+    "iosStep2": "Choisissez « Partager », puis « Sur l'écran d'accueil »",
     "notNow": "Plus tard"
   },
   "onboarding": {

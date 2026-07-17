@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import Svg, { Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, radius, shadows, spacing } from '@/theme';
@@ -61,26 +61,21 @@ function CloseGlyph() {
   );
 }
 
-function ShareGlyph({ color = colors.primary, size = 16 }: { color?: string; size?: number }) {
+function MoreDotsGlyph({ color = colors.primary, size = 15 }: { color?: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path
-        d="M12 3v12M7 8l5-5 5 5"
-        stroke={color}
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      <Rect x={4} y={13} width={16} height={8} rx={2} stroke={color} strokeWidth={2.2} fill="none" />
+      <Circle cx={5} cy={12} r={2.2} fill={color} />
+      <Circle cx={12} cy={12} r={2.2} fill={color} />
+      <Circle cx={19} cy={12} r={2.2} fill={color} />
     </Svg>
   );
 }
 
-/* Mimics Safari's real toolbar (the row of icons around the address bar) so
- * the user can match it to what they actually see on their screen, with the
- * Share button ringed and an arrow pointing down at it — since on iPhone
- * that toolbar sits right below this banner, at the very bottom. */
+/* Mimics Safari's real toolbar (the row around the address bar) so the user
+ * can match it to what they actually see. Modern Safari tucks Share behind
+ * the "•••" (More) button rather than showing it directly, so that's what
+ * gets ringed here, with an arrow pointing at it — on iPhone that toolbar
+ * sits right below this dialog, at the very bottom of the screen. */
 function SafariToolbarHint() {
   return (
     <View style={styles.toolbarHint}>
@@ -90,11 +85,8 @@ function SafariToolbarHint() {
         </Svg>
         <View style={styles.toolbarAddress} />
         <View style={styles.toolbarShareRing}>
-          <ShareGlyph color={colors.primary} size={15} />
+          <MoreDotsGlyph color={colors.primary} size={15} />
         </View>
-        <Svg width={16} height={16} viewBox="0 0 24 24">
-          <Rect x={4} y={4} width={16} height={16} rx={3} stroke={colors.textTertiary} strokeWidth={2} fill="none" />
-        </Svg>
       </View>
       <Svg width={14} height={10} viewBox="0 0 14 10" style={styles.toolbarArrow}>
         <Path d="M1 1l6 6 6-6" stroke={colors.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
@@ -172,7 +164,14 @@ export function InstallPrompt() {
           </Pressable>
         ) : (
           <View style={styles.iosStepBox}>
-            <Text style={styles.iosStepText}>{t('install.iosStep')}</Text>
+            <View style={styles.iosStepRow}>
+              <Text style={styles.iosStepNumber}>1</Text>
+              <Text style={styles.iosStepText}>{t('install.iosStep1')}</Text>
+            </View>
+            <View style={styles.iosStepRow}>
+              <Text style={styles.iosStepNumber}>2</Text>
+              <Text style={styles.iosStepText}>{t('install.iosStep2')}</Text>
+            </View>
           </View>
         )}
 
@@ -241,12 +240,26 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: colors.textOnPrimary, fontWeight: '700', fontSize: 15 },
   iosStepBox: {
     marginTop: spacing.xs,
+    alignSelf: 'stretch',
     backgroundColor: colors.surface,
     borderRadius: radius.md,
-    paddingVertical: 10,
-    paddingHorizontal: spacing.md,
+    padding: spacing.md,
+    gap: spacing.xs,
   },
-  iosStepText: { fontSize: 12.5, color: colors.text, fontWeight: '600', textAlign: 'center' },
+  iosStepRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  iosStepNumber: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.primaryDim,
+    color: colors.inkStrong,
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 20,
+    overflow: 'hidden',
+  },
+  iosStepText: { flex: 1, fontSize: 12.5, color: colors.text, fontWeight: '600' },
   dismissBtn: { marginTop: spacing.xs, paddingVertical: 6, paddingHorizontal: spacing.sm },
   dismissText: { fontSize: 13, color: colors.textTertiary, fontWeight: '600' },
 
