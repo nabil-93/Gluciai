@@ -1,103 +1,253 @@
-import React, { useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import React from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-import { Avatar, CloseGlyph } from '@/components/ui';
-import { SUPPORTED_LANGUAGES, setAppLanguage, type LanguageCode } from '@/i18n';
-import {
-  changePassword,
-  deleteAccount,
-  signOut,
-  uploadAvatar,
-} from '@/services/account';
+import { Avatar } from '@/components/ui';
+import { signOut, uploadAvatar } from '@/services/account';
 import { saveProfile } from '@/services/data';
-import { confirmAsync, notify } from '@/lib/confirm';
-import { ALL_FEATURES, planStatus } from '@/services/features';
+import { confirmAsync } from '@/lib/confirm';
+import { planStatus } from '@/services/features';
 import { useAppStore } from '@/store/useAppStore';
-import { colors, shadows } from '@/theme';
-import type { DiabetesType, InsulinType, Profile } from '@/types';
+import type { Profile } from '@/types';
 
-const GENDERS: Profile['gender'][] = ['male', 'female', 'other'];
-const DIABETES: DiabetesType[] = ['type1', 'type2', 'gestational', 'prediabetes'];
-const INSULINS: InsulinType[] = ['rapid', 'long', 'mixed'];
+const F600 = 'PlusJakartaSans_600SemiBold';
+const F700 = 'PlusJakartaSans_700Bold';
+const F800 = 'PlusJakartaSans_800ExtraBold';
 
-/* ── Minimal line icons (SVG, not emoji) for the section headers ── */
-function Icon({ name, color = '#19C37D' }: { name: string; color?: string }) {
-  const p: Record<string, string> = {
-    user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 20a7 7 0 0 1 14 0',
-    heart:
-      'M12 20s-7-4.35-9.33-8.2C1.1 9.14 2.2 5.5 5.6 5.05 7.7 4.78 9.2 6 12 8.5c2.8-2.5 4.3-3.72 6.4-3.45 3.4.45 4.5 4.09 2.93 6.75C19 15.65 12 20 12 20Z',
-    shield: 'M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z',
-    globe:
-      'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c-2.5 2-2.5 16 0 18m0-18c2.5 2 2.5 16 0 18M3.5 9h17M3.5 15h17',
-    camera:
-      'M4 8h3l1.5-2h7L17 8h3v11H4V8Zm8 3.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
-    star: 'M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.9L12 17.8 6.8 19.2l1-5.9L3.5 9.2l5.9-.9L12 3Z',
+/* ── Design palette (Mint Hub reference) ── */
+const INK = '#0C1D16';
+const MUTED = '#8CA097';
+const GREEN = '#21C57E';
+const GREEN_DEEP = '#0FA968';
+const CARD_BORDER = '#E7EDE9';
+
+/* ─────────────────────────── Icons ─────────────────────────── */
+
+type IconProps = { size?: number; color?: string; sw?: number };
+
+const Chevron = ({ size = 17, color = '#B8C4BE', sw = 2.5 }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="m9 18 6-6-6-6" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const BackIcon = () => (
+  <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
+    <Path d="m15 18-6-6 6-6" stroke={INK} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const SlidersIcon = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Line x1={21} y1={5} x2={14} y2={5} stroke={INK} strokeWidth={2} strokeLinecap="round" />
+    <Line x1={10} y1={5} x2={3} y2={5} stroke={INK} strokeWidth={2} strokeLinecap="round" />
+    <Line x1={21} y1={12} x2={12} y2={12} stroke={INK} strokeWidth={2} strokeLinecap="round" />
+    <Line x1={8} y1={12} x2={3} y2={12} stroke={INK} strokeWidth={2} strokeLinecap="round" />
+    <Line x1={21} y1={19} x2={16} y2={19} stroke={INK} strokeWidth={2} strokeLinecap="round" />
+    <Line x1={12} y1={19} x2={3} y2={19} stroke={INK} strokeWidth={2} strokeLinecap="round" />
+    <Circle cx={12} cy={5} r={2} stroke={INK} strokeWidth={2} />
+    <Circle cx={10} cy={12} r={2} stroke={INK} strokeWidth={2} />
+    <Circle cx={14} cy={19} r={2} stroke={INK} strokeWidth={2} />
+  </Svg>
+);
+
+const CameraIcon = () => (
+  <Svg width={10} height={10} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"
+      stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"
+    />
+    <Circle cx={12} cy={13} r={3} stroke="#FFFFFF" strokeWidth={2.4} />
+  </Svg>
+);
+
+const STAR_PATH = 'M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z';
+
+const StarIcon = ({ size = 10, color = '#C08A2D' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Path d={STAR_PATH} stroke={color} strokeWidth={1} strokeLinejoin="round" />
+  </Svg>
+);
+
+const RulerIcon = () => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Rect x={3} y={8} width={18} height={8} rx={1} stroke={GREEN_DEEP} strokeWidth={2} />
+    <Path d="M7 8v3M12 8v3M17 8v3" stroke={GREEN_DEEP} strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+const GaugeIcon = () => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Circle cx={12} cy={13} r={8} stroke="#3B82C4" strokeWidth={2} />
+    <Path d="M12 13l3-4" stroke="#3B82C4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M9 3h6" stroke="#3B82C4" strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+const CalendarIcon = () => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Rect x={3} y={4} width={18} height={18} rx={2} stroke="#7C6FDE" strokeWidth={2} />
+    <Path d="M16 2v4M8 2v4M3 10h18" stroke="#7C6FDE" strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+const TargetIcon = () => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Circle cx={12} cy={12} r={9} stroke="#E8833A" strokeWidth={2} />
+    <Circle cx={12} cy={12} r={4.5} stroke="#E8833A" strokeWidth={2} />
+    <Circle cx={12} cy={12} r={1} fill="#E8833A" />
+  </Svg>
+);
+
+const ChatIcon = () => (
+  <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+      stroke="#FFFFFF" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const LogoutIcon = () => (
+  <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+    <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="#D64545" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="m16 17 5-5-5-5" stroke="#D64545" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M21 12H9" stroke="#D64545" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+/** Stroke row icons — one path each, lucide-style. */
+function RowIcon({ name, color }: { name: string; color: string }) {
+  const paths: Record<string, React.ReactNode> = {
+    user: (
+      <>
+        <Path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <Circle cx={12} cy={7} r={4} stroke={color} strokeWidth={2} />
+      </>
+    ),
+    heart: (
+      <Path
+        d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"
+        stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      />
+    ),
+    pulse: (
+      <Path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    ),
+    phone: (
+      <Path
+        d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"
+        stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      />
+    ),
+    star: <Path d={STAR_PATH} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />,
+    shield: (
+      <Path
+        d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
+        stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      />
+    ),
+    globe: (
+      <>
+        <Circle cx={12} cy={12} r={10} stroke={color} strokeWidth={2} />
+        <Path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    ),
+    warn: (
+      <>
+        <Path
+          d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+          stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+        />
+        <Path d="M12 9v4M12 17h.01" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      </>
+    ),
   };
-  const strokeW = name === 'shield' || name === 'heart' ? 1.7 : 1.8;
   return (
     <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
-      <Path
-        d={p[name]}
-        stroke={color}
-        strokeWidth={strokeW}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      {paths[name]}
     </Svg>
   );
 }
 
+/* ─────────────────────────── Pieces ─────────────────────────── */
+
+/** 58px conic-style completion ring (SVG arc + inner white disc). */
+function CompletionRing({ pct }: { pct: number }) {
+  const R = 26;
+  const C = 2 * Math.PI * R;
+  return (
+    <View style={{ width: 58, height: 58, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={58} height={58} viewBox="0 0 58 58" style={{ position: 'absolute' }}>
+        <Circle cx={29} cy={29} r={R} stroke="#E7EFEA" strokeWidth={6} fill="none" />
+        <Circle
+          cx={29}
+          cy={29}
+          r={R}
+          stroke={GREEN_DEEP}
+          strokeWidth={6}
+          fill="none"
+          strokeDasharray={`${(C * pct) / 100} ${C}`}
+          strokeLinecap="round"
+          transform="rotate(-90 29 29)"
+        />
+      </Svg>
+      <View style={styles.ringInner}>
+        <Text style={styles.ringPct}>{pct}%</Text>
+      </View>
+    </View>
+  );
+}
+
+function Row({
+  icon,
+  tint,
+  color,
+  title,
+  sub,
+  onPress,
+}: {
+  icon: string;
+  tint: string;
+  color: string;
+  title: string;
+  sub: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
+      <View style={[styles.rowIcon, { backgroundColor: tint }]}>
+        <RowIcon name={icon} color={color} />
+      </View>
+      <View style={styles.rowBody}>
+        <Text style={styles.rowTitle}>{title}</Text>
+        <Text style={styles.rowSub} numberOfLines={1}>
+          {sub}
+        </Text>
+      </View>
+      <Chevron />
+    </Pressable>
+  );
+}
+
+const Divider = () => <View style={styles.divider} />;
+
+/* ─────────────────────────── Screen ─────────────────────────── */
+
 export default function ProfileScreen() {
   const router = useRouter();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const profile = useAppStore((s) => s.profile);
   const lockedFeatures = useAppStore((s) => s.lockedFeatures);
   const wizardDone = useAppStore((s) => s.wizardDone);
 
-  const [draft, setDraft] = useState<Profile | null>(() => profile);
-  const [savedFlash, setSavedFlash] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [pw1, setPw1] = useState('');
-  const [pw2, setPw2] = useState('');
-  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
-
-  // No profile: either it isn't loaded (go home) or the user just signed
-  // out — resetAll() clears the profile BEFORE onSignOut can navigate, and
-  // this render used to win the race and bounce them to the HOME tabs
-  // instead of the login screen. wizardDone is false right after sign-out,
-  // so route straight to /auth in that case.
-  if (!profile || !draft)
-    return <Redirect href={wizardDone ? '/(tabs)' : '/auth'} />;
-
-  const set = <K extends keyof Profile>(key: K, value: Profile[K]) =>
-    setDraft((d) => (d ? { ...d, [key]: value } : d));
-
-  const setNum = (key: keyof Profile, text: string) => {
-    const n = parseFloat(text.replace(',', '.'));
-    set(key, (Number.isFinite(n) ? n : undefined) as Profile[keyof Profile]);
-  };
-
-  const toggleInsulin = (kind: InsulinType) => {
-    const cur = draft.insulin_types ?? [];
-    set(
-      'insulin_types',
-      cur.includes(kind) ? cur.filter((k) => k !== kind) : [...cur, kind]
-    );
-  };
+  if (!profile) return <Redirect href={wizardDone ? '/(tabs)' : '/auth'} />;
 
   const pickAvatar = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -109,51 +259,8 @@ export default function ProfileScreen() {
     });
     const asset = res.assets?.[0];
     if (!asset?.uri) return;
-    set('avatar_url', asset.uri);
     const url = await uploadAvatar(asset.uri, asset.base64 ?? undefined);
-    if (url) set('avatar_url', url);
-  };
-
-  const onSave = async () => {
-    setBusy(true);
-    try {
-      await saveProfile(draft);
-      setSavedFlash(true);
-      setTimeout(() => setSavedFlash(false), 1800);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onChangePassword = async () => {
-    setPwMsg(null);
-    if (pw1.length < 6) {
-      setPwMsg({ ok: false, text: t('profile.passwordWeak') });
-      return;
-    }
-    if (pw1 !== pw2) {
-      setPwMsg({ ok: false, text: t('profile.passwordMismatch') });
-      return;
-    }
-    setBusy(true);
-    try {
-      const r = await changePassword(pw1);
-      if (r.ok) {
-        setPw1('');
-        setPw2('');
-        setPwMsg({ ok: true, text: t('profile.passwordChanged') });
-      } else {
-        setPwMsg({ ok: false, text: r.error ?? t('profile.error') });
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onLanguage = async (code: LanguageCode) => {
-    await setAppLanguage(code);
-    set('language', code);
-    await saveProfile({ ...draft, language: code });
+    await saveProfile({ ...profile, avatar_url: url ?? asset.uri });
   };
 
   const onSignOut = async () => {
@@ -176,620 +283,511 @@ export default function ProfileScreen() {
     router.replace('/auth');
   };
 
-  const onDelete = async () => {
-    const ok = await confirmAsync({
-      title: t('profile.deleteConfirmTitle'),
-      message: t('profile.deleteConfirmBody'),
-      confirmLabel: t('profile.deleteAccount'),
-      cancelLabel: t('profile.cancel'),
-      destructive: true,
-    });
-    if (!ok) return;
-    setBusy(true);
-    const r = await deleteAccount();
-    setBusy(false);
-    if (r.ok) {
-      // Same as sign-out: leave the Profile modal, then land on login as root.
-      try {
-        router.dismissAll();
-      } catch {}
-      router.replace('/auth');
-    } else notify(t('profile.error'), r.error ?? '');
-  };
+  const openEdit = (section: string) =>
+    router.push(`/profile-edit?section=${section}` as any);
+
+  /* Completion: share of the key profile fields already filled in. */
+  const fields: (keyof Profile)[] = [
+    'name',
+    'birth_date',
+    'gender',
+    'height',
+    'weight',
+    'diabetes_type',
+    'target_low',
+    'target_high',
+    'avatar_url',
+    'doctor_name',
+    'emergency_contact_name',
+    'emergency_contact_phone',
+  ];
+  const filled = fields.filter((k) => {
+    const v = profile[k];
+    return v !== undefined && v !== null && v !== '';
+  }).length;
+  const pct = Math.round(
+    ((filled + ((profile.insulin_types?.length ?? 0) > 0 ? 1 : 0)) /
+      (fields.length + 1)) *
+      100
+  );
+
+  const age = (() => {
+    if (!profile.birth_date) return null;
+    const b = new Date(profile.birth_date);
+    if (Number.isNaN(b.getTime())) return null;
+    const now = new Date();
+    let a = now.getFullYear() - b.getFullYear();
+    const m = now.getMonth() - b.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < b.getDate())) a--;
+    return a;
+  })();
+
+  const premium = planStatus(lockedFeatures) !== 'free';
 
   return (
     <View style={styles.root}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.close}>
-          <CloseGlyph size={15} color={colors.text} />
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Pressable onPress={() => router.back()} hitSlop={8} style={styles.headerBtn}>
+          <BackIcon />
         </Pressable>
         <Text style={styles.headerTitle}>{t('profile.title')}</Text>
-        <View style={{ width: 38 }} />
+        <Pressable onPress={() => openEdit('personal')} hitSlop={8} style={styles.headerBtn}>
+          <SlidersIcon />
+        </Pressable>
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingHorizontal: 18,
-          paddingTop: 20,
-          paddingBottom: insets.bottom + 40,
+          paddingHorizontal: 20,
+          paddingTop: 12,
+          paddingBottom: insets.bottom + 30,
+          gap: 14,
         }}
-        keyboardShouldPersistTaps="handled"
       >
-        {/* Avatar with a soft green ring */}
-        <View style={styles.avatarWrap}>
-          <Pressable onPress={pickAvatar}>
-            <LinearGradient
-              colors={['#2ee59d', '#19C37D']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.avatarRing}
-            >
-              <View style={styles.avatarInner}>
-                <Avatar name={draft.name} uri={draft.avatar_url} size={92} />
-              </View>
-            </LinearGradient>
-            <View style={styles.avatarEdit}>
-              <Icon name="camera" color="#ffffff" />
+        {/* Identity card */}
+        <View style={styles.idCard}>
+          <Pressable onPress={pickAvatar} style={{ flexShrink: 0 }}>
+            <View style={styles.avatarRing}>
+              <Avatar name={profile.name} uri={profile.avatar_url} size={52} />
+            </View>
+            <View style={styles.avatarBadge}>
+              <CameraIcon />
             </View>
           </Pressable>
-          <Pressable onPress={pickAvatar} hitSlop={6}>
-            <Text style={styles.changePhoto}>{t('profile.changePhoto')}</Text>
-          </Pressable>
-        </View>
-
-        {/* Personal info */}
-        <Section icon="user" title={t('profile.sectionPersonal')}>
-          <Field
-            label={t('profile.name')}
-            value={draft.name ?? ''}
-            onChangeText={(v) => set('name', v)}
-            autoCapitalize="words"
-          />
-          <Field
-            label={t('profile.birthDate')}
-            value={draft.birth_date ?? ''}
-            onChangeText={(v) => set('birth_date', v)}
-            placeholder="1990-01-31"
-          />
-          <FieldLabel>{t('profile.gender')}</FieldLabel>
-          <View style={styles.chipRow}>
-            {GENDERS.map((g) => (
-              <Chip
-                key={g}
-                label={t(`profile.${g}`)}
-                active={draft.gender === g}
-                onPress={() => set('gender', g)}
-              />
-            ))}
-          </View>
-          <View style={styles.row2}>
-            <Field
-              flex
-              label={t('profile.height')}
-              value={draft.height != null ? String(draft.height) : ''}
-              onChangeText={(v) => setNum('height', v)}
-              keyboardType="numeric"
-            />
-            <Field
-              flex
-              label={t('profile.weight')}
-              value={draft.weight != null ? String(draft.weight) : ''}
-              onChangeText={(v) => setNum('weight', v)}
-              keyboardType="numeric"
-            />
-          </View>
-        </Section>
-
-        {/* Medical info */}
-        <Section icon="heart" title={t('profile.sectionMedical')}>
-          <FieldLabel>{t('profile.diabetesType')}</FieldLabel>
-          <View style={styles.chipRow}>
-            {DIABETES.map((d) => (
-              <Chip
-                key={d}
-                label={t(`profile.${d}`)}
-                active={draft.diabetes_type === d}
-                onPress={() => set('diabetes_type', d)}
-              />
-            ))}
-          </View>
-          <FieldLabel>{t('profile.insulinTypes')}</FieldLabel>
-          <View style={styles.chipRow}>
-            {INSULINS.map((k) => (
-              <Chip
-                key={k}
-                label={t(`profile.${k}`)}
-                active={(draft.insulin_types ?? []).includes(k)}
-                onPress={() => toggleInsulin(k)}
-              />
-            ))}
-          </View>
-          <View style={styles.row2}>
-            <Field
-              flex
-              label={t('profile.targetLow')}
-              value={String(draft.target_low ?? '')}
-              onChangeText={(v) => setNum('target_low', v)}
-              keyboardType="numeric"
-            />
-            <Field
-              flex
-              label={t('profile.targetHigh')}
-              value={String(draft.target_high ?? '')}
-              onChangeText={(v) => setNum('target_high', v)}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.row2}>
-            <Field
-              flex
-              label={t('profile.carbRatio')}
-              value={draft.carb_ratio != null ? String(draft.carb_ratio) : ''}
-              onChangeText={(v) => setNum('carb_ratio', v)}
-              keyboardType="numeric"
-            />
-            <Field
-              flex
-              label={t('profile.correctionFactor')}
-              value={
-                draft.correction_factor != null
-                  ? String(draft.correction_factor)
-                  : ''
-              }
-              onChangeText={(v) => setNum('correction_factor', v)}
-              keyboardType="numeric"
-            />
-          </View>
-          <Field
-            label={t('profile.doctorName')}
-            value={draft.doctor_name ?? ''}
-            onChangeText={(v) => set('doctor_name', v)}
-          />
-          <Field
-            label={t('profile.emergencyName')}
-            value={draft.emergency_contact_name ?? ''}
-            onChangeText={(v) => set('emergency_contact_name', v)}
-          />
-          <Field
-            label={t('profile.emergencyPhone')}
-            value={draft.emergency_contact_phone ?? ''}
-            onChangeText={(v) => set('emergency_contact_phone', v)}
-            keyboardType="phone-pad"
-          />
-        </Section>
-
-        {/* Save */}
-        <PrimaryButton
-          label={savedFlash ? `✓  ${t('profile.saved')}` : t('profile.save')}
-          onPress={onSave}
-          loading={busy}
-          disabled={savedFlash}
-        />
-
-        {/* Subscription → free-plan / support message */}
-        <View style={{ marginTop: 22 }}>
-          <View style={styles.sectionHead}>
-            <View style={[styles.sectionIcon, { backgroundColor: '#FFF6E0' }]}>
-              <Icon name="star" color="#E8930C" />
-            </View>
-            <Text style={styles.sectionTitle}>{t('profile.sectionPlan')}</Text>
-          </View>
-          <Pressable
-            onPress={() => router.push('/subscription' as any)}
-            style={styles.planCard}
-          >
-            <View style={styles.planIcon}>
-              <Text style={{ fontSize: 20 }}>⭐</Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.planTitle}>{t('profile.planRowTitle')}</Text>
-              <Text style={styles.planSub} numberOfLines={2}>
-                {(() => {
-                  const status = planStatus(lockedFeatures);
-                  const active =
-                    ALL_FEATURES.length -
-                    ALL_FEATURES.filter((f) => lockedFeatures.includes(f)).length;
-                  if (status === 'full') return t('profile.planRowSubFull');
-                  if (status === 'partial')
-                    return t('profile.planRowSubPartial', {
-                      active,
-                      total: ALL_FEATURES.length,
-                    });
-                  return t('profile.planRowSubFree');
-                })()}
-              </Text>
-            </View>
-            <Text style={styles.planArrow}>›</Text>
-          </Pressable>
-
-          {/* Doctor code — link to a doctor / see who follows you */}
-          <Pressable
-            onPress={() => router.push('/doctor-code' as any)}
-            style={[styles.planCard, { marginTop: 10 }]}
-          >
-            <View style={[styles.planIcon, { backgroundColor: '#eef0ff' }]}>
-              <Text style={{ fontSize: 20 }}>🩺</Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.planTitle}>{t('coupon.rowTitle')}</Text>
-              <Text style={styles.planSub} numberOfLines={2}>
-                {draft.doctor_name
-                  ? `${t('coupon.doctorPrefix')} ${draft.doctor_name}`
-                  : t('coupon.rowSub')}
-              </Text>
-            </View>
-            <Text style={styles.planArrow}>›</Text>
-          </Pressable>
-
-          {/* Medical disclaimer — the same full "AI limits" page shown at
-              sign-up, always reachable (store guideline for health apps). */}
-          <Pressable
-            onPress={() => router.push('/consent-detail?id=limits' as any)}
-            style={[styles.planCard, { marginTop: 10 }]}
-          >
-            <View style={[styles.planIcon, { backgroundColor: '#fdf0d8' }]}>
-              <Text style={{ fontSize: 20 }}>⚠️</Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.planTitle}>{t('profile.disclaimerRowTitle')}</Text>
-              <Text style={styles.planSub} numberOfLines={2}>
-                {t('profile.disclaimerRowSub')}
-              </Text>
-            </View>
-            <Text style={styles.planArrow}>›</Text>
-          </Pressable>
-        </View>
-
-        {/* Security */}
-        <Section icon="shield" title={t('profile.sectionSecurity')}>
-          <Field
-            label={t('profile.newPassword')}
-            value={pw1}
-            onChangeText={setPw1}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-          <Field
-            label={t('profile.confirmPassword')}
-            value={pw2}
-            onChangeText={setPw2}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-          {pwMsg ? (
-            <Text style={[styles.pwMsg, pwMsg.ok ? styles.pwOk : styles.pwErr]}>
-              {pwMsg.text}
+          <View style={styles.idBody}>
+            <Text style={styles.idName} numberOfLines={1}>
+              {profile.name || '—'}
             </Text>
-          ) : null}
-          <SecondaryButton
-            label={t('profile.changePassword')}
-            onPress={onChangePassword}
-          />
-        </Section>
-
-        {/* App: language + sign out */}
-        <Section icon="globe" title={t('profile.sectionApp')}>
-          <FieldLabel>{t('profile.language')}</FieldLabel>
-          <View style={styles.chipRow}>
-            {SUPPORTED_LANGUAGES.map((l) => (
-              <Chip
-                key={l.code}
-                label={`${l.flag}  ${l.label}`}
-                active={i18n.language === l.code}
-                onPress={() => onLanguage(l.code)}
-              />
-            ))}
+            <View style={styles.chipRow}>
+              {profile.diabetes_type ? (
+                <View style={styles.typeChip}>
+                  <Text style={styles.typeChipText}>
+                    {t(`profile.${profile.diabetes_type}`)}
+                  </Text>
+                </View>
+              ) : null}
+              <View style={styles.planChip}>
+                <StarIcon />
+                <Text style={styles.planChipText}>
+                  {premium ? t('profile.premium') : t('profile.freePlan')}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.idTagline} numberOfLines={2}>
+              {t('profile.tagline')}
+            </Text>
           </View>
-          <View style={{ height: 6 }} />
-          <SecondaryButton label={t('profile.signOut')} onPress={onSignOut} />
-        </Section>
+          <View style={styles.ringCol}>
+            <CompletionRing pct={pct} />
+            <Text style={styles.ringLabel}>{t('profile.completion')}</Text>
+          </View>
+        </View>
 
-        {/* Danger zone */}
-        <Pressable onPress={onDelete} style={styles.deleteBtn} disabled={busy}>
-          <Text style={styles.deleteText}>{t('profile.deleteAccount')}</Text>
+        {/* Quick stats */}
+        <View style={styles.statsCard}>
+          <View style={styles.statCell}>
+            <View style={[styles.statIcon, { backgroundColor: '#E8F5EE' }]}>
+              <RulerIcon />
+            </View>
+            <Text style={styles.statLabel}>{t('profile.statHeight')}</Text>
+            <Text style={styles.statValue}>
+              {profile.height != null ? `${profile.height} cm` : '—'}
+            </Text>
+          </View>
+          <View style={[styles.statCell, styles.statCellSep]}>
+            <View style={[styles.statIcon, { backgroundColor: '#E8F1FA' }]}>
+              <GaugeIcon />
+            </View>
+            <Text style={styles.statLabel}>{t('profile.statWeight')}</Text>
+            <Text style={styles.statValue}>
+              {profile.weight != null ? `${profile.weight} kg` : '—'}
+            </Text>
+          </View>
+          <View style={[styles.statCell, styles.statCellSep]}>
+            <View style={[styles.statIcon, { backgroundColor: '#EFEDFB' }]}>
+              <CalendarIcon />
+            </View>
+            <Text style={styles.statLabel}>{t('profile.statAge')}</Text>
+            <Text style={styles.statValue}>
+              {age != null ? t('profile.ageYears', { age }) : '—'}
+            </Text>
+          </View>
+          <View style={[styles.statCell, styles.statCellSep, { flex: 1.2 }]}>
+            <View style={[styles.statIcon, { backgroundColor: '#FDF0E4' }]}>
+              <TargetIcon />
+            </View>
+            <Text style={styles.statLabel}>{t('profile.statGoal')}</Text>
+            <Text style={[styles.statValue, { fontSize: 11.5 }]}>
+              {profile.target_low != null && profile.target_high != null
+                ? `${profile.target_low}–${profile.target_high} mg/dL`
+                : '—'}
+            </Text>
+          </View>
+        </View>
+
+        {/* AI helper banner */}
+        <LinearGradient
+          colors={['#E9F9F1', '#F1FBF4']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0.4 }}
+          style={styles.aiCard}
+        >
+          <View style={styles.aiFace}>
+            <View style={{ alignItems: 'center' }}>
+              <View style={styles.aiAntennaDot} />
+              <View style={styles.aiAntennaStem} />
+              <View style={styles.aiHead}>
+                <View style={styles.aiEye} />
+                <View style={styles.aiEye} />
+              </View>
+            </View>
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.aiTitle}>{t('profile.aiTitle')}</Text>
+            <Text style={styles.aiSub}>{t('profile.aiSub')}</Text>
+          </View>
+          <Pressable
+            onPress={() => router.push('/ai-chat' as any)}
+            style={({ pressed }) => [styles.aiCta, pressed && { opacity: 0.85 }]}
+          >
+            <ChatIcon />
+            <Text style={styles.aiCtaText}>{t('profile.aiCta')}</Text>
+          </Pressable>
+        </LinearGradient>
+
+        {/* Profile sections */}
+        <View style={styles.group}>
+          <Row
+            icon="user"
+            tint="#E8F5EE"
+            color={GREEN_DEEP}
+            title={t('profile.sectionPersonal')}
+            sub={t('profile.subPersonal')}
+            onPress={() => openEdit('personal')}
+          />
+          <Divider />
+          <Row
+            icon="heart"
+            tint="#FDECEC"
+            color="#E05252"
+            title={t('profile.sectionMedical')}
+            sub={t('profile.subMedical')}
+            onPress={() => openEdit('medical')}
+          />
+          <Divider />
+          <Row
+            icon="pulse"
+            tint="#EFEDFB"
+            color="#7C6FDE"
+            title={t('profile.sectionDoctor')}
+            sub={t('profile.subDoctor')}
+            onPress={() => openEdit('doctor')}
+          />
+          <Divider />
+          <Row
+            icon="phone"
+            tint="#FDF0E4"
+            color="#E8833A"
+            title={t('profile.sectionEmergency')}
+            sub={t('profile.subEmergency')}
+            onPress={() => openEdit('emergency')}
+          />
+        </View>
+
+        {/* App sections */}
+        <View style={styles.group}>
+          <Row
+            icon="star"
+            tint="#FBF1DC"
+            color="#C08A2D"
+            title={t('profile.planRowTitle')}
+            sub={t('profile.subPlan')}
+            onPress={() => router.push('/subscription' as any)}
+          />
+          <Divider />
+          <Row
+            icon="shield"
+            tint="#E8F5EE"
+            color={GREEN_DEEP}
+            title={t('profile.sectionSecurity')}
+            sub={t('profile.subSecurity')}
+            onPress={() => openEdit('security')}
+          />
+          <Divider />
+          <Row
+            icon="globe"
+            tint="#E8F1FA"
+            color="#3B82C4"
+            title={t('profile.sectionLanguages')}
+            sub={t('profile.subLanguages')}
+            onPress={() => openEdit('language')}
+          />
+          <Divider />
+          <Row
+            icon="warn"
+            tint="#FDF0E4"
+            color="#E8833A"
+            title={t('profile.disclaimerRowTitle')}
+            sub={t('profile.disclaimerRowSub')}
+            onPress={() => router.push('/consent-detail?id=limits' as any)}
+          />
+        </View>
+
+        {/* Sign out */}
+        <Pressable
+          onPress={onSignOut}
+          style={({ pressed }) => [styles.logoutBtn, pressed && { opacity: 0.7 }]}
+        >
+          <LogoutIcon />
+          <Text style={styles.logoutText}>{t('profile.signOut')}</Text>
         </Pressable>
       </ScrollView>
     </View>
   );
 }
 
-/* ─────────────────────────── Pieces ─────────────────────────── */
-
-function Section({
-  icon,
-  title,
-  children,
-}: {
-  icon: string;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={{ marginTop: 22 }}>
-      <View style={styles.sectionHead}>
-        <View style={styles.sectionIcon}>
-          <Icon name={icon} />
-        </View>
-        <Text style={styles.sectionTitle}>{title}</Text>
-      </View>
-      <View style={styles.card}>{children}</View>
-    </View>
-  );
-}
-
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.fieldLabel}>{children}</Text>;
-}
-
-function Field({
-  label,
-  flex,
-  ...props
-}: React.ComponentProps<typeof TextInput> & { label: string; flex?: boolean }) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <View style={flex ? { flex: 1 } : undefined}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        {...props}
-        onFocus={(e) => {
-          setFocused(true);
-          props.onFocus?.(e);
-        }}
-        onBlur={(e) => {
-          setFocused(false);
-          props.onBlur?.(e);
-        }}
-        placeholderTextColor={colors.textPlaceholder}
-        style={[styles.input, focused && styles.inputFocused]}
-      />
-    </View>
-  );
-}
-
-function Chip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function PrimaryButton({
-  label,
-  onPress,
-  loading,
-  disabled,
-}: {
-  label: string;
-  onPress: () => void;
-  loading?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={loading || disabled}
-      style={{ marginTop: 24 }}
-    >
-      <LinearGradient
-        colors={disabled ? ['#8fe0bf', '#8fe0bf'] : ['#2ee59d', '#19C37D']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.primaryBtn}
-      >
-        <Text style={styles.primaryBtnText}>
-          {loading ? '…' : label}
-        </Text>
-      </LinearGradient>
-    </Pressable>
-  );
-}
-
-function SecondaryButton({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.secondaryBtn}>
-      <Text style={styles.secondaryBtnText}>{label}</Text>
-    </Pressable>
-  );
-}
+/* ─────────────────────────── Styles ─────────────────────────── */
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: '#F6F9F7' },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEF0F5',
+    paddingHorizontal: 20,
+    paddingBottom: 6,
+    gap: 12,
   },
-  close: {
+  headerBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#F3F0FF',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E4EAE6',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: 'rgba(12,29,22,1)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: F800,
+    fontSize: 17,
+    color: INK,
+  },
 
-  avatarWrap: { alignItems: 'center', gap: 12 },
-  avatarRing: {
-    width: 108,
-    height: 108,
-    borderRadius: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.soft,
-  },
-  avatarInner: {
-    width: 98,
-    height: 98,
-    borderRadius: 49,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarEdit: {
-    position: 'absolute',
-    right: 2,
-    bottom: 2,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#19C37D',
-    borderWidth: 3,
-    borderColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  changePhoto: { fontSize: 14.5, fontWeight: '700', color: '#19C37D' },
-
-  sectionHead: {
+  /* Identity card */
+  idCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    borderRadius: 24,
+    padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
-    marginBottom: 11,
-    marginLeft: 2,
-  },
-  sectionIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: '#E9FBF2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 22,
-    padding: 16,
     gap: 14,
-    ...shadows.soft,
+    shadowColor: 'rgba(12,29,22,1)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
-
-  fieldLabel: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    marginBottom: 7,
+  avatarRing: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 3,
+    borderColor: GREEN,
+    padding: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  input: {
-    backgroundColor: '#F6F7FB',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#F6F7FB',
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-    fontSize: 15.5,
-    fontWeight: '600',
-    color: colors.text,
+  avatarBadge: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: GREEN,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  inputFocused: {
-    backgroundColor: '#ffffff',
-    borderColor: '#19C37D',
-  },
-  row2: { flexDirection: 'row', gap: 12 },
-
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
+  idBody: { flex: 1, gap: 6 },
+  idName: { fontFamily: F800, fontSize: 19, color: INK, lineHeight: 21 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  typeChip: {
+    paddingVertical: 3,
+    paddingHorizontal: 9,
     borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    backgroundColor: '#F3F0FF',
-    borderWidth: 1.5,
-    borderColor: 'transparent',
+    backgroundColor: '#E8F5EE',
   },
-  chipActive: {
-    backgroundColor: '#E9FBF2',
-    borderColor: '#19C37D',
-  },
-  chipText: { fontSize: 13.5, fontWeight: '700', color: '#6B7280' },
-  chipTextActive: { color: '#14A96B' },
-
-  pwMsg: { fontSize: 13, fontWeight: '600' },
-  pwOk: { color: colors.primary },
-  pwErr: { color: colors.danger },
-
-  planCard: {
+  typeChipText: { fontFamily: F800, fontSize: 11, color: '#067647' },
+  planChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 13,
-    backgroundColor: colors.surface,
-    borderRadius: 22,
-    padding: 15,
-    borderWidth: 1.5,
-    borderColor: '#FCE8B8',
-    ...shadows.soft,
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    backgroundColor: '#FBF1DC',
   },
-  planIcon: {
+  planChipText: { fontFamily: F800, fontSize: 11, color: '#9A6A16' },
+  idTagline: { fontFamily: F600, fontSize: 12, color: '#7A8A82' },
+  ringCol: { alignItems: 'center', gap: 5, flexShrink: 0 },
+  ringInner: {
     width: 46,
     height: 46,
-    borderRadius: 14,
-    backgroundColor: '#FFF6E0',
+    borderRadius: 23,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  planTitle: { fontSize: 14.5, fontWeight: '800', color: colors.text },
-  planSub: {
-    fontSize: 11.5,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    marginTop: 3,
-    lineHeight: 16,
+  ringPct: { fontFamily: F800, fontSize: 13, color: INK },
+  ringLabel: {
+    fontFamily: F800,
+    fontSize: 9,
+    letterSpacing: 0.6,
+    color: MUTED,
+    textTransform: 'uppercase',
+    maxWidth: 74,
+    textAlign: 'center',
   },
-  planArrow: { fontSize: 24, fontWeight: '700', color: '#C9A24B' },
 
-  primaryBtn: {
-    height: 54,
-    borderRadius: 17,
+  /* Stats card */
+  statsCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    shadowColor: 'rgba(12,29,22,1)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  statCell: { flex: 1, alignItems: 'center', gap: 4 },
+  statCellSep: { borderLeftWidth: 1, borderLeftColor: '#EEF2EF' },
+  statIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#19C37D',
+  },
+  statLabel: { fontFamily: F700, fontSize: 10, color: MUTED },
+  statValue: { fontFamily: F800, fontSize: 12.5, color: INK },
+
+  /* AI banner */
+  aiCard: {
+    borderWidth: 1,
+    borderColor: '#CFF0DF',
+    borderRadius: 20,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  aiFace: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    shadowColor: 'rgba(12,29,22,1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  aiAntennaDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: GREEN },
+  aiAntennaStem: { width: 2, height: 4, backgroundColor: GREEN },
+  aiHead: {
+    width: 26,
+    height: 19,
+    borderRadius: 8,
+    backgroundColor: INK,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  aiEye: { width: 4, height: 6, borderRadius: 2, backgroundColor: '#3DF0A6' },
+  aiTitle: { fontFamily: F800, fontSize: 14, color: INK },
+  aiSub: { fontFamily: F600, fontSize: 11.5, color: '#5F6F68' },
+  aiCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: GREEN,
+    flexShrink: 0,
+    shadowColor: GREEN,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 6,
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 4,
   },
-  primaryBtnText: { fontSize: 16, fontWeight: '800', color: '#ffffff' },
+  aiCtaText: { fontFamily: F800, fontSize: 13, color: '#FFFFFF' },
 
-  secondaryBtn: {
-    height: 50,
-    borderRadius: 15,
-    backgroundColor: '#F3F0FF',
+  /* Row groups */
+  group: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: 'rgba(12,29,22,1)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+  },
+  rowIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  secondaryBtnText: { fontSize: 15, fontWeight: '750' as any, color: colors.text },
+  rowBody: { flex: 1, gap: 2 },
+  rowTitle: { fontFamily: F800, fontSize: 14.5, color: INK },
+  rowSub: { fontFamily: F600, fontSize: 11.5, color: MUTED },
+  divider: { height: 1, backgroundColor: '#F0F4F1', marginHorizontal: 16 },
 
-  deleteBtn: { marginTop: 28, alignItems: 'center', paddingVertical: 14 },
-  deleteText: { fontSize: 15, fontWeight: '800', color: colors.danger },
+  /* Logout */
+  logoutBtn: {
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: '#FDECEC',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  logoutText: { fontFamily: F800, fontSize: 14.5, color: '#D64545' },
 });
