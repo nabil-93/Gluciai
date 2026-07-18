@@ -642,6 +642,26 @@ function WeekStrip({
   );
   return (
     <View style={styles.weekRow}>
+      {/* "Heute ⌄" sits on its own line ABOVE the dates (right-aligned) so
+          the 7 day pills keep the full row width — month picker popup. */}
+      <View style={styles.weekHead}>
+        <View style={styles.weekCalWrap}>
+          <Pressable style={styles.mealsToday} onPress={() => setMonthOpen((v) => !v)}>
+            <Text style={styles.mealsTodayText}>{label}</Text>
+            <ChevDown size={13} color="#6b7688" />
+          </Pressable>
+          {monthOpen ? (
+            <CalendarPopup
+              selected={selected}
+              onSelect={onSelect}
+              onClose={() => setMonthOpen(false)}
+              mealsByDay={mealsByDay}
+              locale={locale}
+            />
+          ) : null}
+        </View>
+      </View>
+
       <View style={styles.weekDays}>
         {days.map((d) => {
           const isSel = d.toDateString() === selected.toDateString();
@@ -661,8 +681,8 @@ function WeekStrip({
               <View style={styles.weekDisc}>
                 <MealRing
                   slots={mealsByDay[d.toDateString()]}
-                  size={34}
-                  stroke={2.6}
+                  size={38}
+                  stroke={2.8}
                   selected={isSel}
                 />
                 <Text style={[styles.weekNum, isFuture && styles.weekNumMuted]}>
@@ -677,23 +697,6 @@ function WeekStrip({
         })}
       </View>
 
-      {/* Jump further back than the visible week via the full month picker —
-          same "Heute ⌄" text pill pattern as the "Deine Mahlzeiten" header. */}
-      <View style={styles.weekCalWrap}>
-        <Pressable style={styles.mealsToday} onPress={() => setMonthOpen((v) => !v)}>
-          <Text style={styles.mealsTodayText}>{label}</Text>
-          <ChevDown size={13} color="#6b7688" />
-        </Pressable>
-        {monthOpen ? (
-          <CalendarPopup
-            selected={selected}
-            onSelect={onSelect}
-            onClose={() => setMonthOpen(false)}
-            mealsByDay={mealsByDay}
-            locale={locale}
-          />
-        ) : null}
-      </View>
     </View>
   );
 }
@@ -2741,14 +2744,19 @@ const styles = StyleSheet.create({
      position:relative + zIndex:0, so later same-level siblings like the
      glucose card would otherwise paint over the calendar popup). */
   weekRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: 14,
+    marginTop: 10,
     marginBottom: 2,
     zIndex: 20,
   },
+  weekHead: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 4,
+    // Above the weekDays row below it, so the month popup covers the day
+    // pills instead of them painting through it.
+    zIndex: 5,
+  },
   weekDays: {
-    flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
@@ -2757,14 +2765,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 4,
     paddingBottom: 8,
-    paddingHorizontal: 1,
+    paddingHorizontal: 3,
     gap: 5,
   },
   weekCellSel: { backgroundColor: WEEK_ACCENT },
   weekDisc: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#fdfdfc',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2777,7 +2785,7 @@ const styles = StyleSheet.create({
   weekNum: {
     position: 'absolute',
     fontFamily: F700,
-    fontSize: 12,
+    fontSize: 13,
     letterSpacing: 0.2,
     color: '#1f2b28',
   },
@@ -2789,7 +2797,7 @@ const styles = StyleSheet.create({
     color: '#aeb5b1',
   },
   weekLabelSel: { color: '#ffffff' },
-  weekCalWrap: { position: 'relative', marginLeft: 6, paddingTop: 13 },
+  weekCalWrap: { position: 'relative' },
 
   /* Calendar popup */
   calBackdrop: {
