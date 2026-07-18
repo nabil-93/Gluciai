@@ -27,6 +27,7 @@ import {
 import { isRTL } from '@/i18n';
 import { uniqueId } from '@/lib/clock';
 import { confirmAsync } from '@/lib/confirm';
+import { Speaker } from '@/lib/speech';
 import { sendChatMessage, sendChatVoice } from '@/services/ai';
 import {
   actionSummary,
@@ -94,6 +95,34 @@ function ListIcon({ color = '#3b4657' }: { color?: string }) {
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+/** Speaker (▶ read aloud) / stop (■) icon for the "listen" button. */
+function SpeakerIcon({ on, color = '#0f7a45' }: { on: boolean; color?: string }) {
+  if (on) {
+    return (
+      <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+        <Path d="M7 7h10v10H7z" fill={color} />
+      </Svg>
+    );
+  }
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 9v6h4l5 4V5L8 9H4z"
+        fill={color}
+        stroke={color}
+        strokeWidth={1.4}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8 8 0 0 1 0 12"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        fill="none"
       />
     </Svg>
   );
@@ -243,6 +272,31 @@ function AiChatScreen() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
+  /* ── "Listen" (read the answer out loud) ──
+   * For patients who can't read or prefer to listen: a speaker button on
+   * every AI answer reads it aloud (web speech). `speakingId` marks which
+   * message is currently playing so its button turns into a stop button. */
+  const speakerRef = useRef<Speaker | null>(null);
+  if (!speakerRef.current) speakerRef.current = new Speaker();
+  const ttsSupported = speakerRef.current.isSupported;
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  useEffect(() => {
+    const sp = speakerRef.current;
+    if (sp) sp.onEnd = () => setSpeakingId(null);
+    return () => sp?.stop();
+  }, []);
+  const toggleSpeak = (id: string, text: string) => {
+    const sp = speakerRef.current;
+    if (!sp) return;
+    if (speakingId === id) {
+      sp.stop();
+      setSpeakingId(null);
+      return;
+    }
+    sp.speak(text, i18n.language);
+    setSpeakingId(id);
+  };
+
   /* The logger sometimes needs ONE more detail before it can build the
    * entry (e.g. "which meal was it — lunch or dinner?"). While that
    * question is open, the patient's next message must go through
@@ -285,6 +339,12 @@ function AiChatScreen() {
   };
 
   useEffect(scrollDown, [messages.length, thinking, pendingAction, activeConversationId]);
+
+  // Stop any ongoing "listen" playback when the patient switches thread.
+  useEffect(() => {
+    speakerRef.current?.stop();
+    setSpeakingId(null);
+  }, [activeConversationId]);
 
   // Fresh conversation each new day: if the active thread's last message is
   // from a previous day, open a new one automatically. Old conversations
@@ -518,7 +578,26 @@ function AiChatScreen() {
                     router.push({ pathname: '/healthy-food', params: { id } })
                   }
                 />
-                <Text style={styles.aiTime}>{fmtTime(m.created_at)}</Text>
+                <View style={styles.aiFooter}>
+                  <Text style={styles.aiTime}>{fmtTime(m.created_at)}</Text>
+                  {ttsSupported ? (
+                    <Pressable
+                      onPress={() => toggleSpeak(m.id, m.content)}
+                      style={[
+                        styles.listenBtn,
+                        speakingId === m.id && styles.listenBtnOn,
+                      ]}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('chat.listen')}
+                    >
+                      <SpeakerIcon on={speakingId === m.id} />
+                      <Text style={styles.listenText}>
+                        {speakingId === m.id ? t('chat.stopListen') : t('chat.listen')}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               </View>
             </View>
           )
@@ -798,7 +877,25 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   aiText: { fontFamily: F500, fontSize: 13.5, lineHeight: 19.5, color: '#26313f' },
-  aiTime: { fontFamily: F500, fontSize: 10, color: '#a6aebc', marginTop: 5 },
+  aiFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 6,
+  },
+  aiTime: { fontFamily: F500, fontSize: 10, color: '#a6aebc' },
+  listenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    backgroundColor: '#eafaf1',
+  },
+  listenBtnOn: { backgroundColor: '#d8f5e5' },
+  listenText: { fontFamily: F700, fontSize: 10.5, color: '#0f7a45' },
 
   /* Healthy-food recommendation card inside an AI bubble */
   foodLink: {

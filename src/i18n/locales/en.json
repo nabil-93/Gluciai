@@ -514,6 +514,8 @@
     "disclaimerShort": "Informational only — not medical advice.",
     "headerTitle": "Chat with AI",
     "headerSub": "Ask your health questions",
+    "listen": "Listen",
+    "stopListen": "Stop",
     "greeting": "Hello! I'm your health assistant. How can I help you today?",
     "chip1": "Food advice",
     "chip1Q": "Give me food advice suited to my diabetes.",

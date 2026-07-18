@@ -514,6 +514,8 @@
     "disclaimerShort": "Informatif uniquement — pas un avis médical.",
     "headerTitle": "Chat avec l'IA",
     "headerSub": "Posez vos questions de santé",
+    "listen": "Écouter",
+    "stopListen": "Arrêter",
     "greeting": "Bonjour ! Je suis votre assistant santé. Comment puis-je vous aider aujourd'hui ?",
     "chip1": "Conseils alimentation",
     "chip1Q": "Donne-moi des conseils d'alimentation adaptés à mon diabète.",

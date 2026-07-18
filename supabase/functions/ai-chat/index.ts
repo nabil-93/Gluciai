@@ -512,7 +512,9 @@ Rules:
             // gemini-2.5-flash spends "thinking" tokens from the same
             // budget — disable thinking so answers never get truncated.
             thinkingConfig: { thinkingBudget: 0 },
-            maxOutputTokens: mode === 'voice' ? 500 : 1500,
+            // A voice answer carries BOTH the transcript and the reply, so it
+            // needs more room than a text answer or it truncates mid-JSON.
+            maxOutputTokens: mode === 'voice' ? 500 : hasAudio ? 2200 : 1500,
             temperature: 0.6,
             ...(hasAudio ? { responseMimeType: 'application/json' } : {}),
           },
@@ -534,13 +536,12 @@ Rules:
     let reply = rawText;
     let transcript = '';
     if (hasAudio) {
-      try {
-        const parsed = JSON.parse(rawText);
-        reply = typeof parsed.reply === 'string' ? parsed.reply : rawText;
-        transcript = typeof parsed.transcript === 'string' ? parsed.transcript : '';
-      } catch {
-        reply = rawText; // model didn't wrap in JSON — use the text as-is
-      }
+      // The model answers a voice message as {"transcript","reply"}. Extract
+      // them ROBUSTLY: never let the raw JSON blob leak into the chat bubble
+      // (that was the bug where the reply showed up as {"transcript":…}).
+      const parsed = extractAudioReply(rawText);
+      reply = parsed.reply;
+      transcript = parsed.transcript;
     }
     if (!reply) {
       return json({ error: 'Empty AI reply' }, 502);
@@ -576,4 +577,65 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+/**
+ * Pull {transcript, reply} out of a voice-message answer, tolerating every
+ * way the model can deviate from clean JSON — code fences, trailing text,
+ * or a reply string cut off by the token limit. The GOLDEN RULE: the value
+ * returned in `reply` must be human prose, NEVER a JSON blob (the bug the
+ * patient saw was the raw {"transcript":…,"reply":…} showing in the chat).
+ */
+function extractAudioReply(raw: string): { reply: string; transcript: string } {
+  const unescape = (s: string) =>
+    s
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
+      .trim();
+  // Drop ```json … ``` fences if the model added them.
+  const text = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+
+  // 1) Clean JSON — the happy path.
+  try {
+    const p = JSON.parse(text);
+    if (p && typeof p.reply === 'string') {
+      return {
+        reply: p.reply.trim(),
+        transcript: typeof p.transcript === 'string' ? p.transcript.trim() : '',
+      };
+    }
+  } catch {
+    // fall through to tolerant extraction
+  }
+
+  const transMatch = text.match(/"transcript"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  const transcript = transMatch ? unescape(transMatch[1]) : '';
+
+  // 2) A complete "reply":"…" pair even if there's junk around it.
+  const replyMatch = text.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (replyMatch) return { reply: unescape(replyMatch[1]), transcript };
+
+  // 3) A reply cut off by the token limit (no closing quote): salvage
+  //    everything after `"reply":"` to the end.
+  const idx = text.indexOf('"reply"');
+  if (idx >= 0) {
+    let after = text.slice(idx).replace(/^"reply"\s*:\s*"?/, '');
+    // stop at the first unescaped closing quote if there is one
+    const end = after.match(/^((?:[^"\\]|\\.)*)"/);
+    after = unescape(end ? end[1] : after).replace(/[}"]+\s*$/, '');
+    if (after) return { reply: after, transcript };
+  }
+
+  // 4) Not JSON at all → the whole text IS the reply, UNLESS it still looks
+  //    like a JSON object (then we'd rather send nothing than a blob).
+  if (/^\s*\{/.test(text) || /"(reply|transcript)"\s*:/.test(text)) {
+    return { reply: '', transcript };
+  }
+  return { reply: text, transcript };
 }
