@@ -11,7 +11,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PremiumEmptyState, PressableScale } from '@/components/ui';
+import { PremiumEmptyState, PressableScale, Spinner } from '@/components/ui';
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
 import { nowMs } from '@/lib/clock';
 import { deleteActivity, saveActivity } from '@/services/data';
@@ -252,21 +252,27 @@ export default function ActivityScreen() {
           {/* Save button */}
           <PressableScale onPress={add} accessibilityLabel={t('activityScreen.save')}>
             <View style={[styles.saveBtn, saving && { opacity: 0.6 }]}>
-              <Text style={styles.saveText}>
-                {saved ? t('activityScreen.saved') : t('activityScreen.save')}
-              </Text>
-              {!saved ? (
-                <Svg width={14} height={14} viewBox="0 0 24 24">
-                  <Path
-                    d="M9 6l6 6-6 6"
-                    stroke="#fff"
-                    strokeWidth={2.6}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                  />
-                </Svg>
-              ) : null}
+              {saving ? (
+                <Spinner size={20} color="#ffffff" />
+              ) : (
+                <>
+                  <Text style={styles.saveText}>
+                    {saved ? t('activityScreen.saved') : t('activityScreen.save')}
+                  </Text>
+                  {!saved ? (
+                    <Svg width={14} height={14} viewBox="0 0 24 24">
+                      <Path
+                        d="M9 6l6 6-6 6"
+                        stroke="#fff"
+                        strokeWidth={2.6}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        fill="none"
+                      />
+                    </Svg>
+                  ) : null}
+                </>
+              )}
             </View>
           </PressableScale>
         </View>

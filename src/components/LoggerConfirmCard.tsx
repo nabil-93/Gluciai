@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { Spinner } from '@/components/ui/Spinner';
 import { nowDate, nowMs } from '@/lib/clock';
 import type { LoggerAction } from '@/services/aiLogger';
 
@@ -129,7 +130,7 @@ export function LoggerConfirmCard({
         </Pressable>
         <Pressable style={styles.okBtn} onPress={confirm} disabled={busy}>
           {busy ? (
-            <ActivityIndicator size="small" color="#ffffff" />
+            <Spinner size={20} color="#ffffff" />
           ) : (
             <Text style={styles.okText}>✓ {t('logger.confirm')}</Text>
           )}

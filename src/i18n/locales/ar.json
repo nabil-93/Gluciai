@@ -653,7 +653,8 @@
     "sectionLanguages": "اللغات",
     "subLanguages": "اختار اللغة المفضلة",
     "premium": "Premium",
-    "freePlan": "مجاني"
+    "freePlan": "مجاني",
+    "birthDatePlaceholder": "سنة-شهر-يوم"
   },
   "log": {
     "glucoseTitle": "تسجيل سكر الدم",

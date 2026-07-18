@@ -653,7 +653,8 @@
     "sectionLanguages": "Languages",
     "subLanguages": "Choose your preferred language",
     "premium": "Premium",
-    "freePlan": "Free"
+    "freePlan": "Free",
+    "birthDatePlaceholder": "YYYY-MM-DD"
   },
   "log": {
     "glucoseTitle": "Log glucose",

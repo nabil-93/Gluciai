@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Spinner } from '@/components/ui';
 import { saveGlucose } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
@@ -136,9 +137,11 @@ export default function LogGlucoseScreen() {
             end={{ x: 0, y: 1 }}
             style={styles.saveBtn}
           >
-            <Text style={styles.saveBtnText}>
-              {saving ? '…' : t('common.save')}
-            </Text>
+            {saving ? (
+              <Spinner size={22} color="#ffffff" />
+            ) : (
+              <Text style={styles.saveBtnText}>{t('common.save')}</Text>
+            )}
           </LinearGradient>
         </Pressable>
         <Pressable onPress={close} style={styles.cancelBtn}>

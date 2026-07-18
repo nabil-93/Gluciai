@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -14,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, FadeInView, Spinner } from '@/components/ui';
 import {
   checkModifiedDoseAI,
   requestBolusReport,
@@ -274,7 +273,9 @@ export default function BolusScreen() {
             <AnimatedRobot size={96} mood="happy" />
             <Text style={styles.loadingTitle}>{t('bolus.analyzing')}</Text>
             <Text style={styles.loadingSub}>{t('bolus.analyzingSub')}</Text>
-            <ActivityIndicator color={GREEN} style={{ marginTop: 14 }} />
+            <View style={{ marginTop: 14 }}>
+              <Spinner size={26} color={GREEN} />
+            </View>
           </FadeInView>
         ) : null}
 
@@ -397,11 +398,15 @@ export default function BolusScreen() {
                       end={{ x: 0, y: 1 }}
                       style={[styles.cta, (saving || saved) && { opacity: 0.6 }]}
                     >
-                      <Text style={styles.ctaText}>
-                        {saved
-                          ? `✓ ${t('bolus.savedOk')}`
-                          : t('bolus.saveDose', { dose: fmtU(engine.total) })}
-                      </Text>
+                      {saving ? (
+                        <Spinner size={22} color="#ffffff" />
+                      ) : (
+                        <Text style={styles.ctaText}>
+                          {saved
+                            ? `✓ ${t('bolus.savedOk')}`
+                            : t('bolus.saveDose', { dose: fmtU(engine.total) })}
+                        </Text>
+                      )}
                     </LinearGradient>
                   </Pressable>
                 ) : null}
@@ -451,9 +456,16 @@ export default function BolusScreen() {
                     end={{ x: 0, y: 1 }}
                     style={[styles.cta, { marginTop: 14 }, (checking || saving) && { opacity: 0.6 }]}
                   >
-                    <Text style={styles.ctaText}>
-                      {checking ? `🤖 ${t('bolus.checking')}` : t('bolus.verifySave')}
-                    </Text>
+                    {saving ? (
+                      <Spinner size={22} color="#ffffff" />
+                    ) : checking ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Spinner size={18} color="#ffffff" />
+                        <Text style={styles.ctaText}>{t('bolus.checking')}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.ctaText}>{t('bolus.verifySave')}</Text>
+                    )}
                   </LinearGradient>
                 </Pressable>
                 <Pressable onPress={() => setEditing(false)} style={{ marginTop: 10 }}>

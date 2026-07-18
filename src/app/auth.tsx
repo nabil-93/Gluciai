@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Spinner } from '@/components/ui';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { hydrateFromServer } from '@/services/sync';
 import { useAppStore } from '@/store/useAppStore';
@@ -298,9 +299,13 @@ export default function AuthScreen() {
             end={{ x: 0, y: 1 }}
             style={[styles.cta, loading && { opacity: 0.6 }]}
           >
-            <Text style={styles.ctaText}>
-              {isRegister ? t('auth.register') : t('auth.login')}
-            </Text>
+            {loading ? (
+              <Spinner size={22} color="#ffffff" />
+            ) : (
+              <Text style={styles.ctaText}>
+                {isRegister ? t('auth.register') : t('auth.login')}
+              </Text>
+            )}
           </LinearGradient>
         </Pressable>
 

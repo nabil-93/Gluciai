@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BevelCard, ChevronRight, PlusGlyph } from '@/components/ui';
+import { BevelCard, ChevronRight, PlusGlyph, Spinner } from '@/components/ui';
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
 import { deleteMeasure, saveMeasure } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
@@ -232,7 +232,11 @@ export default function BiologyScreen() {
                       },
                     ]}
                   >
-                    <Text style={styles.saveBtnText}>OK</Text>
+                    {saving ? (
+                      <Spinner size={18} color="#ffffff" />
+                    ) : (
+                      <Text style={styles.saveBtnText}>OK</Text>
+                    )}
                   </Pressable>
                 </View>
               ) : null}

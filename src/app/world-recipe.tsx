@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -8,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Spinner } from '@/components/ui/Spinner';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -170,7 +170,7 @@ export default function WorldRecipeScreen() {
         {loading ? (
           <View style={{ alignItems: 'center', paddingVertical: 40, gap: 10 }}>
             <AnimatedRobot size={54} mood="happy" />
-            <ActivityIndicator color="#6d5ef9" />
+            <Spinner size={26} color="#6d5ef9" />
             <Text style={styles.loadingText}>{t('wr.preparing')}</Text>
           </View>
         ) : failed || !recipe ? (

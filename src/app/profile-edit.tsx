@@ -12,6 +12,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
+import { Spinner } from '@/components/ui';
 import { SUPPORTED_LANGUAGES, setAppLanguage, type LanguageCode } from '@/i18n';
 import { changePassword, deleteAccount } from '@/services/account';
 import { saveProfile } from '@/services/data';
@@ -38,6 +39,15 @@ type Section =
   | 'emergency'
   | 'security'
   | 'language';
+
+/** Auto-mask a typed birth date: digits only, dashes inserted for the
+ *  user (1990 01 31 → "1990-01-31"), so they just keep typing numbers. */
+const maskDate = (raw: string) => {
+  const d = raw.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 4) return d;
+  if (d.length <= 6) return `${d.slice(0, 4)}-${d.slice(4)}`;
+  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
+};
 
 const BackIcon = () => (
   <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
@@ -194,8 +204,10 @@ export default function ProfileEditScreen() {
               <Field
                 label={t('profile.birthDate')}
                 value={draft.birth_date ?? ''}
-                onChangeText={(v) => set('birth_date', v)}
-                placeholder="1990-01-31"
+                onChangeText={(v) => set('birth_date', maskDate(v))}
+                placeholder={t('profile.birthDatePlaceholder')}
+                keyboardType="number-pad"
+                maxLength={10}
               />
               <FieldLabel>{t('profile.gender')}</FieldLabel>
               <View style={styles.chipRow}>
@@ -354,10 +366,18 @@ export default function ProfileEditScreen() {
                   {pwMsg.text}
                 </Text>
               ) : null}
-              <Pressable onPress={onChangePassword} style={styles.secondaryBtn}>
-                <Text style={styles.secondaryBtnText}>
-                  {t('profile.changePassword')}
-                </Text>
+              <Pressable
+                onPress={onChangePassword}
+                style={styles.secondaryBtn}
+                disabled={busy}
+              >
+                {busy ? (
+                  <Spinner size={20} color={INK} />
+                ) : (
+                  <Text style={styles.secondaryBtnText}>
+                    {t('profile.changePassword')}
+                  </Text>
+                )}
               </Pressable>
             </>
           ) : null}
@@ -388,9 +408,13 @@ export default function ProfileEditScreen() {
               (pressed || savedFlash) && { opacity: 0.8 },
             ]}
           >
-            <Text style={styles.primaryBtnText}>
-              {busy ? '…' : savedFlash ? `✓  ${t('profile.saved')}` : t('profile.save')}
-            </Text>
+            {busy ? (
+              <Spinner size={22} color="#ffffff" />
+            ) : (
+              <Text style={styles.primaryBtnText}>
+                {savedFlash ? `✓  ${t('profile.saved')}` : t('profile.save')}
+              </Text>
+            )}
           </Pressable>
         ) : null}
 

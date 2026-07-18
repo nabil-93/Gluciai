@@ -17,6 +17,7 @@ export { PremiumEmptyState } from './PremiumEmptyState';
 export { RotaryDial } from './RotaryDial';
 export { AnimatedRobot } from './AnimatedRobot';
 export { Avatar } from './Avatar';
+export { Spinner } from './Spinner';
 export { ScanProgress } from './ScanProgress';
 export { ScanStepper } from './ScanStepper';
 export { BoundingBoxOverlay } from './BoundingBoxOverlay';

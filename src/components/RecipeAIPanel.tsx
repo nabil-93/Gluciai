@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -12,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Spinner } from '@/components/ui/Spinner';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -237,7 +237,7 @@ export function RecipeAIPanel({
                   <AnimatedRobot size={24} mood="happy" />
                 </View>
                 <View style={styles.aiBubble}>
-                  <ActivityIndicator color="#8b93a7" size="small" />
+                  <Spinner size={18} color="#8b93a7" />
                 </View>
               </View>
             ) : null}

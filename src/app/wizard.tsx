@@ -16,7 +16,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FadeInView } from '@/components/ui';
+import { FadeInView, Spinner } from '@/components/ui';
 import { CONSENT_IDS, CONSENT_META } from '@/data/consent';
 import { isRTL } from '@/i18n';
 import { confirmAsync } from '@/lib/confirm';
@@ -840,27 +840,33 @@ export default function WizardScreen() {
             end={{ x: 0, y: 1 }}
             style={[styles.cta, (!canContinue || saving) && { opacity: 0.5 }]}
           >
-            <Text style={styles.ctaText}>
-              {key === 'finish' ? t('wizard.openDashboard') : t('common.next')}
-            </Text>
-            <Svg
-              width={24}
-              height={24}
-              viewBox="0 0 24 24"
-              style={[
-                styles.ctaArrow,
-                rtl && { left: 26, right: undefined, transform: [{ scaleX: -1 }] },
-              ]}
-            >
-              <Path
-                d="M4 12h15M13 6l6 6-6 6"
-                stroke="#fff"
-                strokeWidth={2.4}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            </Svg>
+            {saving ? (
+              <Spinner size={22} color="#ffffff" />
+            ) : (
+              <>
+                <Text style={styles.ctaText}>
+                  {key === 'finish' ? t('wizard.openDashboard') : t('common.next')}
+                </Text>
+                <Svg
+                  width={24}
+                  height={24}
+                  viewBox="0 0 24 24"
+                  style={[
+                    styles.ctaArrow,
+                    rtl && { left: 26, right: undefined, transform: [{ scaleX: -1 }] },
+                  ]}
+                >
+                  <Path
+                    d="M4 12h15M13 6l6 6-6 6"
+                    stroke="#fff"
+                    strokeWidth={2.4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                </Svg>
+              </>
+            )}
           </LinearGradient>
         </Pressable>
         <View style={styles.backWrap}>

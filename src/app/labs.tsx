@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Easing,
   Image,
@@ -11,6 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Spinner } from '@/components/ui/Spinner';
 import Svg, { Circle, Path, Polygon, Text as SvgText } from 'react-native-svg';
 import { Redirect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -685,7 +685,7 @@ function LabsScreen() {
         {busy ? (
           <View style={styles.progressCard}>
             <AnimatedRobot size={54} mood="happy" />
-            <ActivityIndicator color="#6d5ef9" style={{ marginTop: 8 }} />
+            <View style={{ marginTop: 8 }}><Spinner size={26} color="#6d5ef9" /></View>
             <Text style={styles.progressTitle}>
               {phase === 'extracting' ? t('labs.extracting') : t('labs.generatingReport')}
             </Text>
@@ -835,7 +835,7 @@ function LabsScreen() {
                 ]}
               >
                 {voice === 'preparing' ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
+                  <Spinner size={20} color="#ffffff" />
                 ) : (
                   <Text style={{ fontSize: 18, color: '#fff' }}>
                     {voice === 'speaking' ? '■' : '▶'}
@@ -906,7 +906,7 @@ function LabsScreen() {
                 </>
               ) : phase === 'reporting' ? (
                 <View style={{ alignItems: 'center', paddingVertical: 16 }}>
-                  <ActivityIndicator color="#6d5ef9" />
+                  <Spinner size={24} color="#6d5ef9" />
                   <Text style={styles.progressSub}>{t('labs.generatingSub')}</Text>
                 </View>
               ) : (
@@ -1018,7 +1018,7 @@ function LabsScreen() {
                 <ScrollView style={{ marginTop: 10 }} showsVerticalScrollIndicator={false}>
                   {valueText === null ? (
                     <View style={{ alignItems: 'center', paddingVertical: 26 }}>
-                      <ActivityIndicator color="#6d5ef9" />
+                      <Spinner size={24} color="#6d5ef9" />
                       <Text style={styles.progressSub}>{t('labs.analyzingValue')}</Text>
                     </View>
                   ) : (

@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Spinner } from '@/components/ui/Spinner';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -135,7 +135,7 @@ export default function MenuScanScreen() {
 
         {analyzing ? (
           <View style={styles.introWrap}>
-            <ActivityIndicator size="large" color={colors.ink} />
+            <Spinner size={34} color={colors.ink} />
             <Text style={styles.introSub}>{t('menuScanPage.reading')}</Text>
           </View>
         ) : null}

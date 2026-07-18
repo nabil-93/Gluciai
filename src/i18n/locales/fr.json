@@ -653,7 +653,8 @@
     "sectionLanguages": "Langues",
     "subLanguages": "Choisissez votre langue préférée",
     "premium": "Premium",
-    "freePlan": "Gratuit"
+    "freePlan": "Gratuit",
+    "birthDatePlaceholder": "AAAA-MM-JJ"
   },
   "log": {
     "glucoseTitle": "Enregistrer la glycémie",

@@ -653,7 +653,8 @@
     "sectionLanguages": "Sprachen",
     "subLanguages": "Wähle deine bevorzugte Sprache",
     "premium": "Premium",
-    "freePlan": "Kostenlos"
+    "freePlan": "Kostenlos",
+    "birthDatePlaceholder": "JJJJ-MM-TT"
   },
   "log": {
     "glucoseTitle": "Blutzucker erfassen",

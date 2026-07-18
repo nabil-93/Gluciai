@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { ChevronLeft } from '@/components/ui';
+import { ChevronLeft, Spinner } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import { confirmAsync } from '@/lib/confirm';
 import { isDemoMode, supabase } from '@/lib/supabase';
@@ -169,9 +169,11 @@ export default function DoctorCodeScreen() {
               end={{ x: 0, y: 1 }}
               style={styles.applyBtn}
             >
-              <Text style={styles.applyText}>
-                {state === 'checking' ? '…' : t('coupon.apply')}
-              </Text>
+              {state === 'checking' ? (
+                <Spinner size={20} color="#ffffff" />
+              ) : (
+                <Text style={styles.applyText}>{t('coupon.apply')}</Text>
+              )}
             </LinearGradient>
           </Pressable>
         </View>

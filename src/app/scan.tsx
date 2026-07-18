@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Easing,
   Platform,
@@ -9,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Spinner } from '@/components/ui/Spinner';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -278,7 +278,7 @@ function ScanScreen() {
   if (!isWeb && !permission) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator color={ACCENT} />
+        <Spinner size={26} color={ACCENT} />
       </View>
     );
   }

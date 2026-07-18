@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -9,6 +8,7 @@ import {
 import * as Haptics from 'expo-haptics';
 
 import { colors, spacing } from '@/theme';
+import { Spinner } from './Spinner';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'ai';
 
@@ -64,7 +64,7 @@ export function AppButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={v.text} />
+        <Spinner size={22} color={v.text} />
       ) : (
         <Text style={[styles.label, { color: v.text }]}>{label}</Text>
       )}

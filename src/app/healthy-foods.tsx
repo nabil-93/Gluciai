@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Image,
   Modal,
@@ -11,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Spinner } from '@/components/ui/Spinner';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -331,7 +331,7 @@ export default function HealthyFoodsScreen() {
         >
           {worldLoading && !worldItems.length ? (
             <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-              <ActivityIndicator color="#19c37d" />
+              <Spinner size={26} color="#19c37d" />
               <Text style={styles.emptyText}>{t('hf.worldSearching')}</Text>
             </View>
           ) : !worldItems.length ? (
@@ -348,7 +348,7 @@ export default function HealthyFoodsScreen() {
                   {worldQuery ? t('hf.per100gNote') : `🇲🇦 ${t('hf.worldPopular')}`}
                 </Text>
                 {worldLoading ? (
-                  <ActivityIndicator color="#19c37d" size="small" />
+                  <Spinner size={20} color="#19c37d" />
                 ) : null}
               </View>
               <View style={styles.grid}>
@@ -394,7 +394,7 @@ export default function HealthyFoodsScreen() {
               {worldHasMore ? (
                 <PressableScale style={styles.moreBtn} haptic={false} onPress={loadMoreWorld}>
                   {worldLoading ? (
-                    <ActivityIndicator color="#ffffff" size="small" />
+                    <Spinner size={20} color="#ffffff" />
                   ) : (
                     <Text style={styles.moreBtnText}>{t('hf.loadMore')}</Text>
                   )}

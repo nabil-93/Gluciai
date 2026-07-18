@@ -1,6 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -15,7 +14,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppButton, BevelCard, ChevronLeft } from '@/components/ui';
+import { AppButton, BevelCard, ChevronLeft, Spinner } from '@/components/ui';
 import {
   WebBarcodeScanner,
   webBarcodeSupported,
@@ -247,7 +246,7 @@ export default function BarcodeScreen() {
                   ]}
                 >
                   {loading ? (
-                    <ActivityIndicator color="#fff" size="small" />
+                    <Spinner size={20} color="#fff" />
                   ) : (
                     <Text style={styles.manualBtnText}>OK</Text>
                   )}
