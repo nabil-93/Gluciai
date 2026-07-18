@@ -182,12 +182,38 @@ function TypingDots() {
 }
 
 /**
+ * Defensive cleanup so the chat NEVER shows raw "code": if a model JSON
+ * blob ever reaches a bubble, keep only its "reply"; and drop malformed
+ * [[…]] tokens that aren't valid food links (the AI sometimes invents
+ * ones like "[[the menthe sans sucre]]").
+ */
+function cleanAssistantText(raw: string): string {
+  const unescape = (s: string) =>
+    s.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim();
+  let s = (raw ?? '').trim();
+  if (s.startsWith('{') && /"reply"\s*:/.test(s)) {
+    const m = s.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (m) {
+      s = unescape(m[1]);
+    } else {
+      const i = s.indexOf('"reply"');
+      s = unescape(s.slice(i).replace(/^"reply"\s*:\s*"?/, '').replace(/[}"]+\s*$/, ''));
+    }
+  }
+  // Keep valid [[food:id]] tokens; strip any other [[…]] so no code shows.
+  s = s.replace(/\[\[([^\]]*)\]\]/g, (full, inner) =>
+    /^food:[a-z0-9-]+(\|.*)?$/i.test(String(inner).trim()) ? full : ''
+  );
+  return s.replace(/[ \t]+\n/g, '\n').trim();
+}
+
+/**
  * Assistant message body: renders plain text, and turns [[food:id]]
  * tokens (the AI's healthy-food recommendations) into tappable cards
  * that open the food's detail page (photo, nutrition, cooking steps).
  */
 function AiMessageBody({
-  content,
+  content: rawContent,
   lang,
   openLabel,
   onOpenFood,
@@ -197,6 +223,7 @@ function AiMessageBody({
   openLabel: string;
   onOpenFood: (id: string) => void;
 }) {
+  const content = cleanAssistantText(rawContent);
   const parts = content.split(/\[\[food:([a-z0-9-]+)(?:\|[^\]]*)?\]\]/g);
   if (parts.length === 1) {
     return <Text style={styles.aiText}>{content}</Text>;
@@ -424,9 +451,7 @@ function AiChatScreen() {
     }
   };
 
-  const confirmLog = async () => {
-    if (!pendingAction) return;
-    const action = pendingAction;
+  const confirmLog = async (action: LoggerAction) => {
     try {
       await applyLoggerAction(action);
       setPendingAction(null);
@@ -582,7 +607,7 @@ function AiChatScreen() {
                   <Text style={styles.aiTime}>{fmtTime(m.created_at)}</Text>
                   {ttsSupported ? (
                     <Pressable
-                      onPress={() => toggleSpeak(m.id, m.content)}
+                      onPress={() => toggleSpeak(m.id, cleanAssistantText(m.content))}
                       style={[
                         styles.listenBtn,
                         speakingId === m.id && styles.listenBtnOn,

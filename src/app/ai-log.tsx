@@ -244,9 +244,7 @@ function AiLogScreen() {
     }
   };
 
-  const confirm = async () => {
-    if (!pendingAction) return;
-    const action = pendingAction;
+  const confirm = async (action: LoggerAction) => {
     try {
       await applyLoggerAction(action);
       setPendingAction(null);

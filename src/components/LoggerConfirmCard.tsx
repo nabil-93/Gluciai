@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Spinner } from '@/components/ui/Spinner';
 import { nowDate, nowMs } from '@/lib/clock';
 import type { LoggerAction } from '@/services/aiLogger';
+import type { MealType } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F700 = 'PlusJakartaSans_700Bold';
@@ -20,6 +21,24 @@ const ICONS: Record<LoggerAction['type'], string> = {
   note: '📝',
 };
 
+/** The meal-time "folders" a logged meal can go into, with their icons. */
+const MEAL_MOMENTS: { key: MealType; emoji: string }[] = [
+  { key: 'breakfast', emoji: '🌅' },
+  { key: 'lunch', emoji: '☀️' },
+  { key: 'dinner', emoji: '🌙' },
+  { key: 'snack', emoji: '🍎' },
+];
+
+/** When the AI didn't say which meal it was, guess from the time of day so
+ *  the patient sees a sensible slot pre-selected (they can still change it). */
+function guessMeal(): MealType {
+  const h = new Date().getHours();
+  if (h < 11) return 'breakfast';
+  if (h < 16) return 'lunch';
+  if (h < 22) return 'dinner';
+  return 'snack';
+}
+
 /**
  * The confirmation the patient ALWAYS sees before the AI logs anything
  * for them: what will be added + when, with explicit Confirm / Cancel.
@@ -31,11 +50,17 @@ export function LoggerConfirmCard({
   onCancel,
 }: {
   action: LoggerAction;
-  onConfirm: () => Promise<void> | void;
+  /** Receives the FINAL action (with the meal slot the patient picked). */
+  onConfirm: (action: LoggerAction) => Promise<void> | void;
   onCancel: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const [busy, setBusy] = useState(false);
+  // For meals: which slot it will be filed under. Pre-fill with the AI's
+  // guess, else the time of day — the patient sees it and can change it.
+  const [mealType, setMealType] = useState<MealType>(
+    action.type === 'meal' ? action.meal_type ?? guessMeal() : 'lunch'
+  );
 
   const title = (() => {
     switch (action.type) {
@@ -59,10 +84,7 @@ export function LoggerConfirmCard({
   const detail = (() => {
     switch (action.type) {
       case 'meal':
-        return (
-          (action.meal_type ? `${t(`mealType.${action.meal_type}`)} · ` : '') +
-          `≈ ${action.calories} kcal · ${action.carbs} g ${t('day.carbsShort')} · ${action.sugar} g ${t('day.sugarShort')}`
-        );
+        return `≈ ${action.calories} kcal · ${action.carbs} g ${t('day.carbsShort')} · ${action.sugar} g ${t('day.sugarShort')}`;
       case 'insulin':
         return t('day.insulin');
       case 'glucose':
@@ -102,7 +124,11 @@ export function LoggerConfirmCard({
     if (busy) return;
     setBusy(true);
     try {
-      await onConfirm();
+      // Meals carry the slot the patient picked so it files under the right
+      // moment (breakfast/lunch/dinner/snack) in the day report.
+      const finalAction: LoggerAction =
+        action.type === 'meal' ? { ...action, meal_type: mealType } : action;
+      await onConfirm(finalAction);
     } finally {
       setBusy(false);
     }
@@ -123,6 +149,32 @@ export function LoggerConfirmCard({
           </Text>
         </View>
       </View>
+
+      {/* Meal slot: the patient SEES where it will be filed and can change
+          it (breakfast / lunch / dinner / snack) before confirming. */}
+      {action.type === 'meal' ? (
+        <View style={styles.momentBlock}>
+          <Text style={styles.momentLabel}>{t('logger.mealMomentTitle')}</Text>
+          <View style={styles.momentRow}>
+            {MEAL_MOMENTS.map((m) => {
+              const on = mealType === m.key;
+              return (
+                <Pressable
+                  key={m.key}
+                  onPress={() => setMealType(m.key)}
+                  style={[styles.momentChip, on && styles.momentChipOn]}
+                >
+                  <Text style={{ fontSize: 13 }}>{m.emoji}</Text>
+                  <Text style={[styles.momentText, on && styles.momentTextOn]}>
+                    {t(`mealType.${m.key}`)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
       <Text style={styles.question}>{t('logger.confirmTitle')}</Text>
       <View style={styles.btnRow}>
         <Pressable style={styles.cancelBtn} onPress={onCancel} disabled={busy}>
@@ -165,6 +217,28 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: F800, fontSize: 15.5, color: '#101828' },
   detail: { fontFamily: F500, fontSize: 11.5, color: '#667085', marginTop: 3 },
+  momentBlock: { marginTop: 13 },
+  momentLabel: {
+    fontFamily: F700,
+    fontSize: 11.5,
+    color: '#667085',
+    marginBottom: 7,
+  },
+  momentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  momentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#f1f3f9',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  momentChipOn: { backgroundColor: '#e9fbf2', borderColor: '#19c37d' },
+  momentText: { fontFamily: F700, fontSize: 12, color: '#3b4657' },
+  momentTextOn: { color: '#0f7a45' },
   question: {
     fontFamily: F700,
     fontSize: 13,
