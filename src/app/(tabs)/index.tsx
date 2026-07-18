@@ -20,7 +20,6 @@ import Svg, {
   Line,
   Path,
   RadialGradient,
-  Rect,
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
@@ -621,11 +620,13 @@ function WeekStrip({
   onSelect,
   mealsByDay,
   locale,
+  label,
 }: {
   selected: Date;
   onSelect: (d: Date) => void;
   mealsByDay: Record<string, Set<'breakfast' | 'lunch' | 'dinner'>>;
   locale: string;
+  label: string;
 }) {
   const [monthOpen, setMonthOpen] = React.useState(false);
   const today = new Date();
@@ -676,35 +677,12 @@ function WeekStrip({
         })}
       </View>
 
-      {/* Jump further back than the visible week via the full month picker */}
+      {/* Jump further back than the visible week via the full month picker —
+          same "Heute ⌄" text pill pattern as the "Deine Mahlzeiten" header. */}
       <View style={styles.weekCalWrap}>
-        <Pressable
-          onPress={() => setMonthOpen((v) => !v)}
-          style={[styles.weekCalBtn, monthOpen && styles.weekCalBtnActive]}
-          accessibilityLabel={locale.startsWith('ar') ? 'التقويم' : 'Calendar'}
-        >
-          <Svg width={19} height={19} viewBox="0 0 20 20" fill="none">
-            <Rect
-              x={2.5}
-              y={4}
-              width={15}
-              height={13.5}
-              rx={3.2}
-              fill={monthOpen ? 'rgba(255,255,255,0.16)' : 'rgba(10,92,78,0.08)'}
-              stroke={monthOpen ? '#ffffff' : WEEK_ACCENT}
-              strokeWidth={1.5}
-            />
-            <Path
-              d="M2.5 8.4 H17.5"
-              stroke={monthOpen ? '#ffffff' : WEEK_ACCENT}
-              strokeWidth={1.5}
-            />
-            <Line x1={6.6} y1={2.6} x2={6.6} y2={5.6} stroke={monthOpen ? '#ffffff' : WEEK_ACCENT} strokeWidth={1.6} strokeLinecap="round" />
-            <Line x1={13.4} y1={2.6} x2={13.4} y2={5.6} stroke={monthOpen ? '#ffffff' : WEEK_ACCENT} strokeWidth={1.6} strokeLinecap="round" />
-            <Circle cx={6.9} cy={11.4} r={1.15} fill={monthOpen ? '#ffffff' : WEEK_ACCENT} />
-            <Circle cx={10} cy={11.4} r={1.15} fill={monthOpen ? '#ffffff' : WEEK_ACCENT} />
-            <Circle cx={13.1} cy={11.4} r={1.15} fill={monthOpen ? '#ffffff' : WEEK_ACCENT} />
-          </Svg>
+        <Pressable style={styles.mealsToday} onPress={() => setMonthOpen((v) => !v)}>
+          <Text style={styles.mealsTodayText}>{label}</Text>
+          <ChevDown size={13} color="#6b7688" />
         </Pressable>
         {monthOpen ? (
           <CalendarPopup
@@ -1801,6 +1779,7 @@ export default function HomeScreen() {
           onSelect={setSelectedDate}
           mealsByDay={mealsByDay}
           locale={i18n.language}
+          label={selectedDateLabel}
         />
 
         {/* ── Viewing a past day — say so, offer a one-tap way back ── */}
@@ -2763,7 +2742,7 @@ const styles = StyleSheet.create({
      glucose card would otherwise paint over the calendar popup). */
   weekRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginTop: 14,
     marginBottom: 2,
     zIndex: 20,
@@ -2810,23 +2789,7 @@ const styles = StyleSheet.create({
     color: '#aeb5b1',
   },
   weekLabelSel: { color: '#ffffff' },
-  weekCalWrap: { position: 'relative', marginLeft: 8, paddingTop: 4 },
-  weekCalBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 15,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(10,92,78,0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: 'rgba(30,42,38,1)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  weekCalBtnActive: { backgroundColor: WEEK_ACCENT, borderColor: WEEK_ACCENT },
+  weekCalWrap: { position: 'relative', marginLeft: 8 },
 
   /* Calendar popup */
   calBackdrop: {
