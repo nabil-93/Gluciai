@@ -58,11 +58,15 @@ function ScanScreen() {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<'back' | 'front'>('back');
-  const [torch, setTorch] = useState(false);
+  // Flash cycles off → auto → on. "on" = continuous torch (works on Android
+  // web via track constraint; iOS browsers have no torch API). "auto" lets
+  // the native camera decide at capture time.
+  const [flash, setFlash] = useState<'off' | 'auto' | 'on'>('off');
   const [analyzing, setAnalyzing] = useState(false);
   const [percent, setPercent] = useState(0);
   const [captured, setCaptured] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [camError, setCamError] = useState(false);
   const [boxH, setBoxH] = useState(0);
   const cameraRef = useRef<CameraView>(null);
 
@@ -72,6 +76,20 @@ function ScanScreen() {
   const routedRef = useRef(false);
 
   const isWeb = Platform.OS === 'web';
+  // Web live preview needs getUserMedia (secure context / camera-capable browser).
+  const webCamSupported =
+    isWeb && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+
+  // Web: fire the browser's camera prompt on arrival so the live feed fills
+  // the backdrop without an extra tap (no themed permission screen on web).
+  const askedWebRef = useRef(false);
+  useEffect(() => {
+    if (!webCamSupported || askedWebRef.current) return;
+    if (permission && !permission.granted && permission.canAskAgain) {
+      askedWebRef.current = true;
+      requestPermission();
+    }
+  }, [webCamSupported, permission, requestPermission]);
 
   /* ── Laser sweep inside the scan box (up ↔ down, 3.6s round trip) ── */
   const laser = useRef(new Animated.Value(0)).current;
@@ -140,6 +158,9 @@ function ScanScreen() {
     uri?: string,
     imageSize?: { width: number; height: number }
   ) => {
+    // Web capture APIs sometimes hand back a full data URI — the vision
+    // endpoint wants bare base64.
+    base64 = base64.replace(/^data:image\/[^;]+;base64,/, '');
     finishedRef.current = false;
     routedRef.current = false;
     stageRef.current = 'detecting';
@@ -217,9 +238,10 @@ function ScanScreen() {
     await runOn(photo.uri, photo.base64);
   };
 
-  // Web (PWA/browser): open the phone's OS camera directly; fall back to the
+  // Fallback when no live preview is possible (permission denied, mount
+  // error, no getUserMedia): open the OS camera directly; fall back to the
   // library if the camera capture isn't available on this platform.
-  const captureWeb = async () => {
+  const captureViaSystem = async () => {
     if (analyzing) return;
     try {
       const shot = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], base64: true, quality: 1 });
@@ -247,9 +269,10 @@ function ScanScreen() {
     else router.replace('/(tabs)');
   };
 
-  // Live camera only on native once granted; web renders the dark scanner
-  // design and captures via the OS camera / gallery.
-  const liveCamera = !isWeb && !!permission?.granted;
+  // Live full-bleed camera on native AND web once granted; if the preview
+  // can't mount (denied, no getUserMedia, mount error) the dark scanner
+  // design stands in and capture goes through the OS camera / gallery.
+  const liveCamera = !camError && !!permission?.granted && (!isWeb || webCamSupported);
 
   /* ── Native: waiting on permission state ── */
   if (!isWeb && !permission) {
@@ -292,12 +315,17 @@ function ScanScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Full-bleed camera (native), the frozen shot, or the dark scanner
-          backdrop on web where the grid + laser stand in for a live feed. */}
-      {captured ? (
-        <Image source={{ uri: captured }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
-      ) : liveCamera ? (
-        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} enableTorch={torch} />
+      {/* Full-bleed live camera stays running behind everything; the frozen
+          shot lives INSIDE the scan box. Dark backdrop when no preview. */}
+      {liveCamera ? (
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={facing}
+          enableTorch={flash === 'on'}
+          flash={flash === 'auto' ? 'auto' : 'off'}
+          onMountError={() => setCamError(true)}
+        />
       ) : (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: BG }]} />
       )}
@@ -336,9 +364,20 @@ function ScanScreen() {
             </Text>
           </Glass>
 
-          <Pressable onPress={() => setTorch((v) => !v)}>
-            <Glass style={styles.circleBtn} radius={22} tint={torch ? 'rgba(55,222,115,0.22)' : undefined}>
-              <Ionicons name={torch ? 'flash' : 'flash-outline'} size={18} color="#E8ECEA" />
+          <Pressable
+            onPress={() => setFlash((m) => (m === 'off' ? 'auto' : m === 'auto' ? 'on' : 'off'))}
+          >
+            <Glass
+              style={styles.circleBtn}
+              radius={22}
+              tint={flash === 'on' ? 'rgba(55,222,115,0.22)' : undefined}
+            >
+              <Ionicons
+                name={flash === 'off' ? 'flash-off-outline' : flash === 'auto' ? 'flash-outline' : 'flash'}
+                size={18}
+                color={flash === 'on' ? ACCENT : '#E8ECEA'}
+              />
+              {flash === 'auto' ? <Text style={styles.flashAuto}>A</Text> : null}
               <Animated.View style={[styles.liveDot, { opacity: pulse }]} />
             </Glass>
           </Pressable>
@@ -358,6 +397,16 @@ function ScanScreen() {
             style={styles.gridBox}
             onLayout={(e) => setBoxH(e.nativeEvent.layout.height)}
           >
+            {/* Frozen shot pinned inside the box; grid + laser sweep on top
+                of it while the analysis runs. */}
+            {captured ? (
+              <Image
+                source={{ uri: captured }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                transition={120}
+              />
+            ) : null}
             <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
               <Defs>
                 <Pattern id="grid" width={38} height={38} patternUnits="userSpaceOnUse">
@@ -404,7 +453,7 @@ function ScanScreen() {
         {/* ── Controls dock ── */}
         <Glass style={styles.dock} radius={26} tint="rgba(12,18,15,0.62)">
           <DockButton icon="images-outline" label={t('scanner.gallery')} onPress={pickImage} disabled={analyzing} />
-          <Pressable onPress={isWeb ? captureWeb : capture} disabled={analyzing} style={styles.shutter}>
+          <Pressable onPress={liveCamera ? capture : captureViaSystem} disabled={analyzing} style={styles.shutter}>
             <View style={styles.shutterCore} />
           </Pressable>
           <DockButton
@@ -538,6 +587,14 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(55,222,115,0.6)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 5,
+  },
+  flashAuto: {
+    position: 'absolute',
+    bottom: 7,
+    right: 8,
+    fontSize: 9,
+    fontWeight: '800',
+    color: ACCENT,
   },
   liveDot: {
     position: 'absolute',
