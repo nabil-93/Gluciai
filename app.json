@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "GlucoAI",
+    "name": "GluciAI",
     "slug": "glucoai",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,8 +13,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.nabil.glucoai",
       "infoPlist": {
-        "NSCameraUsageDescription": "GlucoAI uses the camera to analyze your meals with AI.",
-        "NSPhotoLibraryUsageDescription": "GlucoAI lets you import meal photos for AI analysis."
+        "NSCameraUsageDescription": "GluciAI uses the camera to analyze your meals with AI.",
+        "NSPhotoLibraryUsageDescription": "GluciAI lets you import meal photos for AI analysis."
       }
     },
     "android": {
@@ -49,7 +49,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "GlucoAI uses the camera to analyze your meals with AI."
+          "cameraPermission": "GluciAI uses the camera to analyze your meals with AI."
         }
       ],
       "expo-font",

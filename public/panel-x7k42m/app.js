@@ -1,4 +1,4 @@
-/* ── GlucoAI Dashboard ─────────────────────────────────────────────────────
+/* ── GluciAI Dashboard ─────────────────────────────────────────────────────
    Static admin/doctor panel. Auth + data via Supabase (RLS enforced):
    - admin  : sees everything, manages doctors, patients, promos, subs, locks
    - doctor : sees only their linked patients, generates promo codes
@@ -207,8 +207,8 @@ function renderLogin(errMsg) {
   app.innerHTML = `
     <div class="login-wrap">
       <div class="login-card">
-        <div class="login-logo"><div class="logo-tile"><img src="logo.png" alt="GlucoAI" /></div>
-          <div><div class="login-title">GlucoAI</div><div style="font-size:11px;color:var(--muted-2);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Dashboard</div></div>
+        <div class="login-logo"><div class="logo-tile"><img src="logo.png" alt="GluciAI" /></div>
+          <div><div class="login-title">GluciAI</div><div style="font-size:11px;color:var(--muted-2);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Dashboard</div></div>
         </div>
         <p class="login-sub">Espace réservé aux médecins et à l'administration.</p>
         <div class="login-error ${errMsg ? 'show' : ''}" id="lerr">${esc(errMsg || '')}</div>
@@ -217,7 +217,7 @@ function renderLogin(errMsg) {
           <div class="field"><label>Mot de passe</label><input type="password" id="lpass" required autocomplete="current-password" placeholder="••••••••" /></div>
           <button class="btn btn-primary btn-block" id="lbtn" type="submit">Se connecter</button>
         </form>
-        <p class="login-hint">🔒 Connexion sécurisée · Les patients utilisent l'application mobile GlucoAI.</p>
+        <p class="login-hint">🔒 Connexion sécurisée · Les patients utilisent l'application mobile GluciAI.</p>
       </div>
     </div>`;
   document.getElementById('lform').addEventListener('submit', async (e) => {
@@ -255,8 +255,8 @@ function shell(active, title, sub, bodyHTML) {
     <div class="shell">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-head">
-          <div class="logo-tile sm"><img src="logo.png" alt="GlucoAI" /></div>
-          <div><div class="name">GlucoAI</div><div class="sub">Dashboard médical</div></div>
+          <div class="logo-tile sm"><img src="logo.png" alt="GluciAI" /></div>
+          <div><div class="name">GluciAI</div><div class="sub">Dashboard médical</div></div>
         </div>
         <nav>${items.map((n) => `<a class="nav-item ${n.hash === active ? 'active' : ''}" href="${n.hash}">${n.icon}<span>${n.label}</span></a>`).join('')}</nav>
         <div class="sidebar-foot">
@@ -629,7 +629,7 @@ async function pagePatient(pid, initTab) {
           </div>
         </div>
         ${prof.phone ? `<a class="btn btn-ghost" style="text-decoration:none" target="_blank" rel="noopener"
-            href="${waHref(prof.phone, prof.language, `Bonjour ${prof.name || ''} 👋, ici l'équipe GlucoAI.`)}">💬 WhatsApp</a>` : ''}
+            href="${waHref(prof.phone, prof.language, `Bonjour ${prof.name || ''} 👋, ici l'équipe GluciAI.`)}">💬 WhatsApp</a>` : ''}
       </div>
 
       <div class="stats-grid fade-up">
@@ -1539,10 +1539,10 @@ async function pageSubs() {
     // WhatsApp renewal reminder — only when we can reach them AND it matters
     const needsReminder = p.phone && ((dl !== null && dl <= 7) || (nUnpaid ?? 0) > 0);
     const waMsg = dl !== null && dl < 0
-      ? `Bonjour ${p.name || ''} 👋, votre abonnement GlucoAI a expiré le ${fmtDate(p.expires_at)}. Pensez à le renouveler pour continuer à profiter de toutes les fonctionnalités 😊`
+      ? `Bonjour ${p.name || ''} 👋, votre abonnement GluciAI a expiré le ${fmtDate(p.expires_at)}. Pensez à le renouveler pour continuer à profiter de toutes les fonctionnalités 😊`
       : dl !== null && dl <= 7
-        ? `Bonjour ${p.name || ''} 👋, votre abonnement GlucoAI expire le ${fmtDate(p.expires_at)} (dans ${dl} jour${dl > 1 ? 's' : ''}). Pensez à le renouveler 😊`
-        : `Bonjour ${p.name || ''} 👋, il reste ${nUnpaid} mois impayé${(nUnpaid ?? 0) > 1 ? 's' : ''} sur votre abonnement GlucoAI. Merci de régulariser quand vous pouvez 😊`;
+        ? `Bonjour ${p.name || ''} 👋, votre abonnement GluciAI expire le ${fmtDate(p.expires_at)} (dans ${dl} jour${dl > 1 ? 's' : ''}). Pensez à le renouveler 😊`
+        : `Bonjour ${p.name || ''} 👋, il reste ${nUnpaid} mois impayé${(nUnpaid ?? 0) > 1 ? 's' : ''} sur votre abonnement GluciAI. Merci de régulariser quand vous pouvez 😊`;
     return `<tr class="click" data-sub="${p.user_id}">
       <td><div class="cell-user">${avatar(p.name, p.email)}<div style="min-width:0"><div class="nm">${esc(p.name || 'Sans nom')}</div><div class="em">${esc(p.phone || p.email || '')}</div></div></div></td>
       <td>${p.plan ? PLAN_LABEL[p.plan] || esc(p.plan) : '—'}</td>

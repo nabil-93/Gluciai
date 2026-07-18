@@ -1,14 +1,14 @@
 import { Platform } from 'react-native';
 
 /**
- * GlucoAI Design Tokens — Bevel-inspired LIGHT premium theme.
+ * GluciAI Design Tokens — Bevel-inspired LIGHT premium theme.
  * Extracted from the Claude Design "Accueil Santé" prototype:
  * light background #F2F2F6, near-white cards #FDFDFE, soft ambient
  * shadows, generous radii, ink-black CTAs, pastel accents.
  */
 
 /**
- * GlucoAI official design system — extracted from the
+ * GluciAI official design system — extracted from the
  * "design application" folder (single source of truth).
  * Violet #6D5EF9 = primary CTA · Vert #19C37D = active/success ·
  * Orange #FF7A1A · Bleu #3B82F6 · fond #F7F8FC · texte #111827.

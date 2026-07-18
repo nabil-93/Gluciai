@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ── GlucoAI — one-shot Supabase setup ──────────────────────────────────
+# ── GluciAI — one-shot Supabase setup ──────────────────────────────────
 # Links the project, pushes the DB schema, sets server-side secrets, and
 # deploys all Edge Functions. Idempotent: safe to re-run.
 #

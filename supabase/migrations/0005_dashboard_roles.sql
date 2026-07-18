@@ -1,4 +1,4 @@
--- ── GlucoAI Dashboard: roles, doctors, promo codes, subscriptions, feature locks ──
+-- ── GluciAI Dashboard: roles, doctors, promo codes, subscriptions, feature locks ──
 -- Roles: patient (default) | doctor | admin.
 -- Doctors see only their linked patients; admin sees everything.
 -- Patients link to a doctor by redeeming that doctor's promo code (-10% on subscription).

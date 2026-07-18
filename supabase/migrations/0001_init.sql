@@ -1,4 +1,4 @@
--- GlucoAI initial schema (Part 6: Database + RLS)
+-- GluciAI initial schema (Part 6: Database + RLS)
 
 -- Profiles ------------------------------------------------------------------
 create table if not exists public.profiles (

@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
 
       const systemPrompt =
         mode === 'bolus'
-          ? `You are GlucoAI, a warm diabetes assistant. The app just computed an
+          ? `You are GluciAI, a warm diabetes assistant. The app just computed an
 insulin bolus recommendation using the patient's OWN clinical parameters
 (carb ratio, correction factor, insulin on board with 4h linear decay,
 recent exercise reduction, glucose trend, hypo guard). Your job: explain
@@ -98,7 +98,7 @@ warnings: short strings, one per real risk (hypo, falling glucose, very
 high glucose, sugar spike, delayed sport hypo, missing profile ratios).
 Empty array if none. Everything in ${langName}. Numbers must match the
 ENGINE RESULT exactly — never invent different numbers.`
-          : `You are GlucoAI's safety checker. The app recommended
+          : `You are GluciAI's safety checker. The app recommended
 ${bolus.total} U of rapid insulin (clinically computed). The patient wants
 to take ${modifiedDose} U instead. Assess the risk of the MODIFIED dose
 given the data.
@@ -170,7 +170,7 @@ BEFORE injecting this modified dose.`;
        returns a structured entry. The APP asks the patient to confirm
        before saving — the AI never saves anything itself. ── */
     if (mode === 'logger') {
-      const loggerPrompt = `You are GlucoAI's logging assistant. The patient TELLS you what they
+      const loggerPrompt = `You are GluciAI's logging assistant. The patient TELLS you what they
 did and you turn it into ONE structured entry that the app will save
 AFTER the patient confirms in the UI. You never save anything yourself.
 
@@ -386,7 +386,7 @@ Rules:
   LANGUAGE RULES).`
       : '';
 
-    const systemPrompt = `You are GlucoAI, the patient's personal diabetes assistant inside the GlucoAI app.
+    const systemPrompt = `You are GluciAI, the patient's personal diabetes assistant inside the GluciAI app.
 
 LANGUAGE RULES (critical):
 - ${langName} is only the DEFAULT (the language the patient picked in the

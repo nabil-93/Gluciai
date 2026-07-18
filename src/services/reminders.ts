@@ -155,7 +155,7 @@ export function checkReminders() {
         tone: 'warning',
         created_at: new Date().toISOString(),
       });
-      browserNotify('GlucoAI ⏰', r.message);
+      browserNotify('GluciAI ⏰', r.message);
       continue;
     }
 
@@ -178,7 +178,7 @@ export function checkReminders() {
           tone: 'info',
           created_at: new Date().toISOString(),
         });
-        browserNotify('GlucoAI 🤔', t('reminders.followBody', { msg: r.message }));
+        browserNotify('GluciAI 🤔', t('reminders.followBody', { msg: r.message }));
       }
     }
   }

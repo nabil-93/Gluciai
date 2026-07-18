@@ -145,7 +145,7 @@ export default function ReportScreen() {
       .disc { margin-top: 28px; font-size: 11px; color: #B7B7BE; line-height: 1.5; }
       .patient { background: #F7F7F9; border-radius: 12px; padding: 14px 16px; margin-top: 18px; font-size: 13px; line-height: 1.7; }
     </style></head><body>
-      <h1>Rapport glycémique — GlucoAI</h1>
+      <h1>Rapport glycémique — GluciAI</h1>
       <div class="sub">Période : ${period} (${DAYS} jours)</div>
       <div class="patient">
         <b>Patient :</b> ${profile?.name || '—'} · <b>Diabète :</b> ${TYPE_FR[profile?.diabetes_type ?? 'type2']} ·
@@ -202,7 +202,7 @@ export default function ReportScreen() {
       </table>
       <div class="disc">
         HbA1c estimée à partir de la moyenne glycémique (formule ADAG) — valeur indicative, seule une analyse
-        de laboratoire fait foi. Rapport généré par GlucoAI le ${new Date().toLocaleDateString('fr-FR')} —
+        de laboratoire fait foi. Rapport généré par GluciAI le ${new Date().toLocaleDateString('fr-FR')} —
         données saisies par le patient, à interpréter par un professionnel de santé.
       </div>
     </body></html>`;

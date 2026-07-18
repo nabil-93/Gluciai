@@ -34,7 +34,7 @@ export default function Root({ children }: PropsWithChildren) {
           name="apple-mobile-web-app-status-bar-style"
           content="default"
         />
-        <meta name="apple-mobile-web-app-title" content="GlucoAI" />
+        <meta name="apple-mobile-web-app-title" content="GluciAI" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="icon" href="/icon-192.png" />
 

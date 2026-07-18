@@ -1,4 +1,4 @@
-# GlucoAI — Supabase project configuration.
+# GluciAI — Supabase project configuration.
 # `project_id` is the local slug (must match the folder / app slug).
 # Link to the hosted project with:  supabase link --project-ref <your-ref>
 project_id = "glucoai"

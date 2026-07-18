@@ -1,4 +1,4 @@
-# GlucoAI 🩺
+# GluciAI 🩺
 
 Application premium de gestion du diabète avec IA — scanner de repas, suivi glycémie/insuline, coach IA, analytics.
 Design inspiré de Bevel : dark mode, glassmorphism, vert menthe + bleu électrique.

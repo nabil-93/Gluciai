@@ -16,7 +16,7 @@ const corsHeaders = {
     'authorization, x-client-info, apikey, content-type',
 };
 
-const UA = 'GlucoAI/1.0 (diabetes education app; contact: support@glucoai.app)';
+const UA = 'GluciAI/1.0 (diabetes education app; contact: support@gluciai.app)';
 
 const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));

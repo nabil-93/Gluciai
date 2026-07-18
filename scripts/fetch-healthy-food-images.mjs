@@ -78,7 +78,7 @@ async function commonsImage(term, tries = 3) {
   let res;
   for (let i = 0; i < tries; i++) {
     res = await fetch(api, {
-      headers: { 'User-Agent': 'GlucoAI-food-images/1.0 (patient education)' },
+      headers: { 'User-Agent': 'GluciAI-food-images/1.0 (patient education)' },
     });
     if (res.ok) break;
     await new Promise((r) => setTimeout(r, 1000 * (i + 1))); // back off on 429

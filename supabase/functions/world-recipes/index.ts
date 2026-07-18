@@ -121,7 +121,7 @@ async function wikimediaImage(term: string): Promise<string | null> {
       `&gsrsearch=${encodeURIComponent(term)}` +
       `&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url|size&iiurlwidth=1600&format=json`;
     const r = await fetch(url, {
-      headers: { 'User-Agent': 'GlucoAI/1.0 (diabetes education app)' },
+      headers: { 'User-Agent': 'GluciAI/1.0 (diabetes education app)' },
       signal: AbortSignal.timeout(8000),
     });
     if (!r.ok) return null;
@@ -259,7 +259,7 @@ Deno.serve(async (req) => {
             .join('\n')
         : '';
 
-      const prompt = `You are GlucoAI, an EXPERT DIABETES DOCTOR + dietitian recommending
+      const prompt = `You are GluciAI, an EXPERT DIABETES DOCTOR + dietitian recommending
 meals to YOUR patient. Default language is ${langName}, BUT if the patient
 writes in another language or dialect (French, Darija, Arabic, English…),
 answer "reply"/"note" in THAT same language. Dish "name" fields in

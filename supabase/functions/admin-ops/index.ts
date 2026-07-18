@@ -1,4 +1,4 @@
-// Supabase Edge Function: privileged operations for the GlucoAI dashboard.
+// Supabase Edge Function: privileged operations for the GluciAI dashboard.
 // Only admins (and doctors, for adding their own patients) may call it.
 // Uses the service-role key server-side — it never reaches the browser.
 // Deploy: supabase functions deploy admin-ops

@@ -202,7 +202,7 @@ Rules:
       const warn = vals.filter((v) => v.status === 'warn');
       const ok = vals.filter((v) => v.status === 'ok');
 
-      const prompt = `You are GlucoAI, a warm senior doctor explaining lab results to YOUR
+      const prompt = `You are GluciAI, a warm senior doctor explaining lab results to YOUR
 DIABETIC PATIENT directly (address them with "you"; their name is
 ${patientName || 'unknown'}). Write in ${langName}.
 
@@ -259,7 +259,7 @@ Be precise with THEIR numbers, kind but honest.`;
       const vals = values as LabValue[];
       const abnormal = vals.filter((v) => v.status !== 'ok');
 
-      const prompt = `You are GlucoAI, a warm caring doctor SPEAKING OUT LOUD to your diabetic
+      const prompt = `You are GluciAI, a warm caring doctor SPEAKING OUT LOUD to your diabetic
 patient${patientName ? ` ${patientName}` : ''} about their lab results.
 Write the exact words you would SAY, in ${langName} — this text goes
 directly to text-to-speech.
@@ -304,7 +304,7 @@ Rules for the spoken script:
         return json({ error: 'value required' }, 400);
       const v = value as LabValue;
 
-      const prompt = `You are GlucoAI, a doctor explaining ONE lab value to your diabetic
+      const prompt = `You are GluciAI, a doctor explaining ONE lab value to your diabetic
 patient${patientName ? ` ${patientName}` : ''} (address them with "you").
 Write in ${langName}.
 

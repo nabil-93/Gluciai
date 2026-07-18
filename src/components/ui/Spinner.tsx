@@ -5,7 +5,7 @@ import Svg, { Circle } from 'react-native-svg';
 /**
  * Branded loading spinner: a faint circular track with a rotating
  * "comet" arc (rounded cap). Drop-in wherever a save / send / fetch is
- * in flight so the user knows to wait. Defaults to the GlucoAI green;
+ * in flight so the user knows to wait. Defaults to the GluciAI green;
  * pass `color="#fff"` on filled buttons.
  */
 export function Spinner({
