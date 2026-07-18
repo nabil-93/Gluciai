@@ -40,7 +40,6 @@ import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
 import { getDailyInsight, type Insight } from '@/services/insights';
 import { getPlannedReminders } from '@/services/notifications';
 import { useAppStore } from '@/store/useAppStore';
-import { colors } from '@/theme';
 import type { ActivityStatus, InsulinType, MealScan } from '@/types';
 
 /* Official Claude Design assets — reused exactly, never redrawn */
@@ -427,13 +426,14 @@ const SLOT_DOT: Record<'breakfast' | 'lunch' | 'dinner', string> = {
 function MealRing({
   slots,
   size = 17,
+  stroke = 2.4,
   selected = false,
 }: {
   slots: Set<'breakfast' | 'lunch' | 'dinner'> | undefined;
   size?: number;
+  stroke?: number;
   selected?: boolean;
 }) {
-  const stroke = 2.4;
   const r = (size - stroke) / 2;
   const cx = size / 2;
   const cy = size / 2;
@@ -598,6 +598,75 @@ function CalendarPopup({
         </View>
       </View>
     </>
+  );
+}
+
+/**
+ * Week date bar shown above the glucose card — "Date Bar" reference design.
+ * Current week (Monday-first). Each day: white disc with the day number,
+ * wrapped by the same 3-arc meal ring as the calendar popup (breakfast /
+ * lunch / dinner light up once scanned). The selected day becomes a deep
+ * green pill with the weekday label in white; tapping a day drives the
+ * "Vos repas" section below. Future days are disabled.
+ */
+const WEEK_ACCENT = '#0a5c4e';
+function WeekStrip({
+  selected,
+  onSelect,
+  mealsByDay,
+  locale,
+}: {
+  selected: Date;
+  onSelect: (d: Date) => void;
+  mealsByDay: Record<string, Set<'breakfast' | 'lunch' | 'dinner'>>;
+  locale: string;
+}) {
+  const today = new Date();
+  const monday = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() - ((today.getDay() + 6) % 7)
+  );
+  const days = Array.from(
+    { length: 7 },
+    (_, i) =>
+      new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)
+  );
+  return (
+    <View style={styles.weekRow}>
+      {days.map((d) => {
+        const isSel = d.toDateString() === selected.toDateString();
+        const isFuture = d > today;
+        const label = d
+          .toLocaleDateString(locale, { weekday: 'short' })
+          .replace(/\./g, '')
+          .toUpperCase()
+          .slice(0, 3);
+        return (
+          <Pressable
+            key={d.toDateString()}
+            disabled={isFuture}
+            onPress={() => onSelect(d)}
+            style={[styles.weekCell, isSel && styles.weekCellSel]}
+          >
+            <View style={styles.weekDisc}>
+              <MealRing
+                slots={mealsByDay[d.toDateString()]}
+                size={42}
+                stroke={3.2}
+                selected={isSel}
+              />
+              <Text style={[styles.weekNum, isFuture && styles.weekNumMuted]}>
+                {String(d.getDate()).padStart(2, '0')}
+              </Text>
+            </View>
+            <Text style={[styles.weekLabel, isSel && styles.weekLabelSel]}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -1321,33 +1390,39 @@ export default function HomeScreen() {
   const carbSliderFrac = goalSliderFrac(totalCarbs, CARB_GOAL);
   const insulinSliderFrac = goalSliderFrac(totalInsulin, INSULIN_GOAL);
 
+  // Plain loops (not .map with a captured running sum): closures that
+  // reassign outer variables block React Compiler memoization.
   const carbReadings = useMemo(() => {
-    let sum = 0;
-    return todayMeals
+    const sorted = todayMeals
       .slice()
       .sort(
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      )
-      .map((m) => {
-        const d = new Date(m.created_at);
-        sum += Math.max(0, m.result.carbohydrates);
-        return { minutes: d.getHours() * 60 + d.getMinutes(), value: sum };
-      });
+      );
+    const out: { minutes: number; value: number }[] = [];
+    let sum = 0;
+    for (const m of sorted) {
+      const d = new Date(m.created_at);
+      sum += Math.max(0, m.result.carbohydrates);
+      out.push({ minutes: d.getHours() * 60 + d.getMinutes(), value: sum });
+    }
+    return out;
   }, [todayMeals]);
   const insulinReadings = useMemo(() => {
-    let sum = 0;
-    return todayInsulin
+    const sorted = todayInsulin
       .slice()
       .sort(
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      )
-      .map((l) => {
-        const d = new Date(l.created_at);
-        sum += Math.max(0, l.dose);
-        return { minutes: d.getHours() * 60 + d.getMinutes(), value: sum };
-      });
+      );
+    const out: { minutes: number; value: number }[] = [];
+    let sum = 0;
+    for (const l of sorted) {
+      const d = new Date(l.created_at);
+      sum += Math.max(0, l.dose);
+      out.push({ minutes: d.getHours() * 60 + d.getMinutes(), value: sum });
+    }
+    return out;
   }, [todayInsulin]);
 
   // Meals section: which day is shown, and whether the calendar popup is open.
@@ -1478,7 +1553,10 @@ export default function HomeScreen() {
       return r.hour * 60 + r.minute <= nowMin && dueAt > seen;
     }).length;
     return newEntries + dueReminders;
-    // Recompute as data changes so the badge stays live.
+    // The log deps are intentional "extra" deps: getPlannedReminders()
+    // reads the store outside React, so the badge must recompute when
+    // the underlying data shifts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiJournal, aiJournalSeenAt, glucoseLogs, insulinLogs, meals]);
   // Urgent = today's coach reading is a hypo/hyper (danger/warning) — the
   // robot turns worried/red and its badge glows.
@@ -1666,6 +1744,14 @@ export default function HomeScreen() {
             <ArrowRight color="#f97316" />
           </Pressable>
         ) : null}
+
+        {/* ── Week date bar — meal rings per day, drives "Vos repas" ── */}
+        <WeekStrip
+          selected={selectedDate}
+          onSelect={setSelectedDate}
+          mealsByDay={mealsByDay}
+          locale={i18n.language}
+        />
 
         {/* ── Metric carousel card (Glycémie · Glucides · Insuline) ── */}
         <View
@@ -2579,6 +2665,51 @@ const styles = StyleSheet.create({
     marginLeft: 2,
     zIndex: 20,
   },
+
+  /* Week date bar */
+  weekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    marginBottom: 2,
+  },
+  weekCell: {
+    width: 46,
+    borderRadius: 999,
+    alignItems: 'center',
+    paddingTop: 4,
+    paddingBottom: 8,
+    gap: 6,
+  },
+  weekCellSel: { backgroundColor: WEEK_ACCENT },
+  weekDisc: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#fdfdfc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: 'rgba(30,42,38,1)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  weekNum: {
+    position: 'absolute',
+    fontFamily: F700,
+    fontSize: 14,
+    letterSpacing: 0.3,
+    color: '#1f2b28',
+  },
+  weekNumMuted: { color: '#b9c1bd' },
+  weekLabel: {
+    fontFamily: F700,
+    fontSize: 9.5,
+    letterSpacing: 1.3,
+    color: '#aeb5b1',
+  },
+  weekLabelSel: { color: '#ffffff' },
 
   /* Calendar popup */
   calBackdrop: {
