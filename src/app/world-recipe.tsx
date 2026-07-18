@@ -54,14 +54,19 @@ export default function WorldRecipeScreen() {
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
 
-  const [recipe, setRecipe] = useState<RecipeDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
+  // One fetch per (dish, language). The result remembers which request it
+  // answers, so `loading`/`failed` are pure derivations — no synchronous
+  // setState inside the effect (React Compiler friendly). The cleanup flag
+  // also fires on dep change, so a stale response can never overwrite a
+  // newer one.
+  const reqKey = `${name}|${dishId}|${image}|${i18n.language}`;
+  const [res, setRes] = useState<{
+    key: string;
+    recipe: RecipeDetail | null;
+  } | null>(null);
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    setFailed(false);
     (async () => {
       // The AI writes the authentic recipe by dish name; the correct
       // dish-specific photo (from the card) is reused as the hero.
@@ -73,15 +78,16 @@ export default function WorldRecipeScreen() {
         },
         i18n.language
       );
-      if (!alive) return;
-      if (!r) setFailed(true);
-      setRecipe(r);
-      setLoading(false);
+      if (alive) setRes({ key: reqKey, recipe: r });
     })();
     return () => {
       alive = false;
     };
-  }, [name, dishId, image, i18n.language]);
+  }, [name, dishId, image, i18n.language, reqKey]);
+
+  const recipe = res?.key === reqKey ? res.recipe : null;
+  const loading = !res || res.key !== reqKey;
+  const failed = !loading && !recipe;
 
   const close = () => {
     if (router.canGoBack()) router.back();

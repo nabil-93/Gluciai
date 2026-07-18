@@ -10,6 +10,7 @@ import {
   MealCard,
   ScreenContainer,
 } from '@/components/ui';
+import { nowMs } from '@/lib/clock';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -35,7 +36,7 @@ export default function HistoryScreen() {
   const [filter, setFilter] = useState<Filter>('week');
 
   const items = useMemo(() => {
-    const cutoff = Date.now() - FILTER_MS[filter];
+    const cutoff = nowMs() - FILTER_MS[filter];
     const within = (iso: string) => new Date(iso).getTime() >= cutoff;
 
     const list: TimelineItem[] = [
@@ -97,7 +98,7 @@ export default function HistoryScreen() {
       map.set(day, [...(map.get(day) ?? []), item]);
     }
     return [...map.entries()];
-  }, [items]);
+  }, [items, i18n.language]);
 
   return (
     <ScreenContainer withTabBarSpace>

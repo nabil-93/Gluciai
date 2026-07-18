@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 import { ActivityGlyph, ChevronLeft } from '@/components/ui';
 import { changeActivityStatus } from '@/services/data';
@@ -9,34 +10,15 @@ import { colors } from '@/theme';
 import type { ActivityStatus } from '@/types';
 
 const OPTIONS = [
-  {
-    key: 'active',
-    label: 'Actif(ve)',
-    desc: "Recommandations d'insuline standards",
-    color: colors.primary,
-  },
-  {
-    key: 'sick',
-    label: 'Malade',
-    desc: "Sensibilité à l'insuline ajustée",
-    color: colors.warning,
-  },
-  {
-    key: 'injured',
-    label: 'Blessé(e)',
-    desc: 'Activité réduite prise en compte',
-    color: colors.protein,
-  },
-  {
-    key: 'paused',
-    label: 'En pause',
-    desc: 'Suivi allégé',
-    color: colors.textSecondary,
-  },
-];
+  { key: 'active', labelKey: 'activeLabel', descKey: 'activeDesc', color: colors.primary },
+  { key: 'sick', labelKey: 'sickLabel', descKey: 'sickDesc', color: colors.warning },
+  { key: 'injured', labelKey: 'injuredLabel', descKey: 'injuredDesc', color: colors.protein },
+  { key: 'paused', labelKey: 'pausedLabel', descKey: 'pausedDesc', color: colors.textSecondary },
+] as const;
 
 export default function ActivityStatusScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const activityStatus = useAppStore((s) => s.activityStatus);
   const [step, setStep] = useState<'intro' | 'choice'>('choice');
   const [selected, setSelected] = useState<ActivityStatus>(activityStatus);
@@ -62,7 +44,7 @@ export default function ActivityStatusScreen() {
               <Pressable style={styles.backBtn} onPress={close}>
                 <ChevronLeft size={16} />
               </Pressable>
-              <Text style={styles.headTitle}>Statut d'activité</Text>
+              <Text style={styles.headTitle}>{t('activityStatus.title')}</Text>
             </View>
 
             <View style={styles.iconsGrid}>
@@ -75,14 +57,10 @@ export default function ActivityStatusScreen() {
               )}
             </View>
 
-            <Text style={styles.centerTitle}>Statut d'activité</Text>
-            <Text style={styles.centerBody}>
-              Définissez votre statut sur Actif(ve), Malade, Blessé(e) ou En
-              pause. GlucoAI ajustera ses recommandations d'insuline en
-              fonction de votre état.
-            </Text>
+            <Text style={styles.centerTitle}>{t('activityStatus.title')}</Text>
+            <Text style={styles.centerBody}>{t('activityStatus.intro')}</Text>
             <Pressable style={styles.cta} onPress={() => setStep('choice')}>
-              <Text style={styles.ctaText}>Continuer</Text>
+              <Text style={styles.ctaText}>{t('activityStatus.continue')}</Text>
             </Pressable>
           </>
         ) : (
@@ -91,7 +69,7 @@ export default function ActivityStatusScreen() {
               <Pressable style={styles.backBtn} onPress={() => setStep('intro')}>
                 <ChevronLeft size={16} />
               </Pressable>
-              <Text style={styles.headTitle}>Statut d'activité</Text>
+              <Text style={styles.headTitle}>{t('activityStatus.title')}</Text>
             </View>
 
             <View style={{ gap: 10 }}>
@@ -107,8 +85,8 @@ export default function ActivityStatusScreen() {
                       <ActivityGlyph size={22} color="#fff" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.optionLabel}>{o.label}</Text>
-                      <Text style={styles.optionDesc}>{o.desc}</Text>
+                      <Text style={styles.optionLabel}>{t(`activityStatus.${o.labelKey}`)}</Text>
+                      <Text style={styles.optionDesc}>{t(`activityStatus.${o.descKey}`)}</Text>
                     </View>
                     <View style={[styles.radio, on && styles.radioOn]}>
                       {on ? <View style={styles.radioDot} /> : null}
@@ -119,7 +97,7 @@ export default function ActivityStatusScreen() {
             </View>
 
             <Pressable style={styles.cta} onPress={update}>
-              <Text style={styles.ctaText}>Mettre à jour</Text>
+              <Text style={styles.ctaText}>{t('activityStatus.update')}</Text>
             </Pressable>
           </>
         )}

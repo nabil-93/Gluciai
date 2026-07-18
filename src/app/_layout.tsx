@@ -25,16 +25,28 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { InstallPrompt } from '@/components/InstallPrompt';
+import * as Sentry from '@sentry/react-native';
 
+import { InstallPrompt } from '@/components/InstallPrompt';
 import { initI18n } from '@/i18n';
 import { colors } from '@/theme';
+
+/* Crash reporting — inert until EXPO_PUBLIC_SENTRY_DSN is set (store
+ * builds). No PII: only unhandled errors and traces leave the device;
+ * health data lives in the store/Supabase and is never attached. */
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? '';
+Sentry.init({
+  dsn: SENTRY_DSN,
+  enabled: !!SENTRY_DSN && !__DEV__,
+  sendDefaultPii: false,
+  tracesSampleRate: 0.2,
+});
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
 
-export default function RootLayout() {
+function RootLayout() {
   const [ready, setReady] = useState(false);
   const [fontsLoaded] = useFonts({
     PlusJakartaSans_500Medium,
@@ -155,6 +167,10 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+/* Sentry.wrap adds the error boundary + touch-event breadcrumbs around the
+ * root — a no-op while Sentry is disabled (no DSN / dev). */
+export default Sentry.wrap(RootLayout);
 
 const styles = StyleSheet.create({
   root: {

@@ -33,7 +33,13 @@ function loadModule(relPath) {
 }
 
 const SUPABASE_URL = env('EXPO_PUBLIC_SUPABASE_URL');
-const ANON = env('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+// This function is admin-guarded server-side — call it with the service-role
+// key (export it before running; never commit it), NOT the public anon key.
+const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || env('SUPABASE_SERVICE_ROLE_KEY');
+if (!SERVICE) {
+  console.error('✗ Missing SUPABASE_SERVICE_ROLE_KEY. Run:\n  export SUPABASE_SERVICE_ROLE_KEY=... && node scripts/gen-dish-images.mjs');
+  process.exit(1);
+}
 const FN_URL = `${SUPABASE_URL}/functions/v1/gen-dish-image`;
 
 const { HEALTHY_FOODS } = loadModule('src/data/healthyFoods.ts');
@@ -47,7 +53,7 @@ async function genOne(f) {
   try {
     const r = await fetch(FN_URL, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${ANON}`, apikey: ANON, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${SERVICE}`, apikey: SERVICE, 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: f.id, name_fr: f.name_fr, name_en: f.name_en, category: f.category }),
       signal: AbortSignal.timeout(120_000),
     });

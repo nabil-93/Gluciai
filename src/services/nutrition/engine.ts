@@ -1,3 +1,4 @@
+import i18n from '@/i18n';
 import type { FoodItemResult, NutritionResult, NutritionSource } from '@/types';
 
 import { buildHighlights, glycemicLoad } from './advice';
@@ -38,6 +39,8 @@ const PROVIDER_CHAIN: NutritionProvider[] = [
   edamamProvider,
 ].map((p) => resilient(p));
 
+/** French labels — kept for the doctor PDF (report.tsx), which is
+ *  intentionally written in French for Moroccan practitioners. */
 export const SOURCE_LABEL: Record<NutritionSource, string> = {
   moroccan_db: 'Base interne',
   usda: 'USDA FoodData Central',
@@ -46,6 +49,13 @@ export const SOURCE_LABEL: Record<NutritionSource, string> = {
   edamam: 'Edamam',
   ai_estimate: 'Estimation IA',
 };
+
+/** Localized source label for UI screens (brand names stay as-is). */
+export function sourceLabel(source: NutritionSource): string {
+  if (source === 'moroccan_db') return i18n.t('sources.internalDb');
+  if (source === 'ai_estimate') return i18n.t('sources.aiEstimate');
+  return SOURCE_LABEL[source];
+}
 
 /** Below this detection confidence a food is discarded — never invented. */
 const MIN_DETECTION_CONFIDENCE = 0.4;

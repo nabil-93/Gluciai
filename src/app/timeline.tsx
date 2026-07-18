@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, PremiumEmptyState } from '@/components/ui';
 import { buildDayEvents, dayTotals, type DayEvent } from '@/services/dayLog';
 import { isRTL } from '@/i18n';
+import { nowMs } from '@/lib/clock';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
 
@@ -89,7 +90,7 @@ export default function TimelineScreen() {
 
   const [daysBack, setDaysBack] = useState(startDay);
   const day = useMemo(
-    () => new Date(Date.now() - daysBack * 24 * 3600 * 1000),
+    () => new Date(nowMs() - daysBack * 24 * 3600 * 1000),
     [daysBack]
   );
 

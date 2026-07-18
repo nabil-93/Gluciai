@@ -35,14 +35,29 @@ export function DidYouMeanSheet({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(600)).current;
-  const [choice, setChoice] = useState<string | null>(null);
+  /** The user's explicit pick; `null` = default. The DEFAULT is derived,
+   *  so no setState-in-effect is needed to refresh it. */
+  const [picked, setPicked] = useState<string | null>(null);
 
   const original = item?.name ?? '';
   const options = item?.alternatives ?? [];
 
+  // A new item (or a re-open) discards the previous pick — adjusted
+  // during render, the official React "previous renders" pattern.
+  const [prev, setPrev] = useState<{
+    item: FoodItemResult | null;
+    visible: boolean;
+  }>({ item: null, visible: false });
+  if (item !== prev.item || visible !== prev.visible) {
+    setPrev({ item, visible });
+    setPicked(null);
+  }
+
+  const choice = picked ?? item?.search_name ?? original;
+  const setChoice = setPicked;
+
   useEffect(() => {
     if (visible) {
-      setChoice(item?.search_name ?? original);
       Animated.timing(translateY, {
         toValue: 0,
         duration: 280,
@@ -52,7 +67,7 @@ export function DidYouMeanSheet({
     } else {
       translateY.setValue(600);
     }
-  }, [visible, item, original, translateY]);
+  }, [visible, translateY]);
 
   if (!item) return null;
 

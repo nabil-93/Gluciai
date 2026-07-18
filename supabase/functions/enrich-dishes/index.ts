@@ -11,6 +11,8 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
+import { isAdminCaller } from '../_shared/adminGuard.ts';
+
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_CHAT_MODEL') ?? 'gemini-2.5-flash';
 
@@ -86,6 +88,13 @@ function arr(v: unknown, max = 12): string[] {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
+    // Offline tooling only — never callable with just the public anon key.
+    if (!(await isAdminCaller(req))) {
+      return new Response(JSON.stringify({ error: 'forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     const body = await req.json();
     const dishes = Array.isArray(body.dishes) ? body.dishes.slice(0, 10) : [];
     const results = await Promise.all(

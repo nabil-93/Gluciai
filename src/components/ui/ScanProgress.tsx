@@ -29,10 +29,9 @@ export function ScanProgress({
   // Ease the visible pointer toward the real stage; when the real stage
   // jumps ahead (e.g. straight to "finalizing"), fill intermediate steps.
   useEffect(() => {
-    if (done) {
-      setVisibleIndex(SCAN_STAGES.length);
-      return;
-    }
+    // `done` is rendered directly (completed = done || …), so the pointer
+    // needs no snap-to-end setState here.
+    if (done) return;
     // Allow the visible pointer to reach at most the real stage.
     const target = realIndex;
     if (visibleIndex >= target) return;

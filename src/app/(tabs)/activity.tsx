@@ -12,12 +12,13 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PremiumEmptyState, PressableScale } from '@/components/ui';
-
-const SNEAKER = require('../../assets/claude/sneaker.png');
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
+import { nowMs } from '@/lib/clock';
 import { deleteActivity, saveActivity } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import type { ActivityIntensity, ActivityKind } from '@/types';
+
+const SNEAKER = require('../../assets/claude/sneaker.png');
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -66,7 +67,7 @@ export default function ActivityScreen() {
 
   // This week vs last week (rolling 7-day windows)
   const { weekMin, deltaPct, hasComparison, recent } = useMemo(() => {
-    const now = Date.now();
+    const now = nowMs();
     const thisWeek = activityLogs.filter(
       (a) => now - new Date(a.created_at).getTime() < 7 * DAY_MS
     );

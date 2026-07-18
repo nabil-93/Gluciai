@@ -431,17 +431,27 @@ function LabsScreen() {
   const [valueModal, setValueModal] = useState<LabValue | null>(null);
   const [valueText, setValueText] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState(false);
-  const [voice, setVoice] = useState<VoiceState>('idle');
+  /** The voice indicator belongs to ONE report: keyed storage + derivation
+   *  means switching reports shows 'idle' with no reset effect. */
+  const [voiceSt, setVoiceSt] = useState<{
+    id: string | null;
+    state: VoiceState;
+  }>({ id: null, state: 'idle' });
 
   const speakerRef = useRef<LabSpeaker | null>(null);
   if (!speakerRef.current) speakerRef.current = new LabSpeaker();
 
   const selected = reports.find((r) => r.id === selectedId) ?? reports[0] ?? null;
 
-  // Keep selection valid when reports change (add/delete/hydrate).
-  useEffect(() => {
-    if (!selected && reports.length) setSelectedId(reports[0].id);
-  }, [reports, selected]);
+  const voice: VoiceState =
+    voiceSt.id === (selected?.id ?? null) ? voiceSt.state : 'idle';
+  const setVoice = (state: VoiceState) =>
+    setVoiceSt({ id: selected?.id ?? null, state });
+
+  // Keep the stored id in sync with the report actually shown
+  // (add/delete/hydrate) — adjusted during render, the official React
+  // "storing information from previous renders" pattern.
+  if (selected && selectedId !== selected.id) setSelectedId(selected.id);
 
   // Stop the voice when leaving the screen or switching report.
   useEffect(() => {
@@ -449,8 +459,6 @@ function LabsScreen() {
   }, []);
   useEffect(() => {
     speakerRef.current?.stop();
-    setVoice('idle');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   const close = () => {

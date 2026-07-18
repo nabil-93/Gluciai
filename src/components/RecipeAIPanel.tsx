@@ -71,27 +71,20 @@ export function RecipeAIPanel({
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
-  const opened = useRef(false);
 
-  // Greet once when the panel first opens.
-  useEffect(() => {
-    if (visible && !opened.current) {
-      opened.current = true;
-      setMsgs([
-        {
-          id: 'greet',
-          role: 'assistant',
-          content: t('wr.aiGreeting'),
-        },
-      ]);
-    }
-    if (!visible) {
-      opened.current = false;
+  // Open/close transitions adjusted during render (the official React
+  // "previous renders" pattern — no setState-in-effect cascade):
+  // opening seeds the greeting, closing clears the conversation.
+  const [wasVisible, setWasVisible] = useState(false);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) {
+      setMsgs([{ id: 'greet', role: 'assistant', content: t('wr.aiGreeting') }]);
+    } else {
       setMsgs([]);
       setInput('');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }
 
   useEffect(() => {
     const id = setTimeout(

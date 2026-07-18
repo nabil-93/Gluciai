@@ -27,11 +27,11 @@ import {
 } from '@/components/ui';
 import { computeBolus, saveMeal } from '@/services/data';
 import {
-  SOURCE_LABEL,
   aggregateItems,
   reidentifyItem,
   rescaleItem,
   resolveFood,
+  sourceLabel,
 } from '@/services/nutrition/engine';
 import {
   getSuggestedCorrection,
@@ -105,7 +105,7 @@ function isToday(iso: string) {
 
 export default function ScanResultScreen() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const profile = useAppStore((s) => s.profile);
   const glucoseLogs = useAppStore((s) => s.glucoseLogs);
   const insets = useSafeAreaInsets();
@@ -260,7 +260,7 @@ export default function ScanResultScreen() {
   };
 
   /** Accept a remembered correction the user was prompted about. */
-  const useSuggestion = async (index: number) => {
+  const applySuggestion = async (index: number) => {
     const current = items[index];
     const s = getSuggestedCorrection(current.name);
     setDismissedSuggestions((d) => ({ ...d, [index]: true }));
@@ -643,7 +643,7 @@ export default function ScanResultScreen() {
                           />
                           <Text style={[styles.sourceText, { color }]}>
                             {t('result.matchedIn')}{' '}
-                            {SOURCE_LABEL[it.matched_database ?? it.source]}
+                            {sourceLabel(it.matched_database ?? it.source)}
                             {it.match_score != null
                               ? ` · ${t('result.matchScore')} ${it.match_score}%`
                               : ''}
@@ -740,7 +740,7 @@ export default function ScanResultScreen() {
                         </Text>
                         <View style={styles.suggestActions}>
                           <Pressable
-                            onPress={() => useSuggestion(i)}
+                            onPress={() => applySuggestion(i)}
                             style={styles.suggestUse}
                           >
                             <Text style={styles.suggestUseText}>
@@ -848,10 +848,10 @@ export default function ScanResultScreen() {
     <>
           {/* ── Macro grid ── */}
           <View style={styles.grid}>
-            <Metric label="Sucre" value={Math.round(result.sugar)} unit="g" color={colors.protein} />
-            <Metric label="Protéines" value={Math.round(result.protein)} unit="g" color={colors.ai} />
-            <Metric label="Lipides" value={Math.round(result.fat)} unit="g" color={colors.lipids} />
-            <Metric label="Fibres" value={Math.round(result.fiber)} unit="g" color={colors.primary} />
+            <Metric label={t('nutritionPage.sugar')} value={Math.round(result.sugar)} unit="g" color={colors.protein} />
+            <Metric label={t('nutritionPage.protein')} value={Math.round(result.protein)} unit="g" color={colors.ai} />
+            <Metric label={t('nutritionPage.fat')} value={Math.round(result.fat)} unit="g" color={colors.lipids} />
+            <Metric label={t('barcodePage.fiber')} value={Math.round(result.fiber)} unit="g" color={colors.primary} />
             {result.sodium ? (
               <Metric label="Sodium" value={result.sodium} unit="mg" color={colors.textSecondary} />
             ) : null}
@@ -861,7 +861,7 @@ export default function ScanResultScreen() {
           {result.source ? (
             <View style={styles.totalsSource}>
               <Text style={styles.totalsSourceText}>
-                Source nutritionnelle : {SOURCE_LABEL[result.source]}
+                {t('scanResultPage.nutritionSource')} {sourceLabel(result.source)}
               </Text>
             </View>
           ) : null}
@@ -870,7 +870,7 @@ export default function ScanResultScreen() {
           {gi > 0 ? (
           <BevelCard style={{ marginTop: 12 }}>
             <View style={styles.giHead}>
-              <Text style={styles.giTitle}>Index glycémique</Text>
+              <Text style={styles.giTitle}>{t('scanResultPage.giTitle')}</Text>
               <View style={[styles.giBadge, { backgroundColor: `${giColor}22` }]}>
                 <Text style={[styles.giBadgeText, { color: giColor }]}>
                   {giLabel}
@@ -892,10 +892,7 @@ export default function ScanResultScreen() {
               <Text style={styles.giScaleText}>100</Text>
             </View>
             {gi > 55 ? (
-              <Text style={styles.giHint}>
-                Cet aliment peut faire monter votre glycémie rapidement —
-                pensez à mesurer 2 h après le repas.
-              </Text>
+              <Text style={styles.giHint}>{t('scanResultPage.giHint')}</Text>
             ) : null}
           </BevelCard>
           ) : null}
@@ -907,23 +904,23 @@ export default function ScanResultScreen() {
     <>
           {/* ── Insulin estimation ── */}
           <View style={styles.bolusCard}>
-            <Text style={styles.bolusLabel}>Dose estimée pour ce repas</Text>
+            <Text style={styles.bolusLabel}>{t('scanResultPage.bolusLabel')}</Text>
             <View style={styles.bolusRow}>
               <Text style={styles.bolusValue}>
-                ≈ {bolus.total.toLocaleString('fr-FR')}
+                ≈ {bolus.total.toLocaleString(i18n.language)}
               </Text>
               <Text style={styles.bolusUnit}>U</Text>
             </View>
             <Text style={styles.bolusDetail}>
               {Math.round(result.carbohydrates)} g ÷ ratio {bolus.ratio}
               {bolus.correction > 0
-                ? ` + correction ${bolus.correction} U (glycémie ${lastGlucose?.value})`
+                ? t('scanResultPage.bolusCorrection', {
+                    correction: bolus.correction,
+                    glucose: lastGlucose?.value,
+                  })
                 : ''}
             </Text>
-            <Text style={styles.disclaimer}>
-              Estimation éducative IA uniquement — ceci n'est PAS un avis
-              médical. Vérifiez toujours la dose avec votre médecin.
-            </Text>
+            <Text style={styles.disclaimer}>{t('scanResultPage.bolusDisclaimer')}</Text>
           </View>
 
           {/* ── Warnings ── */}

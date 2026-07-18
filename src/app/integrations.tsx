@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BevelCard, ChevronLeft } from '@/components/ui';
@@ -18,6 +19,7 @@ import { colors, shadows } from '@/theme';
 
 export default function IntegrationsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [availability, setAvailability] = useState<Record<string, boolean>>({});
 
@@ -57,14 +59,11 @@ export default function IntegrationsScreen() {
           <Pressable onPress={close} style={styles.backBtn}>
             <ChevronLeft size={16} />
           </Pressable>
-          <Text style={styles.headTitle}>Capteurs & santé</Text>
+          <Text style={styles.headTitle}>{t('integrations.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
-        <Text style={styles.subtitle}>
-          Connectez vos capteurs et plateformes santé — vos mesures arrivent
-          automatiquement dans GlucoAI.
-        </Text>
+        <Text style={styles.subtitle}>{t('integrations.subtitle')}</Text>
 
         <View style={{ gap: 12 }}>
           {providers.map((p) => {
@@ -74,18 +73,18 @@ export default function IntegrationsScreen() {
                 <Text style={{ fontSize: 30 }}>{p.icon}</Text>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.name}>{p.name}</Text>
-                  <Text style={styles.desc}>{p.description}</Text>
+                  <Text style={styles.desc}>{t(p.descriptionKey)}</Text>
                 </View>
                 {available ? (
                   <Pressable
                     onPress={() => connect(p)}
                     style={styles.connectBtn}
                   >
-                    <Text style={styles.connectText}>Connecter</Text>
+                    <Text style={styles.connectText}>{t('integrations.connect')}</Text>
                   </Pressable>
                 ) : (
                   <View style={styles.soonBadge}>
-                    <Text style={styles.soonText}>Bientôt</Text>
+                    <Text style={styles.soonText}>{t('integrations.soon')}</Text>
                   </View>
                 )}
               </BevelCard>
@@ -93,11 +92,7 @@ export default function IntegrationsScreen() {
           })}
         </View>
 
-        <Text style={styles.note}>
-          Les connexions natives (HealthKit, Health Connect, LibreLinkUp,
-          Dexcom Share) s'activent dans l'application publiée sur l'App Store
-          et Google Play — l'architecture est déjà prête.
-        </Text>
+        <Text style={styles.note}>{t('integrations.note')}</Text>
       </ScrollView>
     </View>
   );

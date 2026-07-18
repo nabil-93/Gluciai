@@ -8,6 +8,8 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
+import { isAdminCaller } from '../_shared/adminGuard.ts';
+
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const IMG_MODEL = Deno.env.get('GEMINI_IMAGE_MODEL') ?? 'gemini-2.5-flash-image';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -84,6 +86,15 @@ async function upload(id: string, bytes: Uint8Array, mime: string): Promise<stri
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
+    // Offline tooling only — otherwise anyone with the public anon key could
+    // burn image-generation quota AND overwrite dish photos in the public
+    // bucket (x-upsert with a caller-chosen id).
+    if (!(await isAdminCaller(req))) {
+      return new Response(JSON.stringify({ ok: false, error: 'forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     const d = await req.json();
     if (!d?.id) return new Response(JSON.stringify({ ok: false, error: 'no id' }), { status: 400, headers: corsHeaders });
     const img = await genImageBase64(d);

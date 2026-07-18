@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BevelCard, ChevronLeft } from '@/components/ui';
@@ -33,6 +34,7 @@ const TYPE_AR: Record<string, string> = {
 
 export default function EmergencyScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { profile, glucoseLogs, insulinLogs } = useAppStore();
 
@@ -63,7 +65,7 @@ export default function EmergencyScreen() {
           <Pressable onPress={close} style={styles.backBtn}>
             <ChevronLeft size={16} color="#fff" />
           </Pressable>
-          <Text style={styles.headTitle}>Urgence</Text>
+          <Text style={styles.headTitle}>{t('emergencyPage.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
@@ -81,7 +83,7 @@ export default function EmergencyScreen() {
             >
               <Text style={styles.samuIcon}>📞</Text>
               <Text style={styles.contactLabel} numberOfLines={1}>
-                {profile.emergency_contact_name || 'Contact'}
+                {profile.emergency_contact_name || t('emergencyPage.contact')}
               </Text>
               <Text style={styles.contactNum}>
                 {profile.emergency_contact_phone}
@@ -90,20 +92,23 @@ export default function EmergencyScreen() {
           ) : (
             <View style={[styles.contactBtn, { opacity: 0.6 }]}>
               <Text style={styles.samuIcon}>📞</Text>
-              <Text style={styles.contactLabel}>Aucun contact</Text>
-              <Text style={styles.contactNum}>Ajoutez-le au profil</Text>
+              <Text style={styles.contactLabel}>{t('emergencyPage.noContact')}</Text>
+              <Text style={styles.contactNum}>{t('emergencyPage.addToProfile')}</Text>
             </View>
           )}
         </View>
 
-        {/* Hypo first aid */}
+        {/* Hypo first aid — standard "rule of 15" steps, translated per app
+            language. TODO(medical-review): the ar/de/en translations of these
+            4 steps must be double-checked by a clinician / native speaker
+            before store release (see i18n emergencyPage.hypoStep1-4). */}
         <BevelCard style={styles.aidCard}>
-          <Text style={styles.aidTitle}>🧃 En cas d'hypoglycémie</Text>
+          <Text style={styles.aidTitle}>{t('emergencyPage.hypoTitle')}</Text>
           {[
-            'Donnez 15 g de sucre rapide (3 morceaux de sucre, ½ verre de jus).',
-            'Attendez 15 minutes puis re-mesurez la glycémie.',
-            'Si la personne est inconsciente : NE RIEN donner par la bouche, appelez le 141.',
-            'Placez la personne en position latérale de sécurité.',
+            t('emergencyPage.hypoStep1'),
+            t('emergencyPage.hypoStep2'),
+            t('emergencyPage.hypoStep3'),
+            t('emergencyPage.hypoStep4'),
           ].map((s, i) => (
             <View key={i} style={styles.aidRow}>
               <Text style={styles.aidNum}>{i + 1}</Text>
@@ -112,7 +117,9 @@ export default function EmergencyScreen() {
           ))}
         </BevelCard>
 
-        {/* Medical ID card — FR */}
+        {/* Medical ID cards — INTENTIONALLY always French + Arabic, whatever
+            the app language: they are read by bystanders and first responders
+            in Morocco, not by the patient. Do not localize. */}
         <View style={styles.idCard}>
           <Text style={styles.idBadge}>CARTE MÉDICALE</Text>
           <Text style={styles.idTitle}>Je suis diabétique</Text>
@@ -168,7 +175,7 @@ export default function EmergencyScreen() {
           <BevelCard style={styles.doctorRow}>
             <Text style={{ fontSize: 20 }}>🩺</Text>
             <Text style={styles.doctorText}>
-              Médecin traitant : {profile.doctor_name}
+              {t('emergencyPage.doctor', { name: profile.doctor_name })}
             </Text>
           </BevelCard>
         ) : null}

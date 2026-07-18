@@ -19,6 +19,8 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
+import { callerUserId } from '../_shared/usage.ts';
+
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_CHAT_MODEL') ?? 'gemini-2.5-flash';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -228,6 +230,12 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
   try {
+    // Suggest/detail spend Gemini tokens — require a real signed-in user
+    // (the bare anon key passes verify_jwt but must not burn quota).
+    if (!(await callerUserId(req))) {
+      return json({ error: 'unauthorized' }, 401);
+    }
+
     const body = await req.json();
     const action = body.action ?? 'suggest';
     const lang = LANGUAGE_NAMES[body.lang] ? body.lang : 'en';

@@ -81,11 +81,15 @@ export default function HealthyFoodsScreen() {
 
   // ── World search state ──
   const [worldItems, setWorldItems] = useState<WorldFood[]>([]);
-  const [worldLoading, setWorldLoading] = useState(false);
   const [worldPage, setWorldPage] = useState(1);
   const [worldHasMore, setWorldHasMore] = useState(false);
   const [worldFailed, setWorldFailed] = useState(false);
   const [worldSelected, setWorldSelected] = useState<WorldFood | null>(null);
+  /** Key (query) of the last search whose results are on screen — the
+   *  search spinner is DERIVED from it (no sync setState in the effect). */
+  const [worldDoneKey, setWorldDoneKey] = useState<string | null>(null);
+  /** Pagination spinner — set from the load-more press (event time). */
+  const [moreLoading, setMoreLoading] = useState(false);
   const worldSeq = useRef(0);
 
   const foods = useMemo(
@@ -101,7 +105,6 @@ export default function HealthyFoodsScreen() {
   useEffect(() => {
     if (mode !== 'world') return;
     const seq = ++worldSeq.current;
-    setWorldLoading(true);
     const timer = setTimeout(
       async () => {
         const { items, hasMore, failed } = await searchWorldFoods(worldQuery, 1);
@@ -110,22 +113,26 @@ export default function HealthyFoodsScreen() {
         setWorldPage(1);
         setWorldHasMore(hasMore);
         setWorldFailed(!!failed);
-        setWorldLoading(false);
+        setWorldDoneKey(worldQuery);
       },
       worldQuery ? 350 : 0
     );
     return () => clearTimeout(timer);
   }, [worldQuery, mode]);
 
+  // Searching while the on-screen results don't answer the current query.
+  const worldLoading =
+    (mode === 'world' && worldDoneKey !== worldQuery) || moreLoading;
+
   const loadMoreWorld = async () => {
     if (worldLoading) return;
-    setWorldLoading(true);
+    setMoreLoading(true);
     const next = worldPage + 1;
     const { items, hasMore } = await searchWorldFoods(worldQuery, next);
     setWorldItems((prev) => [...prev, ...items]);
     setWorldPage(next);
     setWorldHasMore(hasMore);
-    setWorldLoading(false);
+    setMoreLoading(false);
   };
 
   const close = () => {

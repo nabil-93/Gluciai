@@ -1,3 +1,4 @@
+import i18n from '@/i18n';
 import { MOROCCAN_FOODS } from '@/data/moroccanFoods';
 import type { GlucoseLog, MealScan, Profile } from '@/types';
 
@@ -30,12 +31,12 @@ export function getRecommendations(
     if (bmi >= 27) {
       recs.push({
         icon: '⚖️',
-        text: `Votre IMC est de ${bmi.toFixed(1)} — une perte de 5 % du poids améliore nettement la sensibilité à l'insuline. Privilégiez tajines de légumes et poisson grillé.`,
+        text: i18n.t('recs.bmiHigh', { bmi: bmi.toFixed(1) }),
       });
     } else if (bmi > 0 && bmi < 18.5) {
       recs.push({
         icon: '⚖️',
-        text: `IMC ${bmi.toFixed(1)} — pensez à des collations riches en protéines (sellou en petite quantité, amandes) entre les repas.`,
+        text: i18n.t('recs.bmiLow', { bmi: bmi.toFixed(1) }),
       });
     }
   }
@@ -49,7 +50,7 @@ export function getRecommendations(
   if (favorite && favorite[1] >= 2) {
     recs.push({
       icon: '❤️',
-      text: `Vous aimez « ${favorite[0]} » (${favorite[1]}× cette semaine). Ajoutez une salade (zaalouk, salade marocaine) avant : les fibres ralentissent le pic glycémique.`,
+      text: i18n.t('recs.favorite', { name: favorite[0], count: favorite[1] }),
     });
   }
 
@@ -58,7 +59,7 @@ export function getRecommendations(
   if (sugarWeek > 150) {
     recs.push({
       icon: '🍬',
-      text: `${Math.round(sugarWeek)} g de sucre cette semaine. Le thé à la menthe non sucré ou peu sucré ferait une vraie différence.`,
+      text: i18n.t('recs.sugarWeek', { sugar: Math.round(sugarWeek) }),
     });
   }
 
@@ -73,7 +74,7 @@ export function getRecommendations(
       .join(', ');
     recs.push({
       icon: '🌾',
-      text: `Vos repas manquent de fibres. Bons choix marocains à IG bas : ${highFiber}.`,
+      text: i18n.t('recs.fiber', { foods: highFiber }),
     });
   }
 
@@ -83,30 +84,21 @@ export function getRecommendations(
   if (lastG && lastG.value > high) {
     recs.push({
       icon: '🥗',
-      text: `Glycémie actuelle élevée (${lastG.value}) — pour le prochain repas, visez < 40 g de glucides : kefta grillée, poisson, légumes.`,
+      text: i18n.t('recs.glucoseHigh', { value: lastG.value }),
     });
   }
 
   // ── Diabetes-type specific ──
   if (profile?.diabetes_type === 'type2' || profile?.diabetes_type === 'prediabetes') {
-    recs.push({
-      icon: '🚶',
-      text: '10–15 min de marche après le repas principal réduisent le pic glycémique de 20 à 30 %.',
-    });
+    recs.push({ icon: '🚶', text: i18n.t('recs.walk') });
   }
   if (profile?.diabetes_type === 'gestational') {
-    recs.push({
-      icon: '🤰',
-      text: 'Diabète gestationnel : fractionnez en 3 repas + 2 collations et évitez les jus de fruits, même frais.',
-    });
+    recs.push({ icon: '🤰', text: i18n.t('recs.gestational') });
   }
 
   // ── Fallback ──
   if (recs.length === 0) {
-    recs.push({
-      icon: '✨',
-      text: 'Continuez à scanner vos repas — plus vous enregistrez, plus les recommandations deviennent précises.',
-    });
+    recs.push({ icon: '✨', text: i18n.t('recs.fallback') });
   }
 
   return recs.slice(0, 4);

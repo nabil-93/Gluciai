@@ -94,6 +94,7 @@ export default function AiJournalScreen() {
       (r) => r.hour * 60 + r.minute <= nowMin
     );
     // aiJournal in deps just to recompute when data (and thus reminders) shift.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiJournal, t]);
   const fmtTime = (h: number, m: number) =>
     `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;

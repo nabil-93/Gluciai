@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { nowDate, nowMs } from '@/lib/clock';
 import type { LoggerAction } from '@/services/aiLogger';
 
 const F500 = 'PlusJakartaSans_500Medium';
-const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
@@ -79,8 +79,8 @@ export function LoggerConfirmCard({
 
   const when = (() => {
     if (action.type === 'reminder') {
-      const due = new Date(Date.now() + action.due_in_minutes * 60_000);
-      const sameDay = due.toDateString() === new Date().toDateString();
+      const due = new Date(nowMs() + action.due_in_minutes * 60_000);
+      const sameDay = due.toDateString() === nowDate().toDateString();
       const time = due.toLocaleTimeString(i18n.language, {
         hour: '2-digit',
         minute: '2-digit',
@@ -90,7 +90,7 @@ export function LoggerConfirmCard({
         : `${due.toLocaleDateString(i18n.language, { weekday: 'short', day: 'numeric', month: 'short' })} ${time}`;
     }
     return action.minutes_ago
-      ? new Date(Date.now() - action.minutes_ago * 60_000).toLocaleTimeString(
+      ? new Date(nowMs() - action.minutes_ago * 60_000).toLocaleTimeString(
           i18n.language,
           { hour: '2-digit', minute: '2-digit' }
         )

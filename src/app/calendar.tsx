@@ -2,18 +2,27 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChevronDown } from '@/components/ui';
+import { nowDate } from '@/lib/clock';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
 
-const DOW = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+/** Monday-first day-of-week header, in the app language.
+ *  2024-01-01 is a Monday — any known Monday works as the anchor. */
+const dowLabels = (locale: string) =>
+  Array.from({ length: 7 }, (_, i) =>
+    new Date(2024, 0, 1 + i).toLocaleDateString(locale, { weekday: 'short' })
+  );
 
 export default function CalendarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { i18n } = useTranslation();
   const { glucoseLogs, meals, insulinLogs, profile } = useAppStore();
+  const DOW = useMemo(() => dowLabels(i18n.language), [i18n.language]);
 
   const low = profile?.target_low ?? 70;
   const high = profile?.target_high ?? 180;
@@ -26,18 +35,27 @@ export default function CalendarScreen() {
   /* Month being browsed: 0 = current, 1 = previous… every past day stays
      tappable — tapping opens the full archive of that day (/day). */
   const [monthsBack, setMonthsBack] = useState(0);
-  const now = new Date();
-  const shown = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
-  const year = shown.getFullYear();
-  const month = shown.getMonth();
-  const monthName = shown.toLocaleDateString('fr-FR', {
-    month: 'long',
-    year: 'numeric',
-  });
-  const firstDay = (new Date(year, month, 1).getDay() + 6) % 7; // Monday-first
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today =
-    monthsBack === 0 ? now.getDate() : -1; // highlight only in the current month
+  // Derived in one memo so `year`/`month` reach the memos below as stable
+  // primitives (Date objects are mutable — deriving inline blocks the
+  // compiler from preserving the downstream manual memoization).
+  const { year, month, monthName, firstDay, daysInMonth, today } = useMemo(() => {
+    const now = nowDate();
+    const shown = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+    const year = shown.getFullYear();
+    const month = shown.getMonth();
+    return {
+      year,
+      month,
+      monthName: shown.toLocaleDateString(i18n.language, {
+        month: 'long',
+        year: 'numeric',
+      }),
+      firstDay: (new Date(year, month, 1).getDay() + 6) % 7, // Monday-first
+      daysInMonth: new Date(year, month + 1, 0).getDate(),
+      // highlight only in the current month
+      today: monthsBack === 0 ? now.getDate() : -1,
+    };
+  }, [monthsBack, i18n.language]);
 
   /* Days of this month that hold ANY data (meals / insulin) — small dot */
   const dataDays = useMemo(() => {

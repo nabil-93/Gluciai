@@ -422,6 +422,24 @@ export default function ProfileScreen() {
             </View>
             <Text style={styles.planArrow}>›</Text>
           </Pressable>
+
+          {/* Medical disclaimer — the same full "AI limits" page shown at
+              sign-up, always reachable (store guideline for health apps). */}
+          <Pressable
+            onPress={() => router.push('/consent-detail?id=limits' as any)}
+            style={[styles.planCard, { marginTop: 10 }]}
+          >
+            <View style={[styles.planIcon, { backgroundColor: '#fdf0d8' }]}>
+              <Text style={{ fontSize: 20 }}>⚠️</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.planTitle}>{t('profile.disclaimerRowTitle')}</Text>
+              <Text style={styles.planSub} numberOfLines={2}>
+                {t('profile.disclaimerRowSub')}
+              </Text>
+            </View>
+            <Text style={styles.planArrow}>›</Text>
+          </Pressable>
         </View>
 
         {/* Security */}

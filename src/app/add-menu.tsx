@@ -4,6 +4,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter, type Href } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActivityGlyph, CloseGlyph } from '@/components/ui';
@@ -83,56 +84,57 @@ function LabGlyph() {
 }
 
 interface Item {
-  label: string;
+  /** i18n key under addMenu.* */
+  labelKey: string;
   href: Href;
   gradient?: boolean;
   icon: React.ReactNode;
 }
 
 const ITEMS: Item[] = [
-  { label: 'Scanner un repas', href: '/scan', gradient: true, icon: <ScanGlyph /> },
-  { label: 'Glycémie', href: '/log-glucose', icon: <DropGlyph /> },
-  { label: 'Insuline', href: '/log-insulin', icon: <SyringeGlyph /> },
-  { label: 'Calculateur de bolus', href: '/bolus', icon: <GridGlyph /> },
+  { labelKey: 'scan', href: '/scan', gradient: true, icon: <ScanGlyph /> },
+  { labelKey: 'glucose', href: '/log-glucose', icon: <DropGlyph /> },
+  { labelKey: 'insulin', href: '/log-insulin', icon: <SyringeGlyph /> },
+  { labelKey: 'bolus', href: '/bolus', icon: <GridGlyph /> },
   {
-    label: 'Cuisine marocaine',
+    labelKey: 'moroccanFood',
     href: '/foods',
     icon: <Text style={{ fontSize: 24 }}>🇲🇦</Text>,
   },
   {
-    label: 'Makla saine',
+    labelKey: 'healthyFood',
     href: '/healthy-foods',
     icon: <Text style={{ fontSize: 22 }}>🥗</Text>,
   },
   {
-    label: 'Plats du monde',
+    labelKey: 'worldDishes',
     href: '/world-recipes',
     icon: <Text style={{ fontSize: 22 }}>🌍</Text>,
   },
   {
-    label: 'Code-barres',
+    labelKey: 'barcode',
     href: '/barcode',
     icon: <Text style={{ fontSize: 22 }}>🏷️</Text>,
   },
   {
-    label: 'Menu restaurant',
+    labelKey: 'menuScan',
     href: '/menu-scan',
     icon: <Text style={{ fontSize: 22 }}>📋</Text>,
   },
   {
-    label: 'Activité',
+    labelKey: 'activity',
     href: '/(tabs)/activity',
     icon: <ActivityGlyph size={24} color={colors.primary} />,
   },
-  { label: 'Poids & mesures', href: '/(tabs)/biology', icon: <ScaleGlyph /> },
-  { label: 'Mes analyses', href: '/labs', icon: <LabGlyph /> },
+  { labelKey: 'measures', href: '/(tabs)/biology', icon: <ScaleGlyph /> },
+  { labelKey: 'labs', href: '/labs', icon: <LabGlyph /> },
   {
-    label: 'Rapport médecin',
+    labelKey: 'report',
     href: '/report',
     icon: <Text style={{ fontSize: 22 }}>📄</Text>,
   },
   {
-    label: 'Urgence SOS',
+    labelKey: 'emergency',
     href: '/emergency',
     icon: <Text style={{ fontSize: 22 }}>🚨</Text>,
   },
@@ -140,6 +142,7 @@ const ITEMS: Item[] = [
 
 export default function AddMenuScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   // Hidden feature: the labs shortcut only exists for granted accounts.
   const labsGranted = useAppStore((s) => s.grantedFeatures.includes('labs'));
@@ -169,7 +172,7 @@ export default function AddMenuScreen() {
         <View style={styles.grid}>
           {items.map((item) => (
             <Pressable
-              key={item.label}
+              key={item.labelKey}
               style={({ pressed }) => [styles.item, pressed && { opacity: 0.7 }]}
               onPress={() => open(item.href)}
             >
@@ -186,7 +189,7 @@ export default function AddMenuScreen() {
                 <View style={styles.itemIcon}>{item.icon}</View>
               )}
               <Text style={styles.itemLabel} numberOfLines={2}>
-                {item.label}
+                {t(`addMenu.${item.labelKey}`)}
               </Text>
             </Pressable>
           ))}

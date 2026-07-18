@@ -52,7 +52,14 @@
           "cameraPermission": "GlucoAI uses the camera to analyze your meals with AI."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "glucoai",
+          "project": "glucoai-app"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

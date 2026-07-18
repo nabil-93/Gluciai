@@ -14,6 +14,24 @@ import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
 import type { AIJournalEntry } from '@/types';
 
+/*
+ * TODO(i18n + medical-review): THIS ENTIRE SCREEN IS IN FRENCH ONLY.
+ *
+ * The educational content below (hypo/hyper causes, corrective advice,
+ * rule-of-15 instructions…) is MEDICAL EDUCATION about insulin and
+ * glycemia. It must NOT be machine-translated: the ar/de/en versions
+ * need to be written or reviewed by a clinician / native speaker, then
+ * moved into the i18n locale files like every other screen.
+ *
+ * Until that review happens, Arabic/German/English users will see this
+ * screen in French — a known, accepted limitation for the first release.
+ *
+ * Note: `classify()` below also matches FRENCH keywords in the entry
+ * title (e.g. 'basse', 'élevée') because AI journal titles are currently
+ * generated in French; when localizing, classification should switch to
+ * a structured `kind` field instead of text matching.
+ */
+
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';

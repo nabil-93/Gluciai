@@ -13,6 +13,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
+import { featureGranted } from '../_shared/featureGuard.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_CHAT_MODEL') ?? 'gemini-2.5-flash';
@@ -91,6 +92,16 @@ Deno.serve(async (req) => {
     if (!GEMINI_API_KEY) {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
     }
+
+    // labs is a HIDDEN allowlist feature: only accounts the admin explicitly
+    // granted (feature_access allowed=true) may use it — and never the bare
+    // anon key (it passes verify_jwt but is not a user).
+    const uid = await callerUserId(req);
+    if (!uid) return json({ error: 'unauthorized' }, 401);
+    if (!(await featureGranted(uid, 'labs'))) {
+      return json({ error: 'feature locked' }, 403);
+    }
+
     const langName = LANGUAGE_NAMES[language] ?? 'French';
 
     /* ─────────────────────────── EXTRACT ─────────────────────────── */

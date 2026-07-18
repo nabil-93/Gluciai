@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton, BevelCard, ChevronLeft } from '@/components/ui';
 import { SOURCE_LABEL } from '@/services/nutrition/engine';
+import { nowMs } from '@/lib/clock';
 import { getWeeklySummary } from '@/services/weeklyReport';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
@@ -36,7 +37,7 @@ export default function ReportScreen() {
   const high = profile?.target_high ?? 180;
 
   const stats = useMemo(() => {
-    const cutoff = Date.now() - DAYS * 24 * 3600 * 1000;
+    const cutoff = nowMs() - DAYS * 24 * 3600 * 1000;
     const glucose = glucoseLogs.filter(
       (g) => new Date(g.created_at).getTime() >= cutoff
     );

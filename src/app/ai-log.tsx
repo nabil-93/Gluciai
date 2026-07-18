@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { LoggerConfirmCard } from '@/components/LoggerConfirmCard';
 import { isRTL } from '@/i18n';
+import { uniqueId } from '@/lib/clock';
 import {
   VOICE_NOTE_MAX_MS,
   VoiceNoteRecorder,
@@ -168,7 +169,24 @@ function AiLogScreen() {
   const rtl = isRTL(i18n.language);
   const addAiJournalEntry = useAppStore((s) => s.addAiJournalEntry);
 
-  const [thread, setThread] = useState<Bubble[]>([]);
+  /* Reminder follow-ups: the coach opens with "did you do it?" for every
+     fired reminder still waiting on the patient's word. Resolved once via
+     lazy state init so the thread starts complete — appending them from a
+     mount effect made React re-render in a cascade. */
+  const [initialFollowUps] = useState(() => {
+    const due = pendingFollowUps().slice(0, 2);
+    return {
+      bubbles: due.map((r, i) => ({
+        id: `fu-${r.id}-${i}`,
+        role: 'assistant' as const,
+        content: t('logger.followUpAsk', { msg: r.message }),
+      })),
+      otherIds: due
+        .filter((r) => r.follow_kind === 'other')
+        .map((r) => r.id),
+    };
+  });
+  const [thread, setThread] = useState<Bubble[]>(initialFollowUps.bubbles);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [pendingAction, setPendingAction] = useState<LoggerAction | null>(null);
@@ -183,33 +201,18 @@ function AiLogScreen() {
   };
   useEffect(scrollDown, [thread.length, thinking, pendingAction]);
 
-  /* Reminder follow-ups: the coach opens with "did you do it?" for every
-     fired reminder still waiting on the patient's word. */
-  const followUpIdsRef = useRef<string[]>([]);
-  useEffect(() => {
-    const due = pendingFollowUps().slice(0, 2);
-    if (!due.length) return;
-    followUpIdsRef.current = due
-      .filter((r) => r.follow_kind === 'other')
-      .map((r) => r.id);
-    setThread((s) => [
-      ...s,
-      ...due.map((r, i) => ({
-        id: `fu-${r.id}-${i}`,
-        role: 'assistant' as const,
-        content: t('logger.followUpAsk', { msg: r.message }),
-      })),
-    ]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const followUpIdsRef = useRef<string[]>(initialFollowUps.otherIds);
 
   const close = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
   };
 
-  const pushBubble = (role: Bubble['role'], content: string) =>
-    setThread((s) => [...s, { id: `${Date.now()}-${s.length}`, role, content }]);
+  const pushBubble = (role: Bubble['role'], content: string) => {
+    // id minted at event time, before the updater: updaters must stay pure.
+    const bubble: Bubble = { id: uniqueId(role), role, content };
+    setThread((s) => [...s, bubble]);
+  };
 
   const send = async (text: string) => {
     const content = text.trim();
@@ -223,7 +226,7 @@ function AiLogScreen() {
     }
     const next: Bubble[] = [
       ...thread,
-      { id: `${Date.now()}-u`, role: 'user', content },
+      { id: uniqueId('u'), role: 'user', content },
     ];
     setThread(next);
     setThinking(true);

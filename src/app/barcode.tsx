@@ -140,7 +140,7 @@ export default function BarcodeScreen() {
       source: 'openfoodfacts',
       warnings:
         scaled.sugar > 15
-          ? [`${Math.round(scaled.sugar)} g de sucre — attention à la glycémie.`]
+          ? [t('barcodePage.sugarWarning', { sugar: Math.round(scaled.sugar) })]
           : [],
     };
     await saveMeal(result, product.imageUrl);
@@ -323,7 +323,7 @@ export default function BarcodeScreen() {
 
             {/* Portion selector */}
             <BevelCard style={{ marginTop: 12 }}>
-              <Text style={styles.portionTitle}>Quantité consommée</Text>
+              <Text style={styles.portionTitle}>{t('barcodePage.portionTitle')}</Text>
               <View style={styles.portionRow}>
                 {PORTIONS.map((p) => (
                   <Pressable
@@ -345,12 +345,12 @@ export default function BarcodeScreen() {
             {scaled ? (
               <BevelCard style={{ marginTop: 12 }}>
                 <View style={styles.valuesGrid}>
-                  <Value label="Calories" value={`${scaled.calories}`} unit="kcal" color={colors.warning} />
-                  <Value label="Glucides" value={`${scaled.carbs}`} unit="g" color={colors.carbs} />
-                  <Value label="Sucre" value={`${scaled.sugar}`} unit="g" color={colors.protein} />
-                  <Value label="Protéines" value={`${scaled.protein}`} unit="g" color={colors.ai} />
-                  <Value label="Lipides" value={`${scaled.fat}`} unit="g" color={colors.lipids} />
-                  <Value label="Fibres" value={`${scaled.fiber}`} unit="g" color={colors.primary} />
+                  <Value label={t('nutritionPage.calories')} value={`${scaled.calories}`} unit="kcal" color={colors.warning} />
+                  <Value label={t('nutritionPage.carbs')} value={`${scaled.carbs}`} unit="g" color={colors.carbs} />
+                  <Value label={t('nutritionPage.sugar')} value={`${scaled.sugar}`} unit="g" color={colors.protein} />
+                  <Value label={t('nutritionPage.protein')} value={`${scaled.protein}`} unit="g" color={colors.ai} />
+                  <Value label={t('nutritionPage.fat')} value={`${scaled.fat}`} unit="g" color={colors.lipids} />
+                  <Value label={t('barcodePage.fiber')} value={`${scaled.fiber}`} unit="g" color={colors.primary} />
                 </View>
               </BevelCard>
             ) : null}
@@ -363,13 +363,13 @@ export default function BarcodeScreen() {
                 <Text style={[styles.verdictScore, { color: quality.color }]}>
                   {quality.score}/100 · {quality.label}
                 </Text>
-                <Text style={styles.verdictQ}>Convient au diabète ?</Text>
+                <Text style={styles.verdictQ}>{t('barcodePage.verdictQ')}</Text>
                 <Text style={styles.verdictA}>
                   {quality.score >= 70
-                    ? '✅ Bon choix pour votre glycémie.'
+                    ? t('barcodePage.verdictGood')
                     : quality.score >= 50
-                      ? '⚠️ Acceptable en petite quantité — surveillez votre glycémie.'
-                      : '❌ À éviter — forte charge glucidique/sucrée.'}
+                      ? t('barcodePage.verdictOkay')
+                      : t('barcodePage.verdictAvoid')}
                 </Text>
                 {quality.reasons.slice(0, 2).map((r, i) => (
                   <Text key={i} style={styles.verdictReason}>
@@ -381,12 +381,12 @@ export default function BarcodeScreen() {
 
             <View style={{ gap: 10, marginTop: 14 }}>
               <AppButton
-                label={saved ? '✓ Enregistré' : 'Enregistrer ce produit'}
+                label={saved ? t('barcodePage.saved') : t('barcodePage.save')}
                 onPress={save}
                 disabled={saved}
               />
               <AppButton
-                label="Scanner un autre produit"
+                label={t('barcodePage.scanAnother')}
                 variant="secondary"
                 onPress={() => {
                   setProduct(null);

@@ -5,6 +5,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
+import { featureLocked } from '../_shared/featureGuard.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_CHAT_MODEL') ?? 'gemini-2.5-flash';
@@ -39,6 +40,18 @@ Deno.serve(async (req) => {
     } = await req.json();
     if (!GEMINI_API_KEY) {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
+    }
+
+    // Require a real signed-in user (the anon key alone passes verify_jwt but
+    // must not spend Gemini quota), then honor the dashboard's feature locks:
+    // voice mode belongs to ai_call, chat/logger to ai_chat. The bolus modes
+    // stay user-only — the bolus screen isn't a lockable feature.
+    const uid = await callerUserId(req);
+    if (!uid) return json({ error: 'unauthorized' }, 401);
+    const lockKey =
+      mode === 'voice' ? 'ai_call' : mode === 'chat' || mode === 'logger' ? 'ai_chat' : null;
+    if (lockKey && (await featureLocked(uid, lockKey))) {
+      return json({ error: 'feature locked' }, 403);
     }
 
     const langName = LANGUAGE_NAMES[language] ?? 'English';
@@ -138,7 +151,6 @@ BEFORE injecting this modified dose.`;
       const um = data.usageMetadata ?? {};
       const inTok = um.promptTokenCount ?? 0;
       const outTok = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
-      const uid = await callerUserId(req);
       if (uid && (inTok || outTok)) {
         await logUsage({
           user_id: uid,
@@ -311,7 +323,6 @@ Rules:
       const audioIn = ((um.promptTokensDetails ?? []) as any[])
         .filter((d) => d?.modality === 'AUDIO')
         .reduce((a, d) => a + (d.tokenCount ?? 0), 0);
-      const uid = await callerUserId(req);
       if (uid && (inTok || outTok)) {
         await logUsage({
           user_id: uid,
@@ -542,7 +553,6 @@ Rules:
     const audioIn = ((um.promptTokensDetails ?? []) as any[])
       .filter((d) => d?.modality === 'AUDIO')
       .reduce((a, d) => a + (d.tokenCount ?? 0), 0);
-    const uid = await callerUserId(req);
     if (uid && (inTok || outTok)) {
       await logUsage({
         user_id: uid,

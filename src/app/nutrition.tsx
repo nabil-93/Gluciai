@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -30,6 +31,7 @@ function isToday(iso: string) {
 
 export default function NutritionScreen() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const { meals, profile, glucoseLogs } = useAppStore();
 
@@ -74,13 +76,13 @@ export default function NutritionScreen() {
           <Pressable onPress={close} style={styles.backBtn}>
             <ChevronLeft size={16} />
           </Pressable>
-          <Text style={styles.headTitle}>Nutrition</Text>
+          <Text style={styles.headTitle}>{t('nutritionPage.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
         {/* Big carbs card — the number that matters for insulin */}
         <View style={styles.carbsCard}>
-          <Text style={styles.carbsLabel}>Glucides aujourd'hui</Text>
+          <Text style={styles.carbsLabel}>{t('nutritionPage.carbsToday')}</Text>
           <View style={styles.carbsRow}>
             <Text style={styles.carbsValue}>{Math.round(totals.carbs)}</Text>
             <Text style={styles.carbsUnit}>g / {GOALS.carbs} g</Text>
@@ -97,37 +99,37 @@ export default function NutritionScreen() {
           </View>
           <Text style={styles.carbsHint}>
             {profile?.carb_ratio
-              ? `Ratio insuline/glucides : 1 U pour ${profile.carb_ratio} g`
-              : 'Configurez votre ratio dans le profil médical'}
+              ? t('nutritionPage.ratioHint', { ratio: profile.carb_ratio })
+              : t('nutritionPage.ratioMissing')}
           </Text>
         </View>
 
         {/* Macro goals */}
         <BevelCard style={{ marginTop: 12 }}>
-          <Text style={styles.cardTitle}>Objectifs du jour</Text>
+          <Text style={styles.cardTitle}>{t('nutritionPage.dailyGoals')}</Text>
           <MacroBar
-            name="Calories"
+            name={t('nutritionPage.calories')}
             value={Math.round(totals.kcal)}
             goal={GOALS.kcal}
             unit="kcal"
             color={colors.warning}
           />
           <MacroBar
-            name="Glucides"
+            name={t('nutritionPage.carbs')}
             value={Math.round(totals.carbs)}
             goal={GOALS.carbs}
             unit="g"
             color={colors.carbs}
           />
           <MacroBar
-            name="Protéines"
+            name={t('nutritionPage.protein')}
             value={Math.round(totals.protein)}
             goal={GOALS.protein}
             unit="g"
             color={colors.protein}
           />
           <MacroBar
-            name="Lipides"
+            name={t('nutritionPage.fat')}
             value={Math.round(totals.fat)}
             goal={GOALS.fat}
             unit="g"
@@ -139,14 +141,13 @@ export default function NutritionScreen() {
         {totals.sugar > 50 ? (
           <View style={styles.sugarWarn}>
             <Text style={styles.sugarWarnText}>
-              ⚠️ {Math.round(totals.sugar)} g de sucre aujourd'hui — surveillez
-              votre glycémie post-repas.
+              {t('nutritionPage.sugarWarn', { sugar: Math.round(totals.sugar) })}
             </Text>
           </View>
         ) : null}
 
         {/* Personalized recommendations */}
-        <Text style={styles.section}>Recommandations personnalisées</Text>
+        <Text style={styles.section}>{t('nutritionPage.recommendations')}</Text>
         <BevelCard>
           {recommendations.map((r, i) => (
             <View
@@ -160,20 +161,19 @@ export default function NutritionScreen() {
               <Text style={styles.recText}>{r.text}</Text>
             </View>
           ))}
-          <Text style={styles.recDisclaimer}>
-            Conseils éducatifs personnalisés — ne remplacent pas votre
-            diététicien(ne).
-          </Text>
+          <Text style={styles.recDisclaimer}>{t('nutritionPage.recDisclaimer')}</Text>
         </BevelCard>
 
         {/* Meals list */}
-        <Text style={styles.section}>Repas du jour ({todayMeals.length})</Text>
+        <Text style={styles.section}>
+          {t('nutritionPage.mealsOfDay', { count: todayMeals.length })}
+        </Text>
         {todayMeals.length === 0 ? (
           <PremiumEmptyState
             emoji="🍽️"
-            title="Aucun repas scanné"
-            message="Scannez votre repas pour estimer glucides, sucre et calories — puis votre bolus."
-            actionLabel="Scanner un repas"
+            title={t('nutritionPage.emptyTitle')}
+            message={t('nutritionPage.emptyMessage')}
+            actionLabel={t('nutritionPage.scanMeal')}
             onAction={() => router.push('/scan')}
           />
         ) : (
@@ -197,7 +197,7 @@ export default function NutritionScreen() {
                     </Text>
                     <Text style={styles.mealPortion} numberOfLines={1}>
                       {m.result.estimated_portion} ·{' '}
-                      {new Date(m.created_at).toLocaleTimeString('fr-FR', {
+                      {new Date(m.created_at).toLocaleTimeString(i18n.language, {
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
@@ -212,23 +212,21 @@ export default function NutritionScreen() {
                   </Pressable>
                 </View>
                 <View style={styles.mealMacros}>
-                  <MealStat value={`${Math.round(m.result.carbohydrates)} g`} name="Glucides" color={colors.carbs} />
-                  <MealStat value={`${Math.round(m.result.sugar)} g`} name="Sucre" color={colors.protein} />
+                  <MealStat value={`${Math.round(m.result.carbohydrates)} g`} name={t('nutritionPage.carbs')} color={colors.carbs} />
+                  <MealStat value={`${Math.round(m.result.sugar)} g`} name={t('nutritionPage.sugar')} color={colors.protein} />
                   <MealStat value={`${Math.round(m.result.calories)}`} name="kcal" color={colors.warning} />
-                  <MealStat value={`${m.result.glycemic_index}`} name="IG" color={colors.ai} />
+                  <MealStat value={`${m.result.glycemic_index}`} name={t('nutritionPage.gi')} color={colors.ai} />
                 </View>
                 <Pressable
                   style={styles.bolusLink}
                   onPress={() => router.push('/bolus')}
                 >
-                  <Text style={styles.bolusLinkText}>
-                    Calculer le bolus pour ce repas →
-                  </Text>
+                  <Text style={styles.bolusLinkText}>{t('nutritionPage.bolusLink')}</Text>
                 </Pressable>
               </BevelCard>
             ))}
             <AppButton
-              label="Scanner un autre repas"
+              label={t('nutritionPage.scanAnother')}
               onPress={() => router.push('/scan')}
               variant="secondary"
             />

@@ -25,6 +25,7 @@ import {
   healthyFoodName,
 } from '@/data/healthyFoods';
 import { isRTL } from '@/i18n';
+import { uniqueId } from '@/lib/clock';
 import { confirmAsync } from '@/lib/confirm';
 import { sendChatMessage, sendChatVoice } from '@/services/ai';
 import {
@@ -41,6 +42,20 @@ const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
+
+/** Chat bubble with a unique event-time id + timestamp. Module scope on
+ *  purpose: ids are minted when the user/AI acts, never during render
+ *  (React Compiler purity). */
+const chatMsg = (
+  suffix: string,
+  role: ChatMessage['role'],
+  content: string
+): ChatMessage => ({
+  id: uniqueId(suffix),
+  role,
+  content,
+  created_at: new Date().toISOString(),
+});
 
 /* Quick-topic chips under the conversation (from the design mockup) */
 const CHIPS = [
@@ -285,7 +300,6 @@ function AiChatScreen() {
       s.newConversation();
     }
     // Runs once when the chat opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Opened from the lab-analysis screen: the assistant opens the exchange —
@@ -295,12 +309,7 @@ function AiChatScreen() {
   useEffect(() => {
     if (from !== 'lab' || labIntroRef.current) return;
     labIntroRef.current = true;
-    addChatMessage({
-      id: `${Date.now()}-lab`,
-      role: 'assistant',
-      content: t('labs.chatIntro'),
-      created_at: new Date().toISOString(),
-    });
+    addChatMessage(chatMsg('lab', 'assistant', t('labs.chatIntro')));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -310,12 +319,7 @@ function AiChatScreen() {
     setInput('');
     setPendingAction(null);
 
-    const userMessage: ChatMessage = {
-      id: `${Date.now()}-u`,
-      role: 'user',
-      content,
-      created_at: new Date().toISOString(),
-    };
+    const userMessage = chatMsg('u', 'user', content);
     addChatMessage(userMessage);
     setThinking(true);
 
@@ -339,12 +343,7 @@ function AiChatScreen() {
         content: m.content,
       }));
       const reply = await sendChatMessage(history, i18n.language, profile);
-      addChatMessage({
-        id: `${Date.now()}-a`,
-        role: 'assistant',
-        content: reply,
-        created_at: new Date().toISOString(),
-      });
+      addChatMessage(chatMsg('a', 'assistant', reply));
       const extracted = await extraction;
       if (extracted?.action) {
         loggerPendingRef.current = false;
@@ -354,22 +353,12 @@ function AiChatScreen() {
         // surface its short question and keep extraction armed so the
         // patient's next answer finishes the entry.
         loggerPendingRef.current = true;
-        addChatMessage({
-          id: `${Date.now()}-lq`,
-          role: 'assistant',
-          content: extracted.reply,
-          created_at: new Date().toISOString(),
-        });
+        addChatMessage(chatMsg('lq', 'assistant', extracted.reply));
       } else {
         loggerPendingRef.current = false;
       }
     } catch {
-      addChatMessage({
-        id: `${Date.now()}-e`,
-        role: 'assistant',
-        content: t('common.error'),
-        created_at: new Date().toISOString(),
-      });
+      addChatMessage(chatMsg('e', 'assistant', t('common.error')));
     } finally {
       setThinking(false);
     }
@@ -422,18 +411,10 @@ function AiChatScreen() {
         audio
       );
       const heard = (transcript || '').trim();
-      addChatMessage({
-        id: `${Date.now()}-uv`,
-        role: 'user',
-        content: heard ? `🎙️ ${heard}` : `🎙️ ${t('logger.voiceNote')}`,
-        created_at: new Date().toISOString(),
-      });
-      addChatMessage({
-        id: `${Date.now()}-a`,
-        role: 'assistant',
-        content: reply,
-        created_at: new Date().toISOString(),
-      });
+      addChatMessage(
+        chatMsg('uv', 'user', heard ? `🎙️ ${heard}` : `🎙️ ${t('logger.voiceNote')}`)
+      );
+      addChatMessage(chatMsg('a', 'assistant', reply));
       // If the spoken message was loggable (or the logger is waiting on a
       // missing detail), extract + offer the confirm card.
       if (heard && (looksLoggable(heard) || loggerPendingRef.current)) {
@@ -447,12 +428,7 @@ function AiChatScreen() {
               setPendingAction(ex.action);
             } else if (ex?.reply && looksLoggable(heard)) {
               loggerPendingRef.current = true;
-              addChatMessage({
-                id: `${Date.now()}-lq`,
-                role: 'assistant',
-                content: ex.reply,
-                created_at: new Date().toISOString(),
-              });
+              addChatMessage(chatMsg('lq', 'assistant', ex.reply));
             } else {
               loggerPendingRef.current = false;
             }
@@ -460,12 +436,7 @@ function AiChatScreen() {
           .catch(() => {});
       }
     } catch {
-      addChatMessage({
-        id: `${Date.now()}-e`,
-        role: 'assistant',
-        content: t('common.error'),
-        created_at: new Date().toISOString(),
-      });
+      addChatMessage(chatMsg('e', 'assistant', t('common.error')));
     } finally {
       setThinking(false);
     }

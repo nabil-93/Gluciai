@@ -65,14 +65,11 @@ export default function RappelsScreen() {
           <Pressable onPress={close} style={styles.backBtn}>
             <ChevronLeft size={16} />
           </Pressable>
-          <Text style={styles.headTitle}>Rappels intelligents</Text>
+          <Text style={styles.headTitle}>{t('rappelsPage.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
-        <Text style={styles.subtitle}>
-          GlucoAI apprend vos horaires (mesures, injections, repas) et vous
-          rappelle au bon moment — pas à des heures arbitraires.
-        </Text>
+        <Text style={styles.subtitle}>{t('rappelsPage.subtitle')}</Text>
 
         <View style={{ gap: 10 }}>
           {reminders.map((r) => (
@@ -89,7 +86,7 @@ export default function RappelsScreen() {
               </View>
               <View style={styles.timeBadge}>
                 <Text style={styles.timeText}>{fmt(r.hour, r.minute)}</Text>
-                <Text style={styles.timeSub}>chaque jour</Text>
+                <Text style={styles.timeSub}>{t('rappelsPage.everyDay')}</Text>
               </View>
             </BevelCard>
           ))}
@@ -97,16 +94,11 @@ export default function RappelsScreen() {
 
         {isWeb ? (
           <View style={styles.webNote}>
-            <Text style={styles.webNoteText}>
-              📱 Les notifications s'activent sur iPhone et Android — sur le
-              web, cet aperçu montre ce qui sera programmé.
-            </Text>
+            <Text style={styles.webNoteText}>{t('rappelsPage.webNote')}</Text>
           </View>
         ) : (
           <AppButton
-            label={
-              activated ? '✓ Rappels activés' : 'Activer les notifications'
-            }
+            label={activated ? t('rappelsPage.activated') : t('rappelsPage.activate')}
             onPress={activate}
             loading={activating}
             disabled={activated}
@@ -114,10 +106,7 @@ export default function RappelsScreen() {
           />
         )}
 
-        <Text style={styles.footNote}>
-          Les horaires se réajustent automatiquement au fil de vos
-          enregistrements.
-        </Text>
+        <Text style={styles.footNote}>{t('rappelsPage.footNote')}</Text>
       </ScrollView>
     </View>
   );

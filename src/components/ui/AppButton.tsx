@@ -5,9 +5,8 @@ import {
   StyleSheet,
   Text,
   ViewStyle,
-} from 'react-native';
+ Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Platform } from 'react-native';
 
 import { colors, spacing } from '@/theme';
 

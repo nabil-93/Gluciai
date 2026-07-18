@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -16,16 +17,12 @@ import {
   PlusGlyph,
   PremiumEmptyState,
 } from '@/components/ui';
+import { nowMs } from '@/lib/clock';
 import { deleteInsulin } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
 import type { InsulinType } from '@/types';
 
-const TYPE_LABEL: Record<InsulinType, string> = {
-  rapid: 'Rapide',
-  long: 'Lente',
-  mixed: 'Mixte',
-};
 const TYPE_COLOR: Record<InsulinType, string> = {
   rapid: colors.ai,
   long: '#7C93E8',
@@ -38,8 +35,15 @@ function isToday(iso: string) {
 
 export default function InsulinScreen() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const { insulinLogs } = useAppStore();
+  const locale = i18n.language;
+  const TYPE_LABEL: Record<InsulinType, string> = {
+    rapid: t('insulinPage.rapid'),
+    long: t('insulinPage.long'),
+    mixed: t('insulinPage.mixed'),
+  };
 
   const today = useMemo(
     () => insulinLogs.filter((l) => isToday(l.created_at)),
@@ -64,16 +68,16 @@ export default function InsulinScreen() {
         .filter((l) => new Date(l.created_at).toDateString() === key)
         .reduce((s, l) => s + l.dose, 0);
       days.push({
-        label: d.toLocaleDateString('fr-FR', { weekday: 'narrow' }),
+        label: d.toLocaleDateString(locale, { weekday: 'narrow' }),
         total,
       });
     }
     return days;
-  }, [insulinLogs]);
+  }, [insulinLogs, locale]);
   const weekMax = Math.max(1, ...week.map((d) => d.total));
 
   const recent = useMemo(() => {
-    const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
+    const cutoff = nowMs() - 7 * 24 * 3600 * 1000;
     return insulinLogs.filter(
       (l) => new Date(l.created_at).getTime() >= cutoff
     );
@@ -98,26 +102,26 @@ export default function InsulinScreen() {
           <Pressable onPress={close} style={styles.backBtn}>
             <ChevronLeft size={16} />
           </Pressable>
-          <Text style={styles.headTitle}>Insuline</Text>
+          <Text style={styles.headTitle}>{t('insulinPage.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
         {/* Today totals */}
         <View style={styles.statsRow}>
           <BevelCard style={styles.statCard}>
-            <Text style={styles.statLabel}>Total aujourd'hui</Text>
+            <Text style={styles.statLabel}>{t('insulinPage.totalToday')}</Text>
             <Text style={styles.statValue}>{totalToday}</Text>
-            <Text style={styles.statUnit}>unités</Text>
+            <Text style={styles.statUnit}>{t('insulinPage.units')}</Text>
           </BevelCard>
           <BevelCard style={styles.statCard}>
-            <Text style={styles.statLabel}>Rapide</Text>
+            <Text style={styles.statLabel}>{t('insulinPage.rapid')}</Text>
             <Text style={[styles.statValue, { color: colors.ai }]}>
               {rapidToday}
             </Text>
             <Text style={styles.statUnit}>U</Text>
           </BevelCard>
           <BevelCard style={styles.statCard}>
-            <Text style={styles.statLabel}>Lente</Text>
+            <Text style={styles.statLabel}>{t('insulinPage.long')}</Text>
             <Text style={[styles.statValue, { color: '#7C93E8' }]}>
               {longToday}
             </Text>
@@ -127,7 +131,7 @@ export default function InsulinScreen() {
 
         {/* Week bar chart */}
         <BevelCard style={styles.chartCard}>
-          <Text style={styles.cardTitle}>7 derniers jours</Text>
+          <Text style={styles.cardTitle}>{t('insulinPage.last7days')}</Text>
           <View style={styles.bars}>
             {week.map((d, i) => (
               <View key={i} style={styles.barCol}>
@@ -153,19 +157,19 @@ export default function InsulinScreen() {
         </BevelCard>
 
         <AppButton
-          label="Calculer un bolus"
+          label={t('insulinPage.calcBolus')}
           onPress={() => router.push('/bolus')}
           style={{ marginTop: 14 }}
         />
 
         {/* Injections list */}
-        <Text style={styles.section}>Injections</Text>
+        <Text style={styles.section}>{t('insulinPage.injections')}</Text>
         {recent.length === 0 ? (
           <PremiumEmptyState
             emoji="💉"
-            title="Aucune injection enregistrée"
-            message="Ajoutez une dose avec le bouton + ou laissez le calculateur de bolus la proposer."
-            actionLabel="Calculer un bolus"
+            title={t('insulinPage.emptyTitle')}
+            message={t('insulinPage.emptyMessage')}
+            actionLabel={t('insulinPage.calcBolus')}
             onAction={() => router.push('/bolus')}
           />
         ) : (
@@ -194,11 +198,11 @@ export default function InsulinScreen() {
                   ) : null}
                 </View>
                 <Text style={styles.rowTime}>
-                  {new Date(l.created_at).toLocaleDateString('fr-FR', {
+                  {new Date(l.created_at).toLocaleDateString(locale, {
                     day: '2-digit',
                     month: '2-digit',
                   })}{' '}
-                  {new Date(l.created_at).toLocaleTimeString('fr-FR', {
+                  {new Date(l.created_at).toLocaleTimeString(locale, {
                     hour: '2-digit',
                     minute: '2-digit',
                   })}

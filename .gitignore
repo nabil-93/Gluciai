@@ -58,3 +58,5 @@ supabase/.branches/
 
 # MCP server config (contains a Supabase access token — never commit)
 .mcp.json
+
+.vercel

@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppButton, BevelCard, ChevronLeft } from '@/components/ui';
 import { analyzeMenu } from '@/services/ai';
 import { saveMeal } from '@/services/data';
-import { SOURCE_LABEL } from '@/services/nutrition/engine';
+import { sourceLabel } from '@/services/nutrition/engine';
 import { scoreMeal, type MealScore } from '@/services/nutrition/mealScore';
 import { colors, shadows } from '@/theme';
 import type { FoodItemResult } from '@/types';
@@ -27,7 +27,7 @@ interface ScoredDish {
 
 export default function MenuScanScreen() {
   const router = useRouter();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const [analyzing, setAnalyzing] = useState(false);
   const [dishes, setDishes] = useState<ScoredDish[] | null>(null);
@@ -53,9 +53,7 @@ export default function MenuScanScreen() {
     try {
       const items = await analyzeMenu(asset.base64, i18n.language);
       if (items.length === 0) {
-        setError(
-          "Nous n'avons pas pu lire ce menu. Prenez une photo plus nette de la carte."
-        );
+        setError(t('menuScanPage.unreadable'));
         return;
       }
       const scored: ScoredDish[] = items
@@ -75,7 +73,7 @@ export default function MenuScanScreen() {
         .sort((a, b) => b.score.score - a.score.score);
       setDishes(scored);
     } catch {
-      setError('Erreur pendant l’analyse du menu. Réessayez.');
+      setError(t('menuScanPage.analysisError'));
     } finally {
       setAnalyzing(false);
     }
@@ -117,22 +115,18 @@ export default function MenuScanScreen() {
           <Pressable onPress={close} style={styles.backBtn}>
             <ChevronLeft size={16} />
           </Pressable>
-          <Text style={styles.headTitle}>Menu restaurant</Text>
+          <Text style={styles.headTitle}>{t('menuScanPage.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
         {!dishes && !analyzing ? (
           <View style={styles.introWrap}>
             <Text style={{ fontSize: 56 }}>📋</Text>
-            <Text style={styles.introTitle}>Scannez la carte du restaurant</Text>
-            <Text style={styles.introSub}>
-              L'IA lit tous les plats du menu, calcule leurs valeurs
-              nutritionnelles et vous indique le meilleur choix pour votre
-              glycémie.
-            </Text>
+            <Text style={styles.introTitle}>{t('menuScanPage.introTitle')}</Text>
+            <Text style={styles.introSub}>{t('menuScanPage.introSub')}</Text>
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <AppButton
-              label="📷 Photographier le menu"
+              label={t('menuScanPage.photograph')}
               onPress={pickAndAnalyze}
               style={{ alignSelf: 'stretch', marginTop: 10 }}
             />
@@ -142,17 +136,14 @@ export default function MenuScanScreen() {
         {analyzing ? (
           <View style={styles.introWrap}>
             <ActivityIndicator size="large" color={colors.ink} />
-            <Text style={styles.introSub}>
-              Lecture du menu et calcul nutritionnel…
-            </Text>
+            <Text style={styles.introSub}>{t('menuScanPage.reading')}</Text>
           </View>
         ) : null}
 
         {dishes ? (
           <>
             <Text style={styles.resultCount}>
-              {dishes.length} plats analysés — classés du meilleur au moins bon
-              pour votre diabète
+              {t('menuScanPage.resultCount', { count: dishes.length })}
             </Text>
             <View style={{ gap: 12 }}>
               {dishes.map((d, i) => (
@@ -171,7 +162,7 @@ export default function MenuScanScreen() {
                   {i === 0 ? (
                     <View style={[styles.bestBadge, { backgroundColor: d.score.color }]}>
                       <Text style={styles.bestBadgeText}>
-                        ⭐ Meilleur choix pour le diabète
+                        {t('menuScanPage.bestChoice')}
                       </Text>
                     </View>
                   ) : null}
@@ -180,7 +171,7 @@ export default function MenuScanScreen() {
                       <Text style={styles.dishName}>{d.item.name}</Text>
                       <Text style={styles.dishPortion}>
                         {Math.round(d.item.portion_grams)} g ·{' '}
-                        {SOURCE_LABEL[d.item.source]}
+                        {sourceLabel(d.item.source)}
                       </Text>
                     </View>
                     <View style={styles.scoreWrap}>
@@ -194,10 +185,10 @@ export default function MenuScanScreen() {
                   </View>
                   <View style={styles.dishMacros}>
                     <Macro v={d.item.calories} u="kcal" c={colors.warning} />
-                    <Macro v={Math.round(d.item.carbohydrates)} u="g gluc." c={colors.carbs} />
-                    <Macro v={Math.round(d.item.sugar)} u="g sucre" c={colors.protein} />
-                    <Macro v={Math.round(d.item.protein)} u="g prot." c={colors.ai} />
-                    <Macro v={Math.round(d.item.fat)} u="g lip." c={colors.lipids} />
+                    <Macro v={Math.round(d.item.carbohydrates)} u={t('foodsPage.unitCarbs')} c={colors.carbs} />
+                    <Macro v={Math.round(d.item.sugar)} u={t('foodsPage.unitSugar')} c={colors.protein} />
+                    <Macro v={Math.round(d.item.protein)} u={t('menuScanPage.unitProt')} c={colors.ai} />
+                    <Macro v={Math.round(d.item.fat)} u={t('menuScanPage.unitFat')} c={colors.lipids} />
                     <Macro
                       v={d.item.glycemic_index ?? '—'}
                       u="IG"
@@ -219,15 +210,15 @@ export default function MenuScanScreen() {
                   >
                     <Text style={styles.dishSaveText}>
                       {savedName === d.item.name
-                        ? '✓ Ajouté à votre journal'
-                        : "J'ai commandé ce plat — enregistrer"}
+                        ? t('menuScanPage.savedToJournal')
+                        : t('menuScanPage.orderedSave')}
                     </Text>
                   </Pressable>
                 </BevelCard>
               ))}
             </View>
             <AppButton
-              label="Scanner un autre menu"
+              label={t('menuScanPage.scanAnother')}
               variant="secondary"
               onPress={() => {
                 setDishes(null);

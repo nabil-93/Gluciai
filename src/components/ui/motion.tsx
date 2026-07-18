@@ -13,6 +13,9 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
+/* ── GaugeRing: animated circular gauge, value in the middle ── */
+import Svg, { Circle } from 'react-native-svg';
+
 /**
  * Shared animation primitives — all use the native driver (60 fps on
  * the UI thread) and respect the OS "Reduce Motion" setting.
@@ -181,7 +184,8 @@ export function AnimatedCounter({
 
   useEffect(() => {
     if (rm) {
-      setDisplay(format(value));
+      // Reduce-motion renders the target value directly (see below) —
+      // no setState needed here.
       prev.current = value;
       return;
     }
@@ -203,7 +207,7 @@ export function AnimatedCounter({
     };
   }, [value, rm, anim, duration, format]);
 
-  return <Text style={style}>{display}</Text>;
+  return <Text style={style}>{rm ? format(value) : display}</Text>;
 }
 
 /* ── Shimmer skeleton block ── */
@@ -265,9 +269,6 @@ export function Skeleton({
     </View>
   );
 }
-
-/* ── GaugeRing: animated circular gauge, value in the middle ── */
-import Svg, { Circle } from 'react-native-svg';
 
 /** Animated adds `collapsable={false}`, which react-native-svg forwards to
  *  the DOM <circle> on web and React warns about — strip it. */

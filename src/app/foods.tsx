@@ -8,9 +8,11 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BevelCard, ChevronLeft, SearchGlyph } from '@/components/ui';
+import i18n from '@/i18n';
 import { filterMoroccanFoods, type MoroccanFood } from '@/data/moroccanFoods';
 import { saveMeal } from '@/services/data';
 import { colors, shadows } from '@/theme';
@@ -58,15 +60,13 @@ function toResult(food: MoroccanFood, factor: number): NutritionResult {
         nutrition_confidence: 0.92,
       },
     ],
-    warnings:
-      gi > 65
-        ? ['Index glycémique élevé — mesurez votre glycémie 2 h après.']
-        : [],
+    warnings: gi > 65 ? [i18n.t('foodsPage.highGiWarning')] : [],
   };
 }
 
 export default function FoodsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -108,20 +108,18 @@ export default function FoodsScreen() {
           <Pressable onPress={close} style={styles.backBtn}>
             <ChevronLeft size={16} />
           </Pressable>
-          <Text style={styles.headTitle}>Cuisine marocaine</Text>
+          <Text style={styles.headTitle}>{t('foodsPage.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
-        <Text style={styles.subtitle}>
-          Glucides estimés par portion — ajoutez un plat sans photo 🇲🇦
-        </Text>
+        <Text style={styles.subtitle}>{t('foodsPage.subtitle')}</Text>
 
         <View style={styles.search}>
           <SearchGlyph />
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Tajine, harira, couscous…"
+            placeholder={t('foodsPage.searchPlaceholder')}
             placeholderTextColor={colors.textSecondary}
             style={styles.searchInput}
           />
@@ -149,7 +147,7 @@ export default function FoodsScreen() {
                   </View>
                   <View style={styles.carbsBadge}>
                     <Text style={styles.carbsBadgeValue}>{f.carbs}g</Text>
-                    <Text style={styles.carbsBadgeLabel}>glucides</Text>
+                    <Text style={styles.carbsBadgeLabel}>{t('foodsPage.carbs')}</Text>
                   </View>
                 </Pressable>
 
@@ -157,7 +155,7 @@ export default function FoodsScreen() {
                   <View style={styles.detail}>
                     {/* Portion selector */}
                     <View style={styles.portionRow}>
-                      <Text style={styles.portionLabel}>Portion :</Text>
+                      <Text style={styles.portionLabel}>{t('foodsPage.portion')}</Text>
                       {PORTIONS.map((p) => (
                         <Pressable
                           key={p.label}
@@ -182,8 +180,8 @@ export default function FoodsScreen() {
                     {/* Scaled macros */}
                     <View style={styles.macroRow}>
                       <Macro value={scaled.calories} unit="kcal" color={colors.warning} />
-                      <Macro value={scaled.carbohydrates} unit="g gluc." color={colors.carbs} />
-                      <Macro value={scaled.sugar} unit="g sucre" color={colors.protein} />
+                      <Macro value={scaled.carbohydrates} unit={t('foodsPage.unitCarbs')} color={colors.carbs} />
+                      <Macro value={scaled.sugar} unit={t('foodsPage.unitSugar')} color={colors.protein} />
                       <Macro
                         value={f.glycemic_index ?? 0}
                         unit="IG"
@@ -203,7 +201,7 @@ export default function FoodsScreen() {
                         onPress={() => add(f, false)}
                       >
                         <Text style={styles.actionPrimaryText}>
-                          {savedId === f.id ? '✓ Ajouté' : 'Ajouter'}
+                          {savedId === f.id ? t('foodsPage.added') : t('foodsPage.add')}
                         </Text>
                       </Pressable>
                       <Pressable
@@ -221,7 +219,7 @@ export default function FoodsScreen() {
             );
           })}
           {list.length === 0 ? (
-            <Text style={styles.noResults}>Aucun plat trouvé.</Text>
+            <Text style={styles.noResults}>{t('foodsPage.noResults')}</Text>
           ) : null}
         </View>
       </ScrollView>

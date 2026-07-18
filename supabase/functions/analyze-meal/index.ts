@@ -13,6 +13,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
+import { featureLocked } from '../_shared/featureGuard.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_VISION_MODEL') ?? 'gemini-2.5-flash';
@@ -125,6 +126,14 @@ Deno.serve(async (req) => {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
     }
 
+    // Require a real signed-in user (the anon key alone passes verify_jwt but
+    // must not spend Gemini quota) and honor the dashboard's scanner lock.
+    const uid = await callerUserId(req);
+    if (!uid) return json({ error: 'unauthorized' }, 401);
+    if (await featureLocked(uid, 'scanner')) {
+      return json({ error: 'feature locked' }, 403);
+    }
+
     // Diagnostic (shows in Supabase logs): size of the image we received —
     // lets us verify the app really sends the full, healthy picture.
     console.log(
@@ -136,7 +145,6 @@ Deno.serve(async (req) => {
     const parsed = parseJson(raw);
 
     // Exact billing data from Gemini (usageMetadata) → ai_usage table.
-    const uid = await callerUserId(req);
     if (uid && (inTok || outTok)) {
       await logUsage({
         user_id: uid,

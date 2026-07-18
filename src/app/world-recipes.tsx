@@ -1,6 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Animated,
   Image,
   Pressable,
   ScrollView,
@@ -52,23 +51,31 @@ export default function WorldRecipesScreen() {
 
   const [country, setCountry] = useState('Morocco');
   const [moment, setMoment] = useState<MealMoment>('any');
-  const [dishes, setDishes] = useState<DishSuggestion[]>([]);
-  const [loading, setLoading] = useState(true);
   const [panelOpen, setPanelOpen] = useState(false);
-  const seq = useRef(0);
 
   // Load dishes whenever country or moment changes — the local catalog
   // answers instantly (no tokens); the AI only fills thin countries.
+  // The result carries its request key so `loading` is derived — no
+  // synchronous setState in the effect; the cleanup flag (also run on dep
+  // change) keeps stale responses from overwriting newer ones.
+  const reqKey = `${country}|${moment}|${i18n.language}`;
+  const [res, setRes] = useState<{
+    key: string;
+    dishes: DishSuggestion[];
+  } | null>(null);
   useEffect(() => {
-    const mine = ++seq.current;
-    setLoading(true);
+    let alive = true;
     (async () => {
-      const res = await browseDishes(country, moment, i18n.language);
-      if (seq.current !== mine) return;
-      setDishes(res.dishes);
-      setLoading(false);
+      const r = await browseDishes(country, moment, i18n.language);
+      if (alive) setRes({ key: reqKey, dishes: r.dishes });
     })();
-  }, [country, moment, i18n.language]);
+    return () => {
+      alive = false;
+    };
+  }, [country, moment, i18n.language, reqKey]);
+
+  const dishes = res?.key === reqKey ? res.dishes : [];
+  const loading = !res || res.key !== reqKey;
 
   const openDish = (d: DishSuggestion) => {
     setPanelOpen(false);

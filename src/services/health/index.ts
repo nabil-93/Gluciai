@@ -21,7 +21,8 @@ export interface HealthProvider {
   id: string;
   name: string;
   icon: string;
-  description: string;
+  /** i18n key of the one-line description (integrations.*Desc). */
+  descriptionKey: string;
   /** Which platform(s) the provider can run on */
   platforms: ('ios' | 'android')[];
   /** SDK bridge present in this build? */
@@ -37,14 +38,14 @@ function stub(
   id: string,
   name: string,
   icon: string,
-  description: string,
+  descriptionKey: string,
   platforms: ('ios' | 'android')[]
 ): HealthProvider {
   return {
     id,
     name,
     icon,
-    description,
+    descriptionKey,
     platforms,
     // Native SDK not bundled yet — becomes true once the bridge ships
     async isAvailable() {
@@ -57,34 +58,10 @@ function stub(
 }
 
 export const healthProviders: HealthProvider[] = [
-  stub(
-    'apple-health',
-    'Apple Health',
-    '🍎',
-    'Synchronise glycémie, activité et poids avec l’app Santé de votre iPhone.',
-    ['ios']
-  ),
-  stub(
-    'google-fit',
-    'Google Fit / Health Connect',
-    '🤖',
-    'Synchronise vos données santé sur Android via Health Connect.',
-    ['android']
-  ),
-  stub(
-    'freestyle-libre',
-    'FreeStyle Libre',
-    '⚪',
-    'Importe automatiquement les mesures de votre capteur Libre (LibreLinkUp).',
-    ['ios', 'android']
-  ),
-  stub(
-    'dexcom',
-    'Dexcom',
-    '🟢',
-    'Reçoit les mesures en continu de votre CGM Dexcom (Share).',
-    ['ios', 'android']
-  ),
+  stub('apple-health', 'Apple Health', '🍎', 'integrations.appleHealthDesc', ['ios']),
+  stub('google-fit', 'Google Fit / Health Connect', '🤖', 'integrations.googleFitDesc', ['android']),
+  stub('freestyle-libre', 'FreeStyle Libre', '⚪', 'integrations.libreDesc', ['ios', 'android']),
+  stub('dexcom', 'Dexcom', '🟢', 'integrations.dexcomDesc', ['ios', 'android']),
 ];
 
 /** Providers relevant for the current platform. */

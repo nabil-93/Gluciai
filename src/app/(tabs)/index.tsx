@@ -679,11 +679,13 @@ function WeekStrip({
               style={[styles.weekCell, isSel && styles.weekCellSel]}
             >
               <View style={styles.weekDisc}>
+                {/* The ring sits on the white disc (not the green pill), so
+                    it keeps its meal colors even on the selected day —
+                    white arcs would vanish against the disc. */}
                 <MealRing
                   slots={mealsByDay[d.toDateString()]}
                   size={38}
                   stroke={2.8}
-                  selected={isSel}
                 />
                 <Text style={[styles.weekNum, isFuture && styles.weekNumMuted]}>
                   {String(d.getDate()).padStart(2, '0')}

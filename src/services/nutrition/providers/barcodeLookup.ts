@@ -1,7 +1,6 @@
 import type { BarcodeProduct } from './openfoodfacts';
-import { lookupBarcode as offLookup } from './openfoodfacts';
+import { lookupBarcode as offLookup , openFoodFactsProvider } from './openfoodfacts';
 import { usdaProvider } from './usda';
-import { openFoodFactsProvider } from './openfoodfacts';
 
 /* ────────────────────────────────────────────────────────────
  * MULTI-SOURCE BARCODE LOOKUP
