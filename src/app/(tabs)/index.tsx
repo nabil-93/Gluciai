@@ -661,8 +661,8 @@ function WeekStrip({
               <View style={styles.weekDisc}>
                 <MealRing
                   slots={mealsByDay[d.toDateString()]}
-                  size={38}
-                  stroke={2.8}
+                  size={34}
+                  stroke={2.6}
                   selected={isSel}
                 />
                 <Text style={[styles.weekNum, isFuture && styles.weekNumMuted]}>
@@ -2742,7 +2742,7 @@ const styles = StyleSheet.create({
      glucose card would otherwise paint over the calendar popup). */
   weekRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginTop: 14,
     marginBottom: 2,
     zIndex: 20,
@@ -2757,14 +2757,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 4,
     paddingBottom: 8,
-    paddingHorizontal: 3,
+    paddingHorizontal: 1,
     gap: 5,
   },
   weekCellSel: { backgroundColor: WEEK_ACCENT },
   weekDisc: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: '#fdfdfc',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2777,7 +2777,7 @@ const styles = StyleSheet.create({
   weekNum: {
     position: 'absolute',
     fontFamily: F700,
-    fontSize: 13,
+    fontSize: 12,
     letterSpacing: 0.2,
     color: '#1f2b28',
   },
@@ -2789,7 +2789,7 @@ const styles = StyleSheet.create({
     color: '#aeb5b1',
   },
   weekLabelSel: { color: '#ffffff' },
-  weekCalWrap: { position: 'relative', marginLeft: 8 },
+  weekCalWrap: { position: 'relative', marginLeft: 6, paddingTop: 13 },
 
   /* Calendar popup */
   calBackdrop: {
