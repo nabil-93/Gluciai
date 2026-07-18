@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Spinner } from '@/components/ui/Spinner';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,6 +20,7 @@ import {
   GaugeRing,
 } from '@/components/ui';
 import { isRTL } from '@/i18n';
+import { useAppStore } from '@/store/useAppStore';
 import {
   catalogSearch,
   recipeDetail,
@@ -43,7 +44,14 @@ const RATING: Record<RecipeRating, { color: string; bg: string; key: string }> =
  * Full world recipe: HD photo hero, AI diabetes verdict + advice, animated
  * nutrition gauge rings (per serving), ingredients and translated steps.
  */
-export default function WorldRecipeScreen() {
+/* Gate: hidden when the admin turned off "Plats du monde" for this account. */
+export default function WorldRecipeGate() {
+  const hidden = useAppStore((s) => s.lockedFeatures.includes('world_recipes'));
+  if (hidden) return <Redirect href="/(tabs)" />;
+  return <WorldRecipeScreen />;
+}
+
+function WorldRecipeScreen() {
   const router = useRouter();
   const { name, dishId, image } = useLocalSearchParams<{
     name?: string;

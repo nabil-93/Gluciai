@@ -8,13 +8,14 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView, PressableScale, Skeleton } from '@/components/ui';
 import { RecipeAIPanel } from '@/components/RecipeAIPanel';
 import { isRTL } from '@/i18n';
+import { useAppStore } from '@/store/useAppStore';
 import {
   MEAL_MOMENTS,
   RECIPE_COUNTRIES,
@@ -43,7 +44,16 @@ const MOMENT_EMOJI: Record<MealMoment, string> = {
  * for that moment, diabetes-appropriate, with real photos. The floating
  * robot opens a chat that asks about allergies/dislikes then recommends.
  */
-export default function WorldRecipesScreen() {
+/* Gate: "Plats du monde" is a hideable section. When the admin hid it for
+ * this account (feature_access world_recipes allowed=false) the screen
+ * silently redirects home — its Biology entry point is gone too. */
+export default function WorldRecipesGate() {
+  const hidden = useAppStore((s) => s.lockedFeatures.includes('world_recipes'));
+  if (hidden) return <Redirect href="/(tabs)" />;
+  return <WorldRecipesScreen />;
+}
+
+function WorldRecipesScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();

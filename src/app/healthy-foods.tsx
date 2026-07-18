@@ -12,12 +12,13 @@ import {
 } from 'react-native';
 import { Spinner } from '@/components/ui/Spinner';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChevronLeft, FadeInView, PressableScale } from '@/components/ui';
 import { isRTL } from '@/i18n';
+import { useAppStore } from '@/store/useAppStore';
 import {
   MOMENTS,
   filterHealthyFoods,
@@ -53,13 +54,36 @@ const RATING: Record<DiabetesRating, { color: string; bg: string }> = {
  *    (millions of products, real photos, per-100 g nutrition) with a
  *    diabetes-friendliness rating.
  */
-export default function HealthyFoodsScreen() {
+/* Gate: "Makla saine" hosts two hideable sub-sections — Sélection Santé
+ * (curated) and Base Mondiale (world food search). The admin can hide each
+ * one per patient from the dashboard. If BOTH are hidden the screen
+ * redirects home; if only one is hidden it opens straight into the other
+ * with the segmented control removed. */
+export default function HealthyFoodsGate() {
+  const locked = useAppStore((s) => s.lockedFeatures);
+  const allowSelection = !locked.includes('healthy_selection');
+  const allowWorld = !locked.includes('world_foods');
+  if (!allowSelection && !allowWorld) return <Redirect href="/(tabs)" />;
+  return <HealthyFoodsScreen allowSelection={allowSelection} allowWorld={allowWorld} />;
+}
+
+function HealthyFoodsScreen({
+  allowSelection,
+  allowWorld,
+}: {
+  allowSelection: boolean;
+  allowWorld: boolean;
+}) {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
 
-  const [mode, setMode] = useState<'curated' | 'world'>('curated');
+  // Both sub-sections visible → the patient picks; only one → force it.
+  const bothModes = allowSelection && allowWorld;
+  const [mode, setMode] = useState<'curated' | 'world'>(
+    allowSelection ? 'curated' : 'world'
+  );
   const [query, setQuery] = useState('');
   /* Sliding pill of the segmented control (iOS-style). */
   const [segW, setSegW] = useState(0);
@@ -156,7 +180,9 @@ export default function HealthyFoodsScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* ── Mode toggle (iOS segmented control with sliding pill) ── */}
+      {/* ── Mode toggle (iOS segmented control with sliding pill) ──
+          Shown only when BOTH sub-sections are available to this patient. */}
+      {bothModes ? (
       <View
         style={styles.modeRow}
         onLayout={(e) => setSegW(e.nativeEvent.layout.width)}
@@ -190,6 +216,7 @@ export default function HealthyFoodsScreen() {
           </Text>
         </Pressable>
       </View>
+      ) : null}
 
       {/* ── Search ── */}
       <View style={styles.searchWrap}>

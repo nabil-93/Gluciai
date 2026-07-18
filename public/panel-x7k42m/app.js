@@ -56,6 +56,15 @@ const HIDDEN_FEATURES = [
   { key: 'labs', label: 'Analyses biologiques', desc: 'Photo du bilan → IA : valeurs, graphiques, rapport, docteur vocal', icon: '🧪', bg: '#fdf2ff' },
 ];
 
+/* Rubriques de CONTENU : visibles par défaut, mais l'admin peut les masquer
+ * pour un patient (feature_access allowed=false). Aucune écran de blocage —
+ * la rubrique disparaît simplement de l'app. */
+const CONTENT_SECTIONS = [
+  { key: 'healthy_selection', label: 'Sélection Santé', desc: 'Plats sains sélectionnés (Makla saine)', icon: '🥗', bg: '#e9fbf2' },
+  { key: 'world_foods', label: 'Base Mondiale', desc: 'Recherche produits Open Food Facts (Makla saine)', icon: '🌍', bg: '#e8f1fe' },
+  { key: 'world_recipes', label: 'Plats du monde', desc: 'Recettes du monde générées par IA', icon: '🍽️', bg: '#fef3e8' },
+];
+
 const PLAN_LABEL = { free: 'Gratuit', monthly: 'Mensuel', yearly: 'Annuel' };
 const AVATAR_COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
@@ -679,6 +688,18 @@ async function pagePatient(pid, initTab) {
                 ${on ? '<span class="badge green">👁️ Activée</span>' : '<span class="badge">🕶️ Cachée</span>'}
                 <button class="switch ${on ? 'on' : ''}" data-feat="${f.key}" data-hidden="1"></button>
               </div>`;
+            }).join('')}
+            <div style="margin:14px 0 6px;padding-top:12px;border-top:1px dashed var(--border);font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted-2)">
+              📚 Rubriques de contenu — visibles par défaut, masquez-les pour ce patient (aucun écran de blocage)
+            </div>
+            ${CONTENT_SECTIONS.map((f) => {
+              const on = locks[f.key] !== false;
+              return `<div class="feature-row">
+                <div class="fic" style="background:${f.bg}">${f.icon}</div>
+                <div class="ft"><div class="t">${f.label}</div><div class="d">${f.desc}</div></div>
+                ${on ? '' : '<span class="badge">🙈 Masquée</span>'}
+                <button class="switch ${on ? 'on' : ''}" data-feat="${f.key}" data-content="1"></button>
+              </div>`;
             }).join('')}` : ''}
           </div>
         </div>
@@ -1051,16 +1072,20 @@ async function pagePatient(pid, initTab) {
       sw.addEventListener('click', async () => {
         const feat = sw.dataset.feat;
         const hidden = sw.dataset.hidden === '1';
+        const content = sw.dataset.content === '1';
         const nowOn = !sw.classList.contains('on');
         sw.classList.toggle('on', nowOn);
         const { error } = await db.from('feature_access').upsert({ user_id: pid, feature: feat, allowed: nowOn, updated_at: new Date().toISOString() });
         if (error) { sw.classList.toggle('on', !nowOn); toast('Erreur: ' + error.message, true); return; }
         toast(hidden
           ? (nowOn ? 'Fonction cachée activée pour ce patient 👁️' : 'Fonction cachée désactivée 🕶️')
-          : (nowOn ? 'Fonctionnalité débloquée ✓' : 'Fonctionnalité bloquée 🔒'));
+          : content
+            ? (nowOn ? 'Rubrique visible dans l\'app 👁️' : 'Rubrique masquée pour ce patient 🙈')
+            : (nowOn ? 'Fonctionnalité débloquée ✓' : 'Fonctionnalité bloquée 🔒'));
         const row = sw.closest('.feature-row');
         row.querySelector('.badge')?.remove();
         if (hidden) sw.insertAdjacentHTML('beforebegin', nowOn ? '<span class="badge green">👁️ Activée</span>' : '<span class="badge">🕶️ Cachée</span>');
+        else if (content) { if (!nowOn) sw.insertAdjacentHTML('beforebegin', '<span class="badge">🙈 Masquée</span>'); }
         else if (!nowOn) sw.insertAdjacentHTML('beforebegin', '<span class="badge red">🔒 Bloqué</span>');
       }));
 

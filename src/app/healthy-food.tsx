@@ -23,6 +23,7 @@ import {
   healthyFoodWhy,
 } from '@/data/healthyFoods';
 import { HEALTHY_FOOD_IMAGES } from '@/data/healthyFoodImages';
+import { useAppStore } from '@/store/useAppStore';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -42,8 +43,13 @@ export default function HealthyFoodDetailScreen() {
   const rtl = isRTL(i18n.language);
 
   const [imgBroken, setImgBroken] = useState(false);
+  // "Sélection Santé" hidden by the admin → this detail page redirects home.
+  const selectionHidden = useAppStore((s) =>
+    s.lockedFeatures.includes('healthy_selection')
+  );
 
   const food = getHealthyFood(String(id ?? ''));
+  if (selectionHidden) return <Redirect href="/(tabs)" />;
   if (!food) return <Redirect href="/healthy-foods" />;
   const photo = HEALTHY_FOOD_IMAGES[food.id];
   const showPhoto = !!photo && !imgBroken;

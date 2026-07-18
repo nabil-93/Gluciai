@@ -16,6 +16,29 @@ export const ALL_FEATURES: FeatureKey[] = ['scanner', 'ai_chat', 'ai_call'];
  */
 export const HIDDEN_FEATURES = ['labs'] as const;
 
+/**
+ * HIDEABLE content sections — VISIBLE to everyone by default, but the admin
+ * can hide any of them per patient from the dashboard (a feature_access row
+ * with allowed=false). Unlike the premium locks above they show NO "locked"
+ * teaser and don't count toward the plan tier: the entry point simply
+ * disappears from the app and the screen silently redirects home. They ride
+ * on the same `lockedFeatures` list (allowed=false) as the premium locks.
+ *  - healthy_selection → "Sélection Santé" (curated dishes)
+ *  - world_foods       → "Base Mondiale" (Open Food Facts search)
+ *  - world_recipes     → "Plats du monde" (AI world recipes)
+ */
+export const HIDEABLE_SECTIONS = [
+  'healthy_selection',
+  'world_foods',
+  'world_recipes',
+] as const;
+export type HideableSection = (typeof HIDEABLE_SECTIONS)[number];
+
+/** True when the admin hid `section` for this account. */
+export function isSectionHidden(locked: string[], section: HideableSection) {
+  return locked.includes(section);
+}
+
 export type PlanStatus = 'free' | 'partial' | 'full';
 
 /**

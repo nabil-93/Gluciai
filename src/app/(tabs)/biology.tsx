@@ -45,6 +45,15 @@ export default function BiologyScreen() {
   // Labs is a HIDDEN feature: the card exists only for accounts the admin
   // explicitly granted (feature_access labs allowed=true). No trace otherwise.
   const labsGranted = useAppStore((s) => s.grantedFeatures.includes('labs'));
+  // Hideable content sections — visible by default, hidden per patient from
+  // the dashboard (feature_access allowed=false → lands in lockedFeatures).
+  const locked = useAppStore((s) => s.lockedFeatures);
+  const hideSelection = locked.includes('healthy_selection');
+  const hideWorldFoods = locked.includes('world_foods');
+  const hideWorldRecipes = locked.includes('world_recipes');
+  // "Makla saine" hosts both sub-sections — its card stays as long as at
+  // least one of them is visible.
+  const showHealthy = !hideSelection || !hideWorldFoods;
   const locale = i18n.language;
 
   const [openKind, setOpenKind] = useState<MeasureKind | null>(null);
@@ -107,31 +116,36 @@ export default function BiologyScreen() {
           </BevelCard>
         ) : null}
 
-        {/* Healthy food library */}
-        <BevelCard
-          style={styles.integrationsCard}
-          onPress={() => router.push('/healthy-foods')}
-        >
-          <Text style={{ fontSize: 24 }}>🥗</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.integrationsTitle}>{t('hf.title')}</Text>
-            <Text style={styles.integrationsSub}>{t('hf.subtitle')}</Text>
-          </View>
-          <ChevronRight />
-        </BevelCard>
+        {/* Healthy food library (hidden entirely only when BOTH of its
+            sub-sections were hidden by the admin) */}
+        {showHealthy ? (
+          <BevelCard
+            style={styles.integrationsCard}
+            onPress={() => router.push('/healthy-foods')}
+          >
+            <Text style={{ fontSize: 24 }}>🥗</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.integrationsTitle}>{t('hf.title')}</Text>
+              <Text style={styles.integrationsSub}>{t('hf.subtitle')}</Text>
+            </View>
+            <ChevronRight />
+          </BevelCard>
+        ) : null}
 
         {/* World recipes */}
-        <BevelCard
-          style={styles.integrationsCard}
-          onPress={() => router.push('/world-recipes')}
-        >
-          <Text style={{ fontSize: 24 }}>🌍</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.integrationsTitle}>{t('wr.title')}</Text>
-            <Text style={styles.integrationsSub}>{t('wr.subtitle')}</Text>
-          </View>
-          <ChevronRight />
-        </BevelCard>
+        {!hideWorldRecipes ? (
+          <BevelCard
+            style={styles.integrationsCard}
+            onPress={() => router.push('/world-recipes')}
+          >
+            <Text style={{ fontSize: 24 }}>🌍</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.integrationsTitle}>{t('wr.title')}</Text>
+              <Text style={styles.integrationsSub}>{t('wr.subtitle')}</Text>
+            </View>
+            <ChevronRight />
+          </BevelCard>
+        ) : null}
 
         {/* Health platform integrations */}
         <BevelCard
