@@ -103,11 +103,12 @@ a { color: inherit; text-decoration: none; }
 /* ── Logo tile ── */
 .logo-tile {
   width: 42px; height: 42px; border-radius: 14px; flex: none;
-  background: var(--g-green);
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; box-shadow: 0 10px 22px -6px rgba(16, 185, 129, 0.6), inset 0 1px 1px rgba(255,255,255,0.3);
+  background: #fff; border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  color: #fff; box-shadow: 0 10px 22px -6px rgba(16, 185, 129, 0.38);
 }
 .logo-tile svg { width: 21px; height: 21px; }
+.logo-tile img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
 .logo-tile.sm { width: 36px; height: 36px; border-radius: 12px; }
 .logo-tile.sm svg { width: 18px; height: 18px; }
 

@@ -207,7 +207,7 @@ function renderLogin(errMsg) {
   app.innerHTML = `
     <div class="login-wrap">
       <div class="login-card">
-        <div class="login-logo"><div class="logo-tile">${I.logo}</div>
+        <div class="login-logo"><div class="logo-tile"><img src="logo.png" alt="GlucoAI" /></div>
           <div><div class="login-title">GlucoAI</div><div style="font-size:11px;color:var(--muted-2);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Dashboard</div></div>
         </div>
         <p class="login-sub">Espace réservé aux médecins et à l'administration.</p>
@@ -255,7 +255,7 @@ function shell(active, title, sub, bodyHTML) {
     <div class="shell">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-head">
-          <div class="logo-tile sm">${I.logo}</div>
+          <div class="logo-tile sm"><img src="logo.png" alt="GlucoAI" /></div>
           <div><div class="name">GlucoAI</div><div class="sub">Dashboard médical</div></div>
         </div>
         <nav>${items.map((n) => `<a class="nav-item ${n.hash === active ? 'active' : ''}" href="${n.hash}">${n.icon}<span>${n.label}</span></a>`).join('')}</nav>
