@@ -16,15 +16,19 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
-import { LoggerConfirmCard } from '@/components/LoggerConfirmCard';
+import { DeleteConfirmCard, LoggerConfirmCard } from '@/components/LoggerConfirmCard';
 import { isRTL } from '@/i18n';
 import { uniqueId } from '@/lib/clock';
 import {
   VOICE_NOTE_MAX_MS,
   VoiceNoteRecorder,
   actionSummary,
+  applyDeleteTarget,
   applyLoggerAction,
+  findDeleteTargets,
   sendLoggerMessage,
+  type DeleteRequest,
+  type DeleteTarget,
   type LoggerAction,
 } from '@/services/aiLogger';
 import { markReminder, pendingFollowUps } from '@/services/reminders';
@@ -190,6 +194,8 @@ function AiLogScreen() {
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [pendingAction, setPendingAction] = useState<LoggerAction | null>(null);
+  /** Entry the patient asked to DELETE — behind its own red confirm card. */
+  const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
   const [listening, setListening] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
@@ -199,7 +205,7 @@ function AiLogScreen() {
   const scrollDown = () => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
   };
-  useEffect(scrollDown, [thread.length, thinking, pendingAction]);
+  useEffect(scrollDown, [thread.length, thinking, pendingAction, pendingDelete]);
 
   const followUpIdsRef = useRef<string[]>(initialFollowUps.otherIds);
 
@@ -219,6 +225,7 @@ function AiLogScreen() {
     if (!content || thinking) return;
     setInput('');
     setPendingAction(null);
+    setPendingDelete(null);
     // Replying to an "other"-kind follow-up counts as its answer.
     if (followUpIdsRef.current.length) {
       followUpIdsRef.current.forEach((rid) => markReminder(rid, 'done'));
@@ -236,11 +243,41 @@ function AiLogScreen() {
         i18n.language
       );
       if (turn.reply) pushBubble('assistant', turn.reply);
-      if (turn.action) setPendingAction(turn.action);
+      if (turn.remove) handleDeleteRequest(turn.remove);
+      else if (turn.action) setPendingAction(turn.action);
     } catch {
       pushBubble('assistant', t('logger.error'));
     } finally {
       setThinking(false);
+    }
+  };
+
+  /* ── Delete flow: resolve against today's entries + red confirm card —
+   * nothing is deleted until the patient explicitly confirms. ── */
+  const handleDeleteRequest = (req: DeleteRequest) => {
+    const targets = findDeleteTargets(req);
+    if (!targets.length) {
+      pushBubble('assistant', t('logger.deleteNotFound'));
+      return;
+    }
+    setPendingDelete(targets[0]);
+  };
+
+  const confirmDelete = async (target: DeleteTarget) => {
+    try {
+      await applyDeleteTarget(target);
+      setPendingDelete(null);
+      pushBubble('assistant', t('logger.deleted'));
+      addAiJournalEntry({
+        id: `del-${Date.now()}`,
+        icon: '🗑️',
+        title: t('logger.journalDeleteTitle'),
+        body: target.summary,
+        tone: 'info',
+        created_at: new Date().toISOString(),
+      });
+    } catch {
+      pushBubble('assistant', t('logger.error'));
     }
   };
 
@@ -282,6 +319,7 @@ function AiLogScreen() {
   const sendVoiceNote = async (audio: { mimeType: string; data: string }) => {
     if (thinking) return;
     setPendingAction(null);
+    setPendingDelete(null);
     setThinking(true);
     try {
       const turn = await sendLoggerMessage(
@@ -303,7 +341,8 @@ function AiLogScreen() {
           ? [{ id: `${Date.now()}-a`, role: 'assistant' as const, content: turn.reply }]
           : []),
       ]);
-      if (turn.action) setPendingAction(turn.action);
+      if (turn.remove) handleDeleteRequest(turn.remove);
+      else if (turn.action) setPendingAction(turn.action);
     } catch {
       pushBubble('assistant', t('logger.error'));
     } finally {
@@ -430,6 +469,15 @@ function AiLogScreen() {
             action={pendingAction}
             onConfirm={confirm}
             onCancel={cancel}
+          />
+        ) : null}
+
+        {pendingDelete ? (
+          <DeleteConfirmCard
+            summary={pendingDelete.summary}
+            createdAt={pendingDelete.created_at}
+            onConfirm={() => confirmDelete(pendingDelete)}
+            onCancel={() => setPendingDelete(null)}
           />
         ) : null}
       </ScrollView>

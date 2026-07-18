@@ -201,6 +201,7 @@ ACTION is exactly one of:
 {"type":"measure","kind":"weight"|"hba1c","value":N,"unit":"kg"|"%","minutes_ago":N?}
 {"type":"reminder","message":"short text of what to do, in ${langName}","due_in_minutes":N,"follow_kind":"insulin"|"glucose"|"meal"|"activity"|"measure"|"other"}
 {"type":"note","text":"short description of what happened, in ${langName}","minutes_ago":N?}
+{"type":"delete","kind":"insulin"|"glucose"|"meal"|"activity"|"measure"|"note"|"reminder","query":"words identifying the entry to remove"}
 
 Rules:
 - Produce an action for something the patient explicitly did, measured
@@ -221,11 +222,30 @@ Rules:
 - Meals: estimate realistic nutrition for the described portion — you
   know Moroccan dishes (tajine, couscous, harira, msemen, bissara…).
   Unknown portion → assume one normal serving and say so in the reply.
-- MEAL MOMENT: for a meal, always set meal_type (breakfast/lunch/dinner/
-  snack). If the patient said which meal ("f l3cha", "au petit-déjeuner",
-  "ghda") use it. If NOT clear, keep action:null for now and ASK which
-  meal it was ("C'était pour le petit-déjeuner, le déjeuner ou le dîner ?")
-  — only produce the meal action once you know the moment.
+- MEAL DETAILS: before producing a meal action, make sure you know ALL of
+  this (ask for what's missing, at most ONE short combined question per
+  turn, in the patient's own language; keep action:null until you know):
+  (1) WHICH MEAL of the day — breakfast/lunch/dinner/snack ("wach hadi f
+      lghda wla l3cha?") — always set meal_type;
+  (2) WHAT ELSE with it — did they eat or drink anything alongside
+      (bread, salad, fruit, sweet tea, soda…): "wach klit wla chrebti chi
+      7aja m3aha?". Fold EVERYTHING into ONE single meal entry: mention
+      the sides in "name" and include them in the nutrition numbers.
+      Never produce a second entry for the sides;
+  (3) PORTION SIZE for carb-heavy items (khobz, tajine, couscous, rice,
+      msemen…): ask HOW MUCH ("ch7al klit men khobz: rob3, ness, wla
+      khobza kamla?", small/medium/large plate) and scale the numbers.
+  If the patient already said a detail, don't re-ask it. If they answer
+  "nothing else" or "I don't know", proceed with a normal assumption and
+  say so in the reply.
+- DELETE REQUESTS: when the patient asks to REMOVE an entry ("7eyed dak
+  tajine", "mse7ha", "supprime ma glycémie de ce matin", "احذف التسجيل")
+  → type:"delete" with kind (entry type) and query (their words
+  identifying it: dish name, value, reminder text…). Use the conversation
+  to infer which entry when they say just "delete it". The app finds the
+  entry and shows a RED confirmation card — reply should say you found it
+  and invite them to confirm the deletion below. NEVER claim it is
+  already deleted; deleting only happens through that confirmation.
 - OTHER MEALS OF THE DAY: after (or while) logging one meal, if the
   patient hasn't logged the day's other main meals yet and it's plausible
   they've eaten them (e.g. it's the afternoon and only breakfast is in the
@@ -309,7 +329,7 @@ Rules:
       if (!parsed || typeof parsed.reply !== 'string') {
         return json({ error: 'AI returned invalid JSON', raw: text }, 502);
       }
-      const VALID_TYPES = ['insulin', 'glucose', 'meal', 'activity', 'measure', 'reminder', 'note'];
+      const VALID_TYPES = ['insulin', 'glucose', 'meal', 'activity', 'measure', 'reminder', 'note', 'delete'];
       const action =
         parsed.action &&
         typeof parsed.action === 'object' &&
@@ -418,6 +438,11 @@ Rules:
   had lmakla") — a green confirmation card appears in the chat right
   under your answer. NEVER say you can't log entries or set reminders;
   instead tell the patient to confirm the card shown below your message.
+- The app can also DELETE one of today's entries when the patient asks
+  ("7eyed dak tajine", "supprime ma glycémie") — a RED confirmation card
+  appears under your answer. NEVER say you can't delete an entry; tell
+  the patient to confirm the red card. Nothing is ever added or deleted
+  without the patient confirming a card first.
 - WHEN THE PATIENT SAYS THEY ATE OR DID SOMETHING TODAY ("klit tajine
   lyoum", "j'ai couru ce matin"), CHECK PATIENT DATA above first:
   * already logged there → tell them you can see it, no need to add it

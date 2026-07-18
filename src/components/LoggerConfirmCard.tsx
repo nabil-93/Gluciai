@@ -192,6 +192,73 @@ export function LoggerConfirmCard({
   );
 }
 
+/**
+ * Red twin of the confirm card, shown before the AI DELETES an entry —
+ * the patient always sees exactly what will be removed and must tap
+ * (or verbally confirm, on a call) before anything is deleted.
+ */
+export function DeleteConfirmCard({
+  summary,
+  createdAt,
+  onConfirm,
+  onCancel,
+}: {
+  /** Human summary of the entry to remove (e.g. "🍽️ Tajine (≈520 kcal)"). */
+  summary: string;
+  createdAt?: string;
+  onConfirm: () => Promise<void> | void;
+  onCancel: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  const time = createdAt
+    ? new Date(createdAt).toLocaleTimeString(i18n.language, {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
+
+  const confirm = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onConfirm();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View style={[styles.card, styles.cardDelete]}>
+      <View style={styles.head}>
+        <View style={[styles.icon, styles.iconDelete]}>
+          <Text style={{ fontSize: 18 }}>🗑️</Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.title} numberOfLines={2}>
+            {summary}
+          </Text>
+          {time ? <Text style={styles.detail}>🕐 {time}</Text> : null}
+        </View>
+      </View>
+
+      <Text style={styles.question}>{t('logger.deleteTitle')}</Text>
+      <View style={styles.btnRow}>
+        <Pressable style={styles.cancelBtn} onPress={onCancel} disabled={busy}>
+          <Text style={styles.cancelText}>{t('logger.cancel')}</Text>
+        </Pressable>
+        <Pressable style={[styles.okBtn, styles.deleteBtn]} onPress={confirm} disabled={busy}>
+          {busy ? (
+            <Spinner size={20} color="#ffffff" />
+          ) : (
+            <Text style={styles.okText}>🗑️ {t('logger.delete')}</Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
@@ -264,4 +331,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   okText: { fontFamily: F800, fontSize: 13.5, color: '#ffffff' },
+  cardDelete: { borderColor: '#ef4444', shadowColor: '#ef4444' },
+  iconDelete: { backgroundColor: '#fdeaea' },
+  deleteBtn: { backgroundColor: '#ef4444' },
 });

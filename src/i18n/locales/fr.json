@@ -876,7 +876,14 @@
     "followUpAsk": "⏰ Vous aviez un rappel : « {{msg}} ». L'avez-vous fait ? Dites-le-moi et je l'enregistre.",
     "chipReminder": "Rappelle-moi dans 1h de prendre mon insuline",
     "noteLabel": "Note",
-    "chipNote": "J'ai bu un verre d'eau"
+    "chipNote": "J'ai bu un verre d'eau",
+    "deleteTitle": "Je supprime cette entrée ?",
+    "delete": "Oui, supprimer",
+    "deleted": "C'est fait 🗑️ L'entrée a été supprimée de votre compte.",
+    "deleteNotFound": "Je n'ai pas trouvé cette entrée dans les données d'aujourd'hui. Dites-moi plus précisément quoi supprimer.",
+    "addedShort": "Ajouté",
+    "deletedShort": "Supprimé",
+    "journalDeleteTitle": "Supprimé via l'assistant"
   },
   "events": {
     "section": "Changements du compte",

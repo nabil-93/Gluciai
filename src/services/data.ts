@@ -429,6 +429,12 @@ export function deleteMeasure(rowId: string) {
   remoteDelete('measure_logs', rowId);
 }
 
+/** Notes logged via the AI ("I drank a coffee") live in event_logs. */
+export function deleteEvent(rowId: string) {
+  useAppStore.getState().removeEventLog(rowId);
+  remoteDelete('event_logs', rowId);
+}
+
 /**
  * Bolus estimation from the medical profile:
  * meal bolus = carbs / carb_ratio

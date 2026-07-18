@@ -13,8 +13,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DeleteConfirmCard, LoggerConfirmCard } from '@/components/LoggerConfirmCard';
 import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { isRTL } from '@/i18n';
+import { nowMs } from '@/lib/clock';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { buildHealthContext, sendChatMessage } from '@/services/ai';
 import {
@@ -22,11 +24,17 @@ import {
   LIVE_LOG_TOOLS,
   actionFromFunctionCall,
   actionSummary,
+  applyDeleteTarget,
   applyLoggerAction,
+  findDeleteTargets,
+  type DeletableKind,
+  type DeleteTarget,
+  type LoggerAction,
 } from '@/services/aiLogger';
 import {
   GeminiLiveSession,
   LIVE_MODELS,
+  LIVE_VAD_TUNING,
   MicStreamer,
   PcmPlayer,
   getLiveToken,
@@ -296,7 +304,7 @@ function AiCallScreen() {
   const callLoggedRef = useRef(false);
   const [endNotice, setEndNotice] = useState<string | null>(null);
 
-  /* ── "Saved during the call" toast (function calling) ── */
+  /* ── "Saved/deleted during the call" toast (full text) ── */
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showSaved = (text: string) => {
@@ -305,14 +313,33 @@ function AiCallScreen() {
     savedTimerRef.current = setTimeout(() => setSavedNotice(null), 6000);
   };
 
-  /* ── Dedup guards against double-logging on a call ──
-   * Gemini Live can resend the SAME tool call (same id) across turn
-   * boundaries, and the patient may re-confirm ("yes, add it") which
-   * produces a NEW id but the same entry. We drop both:
-   *  - loggedCallIdsRef: every function-call id we already handled
-   *  - recentSigRef: content signature → timestamp, ignored if repeated
-   *    within a short window (same insulin dose / same note text, etc.) */
-  const loggedCallIdsRef = useRef<Set<string>>(new Set());
+  /* ── CONFIRMATION GATE ──
+   * The AI NEVER saves or deletes anything directly. Every log_* /
+   * delete_entry tool call only creates a PENDING proposal: a card shows
+   * on this screen and the tool answer says confirmation_required. The
+   * proposal is executed only when the patient confirms — OUT LOUD (the
+   * model then calls confirm_entry) or by TAPPING the card's button. */
+  type CallPending =
+    | { id: string; kind: 'log'; action: LoggerAction }
+    | { id: string; kind: 'delete'; target: DeleteTarget };
+  const [pending, setPending] = useState<CallPending | null>(null);
+  const pendingRef = useRef<CallPending | null>(null);
+  const pendingSeqRef = useRef(0);
+  /** Last resolved proposal, so a re-sent confirm_entry gets a clean
+   *  "already handled" answer instead of double-saving. */
+  const lastResolvedRef = useRef<{
+    id: string;
+    outcome: 'saved' | 'deleted' | 'canceled';
+  } | null>(null);
+  const setPendingSafe = (p: CallPending | null) => {
+    pendingRef.current = p;
+    setPending(p);
+  };
+
+  /* ── Dedup guard against double-logging on a call ──
+   * The patient may re-confirm ("yes, add it") after the entry was
+   * already saved: recentSigRef maps a content signature → timestamp and
+   * repeated saves within the window are answered already_saved. */
   const recentSigRef = useRef<Map<string, number>>(new Map());
   const DUP_WINDOW_MS = 90_000;
 
@@ -342,6 +369,80 @@ function AiCallScreen() {
     },
     []
   );
+
+  /** Toast + AI-journal trace once an entry is REALLY saved. */
+  const afterSaved = (action: LoggerAction) => {
+    const summary = actionSummary(action);
+    showSaved(`✅ ${t('logger.addedShort')} · ${summary}`);
+    useAppStore.getState().addAiJournalEntry({
+      id: `log-${Date.now()}`,
+      icon: '📝',
+      title: t('logger.journalTitle'),
+      body: summary,
+      tone: 'success',
+      created_at: new Date().toISOString(),
+    });
+  };
+  /** Toast + AI-journal trace once an entry is REALLY deleted. */
+  const afterDeleted = (target: DeleteTarget) => {
+    showSaved(`🗑️ ${t('logger.deletedShort')} · ${target.summary}`);
+    useAppStore.getState().addAiJournalEntry({
+      id: `del-${Date.now()}`,
+      icon: '🗑️',
+      title: t('logger.journalDeleteTitle'),
+      body: target.summary,
+      tone: 'info',
+      created_at: new Date().toISOString(),
+    });
+  };
+
+  /* ── The patient resolved the proposal by TAPPING the card ──
+   * Execute (or discard) it, then tell the model through a system text
+   * turn so it acknowledges out loud and never re-proposes the entry. */
+  const confirmPendingTap = async (finalAction?: LoggerAction) => {
+    const p = pendingRef.current;
+    if (!p || endedRef.current) return;
+    bumpActivity();
+    setPendingSafe(null);
+    try {
+      if (p.kind === 'log') {
+        // Meals carry the moment picked on the card (breakfast/lunch/…).
+        const action = finalAction ?? p.action;
+        const sig = actionSignature(action);
+        if (sig) recentSigRef.current.set(sig, nowMs());
+        await applyLoggerAction(action);
+        lastResolvedRef.current = { id: p.id, outcome: 'saved' };
+        afterSaved(action);
+        liveRef.current?.sendText(
+          `(SYSTEM: the patient tapped the CONFIRM button on screen — the entry "${actionSummary(
+            action
+          )}" is now SAVED. Briefly acknowledge out loud in the patient's language. Do NOT call confirm_entry and do NOT propose it again.)`
+        );
+      } else {
+        await applyDeleteTarget(p.target);
+        lastResolvedRef.current = { id: p.id, outcome: 'deleted' };
+        afterDeleted(p.target);
+        liveRef.current?.sendText(
+          `(SYSTEM: the patient tapped the CONFIRM button on screen — the entry "${p.target.summary}" was DELETED. Briefly acknowledge out loud in the patient's language. Do NOT call confirm_entry.)`
+        );
+      }
+    } catch {
+      // Save/delete failed — put the card back so the patient can retry.
+      setPendingSafe(p);
+    }
+  };
+
+  const cancelPendingTap = () => {
+    const p = pendingRef.current;
+    if (!p || endedRef.current) return;
+    bumpActivity();
+    lastResolvedRef.current = { id: p.id, outcome: 'canceled' };
+    setPendingSafe(null);
+    const summary = p.kind === 'log' ? actionSummary(p.action) : p.target.summary;
+    liveRef.current?.sendText(
+      `(SYSTEM: the patient tapped the CANCEL button on screen — the proposal "${summary}" was DISCARDED, nothing was saved or deleted. Briefly acknowledge out loud and ask if they want to change something.)`
+    );
+  };
 
   /* ── Cost guards: silence timeout + hard cap ── */
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -524,6 +625,8 @@ ${LIVE_LOG_INSTRUCTION}`;
 
     playerRef.current = player;
     player.onDrain = () => {
+      // Speaker went quiet → stop gating the mic (echo can't happen now).
+      mic.setEchoGate(false);
       if (endedRef.current) return;
       // The patient said goodbye: once the farewell has finished playing, close.
       if (hangupPendingRef.current) {
@@ -539,6 +642,10 @@ ${LIVE_LOG_INSTRUCTION}`;
       onAudio: (chunk) => {
         if (endedRef.current) return;
         bumpActivity(); // AI is speaking → not silent
+        // While the AI's voice is on the speaker, gate the mic: quiet
+        // frames (its own echo, room noise) go out as silence so the
+        // model never thinks the patient barged in and cuts its answer.
+        mic.setEchoGate(true);
         player.play(chunk);
         if (statusRef.current !== 'speaking') setStatusSafe('speaking');
       },
@@ -559,12 +666,19 @@ ${LIVE_LOG_INSTRUCTION}`;
         }
       },
       onInterrupted: () => {
+        // The patient is really talking — stop gating so every nuance of
+        // their speech reaches the model.
+        mic.setEchoGate(false);
         player.clear();
         if (!endedRef.current) {
           setStatusSafe(micOnRef.current ? 'listening' : 'muted');
         }
       },
       onTurnComplete: () => {
+        // Normal end of the model's speech — a queue drain after this is
+        // completion, not a network under-run (jitter-buffer bookkeeping).
+        player.endOfTurn();
+        if (!player.isPlaying()) mic.setEchoGate(false);
         // Fresh user turn starts after each model turn.
         userTurnBufRef.current = '';
         // The patient said goodbye and the model finished its reply →
@@ -576,82 +690,176 @@ ${LIVE_LOG_INSTRUCTION}`;
         // Otherwise status flips back on player drain; nothing to do.
       },
       onToolCall: (calls) => {
-        // The model (after confirming verbally with the patient) asks the
-        // app to log an entry. Save it once, then answer the tool so the AI
-        // can confirm out loud. Guarded against duplicate tool calls.
+        // CONFIRMATION GATE: log_* / delete_entry only CREATE a pending
+        // proposal (card on screen + confirmation_required answer);
+        // confirm_entry executes it after the patient's verbal yes;
+        // cancel_entry discards it. Nothing is ever saved or deleted
+        // without the patient's explicit confirmation.
         if (endedRef.current) return;
         bumpActivity();
+        const answer = (
+          c: (typeof calls)[number],
+          response: Record<string, unknown>
+        ) =>
+          liveRef.current?.sendToolResponse([
+            { id: c.id, name: c.name, response },
+          ]);
+
         for (const c of calls) {
           // The patient said goodbye → the model asks to hang up. Ack the
           // tool so it can finish its spoken farewell, then close gracefully.
           if (c.name === 'end_call') {
-            liveRef.current?.sendToolResponse([
-              { id: c.id, name: c.name, response: { ok: true } },
-            ]);
+            answer(c, { ok: true });
             scheduleHangup();
             continue;
           }
 
+          if (c.name === 'cancel_entry') {
+            const p = pendingRef.current;
+            if (p) {
+              lastResolvedRef.current = { id: p.id, outcome: 'canceled' };
+              setPendingSafe(null);
+            }
+            answer(c, { ok: true, canceled: true, note: 'Nothing was saved or deleted.' });
+            continue;
+          }
+
+          if (c.name === 'confirm_entry') {
+            const pid = String((c.args as Record<string, unknown>)?.pending_id ?? '');
+            const p = pendingRef.current;
+            if (!p || (pid && pid !== p.id)) {
+              const last = lastResolvedRef.current;
+              if (last && (!pid || pid === last.id)) {
+                answer(c, {
+                  ok: true,
+                  already_done: true,
+                  outcome: last.outcome,
+                  note: 'Already handled — do not confirm or propose it again.',
+                });
+              } else {
+                answer(c, { ok: false, error: 'nothing pending to confirm' });
+              }
+              continue;
+            }
+            setPendingSafe(null);
+            if (p.kind === 'log') {
+              // Reserve the signature BEFORE the async save so a duplicate
+              // arriving during the save can't slip through.
+              const sig = actionSignature(p.action);
+              if (sig) recentSigRef.current.set(sig, Date.now());
+              void applyLoggerAction(p.action)
+                .then(() => {
+                  lastResolvedRef.current = { id: p.id, outcome: 'saved' };
+                  answer(c, { ok: true, saved: true });
+                  afterSaved(p.action);
+                })
+                .catch(() => {
+                  if (sig) recentSigRef.current.delete(sig);
+                  setPendingSafe(p); // card comes back so the patient can retry
+                  answer(c, { ok: false, error: 'save failed' });
+                });
+            } else {
+              void applyDeleteTarget(p.target)
+                .then(() => {
+                  lastResolvedRef.current = { id: p.id, outcome: 'deleted' };
+                  answer(c, { ok: true, deleted: true });
+                  afterDeleted(p.target);
+                })
+                .catch(() => {
+                  setPendingSafe(p);
+                  answer(c, { ok: false, error: 'delete failed' });
+                });
+            }
+            continue;
+          }
+
+          if (c.name === 'delete_entry') {
+            const args = (c.args ?? {}) as Record<string, unknown>;
+            const KINDS: DeletableKind[] = [
+              'insulin', 'glucose', 'meal', 'activity', 'measure', 'note', 'reminder',
+            ];
+            const kind = KINDS.includes(args.kind as DeletableKind)
+              ? (args.kind as DeletableKind)
+              : undefined;
+            const query = typeof args.query === 'string' ? args.query : undefined;
+            const targets = findDeleteTargets({ kind, query });
+            if (!targets.length) {
+              answer(c, {
+                ok: false,
+                error: 'not_found',
+                todays_entries: findDeleteTargets({})
+                  .slice(0, 12)
+                  .map((x) => x.summary),
+                note: "No entry matched. Read todays_entries to the patient, ask which one they mean, then call delete_entry again with better identifying words.",
+              });
+              continue;
+            }
+            const target = targets[0];
+            const cur = pendingRef.current;
+            if (cur?.kind === 'delete' && cur.target.rowId === target.rowId) {
+              answer(c, {
+                ok: false,
+                status: 'confirmation_required',
+                pending_id: cur.id,
+                entry: cur.target.summary,
+                note: 'Already proposed — ask the patient to confirm (say yes, or tap the button on screen).',
+              });
+              continue;
+            }
+            const pid = `p${++pendingSeqRef.current}`;
+            setPendingSafe({ id: pid, kind: 'delete', target });
+            answer(c, {
+              ok: false,
+              status: 'confirmation_required',
+              pending_id: pid,
+              entry: target.summary,
+              ...(targets.length > 1
+                ? { other_matches: targets.slice(1, 4).map((x) => x.summary) }
+                : {}),
+              note: "NOT deleted yet. A red confirmation card is on the patient's screen. Read the entry back out loud and ask them to confirm: they can say yes (then call confirm_entry with this pending_id) or tap the button on screen.",
+            });
+            continue;
+          }
+
+          // log_* / set_reminder → create a pending proposal, never save.
           const action = actionFromFunctionCall(c.name, c.args);
           if (!action) {
-            liveRef.current?.sendToolResponse([
-              { id: c.id, name: c.name, response: { ok: false, error: 'invalid arguments' } },
-            ]);
+            answer(c, { ok: false, error: 'invalid arguments' });
             continue;
           }
-
-          // Same tool-call id already handled → just re-ack, don't save.
-          if (c.id && loggedCallIdsRef.current.has(c.id)) {
-            liveRef.current?.sendToolResponse([
-              { id: c.id, name: c.name, response: { ok: true, already_saved: true } },
-            ]);
-            continue;
-          }
-          // Same content saved moments ago (patient re-confirmed) → skip the
-          // duplicate but tell the model it's already recorded.
+          // Same content saved moments ago (patient re-confirmed) → tell
+          // the model it's already recorded instead of proposing again.
           const sig = actionSignature(action);
-          const now = Date.now();
-          const last = recentSigRef.current.get(sig);
-          if (sig && last && now - last < DUP_WINDOW_MS) {
-            if (c.id) loggedCallIdsRef.current.add(c.id);
-            liveRef.current?.sendToolResponse([
-              {
-                id: c.id,
-                name: c.name,
-                response: { ok: true, already_saved: true, note: 'already recorded, do not add again' },
-              },
-            ]);
+          const last = sig ? recentSigRef.current.get(sig) : undefined;
+          if (sig && last && Date.now() - last < DUP_WINDOW_MS) {
+            answer(c, {
+              ok: true,
+              already_saved: true,
+              note: 'already recorded, do not add again',
+            });
             continue;
           }
-
-          // Reserve the signature + id BEFORE the async save so a second
-          // call arriving during the save can't slip a duplicate through.
-          if (sig) recentSigRef.current.set(sig, now);
-          if (c.id) loggedCallIdsRef.current.add(c.id);
-
-          void applyLoggerAction(action)
-            .then(() => {
-              liveRef.current?.sendToolResponse([
-                { id: c.id, name: c.name, response: { ok: true, saved: true } },
-              ]);
-              const summary = actionSummary(action);
-              showSaved(summary);
-              useAppStore.getState().addAiJournalEntry({
-                id: `log-${Date.now()}`,
-                icon: '📝',
-                title: t('logger.journalTitle'),
-                body: summary,
-                tone: 'success',
-                created_at: new Date().toISOString(),
-              });
-            })
-            .catch(() => {
-              // Save failed — release the reservation so a retry can work.
-              if (sig) recentSigRef.current.delete(sig);
-              liveRef.current?.sendToolResponse([
-                { id: c.id, name: c.name, response: { ok: false, error: 'save failed' } },
-              ]);
+          // Same proposal re-sent while its card is still open → re-ack.
+          const cur = pendingRef.current;
+          if (cur?.kind === 'log' && actionSignature(cur.action) === sig) {
+            answer(c, {
+              ok: false,
+              status: 'confirmation_required',
+              pending_id: cur.id,
+              entry: actionSummary(cur.action),
+              note: 'Already proposed — ask the patient to confirm (say yes, or tap the button on screen).',
             });
+            continue;
+          }
+          const pid = `p${++pendingSeqRef.current}`;
+          setPendingSafe({ id: pid, kind: 'log', action });
+          answer(c, {
+            ok: false,
+            status: 'confirmation_required',
+            pending_id: pid,
+            entry: actionSummary(action),
+            note: "NOT SAVED YET. A green confirmation card is on the patient's screen. Read the entry back out loud and ask them to confirm: they can say yes (then call confirm_entry with this pending_id) or tap the button on screen (you will get a system message).",
+          });
         }
       },
       onClose: () => {
@@ -670,39 +878,57 @@ ${LIVE_LOG_INSTRUCTION}`;
     liveRef.current = session;
 
     const instruction = buildInstruction();
+    // Each model is tried WITH the anti-cutout VAD tuning first; if a
+    // server build rejects that setup, the SAME model is retried without
+    // it — the live engine must never fall back to classic just because
+    // of the tuning.
+    const setupAttempts: (Record<string, unknown> | undefined)[] = [
+      LIVE_VAD_TUNING,
+      undefined,
+    ];
     for (const model of LIVE_MODELS) {
-      if (endedRef.current) return false;
-      try {
-        // No forced speech languageCode: the patient speaks FIRST and the
-        // model mirrors their language/dialect (Darija included) — a fixed
-        // BCP-47 tag would lock the voice to the app language.
-        await session.connect(token, model, instruction, undefined, 8000, LIVE_LOG_TOOLS);
-        // Connected — start streaming the mic (its AudioContext was
-        // created inside the answer tap, so iOS lets it run). The call is
-        // now silently listening: the PATIENT opens the conversation
-        // ("salam…") and the model greets back in the same language.
-        micRef.current = mic;
-        await mic.start((b64) => session.sendAudio(b64));
-        mic.setMuted(!micOnRef.current);
-        // From the lab screen the AI opens the call itself: "I've read your
-        // analysis — what would you like to ask?" (normal calls stay silent
-        // until the patient speaks first).
-        if (fromLab) {
-          session.sendText(
-            `(The call just connected from the patient's lab-analysis screen. ` +
-              `YOU speak first: in 1-2 short warm spoken sentences in ` +
-              `${LANGUAGE_NAMES[i18n.language] ?? 'English'}, greet the patient by ` +
-              `their first name, tell them you have read their blood-test ` +
-              `analysis, and ask what they would like to know about it. Then wait ` +
-              `for their reply and switch to THEIR language/dialect from then on.)`
+      for (const setupExtras of setupAttempts) {
+        if (endedRef.current) return false;
+        try {
+          // No forced speech languageCode: the patient speaks FIRST and the
+          // model mirrors their language/dialect (Darija included) — a fixed
+          // BCP-47 tag would lock the voice to the app language.
+          await session.connect(
+            token,
+            model,
+            instruction,
+            undefined,
+            8000,
+            LIVE_LOG_TOOLS,
+            setupExtras
           );
+          // Connected — start streaming the mic (its AudioContext was
+          // created inside the answer tap, so iOS lets it run). The call is
+          // now silently listening: the PATIENT opens the conversation
+          // ("salam…") and the model greets back in the same language.
+          micRef.current = mic;
+          await mic.start((b64) => session.sendAudio(b64));
+          mic.setMuted(!micOnRef.current);
+          // From the lab screen the AI opens the call itself: "I've read your
+          // analysis — what would you like to ask?" (normal calls stay silent
+          // until the patient speaks first).
+          if (fromLab) {
+            session.sendText(
+              `(The call just connected from the patient's lab-analysis screen. ` +
+                `YOU speak first: in 1-2 short warm spoken sentences in ` +
+                `${LANGUAGE_NAMES[i18n.language] ?? 'English'}, greet the patient by ` +
+                `their first name, tell them you have read their blood-test ` +
+                `analysis, and ask what they would like to know about it. Then wait ` +
+                `for their reply and switch to THEIR language/dialect from then on.)`
+            );
+          }
+          if (!endedRef.current) {
+            setStatusSafe(micOnRef.current ? 'listening' : 'muted');
+          }
+          return true;
+        } catch {
+          // try without the VAD tuning, then the next model, same token
         }
-        if (!endedRef.current) {
-          setStatusSafe(micOnRef.current ? 'listening' : 'muted');
-        }
-        return true;
-      } catch {
-        // try the next model with the same token
       }
     }
     cleanupLive();
@@ -976,9 +1202,12 @@ ${LIVE_LOG_INSTRUCTION}`;
     <View
       style={styles.root}
       // First touch anywhere unlocks the audio contexts on iOS Safari.
+      // Any touch also counts as activity — the patient may be silently
+      // reading a confirmation card; don't let the silence guard hang up.
       onTouchStart={() => {
         micRef.current?.resume();
         playerRef.current?.resume();
+        bumpActivity();
       }}
     >
       {/* ── Header ── */}
@@ -1005,7 +1234,9 @@ ${LIVE_LOG_INSTRUCTION}`;
           </View>
         </View>
 
-        <Waveform active={active} />
+        {/* Hidden while a confirmation card is open — keeps the card and
+            the call controls on screen even on small phones. */}
+        {pending ? null : <Waveform active={active} />}
 
         <Text style={styles.statusText}>{statusText}</Text>
         <Text style={styles.timer}>
@@ -1013,27 +1244,46 @@ ${LIVE_LOG_INSTRUCTION}`;
         </Text>
       </View>
 
-      {/* ── Saved-during-call toast (AI logged an entry) ── */}
+      {/* ── Saved/deleted-during-call toast ── */}
       {savedNotice ? (
         <View style={styles.savedPill}>
-          <Text style={styles.savedPillText}>
-            ✅ {t('logger.added')} {savedNotice}
-          </Text>
+          <Text style={styles.savedPillText}>{savedNotice}</Text>
         </View>
       ) : null}
 
-      {/* ── Live advice card ── */}
-      <View style={styles.adviceCard}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.adviceKicker}>{t('call.adviceTitle')}</Text>
-          <Text style={styles.adviceText} numberOfLines={4}>
-            {advice ?? t('call.adviceEmpty')}
-          </Text>
+      {/* ── Pending confirmation card (replaces the advice card while the
+             AI waits for the patient's explicit yes — spoken OR tapped) ── */}
+      {pending ? (
+        <View style={styles.pendingWrap}>
+          {pending.kind === 'log' ? (
+            <LoggerConfirmCard
+              action={pending.action}
+              onConfirm={(a) => confirmPendingTap(a)}
+              onCancel={cancelPendingTap}
+            />
+          ) : (
+            <DeleteConfirmCard
+              summary={pending.target.summary}
+              createdAt={pending.target.created_at}
+              onConfirm={() => confirmPendingTap()}
+              onCancel={cancelPendingTap}
+            />
+          )}
         </View>
-        <View style={styles.adviceBulb}>
-          <BulbIcon />
+      ) : (
+        /* ── Live advice card ── */
+        <View style={styles.adviceCard}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.adviceKicker}>{t('call.adviceTitle')}</Text>
+            <Text style={styles.adviceText} numberOfLines={4}>
+              {advice ?? t('call.adviceEmpty')}
+            </Text>
+          </View>
+          <View style={styles.adviceBulb}>
+            <BulbIcon />
+          </View>
         </View>
-      </View>
+      )}
 
       {/* ── Controls ── */}
       {status === 'incoming' ? (
@@ -1082,15 +1332,17 @@ ${LIVE_LOG_INSTRUCTION}`;
         </View>
       )}
 
-      {/* ── Safety note ── */}
-      <View
-        style={[
-          styles.safetyCard,
-          { marginBottom: Math.max(insets.bottom, 12) + 8 },
-        ]}
-      >
-        <Text style={styles.safetyText}>{t('call.safety')}</Text>
-      </View>
+      {/* ── Safety note (hidden while a confirmation card needs the room) ── */}
+      {pending ? null : (
+        <View
+          style={[
+            styles.safetyCard,
+            { marginBottom: Math.max(insets.bottom, 12) + 8 },
+          ]}
+        >
+          <Text style={styles.safetyText}>{t('call.safety')}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -1188,6 +1440,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 10,
   },
+  pendingWrap: { marginTop: 18 },
   savedPillText: { fontFamily: F700, fontSize: 12.5, color: '#16955f' },
   adviceKicker: { fontFamily: F700, fontSize: 12, color: '#6d5ef9', marginBottom: 3 },
   adviceText: { fontFamily: F500, fontSize: 12.5, lineHeight: 18, color: '#3b4657' },

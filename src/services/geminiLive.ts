@@ -32,6 +32,32 @@ export const LIVE_LANG_TAGS: Record<string, string> = {
   ar: 'ar-XA',
 };
 
+/**
+ * Server-side voice-activity tuning. The DEFAULT sensitivity fires on the
+ * phone's own speaker echo and room noise, which the model treats as the
+ * patient barging in: it CUTS its answer mid-sentence, then either resumes
+ * or sits waiting until the patient really talks (the "hedra kat9te3" bug).
+ *  - LOW start sensitivity: faint noise/echo no longer counts as speech —
+ *    real speech (much louder at the mic) still interrupts fine.
+ *  - prefixPaddingMs: keeps the syllables just before the detected start,
+ *    so the patient's first word is never clipped.
+ *  - silenceDurationMs: the patient must be quiet this long before the
+ *    model decides they finished — natural phone-call turn-taking, no
+ *    answering in the middle of a thinking pause.
+ * Passed as extra setup fields; if a server build rejects them, the call
+ * retries once WITHOUT the tuning (never degrade to the classic engine
+ * because of it).
+ */
+export const LIVE_VAD_TUNING: Record<string, unknown> = {
+  realtimeInputConfig: {
+    automaticActivityDetection: {
+      startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+      prefixPaddingMs: 300,
+      silenceDurationMs: 800,
+    },
+  },
+};
+
 /** Fetch an ephemeral Live token from the edge function. */
 export async function getLiveToken(): Promise<string | null> {
   if (isDemoMode || !supabase) return null;
@@ -117,7 +143,10 @@ export class GeminiLiveSession {
     languageCode?: string,
     timeoutMs = 8000,
     /** Optional function declarations (Live API tools / function calling). */
-    tools?: unknown[]
+    tools?: unknown[],
+    /** Extra top-level setup fields (e.g. LIVE_VAD_TUNING). The caller
+     *  retries without them if the server rejects the setup. */
+    setupExtras?: Record<string, unknown>
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -134,6 +163,9 @@ export class GeminiLiveSession {
         fail('timeout');
       }, timeoutMs);
 
+      // A session may connect() more than once (retry without VAD tuning) —
+      // reset the flag and make every handler ignore superseded sockets.
+      this.closedByUs = false;
       // NOTE: the token must be passed RAW (its slash unencoded) — verified.
       const url = token.startsWith('auth_tokens/')
         ? `${LIVE_HOST_CONSTRAINED}?access_token=${token}`
@@ -160,12 +192,14 @@ export class GeminiLiveSession {
               outputAudioTranscription: {},
               inputAudioTranscription: {},
               ...(tools && tools.length ? { tools } : {}),
+              ...(setupExtras ?? {}),
             },
           })
         );
       };
 
       ws.onmessage = async (evt) => {
+        if (this.ws !== ws) return; // superseded by a newer attempt
         let msg: any;
         try {
           const raw =
@@ -228,11 +262,13 @@ export class GeminiLiveSession {
       };
 
       ws.onerror = () => {
+        if (this.ws !== ws) return; // superseded by a newer attempt
         clearTimeout(timer);
         if (!settled) fail('ws error');
         else if (!this.closedByUs) this.events.onClose?.();
       };
       ws.onclose = () => {
+        if (this.ws !== ws) return; // superseded by a newer attempt
         clearTimeout(timer);
         if (!settled) fail('ws closed');
         else if (!this.closedByUs) this.events.onClose?.();
@@ -322,6 +358,10 @@ function downsampleTo16k(input: Float32Array, inputRate: number): Float32Array {
   return out;
 }
 
+/** RMS above which a mic frame counts as REAL speech (same threshold as
+ *  the silence-hangup detector) — quieter frames are echo/room noise. */
+const SPEECH_RMS = 0.02;
+
 /** Captures the mic and emits base64 16 kHz PCM chunks (~250 ms each). */
 export class MicStreamer {
   private ctx: AudioContext | null = null;
@@ -331,6 +371,20 @@ export class MicStreamer {
   /** Fired (throttled) when the mic picks up actual speech, not just noise. */
   onSpeech: (() => void) | null = null;
   private lastSpeechEmit = 0;
+  /** Echo gate — see setEchoGate(). */
+  private echoGate = false;
+
+  /**
+   * While the AI is speaking, browser echo cancellation doesn't always
+   * remove the phone-speaker echo of its own voice; Gemini's VAD then
+   * hears "speech" and interrupts the answer mid-sentence. With the gate
+   * ON, frames BELOW the speech threshold are streamed as pure silence —
+   * the timing the server VAD needs is preserved, echo/noise is not, and
+   * real barge-in speech (louder than the threshold) still passes through.
+   */
+  setEchoGate(on: boolean) {
+    this.echoGate = on;
+  }
 
   /** MUST be called synchronously inside a user gesture on iOS Safari —
    *  audio contexts created outside a tap stay suspended forever. */
@@ -359,20 +413,24 @@ export class MicStreamer {
     this.proc.onaudioprocess = (e) => {
       if (this.muted) return;
       const f32 = e.inputBuffer.getChannelData(0);
+      let sum = 0;
+      for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
+      const rms = Math.sqrt(sum / f32.length);
       // Voice-activity detection: emit onSpeech only when the frame carries
       // real energy (speech ≫ background), throttled to once per ~500 ms.
       // Used by the caller to reset the silence-hangup countdown.
       if (this.onSpeech) {
-        let sum = 0;
-        for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
-        const rms = Math.sqrt(sum / f32.length);
         const nowMs = Date.now();
-        if (rms > 0.02 && nowMs - this.lastSpeechEmit > 500) {
+        if (rms > SPEECH_RMS && nowMs - this.lastSpeechEmit > 500) {
           this.lastSpeechEmit = nowMs;
           this.onSpeech();
         }
       }
-      onChunk(floatTo16BitBase64(downsampleTo16k(f32, rate)));
+      // Echo gate active (AI speaking) + frame below speech level → stream
+      // silence instead, so speaker echo can't falsely interrupt the model.
+      const frame =
+        this.echoGate && rms < SPEECH_RMS ? new Float32Array(f32.length) : f32;
+      onChunk(floatTo16BitBase64(downsampleTo16k(frame, rate)));
     };
     src.connect(this.proc);
     // ScriptProcessor only fires when connected to a destination; route it
@@ -415,6 +473,13 @@ export class PcmPlayer {
   private gain: GainNode;
   private nextTime = 0;
   private live = new Set<AudioBufferSourceNode>();
+  /** True while the model is still mid-turn (audio has played and no
+   *  turn-complete yet) — a drain in that state is a network UNDER-RUN. */
+  private midTurn = false;
+  /** ctx time of the last mid-turn drain; the next chunk after one gets a
+   *  bigger jitter buffer so the sentence resumes smoothly instead of
+   *  stuttering again ("lhedra kat9te3" fix). */
+  private lastUnderrunAt = 0;
   /** Called when the playback queue fully drains. */
   onDrain?: () => void;
 
@@ -443,19 +508,36 @@ export class PcmPlayer {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.connect(this.gain);
-    // Jitter buffer: when the queue is empty (start of a turn, or after an
-    // under-run) give the network a ~150 ms head start before playing, so
-    // the first words of the AI never stutter. Mid-stream chunks keep the
-    // tight 20 ms scheduling for gapless playback.
-    const lead = this.live.size === 0 ? 0.15 : 0.02;
+    // Jitter buffer: when the queue is empty (start of a turn) give the
+    // network a ~150 ms head start before playing, so the first words of
+    // the AI never stutter. If the queue just drained MID-TURN (network
+    // under-run cut the sentence), buffer ~350 ms before resuming so it
+    // doesn't immediately stutter again. Mid-stream chunks keep the tight
+    // 20 ms scheduling for gapless playback.
+    const resumingAfterUnderrun =
+      this.lastUnderrunAt > 0 && this.ctx.currentTime - this.lastUnderrunAt < 3;
+    const lead =
+      this.live.size === 0 ? (resumingAfterUnderrun ? 0.35 : 0.15) : 0.02;
     const at = Math.max(this.ctx.currentTime + lead, this.nextTime);
     src.start(at);
+    this.midTurn = true;
     this.nextTime = at + buf.duration;
     this.live.add(src);
     src.onended = () => {
       this.live.delete(src);
-      if (this.live.size === 0) this.onDrain?.();
+      if (this.live.size === 0) {
+        // Drained while the model was still talking → under-run.
+        if (this.midTurn) this.lastUnderrunAt = this.ctx.currentTime;
+        this.onDrain?.();
+      }
     };
+  }
+
+  /** The model finished its spoken turn — a drain after this is normal
+   *  completion, not an under-run. Called on turnComplete. */
+  endOfTurn() {
+    this.midTurn = false;
+    this.lastUnderrunAt = 0;
   }
 
   isPlaying(): boolean {
@@ -471,6 +553,8 @@ export class PcmPlayer {
     }
     this.live.clear();
     this.nextTime = 0;
+    this.midTurn = false;
+    this.lastUnderrunAt = 0;
   }
 
   setMuted(m: boolean) {

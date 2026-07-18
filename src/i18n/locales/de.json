@@ -876,7 +876,14 @@
     "followUpAsk": "⏰ Du hattest eine Erinnerung: „{{msg}}“. Hast du es gemacht? Sag es mir und ich trage es ein.",
     "chipReminder": "Erinnere mich in 1 Std. an mein Insulin",
     "noteLabel": "Notiz",
-    "chipNote": "Ich habe ein Glas Wasser getrunken"
+    "chipNote": "Ich habe ein Glas Wasser getrunken",
+    "deleteTitle": "Diesen Eintrag löschen?",
+    "delete": "Ja, löschen",
+    "deleted": "Erledigt 🗑️ Der Eintrag wurde aus Ihrem Konto entfernt.",
+    "deleteNotFound": "Ich habe diesen Eintrag in den heutigen Daten nicht gefunden. Sagen Sie mir genauer, was ich löschen soll.",
+    "addedShort": "Hinzugefügt",
+    "deletedShort": "Gelöscht",
+    "journalDeleteTitle": "Über den Assistenten gelöscht"
   },
   "events": {
     "section": "Konto-Änderungen",

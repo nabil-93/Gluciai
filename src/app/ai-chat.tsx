@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
-import { LoggerConfirmCard } from '@/components/LoggerConfirmCard';
+import { DeleteConfirmCard, LoggerConfirmCard } from '@/components/LoggerConfirmCard';
 import { VoiceRecorderBar } from '@/components/VoiceRecorderBar';
 import {
   getHealthyFood,
@@ -31,9 +31,13 @@ import { Speaker } from '@/lib/speech';
 import { sendChatMessage, sendChatVoice } from '@/services/ai';
 import {
   actionSummary,
+  applyDeleteTarget,
   applyLoggerAction,
+  findDeleteTargets,
   looksLoggable,
   sendLoggerMessage,
+  type DeleteRequest,
+  type DeleteTarget,
   type LoggerAction,
 } from '@/services/aiLogger';
 import { useAppStore } from '@/store/useAppStore';
@@ -296,6 +300,8 @@ function AiChatScreen() {
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [pendingAction, setPendingAction] = useState<LoggerAction | null>(null);
+  /** Entry the patient asked to DELETE — behind its own red confirm card. */
+  const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -345,9 +351,43 @@ function AiChatScreen() {
   const onNew = () => {
     newConversation();
     setPendingAction(null);
+    setPendingDelete(null);
     loggerPendingRef.current = false;
     setInput('');
     setDrawerOpen(false);
+  };
+
+  /* ── Delete flow: resolve the request against today's entries and show
+   * the red confirmation card — nothing is deleted until the patient
+   * explicitly confirms it. ── */
+  const handleDeleteRequest = (req: DeleteRequest) => {
+    const targets = findDeleteTargets(req);
+    if (!targets.length) {
+      // Keep extraction armed: the patient's next message ("dak tajine
+      // dial lghda") should re-resolve the delete.
+      loggerPendingRef.current = true;
+      addChatMessage(chatMsg('dnf', 'assistant', t('logger.deleteNotFound')));
+      return;
+    }
+    setPendingDelete(targets[0]);
+  };
+
+  const confirmDelete = async (target: DeleteTarget) => {
+    try {
+      await applyDeleteTarget(target);
+      setPendingDelete(null);
+      addChatMessage(chatMsg('del', 'assistant', t('logger.deleted')));
+      addAiJournalEntry({
+        id: `del-${Date.now()}`,
+        icon: '🗑️',
+        title: t('logger.journalDeleteTitle'),
+        body: target.summary,
+        tone: 'info',
+        created_at: new Date().toISOString(),
+      });
+    } catch {
+      addChatMessage(chatMsg('dele', 'assistant', t('logger.error')));
+    }
   };
 
   const onDeleteConv = async (id: string) => {
@@ -365,7 +405,13 @@ function AiChatScreen() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
   };
 
-  useEffect(scrollDown, [messages.length, thinking, pendingAction, activeConversationId]);
+  useEffect(scrollDown, [
+    messages.length,
+    thinking,
+    pendingAction,
+    pendingDelete,
+    activeConversationId,
+  ]);
 
   // Stop any ongoing "listen" playback when the patient switches thread.
   useEffect(() => {
@@ -405,6 +451,7 @@ function AiChatScreen() {
     if (!content || thinking) return;
     setInput('');
     setPendingAction(null);
+    setPendingDelete(null);
 
     const userMessage = chatMsg('u', 'user', content);
     addChatMessage(userMessage);
@@ -432,7 +479,10 @@ function AiChatScreen() {
       const reply = await sendChatMessage(history, i18n.language, profile);
       addChatMessage(chatMsg('a', 'assistant', reply));
       const extracted = await extraction;
-      if (extracted?.action) {
+      if (extracted?.remove) {
+        loggerPendingRef.current = false;
+        handleDeleteRequest(extracted.remove);
+      } else if (extracted?.action) {
         loggerPendingRef.current = false;
         setPendingAction(extracted.action);
       } else if (extracted && extracted.reply && looksLoggable(content)) {
@@ -486,6 +536,7 @@ function AiChatScreen() {
   const sendVoice = async (audio: { mimeType: string; data: string }) => {
     if (thinking) return;
     setPendingAction(null);
+    setPendingDelete(null);
     setThinking(true);
     try {
       const history = messages.map((m) => ({ role: m.role, content: m.content }));
@@ -508,7 +559,10 @@ function AiChatScreen() {
           i18n.language
         )
           .then((ex) => {
-            if (ex?.action) {
+            if (ex?.remove) {
+              loggerPendingRef.current = false;
+              handleDeleteRequest(ex.remove);
+            } else if (ex?.action) {
               loggerPendingRef.current = false;
               setPendingAction(ex.action);
             } else if (ex?.reply && looksLoggable(heard)) {
@@ -644,6 +698,15 @@ function AiChatScreen() {
             action={pendingAction}
             onConfirm={confirmLog}
             onCancel={() => setPendingAction(null)}
+          />
+        ) : null}
+
+        {pendingDelete ? (
+          <DeleteConfirmCard
+            summary={pendingDelete.summary}
+            createdAt={pendingDelete.created_at}
+            onConfirm={() => confirmDelete(pendingDelete)}
+            onCancel={() => setPendingDelete(null)}
           />
         ) : null}
       </ScrollView>

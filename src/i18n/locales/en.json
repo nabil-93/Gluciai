@@ -876,7 +876,14 @@
     "followUpAsk": "⏰ You had a reminder: \"{{msg}}\". Did you do it? Tell me and I'll log it.",
     "chipReminder": "Remind me in 1h to take my insulin",
     "noteLabel": "Note",
-    "chipNote": "I drank a glass of water"
+    "chipNote": "I drank a glass of water",
+    "deleteTitle": "Delete this entry?",
+    "delete": "Yes, delete",
+    "deleted": "Done 🗑️ The entry was removed from your account.",
+    "deleteNotFound": "I couldn't find that entry in today's data. Tell me more precisely what to delete.",
+    "addedShort": "Added",
+    "deletedShort": "Deleted",
+    "journalDeleteTitle": "Deleted via the assistant"
   },
   "events": {
     "section": "Account changes",

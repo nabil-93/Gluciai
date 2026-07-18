@@ -127,6 +127,7 @@ interface AppState {
   addAiReminder: (reminder: AiReminder) => void;
   updateAiReminder: (id: string, patch: Partial<AiReminder>) => void;
   addEventLog: (event: AppEvent) => void;
+  removeEventLog: (id: string) => void;
 
   addLabReport: (report: LabReport) => void;
   updateLabReport: (id: string, patch: Partial<LabReport>) => void;
@@ -248,6 +249,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ aiReminders: [reminder, ...s.aiReminders] })),
       addEventLog: (event) =>
         set((s) => ({ eventLogs: [event, ...s.eventLogs].slice(0, 1000) })),
+      removeEventLog: (id) =>
+        set((s) => ({ eventLogs: s.eventLogs.filter((e) => e.id !== id) })),
       updateAiReminder: (id, patch) =>
         set((s) => ({
           aiReminders: s.aiReminders.map((r) =>

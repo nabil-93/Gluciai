@@ -9,6 +9,12 @@ import type {
 } from '@/types';
 
 import {
+  deleteActivity,
+  deleteEvent,
+  deleteGlucose,
+  deleteInsulin,
+  deleteMeal,
+  deleteMeasure,
   logEvent,
   saveActivity,
   saveGlucose,
@@ -16,7 +22,7 @@ import {
   saveMeal,
   saveMeasure,
 } from './data';
-import { createAiReminder, resolveFollowUps } from './reminders';
+import { createAiReminder, markReminder, resolveFollowUps } from './reminders';
 
 /* ────────────────────────────────────────────────────────────
  * AI LOGGER
@@ -68,9 +74,206 @@ export type LoggerAction =
 export interface LoggerTurn {
   reply: string;
   action: LoggerAction | null;
+  /** The patient asked to DELETE an entry ("7eyed dak tajine") — resolved
+   *  against today's data and ALWAYS confirmed by the patient first. */
+  remove?: DeleteRequest | null;
   /** What the patient said, when the turn was a voice note (Gemini
    *  listens to the audio directly — Darija included). */
   transcript?: string;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * DELETE SUPPORT
+ * The AI can also REMOVE an entry (one it just added by mistake, or any
+ * entry of today) — but exactly like adding, NOTHING is deleted without
+ * the patient's explicit confirmation (verbal on a call, or the red
+ * confirmation card in chat / on screen).
+ * ──────────────────────────────────────────────────────────── */
+
+export type DeletableKind =
+  | 'insulin'
+  | 'glucose'
+  | 'meal'
+  | 'activity'
+  | 'measure'
+  | 'note'
+  | 'reminder';
+
+const DELETABLE_KINDS: DeletableKind[] = [
+  'insulin',
+  'glucose',
+  'meal',
+  'activity',
+  'measure',
+  'note',
+  'reminder',
+];
+
+/** What the model asked to delete (kind and/or free words identifying it). */
+export interface DeleteRequest {
+  type: 'delete';
+  kind?: DeletableKind;
+  query?: string;
+}
+
+/** A concrete row resolved from the store — what the patient confirms. */
+export interface DeleteTarget {
+  kind: DeletableKind;
+  rowId: string;
+  /** Human summary shown on the card and spoken by the AI. */
+  summary: string;
+  created_at: string;
+}
+
+export function sanitizeDeleteRequest(raw: any): DeleteRequest | null {
+  if (!raw || typeof raw !== 'object' || raw.type !== 'delete') return null;
+  const query =
+    typeof raw.query === 'string' && raw.query.trim()
+      ? raw.query.trim().slice(0, 80)
+      : undefined;
+  return {
+    type: 'delete',
+    kind: DELETABLE_KINDS.includes(raw.kind) ? raw.kind : undefined,
+    query,
+  };
+}
+
+/**
+ * Resolve a delete request against TODAY's entries (newest first). With a
+ * query, only entries whose summary contains one of its words (≥3 chars)
+ * are kept — an empty result means "not found": the caller lists today's
+ * entries so the AI can ask the patient which one they meant. The final
+ * safety net is always the explicit confirmation of the exact entry.
+ */
+export function findDeleteTargets(req: {
+  kind?: DeletableKind;
+  query?: string;
+}): DeleteTarget[] {
+  const s = useAppStore.getState();
+  const today = (iso: string) =>
+    new Date(iso).toDateString() === new Date().toDateString();
+  const want = (k: DeletableKind) => !req.kind || req.kind === k;
+  const all: DeleteTarget[] = [];
+
+  if (want('meal')) {
+    for (const m of s.meals) {
+      if (!today(m.created_at)) continue;
+      const moment = m.meal_type ? ` · ${m.meal_type}` : '';
+      all.push({
+        kind: 'meal',
+        rowId: m.id,
+        created_at: m.created_at,
+        summary: `🍽️ ${m.result.food_name} (≈${m.result.calories} kcal${moment})`,
+      });
+    }
+  }
+  if (want('insulin')) {
+    for (const l of s.insulinLogs) {
+      if (!today(l.created_at)) continue;
+      all.push({
+        kind: 'insulin',
+        rowId: l.id,
+        created_at: l.created_at,
+        summary: `💉 ${l.dose} U ${l.insulin_type}`,
+      });
+    }
+  }
+  if (want('glucose')) {
+    for (const l of s.glucoseLogs) {
+      if (!today(l.created_at)) continue;
+      all.push({
+        kind: 'glucose',
+        rowId: l.id,
+        created_at: l.created_at,
+        summary: `🩸 ${l.value} mg/dL`,
+      });
+    }
+  }
+  if (want('activity')) {
+    for (const a of s.activityLogs) {
+      if (!today(a.created_at)) continue;
+      all.push({
+        kind: 'activity',
+        rowId: a.id,
+        created_at: a.created_at,
+        summary: `🏃 ${a.kind} ${a.duration_min} min`,
+      });
+    }
+  }
+  if (want('measure')) {
+    for (const m of s.measureLogs) {
+      if (!today(m.created_at)) continue;
+      all.push({
+        kind: 'measure',
+        rowId: m.id,
+        created_at: m.created_at,
+        summary: `📏 ${m.kind === 'hba1c' ? 'HbA1c' : m.kind} ${m.value} ${m.unit}`,
+      });
+    }
+  }
+  if (want('note')) {
+    for (const e of s.eventLogs) {
+      if (e.kind !== 'note' || !today(e.created_at)) continue;
+      all.push({
+        kind: 'note',
+        rowId: e.id,
+        created_at: e.created_at,
+        summary: `📝 ${String(e.payload?.text ?? '').slice(0, 80)}`,
+      });
+    }
+  }
+  if (want('reminder')) {
+    for (const r of s.aiReminders) {
+      if (r.status !== 'pending' && r.status !== 'fired') continue;
+      all.push({
+        kind: 'reminder',
+        rowId: r.id,
+        created_at: r.created_at,
+        summary: `⏰ ${r.message}`,
+      });
+    }
+  }
+
+  all.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  const q = (req.query ?? '').toLowerCase().trim();
+  if (!q) return all;
+  const tokens = q.split(/[\s,;:·'"()]+/).filter((t) => t.length >= 3);
+  if (!tokens.length) return all;
+  return all.filter((t) => {
+    const hay = t.summary.toLowerCase();
+    return tokens.some((tok) => hay.includes(tok));
+  });
+}
+
+/** Delete a CONFIRMED target (store + server). Reminders are closed, not
+ *  erased, so their history stays consistent. */
+export async function applyDeleteTarget(target: DeleteTarget): Promise<void> {
+  switch (target.kind) {
+    case 'meal':
+      deleteMeal(target.rowId);
+      return;
+    case 'insulin':
+      deleteInsulin(target.rowId);
+      return;
+    case 'glucose':
+      deleteGlucose(target.rowId);
+      return;
+    case 'activity':
+      deleteActivity(target.rowId);
+      return;
+    case 'measure':
+      deleteMeasure(target.rowId);
+      return;
+    case 'note':
+      deleteEvent(target.rowId);
+      return;
+    case 'reminder':
+      markReminder(target.rowId, 'done');
+      return;
+  }
 }
 
 const INSULIN_TYPES: InsulinType[] = ['rapid', 'long', 'mixed'];
@@ -227,6 +430,7 @@ export async function sendLoggerMessage(
   return {
     reply: typeof result.reply === 'string' ? result.reply : '',
     action: sanitizeAction(result.action),
+    remove: sanitizeDeleteRequest(result.action),
     transcript: typeof result.transcript === 'string' ? result.transcript : '',
   };
 }
@@ -336,6 +540,12 @@ const LOGGABLE_RE = new RegExp(
     'caf[ée]', '9ahwa', 'قهوة', 'kaffee', 'coffee', 'th[ée]\\b', 'atay', 'أتاي', 'شاي',
     'stress', 'fatigu', '3yan', '3ayan', 'عيان', 'متعب', 'm[üu]de', 'tired',
     'dokht', 'دخت', 'malade', '3endi', 'nervous', '9le9',
+    // delete requests — the patient asks to REMOVE an entry the AI (or
+    // they) added ("7eyedha", "mse7 dak tajine", "supprime", "احذف")
+    '7ey+ed', '7iy+ed', 'hay+ed', '7ayed', 'mse7', 'msse7', '\\bms7\\b',
+    'supprim', 'efface', 'retire', 'enl[eè]ve', 'annul',
+    '\\bdelete\\b', '\\bremove\\b', '\\berase\\b', 'l[öo]sch', 'entfern',
+    'امسح', 'احذف', 'حذف', 'حيد', 'أزل',
   ].join('|'),
   'i'
 );
@@ -346,9 +556,11 @@ export function looksLoggable(text: string): boolean {
 
 /* ────────────────────────────────────────────────────────────
  * VOICE CALL (Gemini Live function calling)
- * The call declares log_* tools; the model confirms VERBALLY with the
- * patient first, then invokes the tool — the app saves and answers so
- * the model can confirm out loud.
+ * STRICT two-step protocol: every log_* / delete_entry call is only a
+ * PROPOSAL — the app shows a confirmation card and answers
+ * confirmation_required. Nothing is saved or deleted until the patient
+ * either SAYS yes (→ the model calls confirm_entry) or TAPS the button
+ * on screen (→ the app tells the model via a system text turn).
  * ──────────────────────────────────────────────────────────── */
 
 export const LIVE_LOG_TOOLS = [
@@ -357,7 +569,7 @@ export const LIVE_LOG_TOOLS = [
       {
         name: 'log_insulin',
         description:
-          'Save an insulin dose the patient says they injected. Call ONLY after the patient verbally confirmed the exact dose.',
+          'PROPOSE saving an insulin dose the patient says they injected. Saves NOTHING yet: a confirmation card appears and the patient must confirm (verbally → then call confirm_entry, or by tapping the card).',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -374,7 +586,7 @@ export const LIVE_LOG_TOOLS = [
       {
         name: 'log_glucose',
         description:
-          'Save a blood-glucose reading the patient reports, in mg/dL. Confirm the value verbally first.',
+          'PROPOSE saving a blood-glucose reading the patient reports, in mg/dL. Saves nothing until the patient confirms.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -387,12 +599,15 @@ export const LIVE_LOG_TOOLS = [
       {
         name: 'log_meal',
         description:
-          'Save a meal the patient says they ate, with your realistic nutrition estimate for the described portion (you know Moroccan dishes). Ask which meal of the day it was (breakfast/lunch/dinner/snack) if unclear, then confirm verbally before calling.',
+          'PROPOSE saving a meal the patient ate, with your realistic nutrition estimate for the described portion (you know Moroccan dishes). BEFORE calling, ask: which meal of the day it was, whether they ate/drank anything with it (bread, tea…), and the portion size. ONE combined entry including the sides. Saves nothing until the patient confirms.',
         parameters: {
           type: 'OBJECT',
           properties: {
-            name: { type: 'STRING', description: 'Short dish name' },
-            portion: { type: 'STRING', description: 'e.g. "1 assiette"' },
+            name: {
+              type: 'STRING',
+              description: 'Short dish name, mention sides (e.g. "Tajine kefta + khobz")',
+            },
+            portion: { type: 'STRING', description: 'e.g. "1 assiette moyenne + 1/2 khobza"' },
             calories: { type: 'NUMBER' },
             carbs: { type: 'NUMBER', description: 'grams of carbohydrates' },
             sugar: { type: 'NUMBER', description: 'grams of sugar' },
@@ -406,13 +621,13 @@ export const LIVE_LOG_TOOLS = [
             },
             minutes_ago: { type: 'NUMBER' },
           },
-          required: ['name', 'calories', 'carbs', 'sugar'],
+          required: ['name', 'calories', 'carbs', 'sugar', 'meal_type'],
         },
       },
       {
         name: 'log_activity',
         description:
-          'Save a sport/exercise session the patient reports. Confirm duration verbally first.',
+          'PROPOSE saving a sport/exercise session the patient reports. Ask the duration first. Saves nothing until the patient confirms.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -427,7 +642,7 @@ export const LIVE_LOG_TOOLS = [
       {
         name: 'log_measure',
         description:
-          'Save a body measure (weight in kg or HbA1c in %) the patient reports. Confirm verbally first.',
+          'PROPOSE saving a body measure (weight in kg or HbA1c in %) the patient reports. Saves nothing until the patient confirms.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -442,7 +657,7 @@ export const LIVE_LOG_TOOLS = [
       {
         name: 'set_reminder',
         description:
-          'Set a reminder the patient asked for ("rappelle-moi dans 1h de prendre mon insuline"). The app will alert them at the right time and follow up. Confirm the time verbally first.',
+          'PROPOSE a reminder the patient asked for ("rappelle-moi dans 1h de prendre mon insuline"). The app will alert them at the right time and follow up. Nothing is set until the patient confirms.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -462,7 +677,7 @@ export const LIVE_LOG_TOOLS = [
       {
         name: 'log_note',
         description:
-          "Record ANYTHING the patient did that doesn't fit the other tools but may matter for their diabetes — drank water/coffee/tea/alcohol, felt stressed/tired, skipped a meal, had a hypo snack, changed routine. Confirm verbally first.",
+          "PROPOSE recording ANYTHING the patient did that doesn't fit the other tools but may matter for their diabetes — drank water/coffee/tea/alcohol, felt stressed/tired, skipped a meal, had a hypo snack, changed routine. Saves nothing until the patient confirms.",
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -470,6 +685,55 @@ export const LIVE_LOG_TOOLS = [
             minutes_ago: { type: 'NUMBER' },
           },
           required: ['text'],
+        },
+      },
+      {
+        name: 'delete_entry',
+        description:
+          'PROPOSE DELETING one of today\'s entries when the patient asks to remove something ("7eyedha", "mse7 dak tajine", "supprime-le", "احذفها") — including an entry that was just added by mistake. Deletes NOTHING yet: the app finds the entry, shows a red confirmation card and answers confirmation_required. If it answers not_found, read the todays_entries list to the patient and ask which one they mean.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            kind: {
+              type: 'STRING',
+              enum: ['insulin', 'glucose', 'meal', 'activity', 'measure', 'note', 'reminder'],
+              description: 'Type of entry to delete',
+            },
+            query: {
+              type: 'STRING',
+              description: 'Words identifying the entry (dish name, value, reminder text…)',
+            },
+          },
+        },
+      },
+      {
+        name: 'confirm_entry',
+        description:
+          'EXECUTE the pending proposal (save or delete) — call it ONLY after the patient clearly said YES out loud ("ah", "wah", "oui", "yes", "ok") to the proposal you just read back to them. Never call it in the same turn as the proposal itself.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            pending_id: {
+              type: 'STRING',
+              description: 'The pending_id returned by the proposal call',
+            },
+          },
+          required: ['pending_id'],
+        },
+      },
+      {
+        name: 'cancel_entry',
+        description:
+          'DISCARD the pending proposal — call it when the patient says no, hesitates, or wants to change something. You can then re-propose a corrected entry.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            pending_id: {
+              type: 'STRING',
+              description: 'The pending_id returned by the proposal call',
+            },
+          },
+          required: ['pending_id'],
         },
       },
       {
@@ -484,43 +748,83 @@ export const LIVE_LOG_TOOLS = [
 
 /** Rules appended to the call's system instruction. */
 export const LIVE_LOG_INSTRUCTION = `
-LOGGING (function calling): when the patient says they DID something —
-took insulin, ate a meal, measured their glucose, did sport, drank
-something, weighed themselves — FIRST check PATIENT DATA above:
-- Already logged there → tell them it's already saved; do NOT log again.
-- NOT in their data → tell them you don't see it in the app today and ask
-  if they want you to add it ("ma-l9itch hadchi msejjel lyoum, wach bghiti
-  nzido?"). Collect any missing detail (dose, value, duration, which meal
-  of the day…) by asking, then repeat the entry back and ask for a clear
-  yes.
-WHEN THE PATIENT CONFIRMS ("ah", "wah", "oui", "yes", "ja"): you MUST
-invoke the matching log_* function IMMEDIATELY, IN THAT SAME TURN, while
-saying one short line that you're adding it right now ("sber chwiya,
-ghanzidha daba…"). SPEAKING IS NOT SAVING: the entry is saved ONLY when
-you actually call the function and it answers ok. NEVER say "it's added"
-or "it's saved" unless the function really returned ok. NEVER end a turn
-after the patient's yes without having called the function.
-After the tool answers ok: tell them it's done ("safi, zedtha lik") and
-naturally CONTINUE the conversation.
-CRITICAL — never log the same thing twice: call each log function ONE
-time per entry. Once the tool has answered (ok/already_saved), the entry
-IS saved — do NOT call it again, even if the patient says "yes" again,
-repeats themselves, asks a follow-up question about it, or a moment
-passes. If the patient adds detail to the SAME entry (e.g. now mentions
-the bread that came with the meal), do not create a new entry — just
-acknowledge; treat it as the same already-saved item.
+LOGGING — ABSOLUTE RULE: you NEVER save, change or delete ANYTHING in the
+patient's account without their EXPLICIT confirmation, entry by entry.
+Every log_*, set_reminder and delete_entry call is only a PROPOSAL: it
+saves NOTHING — the app shows a confirmation card on the patient's screen
+and answers you {status:"confirmation_required", pending_id:"..."}.
+
+THE FLOW (always, no exception):
+1. The patient mentions they DID something (insulin, meal, glucose,
+   sport, drink…) → FIRST check PATIENT DATA above:
+   - already logged there → tell them it's already saved; do NOT propose
+     it again;
+   - not there → tell them you don't see it and ask if they want you to
+     add it ("ma-l9itch hadchi msejjel lyoum, wach bghiti nzido?").
+2. COLLECT the details by asking (see MEAL DETAILS below; insulin → exact
+   dose and type; glucose → exact value; sport → duration). NEVER invent
+   a missing critical number.
+3. PROPOSE: call the matching log_* function. It answers
+   confirmation_required with a pending_id, and a green card appears on
+   the patient's screen.
+4. ASK OUT LOUD: read the entry back in the patient's own language and
+   ask them to confirm — e.g. "ghanzid lik: tajine dial lghda m3a ness
+   khobza, taqriban 520 kcal — wach n'confirmiha? goul liya wah, wla
+   wrek 3la l'bouton lakhder". The patient can EITHER answer with their
+   voice OR tap the button on screen. WAIT for their answer — never call
+   confirm_entry in the same turn as the proposal.
+5. RESOLVE:
+   - patient says YES ("ah","wah","oui","yes","ja","ok","confirmi") →
+     call confirm_entry with the pending_id. ONLY when it answers
+     {saved:true} (or {deleted:true}) say it's done ("safi, zedtha lik").
+   - patient says NO or corrects something → call cancel_entry, then
+     re-propose the corrected entry if needed.
+   - patient TAPS the card instead: you receive a system message in
+     parentheses telling you what happened — acknowledge it briefly out
+     loud and do NOT call confirm_entry or re-propose.
+NEVER say "it's added / saved / deleted" unless the function really
+answered saved:true or deleted:true. SPEAKING IS NOT SAVING.
+
+MEAL DETAILS — before proposing a meal, make sure you know ALL of this
+(ask naturally, 1-2 short questions at a time; skip what they already
+said):
+- WHICH MEAL of the day: breakfast, lunch, dinner or snack ("hadi f
+  lghda wla f l3cha?") — required.
+- WHAT ELSE with it: did they eat or drink anything alongside — bread,
+  salad, fruit, sweet tea, soda… ("wach klit wla chrebti chi 7aja
+  m3aha? khobz, atay?"). Fold EVERYTHING into ONE single meal entry:
+  mention the sides in the name and include them in the nutrition
+  estimate. Never create a second entry for the sides.
+- PORTION SIZE for carb-heavy items (khobz, tajine, couscous, rice,
+  msemen…): ask HOW MUCH — "ch7al klit men khobz: rob3, ness, wla
+  khobza kamla?", small/medium/large plate — and scale your estimate.
+If the patient hasn't mentioned the day's other main meals and it's
+plausible they've eaten them, gently ask about the missing ones, one at
+a time (never nag; ask each meal only once), each as its OWN proposal.
+
+DELETING: when the patient asks to remove something ("7eyedha", "mse7
+dak tajine", "supprime", "احذفها") — including an entry that was just
+added by mistake — call delete_entry with the kind and identifying
+words. If it answers not_found, read them the todays_entries list from
+the answer and ask which one they mean. Deleting follows the SAME
+confirmation flow: red card + verbal yes (confirm_entry) or tap. Never
+say you can't delete an entry.
+
+DUPLICATES: propose each thing ONCE. Once confirm_entry answered (or the
+system message said the patient tapped confirm), the entry IS handled —
+do NOT propose or confirm it again, even if the patient says "yes" again
+or repeats themselves. If the patient adds detail to an ALREADY SAVED
+meal (e.g. now mentions the bread), do not create a new entry — offer to
+delete the old one and re-add it complete, or just acknowledge.
+
 REMINDERS: when the patient asks to be reminded of something later
-("fekerni men daba sa3a bach nakhod l'insuline"), confirm the time and
-call set_reminder — the app WILL alert them at that time and follow up.
-Never say you can't set reminders.
-MEALS: when logging a meal, always find out which meal of the day it was
-(breakfast/lunch/dinner/snack) — ask if unclear — and pass meal_type. If
-the patient hasn't mentioned the day's other main meals and it's
-plausible they've eaten them, gently ask what they had for the missing
-ones, one at a time, and log each (never nag; ask each meal only once).
+("fekerni men daba sa3a bach nakhod l'insuline"), collect the time and
+propose set_reminder — same confirmation flow. The app WILL alert them
+at that time and follow up. Never say you can't set reminders.
 NOTES: anything else the patient did that doesn't fit the tools but may
 matter (drank water/coffee/tea/alcohol, felt stressed/tired/ill, skipped
-a meal…) → confirm and call log_note. Never say you can't record it.
+a meal…) → propose log_note, same confirmation flow. Never say you can't
+record it.
 HANG UP: the call does NOT end by itself — hanging up ONLY happens
 through the end_call function. When the patient says goodbye or clearly
 wants to stop ("bslama", "beslama", "thala f rassek", "au revoir",
@@ -528,7 +832,9 @@ wants to stop ("bslama", "beslama", "thala f rassek", "au revoir",
 short warm goodbye sentence AND call end_call IN THAT SAME TURN. Never
 skip end_call after your goodbye — without it the line stays open and
 keeps billing the patient. Never call it while the patient is still
-talking or only thanking you in the middle of the call.`;
+talking or only thanking you in the middle of the call. end_call and
+cancel_entry/confirm_entry are the only functions exempt from the
+confirmation flow.`;
 
 /** Map a Live-API function call to a validated LoggerAction. */
 export function actionFromFunctionCall(
