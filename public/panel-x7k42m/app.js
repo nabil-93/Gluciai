@@ -38,6 +38,8 @@ const I = {
   syringe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 2 4 4"/><path d="m17 7 3-3"/><path d="M19 9 8.7 19.3c-1 1-2.5 1-3.4 0l-.6-.6c-1-1-1-2.5 0-3.4L15 5"/><path d="m9 11 4 4"/><path d="m5 19-3 3"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
   cpu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>',
+  group: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="3.2"/><path d="M6.5 21v-1.6a5.5 5.5 0 0 1 11 0V21"/><circle cx="4.5" cy="9.5" r="2.2"/><path d="M1 19.5v-.9a3.7 3.7 0 0 1 4.6-3.58"/><circle cx="19.5" cy="9.5" r="2.2"/><path d="M23 19.5v-.9a3.7 3.7 0 0 0-4.6-3.58"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>',
 };
 
 const FEATURES = [
@@ -239,6 +241,7 @@ function renderLogin(errMsg) {
 /* ── Shell ── */
 const NAV = [
   { hash: '#/', label: 'Dashboard', icon: I.dash, roles: ['admin', 'doctor'] },
+  { hash: '#/users', label: 'Utilisateurs', icon: I.group, roles: ['admin'] },
   { hash: '#/patients', label: 'Patients', icon: I.users, roles: ['admin', 'doctor'] },
   { hash: '#/doctors', label: 'Médecins', icon: I.steth, roles: ['admin'] },
   { hash: '#/promos', label: 'Codes promo', icon: I.tag, roles: ['admin', 'doctor'] },
@@ -308,12 +311,17 @@ const loading = `<div style="display:grid;gap:14px"><div class="skel" style="hei
 /* ── Router ── */
 async function route() {
   if (!me) return boot();
+  // Stop the day-report auto-refresh of the page we're leaving.
+  if (window.__dayTimer) { clearInterval(window.__dayTimer); window.__dayTimer = null; }
   const h = location.hash || '#/';
   const mPatient = h.match(/^#\/patient\/([\w-]+)(?:\/(\w+))?/);
   const mDoctor = h.match(/^#\/doctor\/([\w-]+)/);
+  const mUser = h.match(/^#\/user\/([\w-]+)/);
   try {
     if (mPatient) return await pagePatient(mPatient[1], mPatient[2]);
     if (mDoctor && me.role === 'admin') return await pageDoctor(mDoctor[1]);
+    if (mUser && me.role === 'admin') return await pageUser(mUser[1]);
+    if (h.startsWith('#/users') && me.role === 'admin') return await pageUsers();
     if (h.startsWith('#/patients')) return await pagePatients();
     if (h.startsWith('#/doctors') && me.role === 'admin') return await pageDoctors();
     if (h.startsWith('#/promos')) return await pagePromos();
@@ -542,7 +550,7 @@ async function pagePatient(pid, initTab) {
   const sub = subRes.data;
   const locks = Object.fromEntries((featRes.data ?? []).map((f) => [f.feature, f.allowed]));
 
-  const [meals, glys, insus, acts, meas, payments, chats, calls, labReports] = await Promise.all([
+  const [meals, glys, insus, acts, meas, payments, chats, calls, labRes] = await Promise.all([
     db.from('meal_scans').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(60).then((r) => r.data ?? []),
     db.from('glucose_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(80).then((r) => r.data ?? []),
     db.from('insulin_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(80).then((r) => r.data ?? []),
@@ -551,8 +559,10 @@ async function pagePatient(pid, initTab) {
     db.from('payments').select('*').eq('user_id', pid).order('period', { ascending: false }).then((r) => r.data ?? []),
     db.from('chat_history').select('*').eq('user_id', pid).order('created_at', { ascending: true }).limit(300).then((r) => r.data ?? []),
     db.from('call_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(100).then((r) => r.data ?? []),
-    db.from('lab_reports').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(50).then((r) => r.data ?? []),
+    db.from('lab_reports').select('*', { count: 'exact' }).eq('user_id', pid).order('created_at', { ascending: false }).limit(50).then((r) => ({ rows: r.data ?? [], count: r.count ?? (r.data ?? []).length })),
   ]);
+  const labReports = labRes.rows;
+  const labsCount = labRes.count;
   const aiUsage = (await db.from('ai_usage').select('kind, input_tokens, output_tokens, audio_input_tokens, audio_output_tokens, cost_usd').eq('user_id', pid)).data ?? [];
   // Voice-call minutes consumed this calendar month (quota tracking).
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
@@ -602,6 +612,7 @@ async function pagePatient(pid, initTab) {
         <div class="card stat-card"><div class="sc-body"><div class="l">Glycémies</div><div class="v">${ov.glucose_count ?? 0}</div></div><div class="ic tone-red">${I.drop}</div></div>
         <div class="card stat-card"><div class="sc-body"><div class="l">Moy. 7j (mg/dL)${tir !== null ? ` · TIR ${tir}%` : ''}</div><div class="v">${avg7 ?? '—'}</div></div><div class="ic tone-green">${I.pulse}</div></div>
         <div class="card stat-card"><div class="sc-body"><div class="l">Insuline 7j (U)</div><div class="v">${Math.round(insu7 * 10) / 10}</div></div><div class="ic tone-violet">${I.syringe}</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Analyses labo</div><div class="v">${labsCount}</div></div><div class="ic tone-amber" style="font-size:19px">🧪</div></div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px" class="fade-up">
@@ -667,9 +678,11 @@ async function pagePatient(pid, initTab) {
         <div class="card-head">
           <h3>📆 Rapport du jour</h3>
           <div style="display:flex;gap:6px;align-items:center">
+            <span class="hint" style="margin-right:4px">identique à l'app du patient</span>
             <button class="btn" id="dayPrev" title="Jour précédent" style="padding:6px 12px">‹</button>
             <input type="date" id="dayPick" style="height:34px;border:1.5px solid var(--border);border-radius:9px;padding:0 8px;font-size:12.5px;background:#fbfcfe" />
             <button class="btn" id="dayNext" title="Jour suivant" style="padding:6px 12px">›</button>
+            <button class="btn" id="dayRefresh" title="Actualiser maintenant" style="padding:6px 12px">↻</button>
           </div>
         </div>
         <div id="dayPanel" style="padding:14px 18px 18px">
@@ -686,7 +699,7 @@ async function pagePatient(pid, initTab) {
               ['insu', `💉 Insuline (${insus.length})`],
               ['act', `🏃 Activité (${acts.length})`],
               ['meas', `📏 Mesures (${meas.length})`],
-              ['labs', `🧪 Analyses (${labReports.length})`],
+              ['labs', `🧪 Analyses (${labsCount})`],
               ['chat', `💬 Chat IA (${Math.ceil(chats.length / 2)})`],
               ['calls', `📞 Appels (${calls.length})`],
             ].map(([k, label]) => `<button class="tab ${k === (initTab || 'meals') ? 'active' : ''}" data-tab="${k}">${label}</button>`).join('')}
@@ -748,9 +761,17 @@ async function pagePatient(pid, initTab) {
       return `<div class="chat-box" id="chatBox">${rows}</div>`;
     },
     labs: () => {
-      if (!labReports.length) return emptyData('🧪', 'Aucune analyse biologique envoyée');
+      // How much the patient used the lab-analysis feature + what it cost in AI.
+      const labUse = aiUsage.filter((r) => r.kind === 'lab');
+      const labCost = labUse.reduce((a, r) => a + Number(r.cost_usd || 0), 0);
+      const strip = `<div class="pay-stats" style="padding-bottom:2px">
+        <span class="badge indigo">🧪 ${labsCount} analyse${labsCount > 1 ? 's' : ''} envoyée${labsCount > 1 ? 's' : ''}</span>
+        <span class="badge violet">${labUse.length} requête${labUse.length > 1 ? 's' : ''} IA</span>
+        <span class="badge green">Coût IA : ${fmtUsd(labCost)}</span>
+      </div>`;
+      if (!labReports.length) return strip + emptyData('🧪', 'Aucune analyse biologique envoyée');
       const S = { ok: ['#10b981', 'Normal'], warn: ['#f59e0b', 'Attention'], danger: ['#ef4444', 'Critique'] };
-      return `<div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
+      return strip + `<div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
         ${labReports.map((rep) => {
           const vals = Array.isArray(rep.values) ? rep.values : [];
           const ok = vals.filter((v) => v.status === 'ok').length;
@@ -818,66 +839,128 @@ async function pagePatient(pid, initTab) {
     if (ph) lightbox(ph.dataset.photo, ph.dataset.cap);
   });
 
-  /* ── Rapport du jour: everything the patient did on ONE day, with
-     ‹ › navigation to walk back through the previous days. ── */
+  /* ── Rapport du jour : EXACTEMENT ce que le patient voit dans son écran
+     "Rapport du jour" (timeline de l'app) — un fil chronologique de TOUT
+     ce qu'il a fait ce jour-là (repas, insuline, glycémies, sport, mesures,
+     analyses labo, notes, changements d'état/réglages), du plus récent au
+     plus ancien. S'actualise seul chaque minute sur le jour courant. ── */
   const dayPanel = document.getElementById('dayPanel');
   const dayPick = document.getElementById('dayPick');
-  const toIso = (d) => d.toISOString().slice(0, 10);
+  // Date ISO LOCALE (pas toISOString, qui décale le jour en UTC).
+  const toIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   dayPick.value = toIso(new Date());
   dayPick.max = toIso(new Date());
 
-  async function loadDayReport(dateStr) {
-    dayPanel.innerHTML = '<div style="color:var(--muted);font-size:12.5px">Chargement…</div>';
-    const from = dateStr + 'T00:00:00';
-    const d2 = new Date(dateStr + 'T00:00:00');
-    d2.setDate(d2.getDate() + 1);
-    const to = toIso(d2) + 'T00:00:00';
-    const between = (q) => q.gte('created_at', from).lt('created_at', to).order('created_at', { ascending: true });
-    const [dm, dg, di, da, dx, de_] = await Promise.all([
+  const ST_LABEL = { active: 'Actif', sick: 'Malade', injured: 'Blessé', paused: 'En pause' };
+  const F_LABEL = {
+    diabetes_type: 'Type de diabète', insulin_types: 'Insulines', target_low: 'Cible basse',
+    target_high: 'Cible haute', carb_ratio: 'Ratio glucides', correction_factor: 'Facteur de correction',
+    weight: 'Poids', height: 'Taille',
+  };
+  const chVal = (v) => (Array.isArray(v) ? v.join('+') : v ?? '—');
+
+  async function loadDayReport(dateStr, silent) {
+    if (!silent) dayPanel.innerHTML = '<div style="color:var(--muted);font-size:12.5px">Chargement…</div>';
+    // Bornes du jour en heure LOCALE — le même découpage que l'app du patient.
+    const d0 = new Date(dateStr + 'T00:00:00');
+    const from = d0.toISOString();
+    const to = new Date(d0.getTime() + 86400000).toISOString();
+    const between = (q) => q.gte('created_at', from).lt('created_at', to);
+    const [dm, dg, di, da, dx, de_, dlab] = await Promise.all([
       between(db.from('meal_scans').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
       between(db.from('glucose_logs').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
       between(db.from('insulin_logs').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
       between(db.from('activity_logs').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
       between(db.from('measure_logs').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
       between(db.from('event_logs').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
+      between(db.from('lab_reports').select('*').eq('user_id', pid)).then((r) => r.data ?? []),
     ]);
     const time = (iso) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+    /* Totaux du jour — les mêmes chiffres que la barre de totaux de l'app */
     const totCarbs = dm.reduce((a, m) => a + Number(m.carbs ?? m.result?.carbohydrates ?? 0), 0);
     const totKcal = dm.reduce((a, m) => a + Number(m.calories ?? m.result?.calories ?? 0), 0);
+    const totSugar = dm.reduce((a, m) => a + Number(m.sugar ?? m.result?.sugar ?? 0), 0);
+    const rapidU = di.filter((x) => x.insulin_type === 'rapid').reduce((a, x) => a + Number(x.dose || 0), 0);
+    const longU = di.filter((x) => x.insulin_type === 'long').reduce((a, x) => a + Number(x.dose || 0), 0);
     const totIns = di.reduce((a, x) => a + Number(x.dose || 0), 0);
-    const notes = de_.filter((ev) => ev.kind === 'note');
-    const sec = (title, inner) => inner
-      ? `<div style="margin-top:12px"><div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted-2);margin-bottom:6px">${title}</div>${inner}</div>`
-      : '';
-    const empty = !dm.length && !dg.length && !di.length && !da.length && !dx.length && !notes.length;
-    dayPanel.innerHTML = empty
-      ? '<div style="text-align:center;color:var(--muted);font-size:13px;padding:18px 0">📭 Rien d\'enregistré ce jour-là</div>'
-      : `
-      <div class="pay-stats" style="padding:0 0 4px">
-        <span class="badge indigo">🍽️ ${dm.length} repas · ${Math.round(totCarbs)} g gluc. · ${Math.round(totKcal)} kcal</span>
-        <span class="badge violet">💉 ${totIns} U</span>
-        <span class="badge gray">🩸 ${dg.length} mesure${dg.length > 1 ? 's' : ''}</span>
+    const sportMin = da.reduce((a, x) => a + Number(x.duration_min || 0), 0);
+    const avgGly = dg.length ? Math.round(dg.reduce((a, g) => a + Number(g.value), 0) / dg.length) : null;
+
+    /* Fil unique, du plus récent au plus ancien — comme l'app */
+    const feed = [
+      ...dm.map((m) => ({ t: m.created_at, type: 'meal', m })),
+      ...dg.map((g) => ({ t: g.created_at, type: 'gly', g })),
+      ...di.map((x) => ({ t: x.created_at, type: 'insu', x })),
+      ...da.map((a) => ({ t: a.created_at, type: 'act', a })),
+      ...dx.map((x) => ({ t: x.created_at, type: 'meas', x })),
+      ...de_.map((e) => ({ t: e.created_at, type: 'ev', e })),
+      ...dlab.map((l) => ({ t: l.created_at, type: 'lab', l })),
+    ].sort((a, b) => new Date(b.t) - new Date(a.t));
+
+    const stamp = `<div style="font-size:10.5px;color:var(--muted-2);margin-top:10px">↻ Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} · actualisation automatique chaque minute</div>`;
+
+    if (!feed.length) {
+      dayPanel.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:18px 0">📭 Rien d\'enregistré ce jour-là</div>' + stamp;
+      return;
+    }
+
+    const card = (color, icon, title, meta, right = '') => `
+      <div class="tl-card">
+        <div class="tl-ic" style="background:${color}1c">${icon}</div>
+        <div style="flex:1;min-width:0"><div class="tl-t">${title}</div><div class="tl-m">${meta}</div></div>
+        ${right}
+      </div>`;
+
+    const rows = feed.map((e) => {
+      let color = '#64748b', inner = '';
+      if (e.type === 'meal') {
+        const r = e.m.result || {};
+        const names = r.food_name || (r.items || []).map((i) => i.name).slice(0, 3).join(', ') || 'Repas';
+        const thumb = e.m.image_url && /^https?:/i.test(e.m.image_url)
+          ? `<img class="meal-thumb" src="${esc(e.m.image_url)}" data-photo="${esc(e.m.image_url)}" data-cap="${esc(names)}" loading="lazy" alt="" />` : '';
+        color = '#3b82f6';
+        inner = card(color, '🍽️', `${e.m.meal_type ? esc(e.m.meal_type) + ' · ' : ''}${esc(names)}`,
+          `${Math.round(e.m.calories ?? r.calories ?? 0)} kcal · ${Math.round(e.m.carbs ?? r.carbohydrates ?? 0)} g gluc. · ${Math.round(e.m.sugar ?? r.sugar ?? 0)} g sucre`, thumb);
+      } else if (e.type === 'insu') {
+        color = '#8b5cf6';
+        inner = card(color, '💉', `${e.x.dose} U · ${esc(e.x.insulin_type === 'rapid' ? 'rapide' : e.x.insulin_type === 'long' ? 'lente' : e.x.insulin_type || 'insuline')}`, esc(e.x.notes || 'Insuline'));
+      } else if (e.type === 'gly') {
+        color = '#ef4444';
+        inner = card(color, '🩸', glyBadge(e.g.value), esc(e.g.notes || 'Glycémie'));
+      } else if (e.type === 'act') {
+        color = '#10b981';
+        inner = card(color, '🏃', `${esc(e.a.kind || 'Sport')} · ${e.a.duration_min ?? '—'} min`, `Activité · ${esc(e.a.intensity || '—')}`);
+      } else if (e.type === 'meas') {
+        color = '#f59e0b';
+        inner = card(color, '📏', `${esc(e.x.kind || 'Mesure')} · ${e.x.value} ${esc(e.x.unit || '')}`, 'Mesure corporelle');
+      } else if (e.type === 'lab') {
+        const vals = Array.isArray(e.l.values) ? e.l.values : [];
+        const danger = vals.filter((v) => v.status === 'danger').length;
+        const warn = vals.filter((v) => v.status === 'warn').length;
+        const thumb = e.l.image_thumb
+          ? `<img class="meal-thumb" src="${esc(e.l.image_thumb)}" data-photo="${esc(e.l.image_thumb)}" data-cap="${esc(e.l.lab_name || 'Analyse')}" loading="lazy" alt="" />` : '';
+        color = '#d946ef';
+        inner = card(color, '🧪', esc(e.l.lab_name || 'Analyse biologique'),
+          `${vals.length} valeur${vals.length > 1 ? 's' : ''}${danger ? ` · <b style="color:var(--red-text)">${danger} critique${danger > 1 ? 's' : ''}</b>` : ''}${warn ? ` · <b style="color:var(--amber-text)">${warn} à surveiller</b>` : ''} · <a href="#/patient/${pid}/labs" style="color:var(--primary);font-weight:700">détails</a>`, thumb);
+      } else if (e.type === 'ev') {
+        const k = e.e.kind, p = e.e.payload || {};
+        if (k === 'note') { color = '#0ea5e9'; inner = card(color, '📝', 'Note du patient', `“${esc(p.text || '')}”`); }
+        else if (k === 'status') { color = '#f97316'; inner = card(color, '🩺', "Changement d'état", `${ST_LABEL[p.from] || esc(String(p.from ?? '—'))} → <b>${ST_LABEL[p.to] || esc(String(p.to ?? '—'))}</b>`); }
+        else { inner = card(color, '⚙️', 'Réglages médicaux modifiés', Object.entries(p.changes ?? {}).map(([f, v]) => `${F_LABEL[f] || esc(f)} : ${esc(String(chVal(v?.from)))} → <b>${esc(String(chVal(v?.to)))}</b>`).join(' · ') || '—'); }
+      }
+      return `<div class="tl-row"><div class="tl-time">${time(e.t)}</div><div class="tl-spine"><div class="tl-dot" style="background:${color}"></div></div>${inner}</div>`;
+    }).join('');
+
+    dayPanel.innerHTML = `
+      <div class="pay-stats" style="padding:0 0 10px">
+        <span class="badge indigo">🍽️ ${dm.length} repas · ${Math.round(totCarbs)} g gluc. · ${Math.round(totKcal)} kcal · ${Math.round(totSugar)} g sucre</span>
+        <span class="badge violet">💉 ${Math.round(totIns * 10) / 10} U${totIns ? ` (${Math.round(rapidU * 10) / 10} rapide / ${Math.round(longU * 10) / 10} lente)` : ''}</span>
+        <span class="badge gray">🩸 ${dg.length} mesure${dg.length > 1 ? 's' : ''}${avgGly !== null ? ` · moy. ${avgGly}` : ''}</span>
+        ${sportMin ? `<span class="badge green">🏃 ${sportMin} min</span>` : ''}
+        ${dlab.length ? `<span class="badge amber">🧪 ${dlab.length} analyse${dlab.length > 1 ? 's' : ''}</span>` : ''}
       </div>
-      ${sec('🍽️ Repas', dm.length ? dm.map((m) => {
-        const r = m.result || {};
-        const names = r.food_name || (r.items || []).map((i) => i.name).join(', ') || 'Repas';
-        const hasPhoto = m.image_url && /^https?:/i.test(m.image_url);
-        const photo = hasPhoto
-          ? `<img class="meal-thumb" src="${esc(m.image_url)}" data-photo="${esc(m.image_url)}" data-cap="${esc(names)}" loading="lazy" alt="" />`
-          : `<div class="meal-thumb ph">🍽️</div>`;
-        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed var(--border)">
-          ${photo}
-          <div style="flex:1;min-width:0"><b style="font-size:12.5px">${esc(names)}</b>
-            <div style="font-size:11px;color:var(--muted)">${m.meal_type ? esc(m.meal_type) + ' · ' : ''}${Math.round(m.carbs ?? r.carbohydrates ?? 0)} g glucides · ${Math.round(m.calories ?? r.calories ?? 0)} kcal</div>
-          </div>
-          <span style="font-size:11px;color:var(--muted);white-space:nowrap">${time(m.created_at)}</span>
-        </div>`;
-      }).join('') : '') }
-      ${sec('🩸 Glycémie', dg.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${dg.map((g) => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--border);border-radius:999px;padding:4px 10px">${time(g.created_at)} ${glyBadge(g.value)}</span>`).join('')}</div>` : '')}
-      ${sec('💉 Insuline', di.length ? di.map((x) => `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0"><span><span class="badge violet">${esc(x.insulin_type || '—')}</span> <b>${x.dose} U</b></span><span style="color:var(--muted);font-size:11px">${time(x.created_at)}</span></div>`).join('') : '')}
-      ${sec('🏃 Activité', da.length ? da.map((a) => `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0"><span><b>${esc(a.kind || '—')}</b> ${a.duration_min ?? '—'} min (${esc(a.intensity || '—')})</span><span style="color:var(--muted);font-size:11px">${time(a.created_at)}</span></div>`).join('') : '')}
-      ${sec('📏 Mesures', dx.length ? dx.map((x) => `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0"><span><b>${esc(x.kind)}</b> ${x.value} ${esc(x.unit || '')}</span><span style="color:var(--muted);font-size:11px">${time(x.created_at)}</span></div>`).join('') : '')}
-      ${sec('📝 Notes du patient', notes.length ? notes.map((ev) => `<div style="font-size:12.5px;padding:4px 0;color:var(--muted)">"${esc(ev.payload?.text || '')}" <span style="font-size:11px">· ${time(ev.created_at)}</span></div>`).join('') : '')}`;
+      <div class="tl-feed">${rows}</div>${stamp}`;
   }
   const shiftDay = (n) => {
     const d = new Date(dayPick.value + 'T00:00:00');
@@ -888,12 +971,20 @@ async function pagePatient(pid, initTab) {
   };
   document.getElementById('dayPrev').addEventListener('click', () => shiftDay(-1));
   document.getElementById('dayNext').addEventListener('click', () => shiftDay(1));
+  document.getElementById('dayRefresh').addEventListener('click', () => loadDayReport(dayPick.value));
   dayPick.addEventListener('change', () => dayPick.value && loadDayReport(dayPick.value));
   dayPanel.addEventListener('click', (e) => {
     const ph = e.target.closest('[data-photo]');
     if (ph) lightbox(ph.dataset.photo, ph.dataset.cap);
   });
   loadDayReport(dayPick.value);
+  // Live : tant que la fiche affiche AUJOURD'HUI, on recharge chaque minute —
+  // ce que le patient vient de faire dans l'app apparaît tout seul ici.
+  if (window.__dayTimer) clearInterval(window.__dayTimer);
+  window.__dayTimer = setInterval(() => {
+    if (!document.body.contains(dayPanel)) { clearInterval(window.__dayTimer); window.__dayTimer = null; return; }
+    if (dayPick.value === toIso(new Date())) loadDayReport(dayPick.value, true);
+  }, 60000);
   document.querySelectorAll('#dataTabs .tab').forEach((t) =>
     t.addEventListener('click', () => {
       document.querySelectorAll('#dataTabs .tab').forEach((x) => x.classList.remove('active'));
@@ -1145,6 +1236,138 @@ function deleteUserModal(uid, label, onDone) {
     if (!res.ok) { toast(res.error || 'Erreur', true); btn.disabled = false; btn.textContent = 'Supprimer définitivement'; return; }
     ov.remove(); toast('Compte supprimé'); onDone?.();
   });
+}
+
+/* ════════════════ UTILISATEURS (admin) ════════════════
+   TOUS les comptes de l'application — admins, médecins et patients —
+   réunis au même endroit. Un clic ouvre la fiche complète du compte
+   (fiche patient, fiche médecin ou fiche utilisateur selon le rôle). */
+const ROLE_BADGE = {
+  admin: '<span class="badge indigo">👑 Admin</span>',
+  doctor: '<span class="badge violet">🩺 Médecin</span>',
+  patient: '<span class="badge gray">👤 Patient</span>',
+};
+const userHref = (p) =>
+  p.role === 'doctor' ? `#/doctor/${p.user_id}` : p.role === 'admin' ? `#/user/${p.user_id}` : `#/patient/${p.user_id}`;
+
+async function pageUsers() {
+  const page = shell('#/users', 'Utilisateurs', 'Tous les comptes : admins, médecins et patients', loading);
+  const [profsRes, patients, usageRes] = await Promise.all([
+    db.from('profiles').select('user_id, role, name, email, phone, language, created_at').order('created_at', { ascending: false }),
+    fetchPatients(),
+    db.from('ai_usage').select('user_id, cost_usd, created_at').order('created_at', { ascending: false }).limit(10000),
+  ]);
+  const profs = profsRes.data ?? [];
+  const pmap = Object.fromEntries(patients.map((p) => [p.user_id, p]));
+  // Coût IA + dernière requête IA par compte (les lignes arrivent du plus récent au plus ancien).
+  const usage = {};
+  (usageRes.data ?? []).forEach((r) => {
+    const u = (usage[r.user_id] ??= { cost: 0, n: 0, last: r.created_at });
+    u.cost += Number(r.cost_usd || 0);
+    u.n++;
+  });
+  const nAdm = profs.filter((p) => p.role === 'admin').length;
+  const nDoc = profs.filter((p) => p.role === 'doctor').length;
+  const nPat = profs.filter((p) => p.role === 'patient').length;
+
+  const rowHtml = (p) => {
+    const ov = pmap[p.user_id];
+    const u = usage[p.user_id];
+    const last = ov?.last_activity || u?.last || null;
+    return `<tr class="click" data-uhref="${userHref(p)}">
+      <td><div class="cell-user">${avatar(p.name, p.email)}<div style="min-width:0"><div class="nm">${esc((p.role === 'doctor' ? 'Dr. ' : '') + (p.name || 'Sans nom'))}</div><div class="em">${esc(p.email || '')}</div></div></div></td>
+      <td>${ROLE_BADGE[p.role] || `<span class="badge gray">${esc(p.role || '—')}</span>`}</td>
+      <td style="font-size:12px;color:var(--muted)">${p.phone ? '📱 ' + esc(p.phone) : '—'}</td>
+      <td>${p.language ? `<span class="badge gray">${esc(String(p.language).toUpperCase())}</span>` : '—'}</td>
+      <td style="color:var(--muted);font-size:12px">${fmtDate(p.created_at)}</td>
+      <td style="color:var(--muted);font-size:12px">${last ? timeAgo(last) : '—'}</td>
+      <td>${p.role === 'patient' ? `<span class="badge blue">📷 ${ov?.meals_count ?? 0}</span> <span class="badge red">🩸 ${ov?.glucose_count ?? 0}</span>` : '—'}</td>
+      <td>${u ? `<b style="color:var(--primary)">${fmtUsd(u.cost)}</b> <span style="font-size:11px;color:var(--muted-2)">(${u.n})</span>` : '—'}</td>
+      <td style="color:var(--muted-2);width:20px">${I.chevR}</td>
+    </tr>`;
+  };
+  const tableHtml = (rows) => rows.length
+    ? `<div class="table-wrap"><table class="data">
+        <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Téléphone</th><th>Langue</th><th>Inscrit le</th><th>Dernière activité</th><th>Données</th><th>Conso IA</th><th></th></tr></thead>
+        <tbody>${rows.map(rowHtml).join('')}</tbody></table></div>`
+    : `<div class="empty"><div class="e">👥</div><div class="t">Aucun compte</div></div>`;
+
+  const renderList = () => {
+    const q = (document.getElementById('usearch')?.value || '').trim().toLowerCase();
+    const fRole = document.getElementById('fRole')?.value || '';
+    let f = profs;
+    if (fRole) f = f.filter((p) => p.role === fRole);
+    if (q) f = f.filter((p) => (p.name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q) || (p.phone || '').toLowerCase().includes(q));
+    document.getElementById('ulist').innerHTML = tableHtml(f);
+    document.getElementById('ucount').textContent = `${f.length} / ${profs.length}`;
+    document.querySelectorAll('#ulist tr[data-uhref]').forEach((tr) =>
+      tr.addEventListener('click', () => { location.hash = tr.dataset.uhref; }));
+  };
+
+  page.innerHTML = `
+    <div class="stats-grid fade-up" style="margin-bottom:16px">
+      <div class="card stat-card"><div class="sc-body"><div class="l">Comptes au total</div><div class="v">${profs.length}</div></div><div class="ic tone-indigo">${I.group}</div></div>
+      <div class="card stat-card"><div class="sc-body"><div class="l">Admins</div><div class="v">${nAdm}</div></div><div class="ic tone-amber" style="font-size:19px">👑</div></div>
+      <div class="card stat-card"><div class="sc-body"><div class="l">Médecins</div><div class="v">${nDoc}</div></div><div class="ic tone-violet">${I.steth}</div></div>
+      <div class="card stat-card"><div class="sc-body"><div class="l">Patients</div><div class="v">${nPat}</div></div><div class="ic tone-green">${I.users}</div></div>
+    </div>
+    <div class="page-actions fade-up">
+      <div class="search-bar">${I.search}<input id="usearch" placeholder="Rechercher un compte (nom, email, téléphone)…" /></div>
+      <select class="sel" id="fRole">
+        <option value="">👥 Tous les rôles</option>
+        <option value="admin">👑 Admins</option>
+        <option value="doctor">🩺 Médecins</option>
+        <option value="patient">👤 Patients</option>
+      </select>
+      <span class="badge gray" id="ucount"></span>
+    </div>
+    <div class="card fade-up" style="animation-delay:.05s" id="ulist"></div>`;
+  renderList();
+  document.getElementById('usearch').addEventListener('input', renderList);
+  document.getElementById('fRole').addEventListener('change', renderList);
+}
+
+/* Fiche d'un compte admin (les patients/médecins ont leur propre fiche). */
+async function pageUser(uid) {
+  const page = shell('#/users', 'Fiche utilisateur', '', loading);
+  const [profRes, usageRows] = await Promise.all([
+    db.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
+    db.from('ai_usage').select('kind, input_tokens, output_tokens, audio_input_tokens, audio_output_tokens, cost_usd').eq('user_id', uid).then((r) => r.data ?? []),
+  ]);
+  const prof = profRes.data;
+  if (!prof) { page.innerHTML = `<div class="empty"><div class="e">🔍</div><div class="t">Utilisateur introuvable</div></div>`; return; }
+  if (prof.role === 'patient') { location.hash = `#/patient/${uid}`; return; }
+  if (prof.role === 'doctor') { location.hash = `#/doctor/${uid}`; return; }
+
+  page.innerHTML = `
+    <div style="display:grid;gap:16px">
+      <div class="page-actions fade-up" style="margin-bottom:0">
+        <button class="btn btn-ghost" id="backBtn">${I.back} Retour</button>
+        <div class="spacer" style="flex:1"></div>
+        <button class="btn btn-ghost" id="pwBtn">${I.key} Mot de passe</button>
+        ${uid !== me.id ? `<button class="btn btn-danger" id="delBtn">${I.trash} Supprimer</button>` : ''}
+      </div>
+
+      <div class="card card-pad fade-up" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        ${avatar(prof.name, prof.email, true)}
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:18px;font-weight:800">${esc(prof.name || 'Sans nom')}</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${esc(prof.email || '')} · compte créé le ${fmtDate(prof.created_at)}</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">
+            ${ROLE_BADGE[prof.role] || ''}
+            ${uid === me.id ? '<span class="badge green">C\'est vous</span>' : ''}
+            ${prof.language ? `<span class="badge gray">${esc(String(prof.language).toUpperCase())}</span>` : ''}
+            ${prof.phone ? `<span class="badge blue">📱 ${esc(prof.phone)}</span>` : ''}
+          </div>
+        </div>
+        ${prof.phone ? `<a class="btn btn-ghost" style="text-decoration:none" target="_blank" rel="noopener" href="${waHref(prof.phone, prof.language, '')}">💬 WhatsApp</a>` : ''}
+      </div>
+
+      ${usageCard(usageRows)}
+    </div>`;
+  document.getElementById('backBtn').addEventListener('click', () => history.back());
+  document.getElementById('pwBtn').addEventListener('click', () => passwordModal(uid));
+  document.getElementById('delBtn')?.addEventListener('click', () => deleteUserModal(uid, prof.name || prof.email, () => { location.hash = '#/users'; }));
 }
 
 /* ════════════════ DOCTORS (admin) ════════════════ */
@@ -1449,6 +1672,7 @@ const KIND_META = {
   call: { label: 'Appel vocal (Live)', icon: '📞' },
   voice: { label: 'Voix (secours)', icon: '🎙️' },
   bolus: { label: 'Calcul insuline', icon: '💉' },
+  lab: { label: 'Analyse labo', icon: '🧪' },
 };
 
 async function pageUsage() {

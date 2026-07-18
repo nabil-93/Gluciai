@@ -477,3 +477,21 @@ table.data tbody tr.click:hover { background: #f8f9fe; }
   .stat-card .ic { width: 46px; height: 46px; border-radius: 14px; }
   .sidebar-backdrop { position: fixed; inset: 0; z-index: 39; background: rgba(16,21,38,0.44); animation: fadeIn 0.2s; }
 }
+
+/* ── Rapport du jour : timeline identique à l'app patient ── */
+.tl-feed { display: flex; flex-direction: column; }
+.tl-row { display: grid; grid-template-columns: 44px 18px 1fr; gap: 8px; align-items: stretch; }
+.tl-time { font-size: 11px; font-weight: 700; color: var(--muted-2); text-align: right; padding-top: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tl-spine { position: relative; display: flex; justify-content: center; }
+.tl-spine::before { content: ""; position: absolute; top: 0; bottom: 0; width: 2px; background: var(--border); border-radius: 2px; }
+.tl-row:first-child .tl-spine::before { top: 20px; }
+.tl-row:last-child .tl-spine::before { bottom: calc(100% - 26px); }
+.tl-dot { position: relative; z-index: 1; width: 10px; height: 10px; border-radius: 50%; margin-top: 19px; box-shadow: 0 0 0 3px var(--card); flex-shrink: 0; }
+.tl-card { display: flex; gap: 10px; align-items: center; border: 1.5px solid var(--border); border-radius: 13px; padding: 9px 12px; margin: 5px 0; background: #fbfcfe; min-width: 0; }
+.tl-ic { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.tl-t { font-weight: 700; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
+.tl-m { font-size: 11.5px; color: var(--muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 560px) {
+  .tl-row { grid-template-columns: 38px 14px 1fr; gap: 6px; }
+  .tl-time { font-size: 10px; }
+}
