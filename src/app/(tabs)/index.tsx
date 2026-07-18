@@ -20,6 +20,7 @@ import Svg, {
   Line,
   Path,
   RadialGradient,
+  Rect,
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
@@ -75,6 +76,9 @@ const INSULIN_GOAL = 40;
 
 function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
+}
+function sameDay(iso: string, ref: Date) {
+  return new Date(iso).toDateString() === ref.toDateString();
 }
 
 /* Small inline SVG glyphs from the prototype (chevrons/arrows) */
@@ -607,7 +611,9 @@ function CalendarPopup({
  * wrapped by the same 3-arc meal ring as the calendar popup (breakfast /
  * lunch / dinner light up once scanned). The selected day becomes a deep
  * green pill with the weekday label in white; tapping a day drives the
- * "Vos repas" section below. Future days are disabled.
+ * whole screen (glucose / carbs / insulin / meals) to that day. Future
+ * days are disabled. A calendar button at the end opens the full month
+ * picker for jumping further back than the visible week.
  */
 const WEEK_ACCENT = '#0a5c4e';
 function WeekStrip({
@@ -621,6 +627,7 @@ function WeekStrip({
   mealsByDay: Record<string, Set<'breakfast' | 'lunch' | 'dinner'>>;
   locale: string;
 }) {
+  const [monthOpen, setMonthOpen] = React.useState(false);
   const today = new Date();
   const monday = new Date(
     today.getFullYear(),
@@ -634,38 +641,65 @@ function WeekStrip({
   );
   return (
     <View style={styles.weekRow}>
-      {days.map((d) => {
-        const isSel = d.toDateString() === selected.toDateString();
-        const isFuture = d > today;
-        const label = d
-          .toLocaleDateString(locale, { weekday: 'short' })
-          .replace(/\./g, '')
-          .toUpperCase()
-          .slice(0, 3);
-        return (
-          <Pressable
-            key={d.toDateString()}
-            disabled={isFuture}
-            onPress={() => onSelect(d)}
-            style={[styles.weekCell, isSel && styles.weekCellSel]}
-          >
-            <View style={styles.weekDisc}>
-              <MealRing
-                slots={mealsByDay[d.toDateString()]}
-                size={42}
-                stroke={3.2}
-                selected={isSel}
-              />
-              <Text style={[styles.weekNum, isFuture && styles.weekNumMuted]}>
-                {String(d.getDate()).padStart(2, '0')}
+      <View style={styles.weekDays}>
+        {days.map((d) => {
+          const isSel = d.toDateString() === selected.toDateString();
+          const isFuture = d > today;
+          const label = d
+            .toLocaleDateString(locale, { weekday: 'short' })
+            .replace(/\./g, '')
+            .toUpperCase()
+            .slice(0, 3);
+          return (
+            <Pressable
+              key={d.toDateString()}
+              disabled={isFuture}
+              onPress={() => onSelect(d)}
+              style={[styles.weekCell, isSel && styles.weekCellSel]}
+            >
+              <View style={styles.weekDisc}>
+                <MealRing
+                  slots={mealsByDay[d.toDateString()]}
+                  size={38}
+                  stroke={2.8}
+                  selected={isSel}
+                />
+                <Text style={[styles.weekNum, isFuture && styles.weekNumMuted]}>
+                  {String(d.getDate()).padStart(2, '0')}
+                </Text>
+              </View>
+              <Text style={[styles.weekLabel, isSel && styles.weekLabelSel]}>
+                {label}
               </Text>
-            </View>
-            <Text style={[styles.weekLabel, isSel && styles.weekLabelSel]}>
-              {label}
-            </Text>
-          </Pressable>
-        );
-      })}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Jump further back than the visible week via the full month picker */}
+      <View style={styles.weekCalWrap}>
+        <Pressable
+          onPress={() => setMonthOpen((v) => !v)}
+          style={styles.weekCalBtn}
+          accessibilityLabel={locale.startsWith('ar') ? 'التقويم' : 'Calendar'}
+        >
+          <Svg width={17} height={17} viewBox="0 0 20 20" fill="none">
+            <Rect x={3} y={4.5} width={14} height={12.5} rx={3} stroke="#48524e" strokeWidth={1.6} />
+            <Line x1={3.4} y1={8.6} x2={16.6} y2={8.6} stroke="#48524e" strokeWidth={1.6} strokeLinecap="round" />
+            <Line x1={7} y1={3} x2={7} y2={5.8} stroke="#48524e" strokeWidth={1.6} strokeLinecap="round" />
+            <Line x1={13} y1={3} x2={13} y2={5.8} stroke="#48524e" strokeWidth={1.6} strokeLinecap="round" />
+          </Svg>
+        </Pressable>
+        {monthOpen ? (
+          <CalendarPopup
+            selected={selected}
+            onSelect={onSelect}
+            onClose={() => setMonthOpen(false)}
+            mealsByDay={mealsByDay}
+            locale={locale}
+          />
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -1266,36 +1300,43 @@ export default function HomeScreen() {
   const low = profile?.target_low ?? 70;
   const high = profile?.target_high ?? 180;
 
-  const todayGlucose = useMemo(
+  // Which day the whole screen (glucose / carbs / insulin / meals) shows —
+  // defaults to today; the week bar and its calendar button both drive it,
+  // so tapping any past date time-travels the entire home screen there.
+  const [selectedDate, setSelectedDate] = React.useState(() => new Date());
+  const [calendarOpen, setCalendarOpen] = React.useState(false);
+  const isViewingToday = selectedDate.toDateString() === new Date().toDateString();
+
+  const dayGlucose = useMemo(
     () =>
       glucoseLogs
-        .filter((g) => isToday(g.created_at))
+        .filter((g) => sameDay(g.created_at, selectedDate))
         .sort(
           (a, b) =>
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         ),
-    [glucoseLogs]
+    [glucoseLogs, selectedDate]
   );
-  const todayMeals = useMemo(
-    () => meals.filter((m) => isToday(m.created_at)),
-    [meals]
+  const dayMeals = useMemo(
+    () => meals.filter((m) => sameDay(m.created_at, selectedDate)),
+    [meals, selectedDate]
   );
-  const todayInsulin = useMemo(
-    () => insulinLogs.filter((l) => isToday(l.created_at)),
-    [insulinLogs]
+  const dayInsulin = useMemo(
+    () => insulinLogs.filter((l) => sameDay(l.created_at, selectedDate)),
+    [insulinLogs, selectedDate]
   );
-  const todayActivities = useMemo(
-    () => activityLogs.filter((a) => isToday(a.created_at)),
-    [activityLogs]
+  const dayActivities = useMemo(
+    () => activityLogs.filter((a) => sameDay(a.created_at, selectedDate)),
+    [activityLogs, selectedDate]
   );
 
-  const lastGlucose = todayGlucose[todayGlucose.length - 1];
-  const totalCarbs = todayMeals.reduce((s, m) => s + m.result.carbohydrates, 0);
-  const totalInsulin = todayInsulin.reduce((s, l) => s + l.dose, 0);
-  const inRangeCount = todayGlucose.filter(
+  const lastGlucose = dayGlucose[dayGlucose.length - 1];
+  const totalCarbs = dayMeals.reduce((s, m) => s + m.result.carbohydrates, 0);
+  const totalInsulin = dayInsulin.reduce((s, l) => s + l.dose, 0);
+  const inRangeCount = dayGlucose.filter(
     (g) => g.value >= low && g.value <= high
   ).length;
-  const tir = todayGlucose.length ? inRangeCount / todayGlucose.length : 0;
+  const tir = dayGlucose.length ? inRangeCount / dayGlucose.length : 0;
 
   // Gauge zone + Bas→Haut position for the latest reading (gluci mockup).
   const glyZone = lastGlucose ? zoneFor(lastGlucose.value, low, high) : null;
@@ -1309,11 +1350,11 @@ export default function HomeScreen() {
   // Today's readings mapped onto the 00:00 → 24:00 chart.
   const dayReadings = useMemo(
     () =>
-      todayGlucose.map((g) => {
+      dayGlucose.map((g) => {
         const d = new Date(g.created_at);
         return { minutes: d.getHours() * 60 + d.getMinutes(), value: g.value };
       }),
-    [todayGlucose]
+    [dayGlucose]
   );
 
   // ── Metric carousel (Glycémie · Glucides · Insuline) ──
@@ -1393,7 +1434,7 @@ export default function HomeScreen() {
   // Plain loops (not .map with a captured running sum): closures that
   // reassign outer variables block React Compiler memoization.
   const carbReadings = useMemo(() => {
-    const sorted = todayMeals
+    const sorted = dayMeals
       .slice()
       .sort(
         (a, b) =>
@@ -1407,9 +1448,9 @@ export default function HomeScreen() {
       out.push({ minutes: d.getHours() * 60 + d.getMinutes(), value: sum });
     }
     return out;
-  }, [todayMeals]);
+  }, [dayMeals]);
   const insulinReadings = useMemo(() => {
-    const sorted = todayInsulin
+    const sorted = dayInsulin
       .slice()
       .sort(
         (a, b) =>
@@ -1423,11 +1464,7 @@ export default function HomeScreen() {
       out.push({ minutes: d.getHours() * 60 + d.getMinutes(), value: sum });
     }
     return out;
-  }, [todayInsulin]);
-
-  // Meals section: which day is shown, and whether the calendar popup is open.
-  const [selectedDate, setSelectedDate] = React.useState(() => new Date());
-  const [calendarOpen, setCalendarOpen] = React.useState(false);
+  }, [dayInsulin]);
 
   const insight = useMemo(
     () =>
@@ -1440,10 +1477,6 @@ export default function HomeScreen() {
   const mealSlots = useMemo(() => {
     const slotOf = (h: number): 'breakfast' | 'lunch' | 'dinner' =>
       h < 11 ? 'breakfast' : h < 16 ? 'lunch' : 'dinner';
-    const dayMeals = meals.filter(
-      (m) =>
-        new Date(m.created_at).toDateString() === selectedDate.toDateString()
-    );
     const bySlot: Record<string, MealScan | undefined> = {};
     for (const m of dayMeals) {
       const s = slotOf(new Date(m.created_at).getHours());
@@ -1453,7 +1486,7 @@ export default function HomeScreen() {
       }
     }
     return bySlot;
-  }, [meals, selectedDate]);
+  }, [dayMeals]);
 
   // Which meal slots exist for any given day — powers the calendar dots.
   const mealsByDay = useMemo(() => {
@@ -1586,7 +1619,7 @@ export default function HomeScreen() {
       detail: string;
       dot: string;
     }[] = [
-      ...todayActivities.map((a) => ({
+      ...dayActivities.map((a) => ({
         id: `a-${a.id}`,
         time: a.created_at,
         icon: 'act' as const,
@@ -1597,7 +1630,7 @@ export default function HomeScreen() {
         }),
         dot: '#19c37d',
       })),
-      ...todayMeals.map((m) => ({
+      ...dayMeals.map((m) => ({
         id: `m-${m.id}`,
         time: m.created_at,
         icon: 'meal' as const,
@@ -1608,7 +1641,7 @@ export default function HomeScreen() {
         }),
         dot: '#d3d6e2',
       })),
-      ...todayInsulin.map((l) => ({
+      ...dayInsulin.map((l) => ({
         id: `i-${l.id}`,
         time: l.created_at,
         icon: 'insulin' as const,
@@ -1619,7 +1652,7 @@ export default function HomeScreen() {
         }),
         dot: '#7c6cf6',
       })),
-      ...todayGlucose.map((g) => ({
+      ...dayGlucose.map((g) => ({
         id: `g-${g.id}`,
         time: g.created_at,
         icon: 'glucose' as const,
@@ -1632,7 +1665,7 @@ export default function HomeScreen() {
     return items.sort(
       (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
     );
-  }, [todayActivities, todayMeals, todayInsulin, todayGlucose, low, high, t]);
+  }, [dayActivities, dayMeals, dayInsulin, dayGlucose, low, high, t]);
 
   const firstName = profile?.name ? profile.name.split(' ')[0] : null;
 
@@ -1729,8 +1762,8 @@ export default function HomeScreen() {
           </PressableScale>
         </View>
 
-        {/* ── Alert banner ── */}
-        {todayGlucose.length === 0 ? (
+        {/* ── Alert banner (today only — logging always writes "now") ── */}
+        {isViewingToday && dayGlucose.length === 0 ? (
           <Pressable
             style={styles.alert}
             onPress={() => router.push('/log-glucose')}
@@ -1745,13 +1778,32 @@ export default function HomeScreen() {
           </Pressable>
         ) : null}
 
-        {/* ── Week date bar — meal rings per day, drives "Vos repas" ── */}
+        {/* ── Week date bar — meal rings per day, drives the whole screen;
+            calendar icon jumps far back in history ── */}
         <WeekStrip
           selected={selectedDate}
           onSelect={setSelectedDate}
           mealsByDay={mealsByDay}
           locale={i18n.language}
         />
+
+        {/* ── Viewing a past day — say so, offer a one-tap way back ── */}
+        {!isViewingToday ? (
+          <Pressable
+            style={styles.historyBanner}
+            onPress={() => setSelectedDate(new Date())}
+          >
+            <Text style={styles.historyBannerText} numberOfLines={1}>
+              {t('home.viewingHistory', {
+                date: selectedDate.toLocaleDateString(i18n.language, {
+                  day: 'numeric',
+                  month: 'long',
+                }),
+              })}
+            </Text>
+            <Text style={styles.historyBannerCta}>{t('home.backToToday')}</Text>
+          </Pressable>
+        ) : null}
 
         {/* ── Metric carousel card (Glycémie · Glucides · Insuline) ── */}
         <View
@@ -1919,12 +1971,12 @@ export default function HomeScreen() {
         <View style={styles.ringsRow}>
           <RingCard
             progress={tir}
-            valueText={todayGlucose.length ? `${Math.round(tir * 100)}` : '0'}
-            hasData={todayGlucose.length > 0}
+            valueText={dayGlucose.length ? `${Math.round(tir * 100)}` : '0'}
+            hasData={dayGlucose.length > 0}
             label={t('home.ringTarget')}
             sub={
-              todayGlucose.length
-                ? `${inRangeCount} / ${todayGlucose.length}`
+              dayGlucose.length
+                ? `${inRangeCount} / ${dayGlucose.length}`
                 : '– / –'
             }
             onPress={() => router.push('/glucose')}
@@ -2157,12 +2209,12 @@ export default function HomeScreen() {
           <Text style={styles.injLabel}>{t('home.injections')}</Text>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.injTitle} numberOfLines={1}>
-              {todayInsulin.length === 0
+              {dayInsulin.length === 0
                 ? t('home.noInjectionToday')
                 : t('home.injectionSummary', {
                     units: totalInsulin,
-                    count: todayInsulin.length,
-                    plural: todayInsulin.length > 1 ? 's' : '',
+                    count: dayInsulin.length,
+                    plural: dayInsulin.length > 1 ? 's' : '',
                   })}
             </Text>
             <Text style={styles.injSub} numberOfLines={1}>
@@ -2666,26 +2718,58 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
 
-  /* Week date bar */
+  historyBanner: {
+    marginTop: 9,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: 'rgba(10,92,78,0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+  },
+  historyBannerText: {
+    flex: 1,
+    fontFamily: F700,
+    fontSize: 12.5,
+    color: WEEK_ACCENT,
+    textTransform: 'capitalize',
+  },
+  historyBannerCta: {
+    fontFamily: F800,
+    fontSize: 12.5,
+    color: WEEK_ACCENT,
+    textDecorationLine: 'underline',
+  },
+
+  /* Week date bar. zIndex above default (RN Web gives every View
+     position:relative + zIndex:0, so later same-level siblings like the
+     glucose card would otherwise paint over the calendar popup). */
   weekRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginTop: 14,
     marginBottom: 2,
+    zIndex: 20,
+  },
+  weekDays: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   weekCell: {
-    width: 46,
     borderRadius: 999,
     alignItems: 'center',
     paddingTop: 4,
     paddingBottom: 8,
-    gap: 6,
+    paddingHorizontal: 3,
+    gap: 5,
   },
   weekCellSel: { backgroundColor: WEEK_ACCENT },
   weekDisc: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#fdfdfc',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2698,18 +2782,32 @@ const styles = StyleSheet.create({
   weekNum: {
     position: 'absolute',
     fontFamily: F700,
-    fontSize: 14,
-    letterSpacing: 0.3,
+    fontSize: 13,
+    letterSpacing: 0.2,
     color: '#1f2b28',
   },
   weekNumMuted: { color: '#b9c1bd' },
   weekLabel: {
     fontFamily: F700,
-    fontSize: 9.5,
-    letterSpacing: 1.3,
+    fontSize: 9,
+    letterSpacing: 1,
     color: '#aeb5b1',
   },
   weekLabelSel: { color: '#ffffff' },
+  weekCalWrap: { position: 'relative', marginLeft: 6, paddingTop: 4 },
+  weekCalBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: 'rgba(30,42,38,1)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
 
   /* Calendar popup */
   calBackdrop: {

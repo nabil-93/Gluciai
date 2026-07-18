@@ -225,6 +225,8 @@
     "bolus": "Bolus",
     "bolusQuick": "Calcul rapide",
     "noGlucoseToday": "Aucune glycémie aujourd'hui — ajoutez votre mesure",
+    "viewingHistory": "Vous consultez le {{date}}",
+    "backToToday": "Aujourd'hui",
     "glycemia": "Glycémie",
     "noMeasure": "Aucune mesure",
     "rangeHour": "1h",

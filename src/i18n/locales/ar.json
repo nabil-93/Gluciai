@@ -225,6 +225,8 @@
     "bolus": "الجرعة",
     "bolusQuick": "حساب سريع",
     "noGlucoseToday": "لا قياس لسكر الدم اليوم — أضف قياسك",
+    "viewingHistory": "كتشوف {{date}}",
+    "backToToday": "اليوم",
     "glycemia": "سكر الدم",
     "noMeasure": "لا قياس",
     "rangeHour": "ساعة",
