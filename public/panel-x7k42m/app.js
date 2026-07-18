@@ -319,8 +319,9 @@ async function route() {
   const mUser = h.match(/^#\/user\/([\w-]+)/);
   try {
     if (mPatient) return await pagePatient(mPatient[1], mPatient[2]);
-    if (mDoctor && me.role === 'admin') return await pageDoctor(mDoctor[1]);
-    if (mUser && me.role === 'admin') return await pageUser(mUser[1]);
+    // Médecins et admins ouvrent la MÊME fiche complète que les patients.
+    if (mDoctor && me.role === 'admin') return await pagePatient(mDoctor[1]);
+    if (mUser && me.role === 'admin') return await pagePatient(mUser[1]);
     if (h.startsWith('#/users') && me.role === 'admin') return await pageUsers();
     if (h.startsWith('#/patients')) return await pagePatients();
     if (h.startsWith('#/doctors') && me.role === 'admin') return await pageDoctors();
@@ -535,9 +536,14 @@ function addUserModal(kind, doctors, onDone, forcedDoctorId) {
   });
 }
 
-/* ════════════════ PATIENT DETAIL ════════════════ */
+/* ════════════════ FICHE COMPTE (patient, médecin ou admin) ════════════════
+   Une seule fiche pour TOUS les rôles : les médecins et les admins (y compris
+   votre propre compte) montrent exactement les mêmes données que les patients
+   — rapport du jour, repas scannés, chat, appels, analyses, options… Les
+   sections abonnement/paiements/médecin référent restent réservées aux
+   patients ; la fiche d'un médecin ajoute ses codes promo et ses patients. */
 async function pagePatient(pid, initTab) {
-  const page = shell('#/patients', 'Fiche patient', '', loading);
+  let page = shell('#/patients', 'Fiche patient', '', loading);
   const [ovRes, profRes, subRes, featRes, doctors] = await Promise.all([
     db.from('patient_overview').select('*').eq('user_id', pid).maybeSingle(),
     db.from('profiles').select('*').eq('user_id', pid).maybeSingle(),
@@ -545,14 +551,29 @@ async function pagePatient(pid, initTab) {
     db.from('feature_access').select('*').eq('user_id', pid),
     me.role === 'admin' ? fetchDoctors() : Promise.resolve([]),
   ]);
-  const ov = ovRes.data, prof = profRes.data;
-  if (!ov || !prof) { page.innerHTML = `<div class="empty"><div class="e">🔍</div><div class="t">Patient introuvable</div></div>`; return; }
+  const prof = profRes.data;
+  if (!prof) { page.innerHTML = `<div class="empty"><div class="e">🔍</div><div class="t">Compte introuvable</div></div>`; return; }
+  const role = prof.role || 'patient';
+  const isPatient = role === 'patient';
+  const ov = ovRes.data ?? {}; // les médecins/admins ne sont pas dans patient_overview
+  if (!isPatient) {
+    page = shell(role === 'doctor' ? '#/doctors' : '#/users',
+      role === 'doctor' ? 'Fiche médecin' : 'Fiche administrateur',
+      'Toutes les données du compte — comme une fiche patient', loading);
+  }
   const sub = subRes.data;
   const locks = Object.fromEntries((featRes.data ?? []).map((f) => [f.feature, f.allowed]));
+  // Fiche médecin : ses codes promo et les patients qu'il suit.
+  const [docCodes, docPatients] = role === 'doctor'
+    ? await Promise.all([
+        db.from('promo_codes').select('*').eq('doctor_id', pid).order('created_at', { ascending: false }).then((r) => r.data ?? []),
+        fetchPatients().then((ps) => ps.filter((p) => p.doctor_id === pid)),
+      ])
+    : [[], []];
 
-  const [meals, glys, insus, acts, meas, payments, chats, calls, labRes] = await Promise.all([
-    db.from('meal_scans').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(60).then((r) => r.data ?? []),
-    db.from('glucose_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(80).then((r) => r.data ?? []),
+  const [mealsRes, glysRes, insus, acts, meas, payments, chats, calls, labRes] = await Promise.all([
+    db.from('meal_scans').select('*', { count: 'exact' }).eq('user_id', pid).order('created_at', { ascending: false }).limit(60).then((r) => ({ rows: r.data ?? [], count: r.count ?? (r.data ?? []).length })),
+    db.from('glucose_logs').select('*', { count: 'exact' }).eq('user_id', pid).order('created_at', { ascending: false }).limit(80).then((r) => ({ rows: r.data ?? [], count: r.count ?? (r.data ?? []).length })),
     db.from('insulin_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(80).then((r) => r.data ?? []),
     db.from('activity_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(60).then((r) => r.data ?? []),
     db.from('measure_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(60).then((r) => r.data ?? []),
@@ -561,6 +582,8 @@ async function pagePatient(pid, initTab) {
     db.from('call_logs').select('*').eq('user_id', pid).order('created_at', { ascending: false }).limit(100).then((r) => r.data ?? []),
     db.from('lab_reports').select('*', { count: 'exact' }).eq('user_id', pid).order('created_at', { ascending: false }).limit(50).then((r) => ({ rows: r.data ?? [], count: r.count ?? (r.data ?? []).length })),
   ]);
+  const meals = mealsRes.rows, mealsCount = mealsRes.count;
+  const glys = glysRes.rows, glysCount = glysRes.count;
   const labReports = labRes.rows;
   const labsCount = labRes.count;
   const aiUsage = (await db.from('ai_usage').select('kind, input_tokens, output_tokens, audio_input_tokens, audio_output_tokens, cost_usd').eq('user_id', pid)).data ?? [];
@@ -586,21 +609,23 @@ async function pagePatient(pid, initTab) {
       <div class="page-actions fade-up" style="margin-bottom:0">
         <button class="btn btn-ghost" id="backBtn">${I.back} Retour</button>
         <div class="spacer" style="flex:1"></div>
-        ${me.role === 'admin' ? `<button class="btn btn-ghost" id="pwBtn">${I.key} Mot de passe</button><button class="btn btn-danger" id="delBtn">${I.trash} Supprimer</button>` : ''}
+        ${me.role === 'admin' ? `<button class="btn btn-ghost" id="pwBtn">${I.key} Mot de passe</button>${pid !== me.id ? `<button class="btn btn-danger" id="delBtn">${I.trash} Supprimer</button>` : ''}` : ''}
       </div>
 
       <div class="card card-pad fade-up" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
         ${avatar(prof.name, prof.email, true)}
         <div style="flex:1;min-width:220px">
-          <div style="font-size:18px;font-weight:800">${esc(prof.name || 'Sans nom')}</div>
+          <div style="font-size:18px;font-weight:800">${esc((role === 'doctor' ? 'Dr. ' : '') + (prof.name || 'Sans nom'))}</div>
           <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${esc(prof.email || '')} · inscrit le ${fmtDate(prof.created_at)}</div>
           <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">
+            ${!isPatient ? (ROLE_BADGE[role] || '') : ''}
+            ${pid === me.id ? '<span class="badge green">C\'est vous</span>' : ''}
             ${prof.diabetes_type ? `<span class="badge indigo">${esc(String(prof.diabetes_type).replace('type', 'Type '))}</span>` : ''}
             ${prof.language ? `<span class="badge gray">${esc(String(prof.language).toUpperCase())}</span>` : ''}
             ${ov.doctor_name ? `<span class="badge violet">Dr. ${esc(ov.doctor_name)}</span>` : ''}
             ${prof.promo_code_used ? `<span class="badge amber">Code ${esc(prof.promo_code_used)}</span>` : ''}
             ${prof.phone ? `<span class="badge blue">📱 ${esc(prof.phone)}</span>` : '<span class="badge gray">📱 —</span>'}
-            ${subBadge(ov)}
+            ${isPatient ? subBadge(ov) : ''}
           </div>
         </div>
         ${prof.phone ? `<a class="btn btn-ghost" style="text-decoration:none" target="_blank" rel="noopener"
@@ -608,14 +633,15 @@ async function pagePatient(pid, initTab) {
       </div>
 
       <div class="stats-grid fade-up">
-        <div class="card stat-card"><div class="sc-body"><div class="l">Repas scannés</div><div class="v">${ov.meals_count ?? 0}</div></div><div class="ic tone-blue">${I.scan}</div></div>
-        <div class="card stat-card"><div class="sc-body"><div class="l">Glycémies</div><div class="v">${ov.glucose_count ?? 0}</div></div><div class="ic tone-red">${I.drop}</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Repas scannés</div><div class="v">${mealsCount}</div></div><div class="ic tone-blue">${I.scan}</div></div>
+        <div class="card stat-card"><div class="sc-body"><div class="l">Glycémies</div><div class="v">${glysCount}</div></div><div class="ic tone-red">${I.drop}</div></div>
         <div class="card stat-card"><div class="sc-body"><div class="l">Moy. 7j (mg/dL)${tir !== null ? ` · TIR ${tir}%` : ''}</div><div class="v">${avg7 ?? '—'}</div></div><div class="ic tone-green">${I.pulse}</div></div>
         <div class="card stat-card"><div class="sc-body"><div class="l">Insuline 7j (U)</div><div class="v">${Math.round(insu7 * 10) / 10}</div></div><div class="ic tone-violet">${I.syringe}</div></div>
         <div class="card stat-card"><div class="sc-body"><div class="l">Analyses labo</div><div class="v">${labsCount}</div></div><div class="ic tone-amber" style="font-size:19px">🧪</div></div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px" class="fade-up">
+        ${isPatient ? `
         <div class="card">
           <div class="card-head"><h3>💳 Abonnement</h3>${me.role === 'admin' ? `<button class="btn btn-ghost" style="height:32px;padding:0 12px;font-size:12px" id="editSub">Modifier</button>` : ''}</div>
           <div class="info-grid">
@@ -627,7 +653,7 @@ async function pagePatient(pid, initTab) {
             <div class="info-cell"><div class="k">Expire</div><div class="v">${sub?.expires_at ? `${fmtDate(sub.expires_at)}${dl !== null ? ` <span style="font-size:11px;color:${dl < 0 ? 'var(--red-text)' : dl <= 7 ? 'var(--amber-text)' : 'var(--muted-2)'}">(${dl < 0 ? 'expiré' : 'dans ' + dl + ' j'})</span>` : ''}` : '—'}</div></div>
             <div class="info-cell"><div class="k">Appels vocaux/mois</div><div class="v">${callLimit == null ? 'Illimité' : `${callLimit} min`}</div></div>
           </div>
-        </div>
+        </div>` : ''}
 
         <div class="card">
           <div class="card-head"><h3>🔐 Accès aux fonctionnalités</h3><span class="hint">${me.role === 'admin' ? 'cliquez pour bloquer/débloquer' : 'lecture seule'}</span></div>
@@ -658,7 +684,7 @@ async function pagePatient(pid, initTab) {
         </div>
       </div>
 
-      ${me.role === 'admin' ? `
+      ${me.role === 'admin' && isPatient ? `
       <div class="card fade-up">
         <div class="card-head"><h3>👨‍⚕️ Médecin référent</h3></div>
         <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -670,7 +696,7 @@ async function pagePatient(pid, initTab) {
         </div>
       </div>` : ''}
 
-      ${paymentsCard(sub, payments)}
+      ${isPatient ? paymentsCard(sub, payments) : ''}
 
       ${usageCard(aiUsage, { callMinMonth, callLimit })}
 
@@ -707,6 +733,16 @@ async function pagePatient(pid, initTab) {
         </div>
         <div id="dataPanel"></div>
       </div>
+
+      ${role === 'doctor' ? `
+      <div class="card fade-up">
+        <div class="card-head"><h3>🎟️ Codes promo</h3>${me.role === 'admin' ? `<button class="btn btn-primary" style="height:34px;font-size:12px" id="addCode">${I.plus} Générer un code</button>` : ''}</div>
+        <div id="codesBox">${promoTable(docCodes, { hideDoctor: true })}</div>
+      </div>
+      <div class="card fade-up">
+        <div class="card-head"><h3>🩺 Patients suivis</h3><span class="hint">liés par code promo ou assignés</span></div>
+        ${patientTable(docPatients, { hideDoctor: true })}
+      </div>` : ''}
 
       <div class="card fade-up">
         <div class="card-head"><h3>📋 Profil médical</h3></div>
@@ -1036,7 +1072,17 @@ async function pagePatient(pid, initTab) {
       toast('Médecin mis à jour ✓'); pagePatient(pid);
     });
     document.getElementById('pwBtn')?.addEventListener('click', () => passwordModal(pid));
-    document.getElementById('delBtn')?.addEventListener('click', () => deleteUserModal(pid, prof.name || prof.email, () => { location.hash = '#/patients'; }));
+    document.getElementById('delBtn')?.addEventListener('click', () => deleteUserModal(pid, prof.name || prof.email, () => {
+      location.hash = isPatient ? '#/patients' : role === 'doctor' ? '#/doctors' : '#/users';
+    }));
+  }
+
+  /* fiche médecin : codes promo + patients suivis */
+  if (role === 'doctor') {
+    document.getElementById('addCode')?.addEventListener('click', () =>
+      promoModal([{ user_id: pid, name: prof.name, email: prof.email }], pid, () => pagePatient(pid)));
+    bindPromoRows(page, () => pagePatient(pid));
+    bindPatientRows(page);
   }
 }
 const emptyData = (e, t) => `<div class="empty"><div class="e">${e}</div><div class="t">${t}</div></div>`;
@@ -1327,49 +1373,6 @@ async function pageUsers() {
   document.getElementById('fRole').addEventListener('change', renderList);
 }
 
-/* Fiche d'un compte admin (les patients/médecins ont leur propre fiche). */
-async function pageUser(uid) {
-  const page = shell('#/users', 'Fiche utilisateur', '', loading);
-  const [profRes, usageRows] = await Promise.all([
-    db.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
-    db.from('ai_usage').select('kind, input_tokens, output_tokens, audio_input_tokens, audio_output_tokens, cost_usd').eq('user_id', uid).then((r) => r.data ?? []),
-  ]);
-  const prof = profRes.data;
-  if (!prof) { page.innerHTML = `<div class="empty"><div class="e">🔍</div><div class="t">Utilisateur introuvable</div></div>`; return; }
-  if (prof.role === 'patient') { location.hash = `#/patient/${uid}`; return; }
-  if (prof.role === 'doctor') { location.hash = `#/doctor/${uid}`; return; }
-
-  page.innerHTML = `
-    <div style="display:grid;gap:16px">
-      <div class="page-actions fade-up" style="margin-bottom:0">
-        <button class="btn btn-ghost" id="backBtn">${I.back} Retour</button>
-        <div class="spacer" style="flex:1"></div>
-        <button class="btn btn-ghost" id="pwBtn">${I.key} Mot de passe</button>
-        ${uid !== me.id ? `<button class="btn btn-danger" id="delBtn">${I.trash} Supprimer</button>` : ''}
-      </div>
-
-      <div class="card card-pad fade-up" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-        ${avatar(prof.name, prof.email, true)}
-        <div style="flex:1;min-width:220px">
-          <div style="font-size:18px;font-weight:800">${esc(prof.name || 'Sans nom')}</div>
-          <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${esc(prof.email || '')} · compte créé le ${fmtDate(prof.created_at)}</div>
-          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">
-            ${ROLE_BADGE[prof.role] || ''}
-            ${uid === me.id ? '<span class="badge green">C\'est vous</span>' : ''}
-            ${prof.language ? `<span class="badge gray">${esc(String(prof.language).toUpperCase())}</span>` : ''}
-            ${prof.phone ? `<span class="badge blue">📱 ${esc(prof.phone)}</span>` : ''}
-          </div>
-        </div>
-        ${prof.phone ? `<a class="btn btn-ghost" style="text-decoration:none" target="_blank" rel="noopener" href="${waHref(prof.phone, prof.language, '')}">💬 WhatsApp</a>` : ''}
-      </div>
-
-      ${usageCard(usageRows)}
-    </div>`;
-  document.getElementById('backBtn').addEventListener('click', () => history.back());
-  document.getElementById('pwBtn').addEventListener('click', () => passwordModal(uid));
-  document.getElementById('delBtn')?.addEventListener('click', () => deleteUserModal(uid, prof.name || prof.email, () => { location.hash = '#/users'; }));
-}
-
 /* ════════════════ DOCTORS (admin) ════════════════ */
 async function pageDoctors() {
   const page = shell('#/doctors', 'Médecins', 'Comptes médecins et leurs patients', loading);
@@ -1398,57 +1401,7 @@ async function pageDoctors() {
     tr.addEventListener('click', () => { location.hash = `#/doctor/${tr.dataset.did}`; }));
 }
 
-async function pageDoctor(did) {
-  const page = shell('#/doctors', 'Fiche médecin', '', loading);
-  const [profRes, patientsAll, codesRes] = await Promise.all([
-    db.from('profiles').select('*').eq('user_id', did).maybeSingle(),
-    fetchPatients(),
-    db.from('promo_codes').select('*').eq('doctor_id', did).order('created_at', { ascending: false }),
-  ]);
-  const prof = profRes.data;
-  if (!prof) { page.innerHTML = `<div class="empty"><div class="e">🔍</div><div class="t">Médecin introuvable</div></div>`; return; }
-  const patients = patientsAll.filter((p) => p.doctor_id === did);
-  const codes = codesRes.data ?? [];
-
-  page.innerHTML = `
-    <div style="display:grid;gap:16px">
-      <div class="page-actions fade-up" style="margin-bottom:0">
-        <button class="btn btn-ghost" id="backBtn">${I.back} Retour</button>
-        <div class="spacer" style="flex:1"></div>
-        <button class="btn btn-ghost" id="pwBtn">${I.key} Mot de passe</button>
-        <button class="btn btn-danger" id="delBtn">${I.trash} Supprimer</button>
-      </div>
-
-      <div class="card card-pad fade-up" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-        ${avatar(prof.name, prof.email, true)}
-        <div style="flex:1;min-width:220px">
-          <div style="font-size:18px;font-weight:800">Dr. ${esc(prof.name || 'Sans nom')}</div>
-          <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${esc(prof.email || '')} · compte créé le ${fmtDate(prof.created_at)}</div>
-          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">
-            <span class="badge violet">Médecin</span>
-            <span class="badge indigo">${patients.length} patient${patients.length > 1 ? 's' : ''}</span>
-            <span class="badge amber">${codes.length} code${codes.length > 1 ? 's' : ''}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="card fade-up">
-        <div class="card-head"><h3>🎟️ Codes promo</h3><button class="btn btn-primary" style="height:34px;font-size:12px" id="addCode">${I.plus} Générer un code</button></div>
-        <div id="codesBox">${promoTable(codes, { hideDoctor: true })}</div>
-      </div>
-
-      <div class="card fade-up">
-        <div class="card-head"><h3>🩺 Patients suivis</h3><span class="hint">liés par code promo ou assignés</span></div>
-        ${patientTable(patients, { hideDoctor: true })}
-      </div>
-    </div>`;
-  document.getElementById('backBtn').addEventListener('click', () => history.back());
-  document.getElementById('pwBtn').addEventListener('click', () => passwordModal(did));
-  document.getElementById('delBtn').addEventListener('click', () => deleteUserModal(did, 'Dr. ' + (prof.name || prof.email), () => { location.hash = '#/doctors'; }));
-  document.getElementById('addCode').addEventListener('click', () => promoModal([{ user_id: did, name: prof.name, email: prof.email }], did, () => pageDoctor(did)));
-  bindPatientRows(page);
-  bindPromoRows(page, () => pageDoctor(did));
-}
+/* La fiche médecin passe désormais par la fiche compte unifiée (pagePatient). */
 
 /* ════════════════ PROMO CODES ════════════════ */
 function promoTable(codes, opts = {}) {
