@@ -1651,6 +1651,7 @@ const KIND_META = {
   voice: { label: 'Voix (secours)', icon: '🎙️' },
   bolus: { label: 'Calcul insuline', icon: '💉' },
   lab: { label: 'Analyse labo', icon: '🧪' },
+  tts: { label: 'Lecture vocale', icon: '🔊' },
 };
 
 async function pageUsage() {

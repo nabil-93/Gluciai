@@ -11,6 +11,10 @@ export const FLASH_IN_PER_M = 0.3;
 export const FLASH_AUDIO_IN_PER_M = 1.0;
 export const FLASH_OUT_PER_M = 2.5;
 
+/** gemini-2.5-flash-preview-tts: $0.50 text in, $10.00 audio out — per 1M. */
+export const TTS_IN_PER_M = 0.5;
+export const TTS_AUDIO_OUT_PER_M = 10.0;
+
 /** Resolve the calling user's id from the request JWT (null if anonymous). */
 export async function callerUserId(req: Request): Promise<string | null> {
   try {
@@ -30,7 +34,7 @@ export async function callerUserId(req: Request): Promise<string | null> {
 /** Insert one ai_usage row (service role, bypasses RLS). */
 export async function logUsage(row: {
   user_id: string;
-  kind: 'chat' | 'voice' | 'scan' | 'bolus' | 'lab';
+  kind: 'chat' | 'voice' | 'scan' | 'bolus' | 'lab' | 'tts';
   model: string;
   input_tokens: number;
   output_tokens: number;
@@ -65,6 +69,14 @@ export function flashCost(
     ((inputTokens - audioInputTokens) * FLASH_IN_PER_M +
       audioInputTokens * FLASH_AUDIO_IN_PER_M +
       outputTokens * FLASH_OUT_PER_M) /
+    1_000_000
+  );
+}
+
+/** Cost of a flash-TTS call: text prompt in, audio tokens out. */
+export function ttsCost(inputTokens: number, audioOutTokens: number): number {
+  return (
+    (inputTokens * TTS_IN_PER_M + audioOutTokens * TTS_AUDIO_OUT_PER_M) /
     1_000_000
   );
 }

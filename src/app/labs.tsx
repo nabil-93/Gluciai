@@ -26,9 +26,9 @@ import {
 } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import { confirmAsync } from '@/lib/confirm';
+import { Speaker } from '@/lib/speech';
 import { deleteLabReport, saveLabReport, updateLabReport } from '@/services/data';
 import {
-  LabSpeaker,
   explainLabValue,
   extractLabReport,
   generateLabReportText,
@@ -438,8 +438,8 @@ function LabsScreen() {
     state: VoiceState;
   }>({ id: null, state: 'idle' });
 
-  const speakerRef = useRef<LabSpeaker | null>(null);
-  if (!speakerRef.current) speakerRef.current = new LabSpeaker();
+  const speakerRef = useRef<Speaker | null>(null);
+  if (!speakerRef.current) speakerRef.current = new Speaker();
 
   const selected = reports.find((r) => r.id === selectedId) ?? reports[0] ?? null;
 
@@ -566,9 +566,12 @@ function LabsScreen() {
       return;
     }
     if (!selected) return;
+    // Unlock audio NOW, inside the tap gesture (iOS) — the natural voice
+    // arrives async, after the script generation and the TTS fetch.
+    speaker.warm();
     let script = selected.voice_script;
+    setVoice('preparing');
     if (!script) {
-      setVoice('preparing');
       try {
         script = await generateLabVoiceScript(selected, i18n.language);
         updateLabReport(selected.id, { voice_script: script });
@@ -579,8 +582,10 @@ function LabsScreen() {
       }
     }
     speaker.onEnd = () => setVoice('idle');
+    // "preparing" stays on while the natural voice is fetched; flip to
+    // "speaking" only when sound actually comes out.
+    speaker.onStart = () => setVoice('speaking');
     speaker.speak(script, i18n.language);
-    setVoice('speaking');
   };
 
   /* ── Per-value AI explanation ── */
