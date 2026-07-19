@@ -647,9 +647,13 @@ export const LIVE_LOG_TOOLS = [
           properties: {
             name: {
               type: 'STRING',
-              description: 'Short dish name, mention sides (e.g. "Tajine kefta + khobz")',
+              description:
+                'Short dish name incl. sides, WRITTEN IN THE APP LANGUAGE (dish proper names stay), e.g. German app: "Tajine Kefta + halbes Brot"',
             },
-            portion: { type: 'STRING', description: 'e.g. "1 assiette moyenne + 1/2 khobza"' },
+            portion: {
+              type: 'STRING',
+              description: 'In the app language, e.g. "1 mittlerer Teller" / "1 assiette moyenne"',
+            },
             calories: { type: 'NUMBER' },
             carbs: { type: 'NUMBER', description: 'grams of carbohydrates' },
             sugar: { type: 'NUMBER', description: 'grams of sugar' },
@@ -703,7 +707,10 @@ export const LIVE_LOG_TOOLS = [
         parameters: {
           type: 'OBJECT',
           properties: {
-            message: { type: 'STRING', description: 'Short reminder text' },
+            message: {
+              type: 'STRING',
+              description: 'Short reminder text, written in the APP language',
+            },
             due_in_minutes: {
               type: 'NUMBER',
               description: 'Minutes from now (max 10080 = 7 days)',
@@ -723,7 +730,11 @@ export const LIVE_LOG_TOOLS = [
         parameters: {
           type: 'OBJECT',
           properties: {
-            text: { type: 'STRING', description: 'Short description of what happened' },
+            text: {
+              type: 'STRING',
+              description:
+                'Short description of what happened, written in the APP language (never in the spoken dialect)',
+            },
             minutes_ago: { type: 'NUMBER' },
           },
           required: ['text'],
@@ -743,7 +754,8 @@ export const LIVE_LOG_TOOLS = [
             },
             query: {
               type: 'STRING',
-              description: 'Words identifying the entry (dish name, value, reminder text…)',
+              description:
+                'Words identifying the entry — use the words of the entry AS STORED in PATIENT DATA (stored names are in the app language), not the dialect words the patient just spoke',
             },
           },
         },
@@ -788,8 +800,10 @@ export const LIVE_LOG_TOOLS = [
   },
 ];
 
-/** Rules appended to the call's system instruction. */
-export const LIVE_LOG_INSTRUCTION = `
+/** Rules appended to the call's system instruction. `langName` is the APP
+ *  language — the language every saved value must be WRITTEN in, whatever
+ *  dialect the conversation itself is in. */
+export const liveLogInstruction = (langName: string) => `
 LOGGING — ABSOLUTE RULE: you NEVER save, change or delete ANYTHING in the
 patient's account without their EXPLICIT confirmation, entry by entry.
 Every log_*, set_reminder and delete_entry call is only a PROPOSAL: it
@@ -826,6 +840,18 @@ THE FLOW (always, no exception):
      loud and do NOT call confirm_entry or re-propose.
 NEVER say "it's added / saved / deleted" unless the function really
 answered saved:true or deleted:true. SPEAKING IS NOT SAVING.
+
+DATA LANGUAGE (critical): this patient's app runs in ${langName}. EVERY
+value you WRITE into a tool call — meal "name" and "portion", note
+"text", reminder "message" — MUST be written in ${langName}, no matter
+what language or dialect you are SPEAKING with the patient. You talk
+Darija, you write ${langName}: patient says "chrebt kass dial lma" →
+log_note text (if the app is German) "Ein Glas Wasser getrunken", (if
+French) "A bu un verre d'eau". Keep proper dish names as names (tajine,
+harira, couscous stay tajine, harira, couscous) and translate the rest
+("… m3a ness khobza" → "… mit einem halben Brot"). For delete_entry,
+"query" must use the words of the entry AS STORED in PATIENT DATA (they
+are in ${langName}), not the dialect words the patient just used.
 
 MEAL DETAILS — before proposing a meal, make sure you know ALL of this
 (ask naturally, 1-2 short questions at a time; skip what they already

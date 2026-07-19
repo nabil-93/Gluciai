@@ -20,13 +20,13 @@ import { nowMs } from '@/lib/clock';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { buildHealthContext, sendChatMessage } from '@/services/ai';
 import {
-  LIVE_LOG_INSTRUCTION,
   LIVE_LOG_TOOLS,
   actionFromFunctionCall,
   actionSummary,
   applyDeleteTarget,
   applyLoggerAction,
   findDeleteTargets,
+  liveLogInstruction,
   type DeletableKind,
   type DeleteTarget,
   type LoggerAction,
@@ -657,7 +657,7 @@ it naturally, not every single turn — only when you actually advised something
 PATIENT DATA (live from the app — use it to answer questions about meals,
 glucose, insulin, parameters):
 ${buildHealthContext()}
-${LIVE_LOG_INSTRUCTION}`;
+${liveLogInstruction(langName)}`;
   };
 
   /* ────────────── LIVE ENGINE (Gemini Live API) ────────────── */

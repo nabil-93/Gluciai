@@ -531,7 +531,8 @@ export class PcmPlayer {
     src.connect(this.gain);
     // ADAPTIVE jitter buffer, sized for where the call actually breaks:
     //  - very first turn of the call (connection still cold — TCP/TLS
-    //    warm-up makes the first chunks the most jittery): ~450 ms;
+    //    warm-up + the audio route switching when the mic opens make the
+    //    first chunks by far the most jittery): ~600 ms;
     //  - normal start of a turn: ~150 ms, plus whatever bumpLead the
     //    call's under-runs have taught us this network needs;
     //  - resuming after a mid-sentence under-run: at least ~350 ms so it
@@ -542,7 +543,7 @@ export class PcmPlayer {
     const lead =
       this.live.size === 0
         ? Math.max(
-            this.firstTurnDone ? 0.15 : 0.45,
+            this.firstTurnDone ? 0.15 : 0.6,
             this.bumpLead,
             resumingAfterUnderrun ? 0.35 : 0
           )

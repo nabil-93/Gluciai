@@ -196,7 +196,7 @@ Latin script as spoken). Empty string for text messages.
 ACTION is exactly one of:
 {"type":"insulin","dose":N,"insulin_type":"rapid"|"long"|"mixed","minutes_ago":N?}
 {"type":"glucose","value":N,"minutes_ago":N?}
-{"type":"meal","name":"short dish name","portion":"e.g. 1 assiette","calories":N,"carbs":N,"sugar":N,"protein":N,"fat":N,"fiber":N,"glycemic_index":N,"meal_type":"breakfast"|"lunch"|"dinner"|"snack","minutes_ago":N?}
+{"type":"meal","name":"short dish name incl. sides, in ${langName}","portion":"portion in ${langName}, e.g. 1 assiette / 1 Teller","calories":N,"carbs":N,"sugar":N,"protein":N,"fat":N,"fiber":N,"glycemic_index":N,"meal_type":"breakfast"|"lunch"|"dinner"|"snack","minutes_ago":N?}
 {"type":"activity","kind":"walk"|"run"|"bike"|"gym"|"other","duration_min":N,"intensity":"low"|"medium"|"high","minutes_ago":N?}
 {"type":"measure","kind":"weight"|"hba1c","value":N,"unit":"kg"|"%","minutes_ago":N?}
 {"type":"reminder","message":"short text of what to do, in ${langName}","due_in_minutes":N,"follow_kind":"insulin"|"glucose"|"meal"|"activity"|"measure"|"other"}
@@ -204,6 +204,15 @@ ACTION is exactly one of:
 {"type":"delete","kind":"insulin"|"glucose"|"meal"|"activity"|"measure"|"note"|"reminder","query":"words identifying the entry to remove"}
 
 Rules:
+- DATA LANGUAGE (critical): every value INSIDE the action — meal "name"
+  and "portion", note "text", reminder "message", delete "query" — must
+  be WRITTEN in ${langName} (the language of the patient's app),
+  whatever language or dialect the patient speaks. Proper dish names
+  stay themselves (tajine, harira, couscous…), the rest is translated:
+  patient says "chrebt kass dial lma" and the app is German → note text
+  "Ein Glas Wasser getrunken". Only the "reply" mirrors the patient's
+  own language. For delete, "query" should use the stored entry's words
+  from PATIENT CONTEXT (they are in ${langName}).
 - Produce an action for something the patient explicitly did, measured
   or wants remembered. If it fits a structured type (insulin/glucose/
   meal/activity/measure/reminder), use it. Otherwise, if it's still
