@@ -65,6 +65,17 @@ const CONTENT_SECTIONS = [
   { key: 'world_recipes', label: 'Plats du monde', desc: 'Recettes du monde générées par IA', icon: '🍽️', bg: '#fef3e8' },
 ];
 
+/* Usage limits (quotas) — the four AI features that carry a day/week/month
+ * budget (usage_limits / usage_default_limits, migration 0020). For ai_call
+ * the unit is minutes; the others are counts. */
+const USAGE_LIMIT_FEATURES = [
+  { key: 'scanner', label: 'Scanner de repas', icon: '📷', bg: '#e8f1fe', unit: 'scans' },
+  { key: 'ai_chat', label: "Chat avec l'IA", icon: '💬', bg: '#f3f0ff', unit: 'messages' },
+  { key: 'ai_call', label: 'Appel vocal IA', icon: '📞', bg: '#e9fbf2', unit: 'min' },
+  { key: 'labs', label: 'Analyse de rapport', icon: '🧪', bg: '#fdf2ff', unit: 'analyses' },
+];
+const PERIOD_LABEL = { day: 'Jour', week: 'Semaine', month: 'Mois' };
+
 const PLAN_LABEL = { free: 'Gratuit', monthly: 'Mensuel', yearly: 'Annuel' };
 const AVATAR_COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
@@ -596,6 +607,10 @@ async function pagePatient(pid, initTab) {
   const labReports = labRes.rows;
   const labsCount = labRes.count;
   const aiUsage = (await db.from('ai_usage').select('kind, input_tokens, output_tokens, audio_input_tokens, audio_output_tokens, cost_usd').eq('user_id', pid)).data ?? [];
+  // Live usage-limit status (override→default resolved, with used/remaining)
+  // + the per-user override rows, so the card can flag custom vs default.
+  const usageStatus = (await db.rpc('usage_status', { p_user: pid })).data ?? [];
+  const usageOverrides = (await db.from('usage_limits').select('*').eq('user_id', pid)).data ?? [];
   // Voice-call minutes consumed this calendar month (quota tracking).
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
   const callSecMonth = calls
@@ -660,7 +675,6 @@ async function pagePatient(pid, initTab) {
             <div class="info-cell"><div class="k">Payé</div><div class="v">${sub ? (sub.paid ? '<span class="badge green">Payé ✓</span>' : '<span class="badge red">Non payé</span>') : '—'}</div></div>
             <div class="info-cell"><div class="k">Montant payé</div><div class="v">${sub?.paid_amount ? Number(sub.paid_amount).toFixed(2) + ' €' : '—'}</div></div>
             <div class="info-cell"><div class="k">Expire</div><div class="v">${sub?.expires_at ? `${fmtDate(sub.expires_at)}${dl !== null ? ` <span style="font-size:11px;color:${dl < 0 ? 'var(--red-text)' : dl <= 7 ? 'var(--amber-text)' : 'var(--muted-2)'}">(${dl < 0 ? 'expiré' : 'dans ' + dl + ' j'})</span>` : ''}` : '—'}</div></div>
-            <div class="info-cell"><div class="k">Appels vocaux/mois</div><div class="v">${callLimit == null ? 'Illimité' : `${callLimit} min`}</div></div>
           </div>
         </div>` : ''}
 
@@ -719,7 +733,9 @@ async function pagePatient(pid, initTab) {
 
       ${isPatient ? paymentsCard(sub, payments) : ''}
 
-      ${usageCard(aiUsage, { callMinMonth, callLimit })}
+      ${usageLimitsCard(usageStatus, usageOverrides, me.role === 'admin')}
+
+      ${usageCard(aiUsage)}
 
       <div class="card fade-up">
         <div class="card-head">
@@ -1089,6 +1105,32 @@ async function pagePatient(pid, initTab) {
         else if (!nowOn) sw.insertAdjacentHTML('beforebegin', '<span class="badge red">🔒 Bloqué</span>');
       }));
 
+    /* usage-limit overrides (per feature): save = upsert, reset = drop override */
+    document.querySelectorAll('#ulimitList .ul-save').forEach((btn) =>
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('.ulimit-row');
+        const feature = row.dataset.feat;
+        const raw = row.querySelector('.ul-val').value;
+        const payload = {
+          user_id: pid,
+          feature,
+          limit_value: raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0),
+          period: row.querySelector('.ul-per').value,
+          updated_at: new Date().toISOString(),
+        };
+        btn.disabled = true;
+        const { error } = await db.from('usage_limits').upsert(payload);
+        if (error) { btn.disabled = false; return toast('Erreur: ' + error.message, true); }
+        toast('Limite enregistrée ✓'); pagePatient(pid);
+      }));
+    document.querySelectorAll('#ulimitList .ul-reset').forEach((btn) =>
+      btn.addEventListener('click', async () => {
+        const feature = btn.closest('.ulimit-row').dataset.feat;
+        const { error } = await db.from('usage_limits').delete().eq('user_id', pid).eq('feature', feature);
+        if (error) return toast('Erreur: ' + error.message, true);
+        toast('Revenu au défaut ✓'); pagePatient(pid);
+      }));
+
     document.getElementById('editSub')?.addEventListener('click', () => subModal(pid, sub, () => pagePatient(pid)));
     document.getElementById('docSave')?.addEventListener('click', async () => {
       const v = document.getElementById('docSel').value || null;
@@ -1111,6 +1153,97 @@ async function pagePatient(pid, initTab) {
   }
 }
 const emptyData = (e, t) => `<div class="empty"><div class="e">${e}</div><div class="t">${t}</div></div>`;
+
+/* ── Usage limits card (patient detail): per-feature quota + live bar ── */
+function limitBar(used, limit, unlimited) {
+  const pct = unlimited ? 100 : limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const color = unlimited ? '#10b98188' : pct >= 90 ? '#ef4444' : pct >= 75 ? '#f59e0b' : '#10b981';
+  return `<div style="height:8px;background:#eef1f5;border-radius:5px;overflow:hidden">
+    <div style="height:100%;width:${pct}%;background:${color};border-radius:5px;transition:width .4s"></div></div>`;
+}
+
+function usageLimitsCard(status, overrides, isAdmin) {
+  const byFeat = Object.fromEntries((status ?? []).map((s) => [s.feature, s]));
+  const ov = Object.fromEntries((overrides ?? []).map((o) => [o.feature, o]));
+  const PERIODS = [['day', 'Jour'], ['week', 'Semaine'], ['month', 'Mois']];
+  return `
+    <div class="card fade-up">
+      <div class="card-head"><h3>🎚️ Limites d'utilisation</h3><span class="hint">${isAdmin ? 'quota jour / semaine / mois — vide = illimité' : 'lecture seule'}</span></div>
+      <div id="ulimitList" style="display:grid;gap:14px;padding:6px 2px 2px">
+        ${USAGE_LIMIT_FEATURES.map((f) => {
+          const s = byFeat[f.key] ?? {};
+          const isCustom = !!ov[f.key];
+          const limit = s.limit ?? null;
+          const period = s.period ?? 'day';
+          const used = s.used ?? 0;
+          const unlimited = limit == null;
+          return `<div class="ulimit-row" data-feat="${f.key}">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div class="fic" style="background:${f.bg};width:34px;height:34px">${f.icon}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:13px">${f.label}
+                  <span style="font-size:10.5px;color:var(--muted-2);font-weight:600">· ${isCustom ? 'personnalisé' : 'défaut'}</span></div>
+                <div style="font-size:11.5px;color:var(--muted)">${unlimited ? 'Illimité' : `${used} / ${limit} ${f.unit}`} · ${PERIOD_LABEL[period]}</div>
+              </div>
+            </div>
+            ${limitBar(used, limit ?? 0, unlimited)}
+            ${isAdmin ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px">
+              <input class="ul-val" type="number" min="0" step="1" placeholder="∞ illimité" value="${limit ?? ''}"
+                style="width:120px;height:34px;border:1.5px solid var(--border);border-radius:9px;padding:0 10px;font-size:13px" />
+              <select class="ul-per" style="height:34px;border:1.5px solid var(--border);border-radius:9px;padding:0 8px;font-size:13px;background:#fbfcfe">
+                ${PERIODS.map(([k, v]) => `<option value="${k}" ${period === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+              <button class="btn btn-primary ul-save" style="height:34px;padding:0 14px;font-size:12px">Enregistrer</button>
+              ${isCustom ? `<button class="btn btn-ghost ul-reset" style="height:34px;padding:0 10px;font-size:12px">↺ défaut</button>` : ''}
+            </div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+/* ── Global default limits editor (Conso IA page, admin only) ── */
+async function defaultLimitsCardHTML() {
+  const { data } = await db.from('usage_default_limits').select('*');
+  const by = Object.fromEntries((data ?? []).map((d) => [d.feature, d]));
+  const PERIODS = [['day', 'Jour'], ['week', 'Semaine'], ['month', 'Mois']];
+  return `<div class="card fade-up" style="margin-bottom:16px">
+    <div class="card-head"><h3>🎚️ Limites par défaut</h3><span class="hint">appliquées à tous — sauf override par utilisateur</span></div>
+    <div id="defLimitList" style="display:grid;gap:10px;padding:8px 2px 2px">
+      ${USAGE_LIMIT_FEATURES.map((f) => {
+        const d = by[f.key] ?? {};
+        return `<div class="def-row" data-feat="${f.key}" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="fic" style="background:${f.bg};width:30px;height:30px">${f.icon}</div>
+          <div style="flex:1;min-width:120px;font-weight:600;font-size:12.5px">${f.label}
+            <span style="color:var(--muted-2);font-weight:500">(${f.unit})</span></div>
+          <input class="def-val" type="number" min="0" step="1" placeholder="∞ illimité" value="${d.limit_value ?? ''}"
+            style="width:110px;height:32px;border:1.5px solid var(--border);border-radius:8px;padding:0 8px;font-size:12.5px" />
+          <select class="def-per" style="height:32px;border:1.5px solid var(--border);border-radius:8px;padding:0 6px;font-size:12.5px;background:#fbfcfe">
+            ${PERIODS.map(([k, v]) => `<option value="${k}" ${(d.period ?? 'day') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="padding:12px 2px 2px"><button class="btn btn-primary" id="defSave">Enregistrer les défauts</button></div>
+  </div>`;
+}
+
+function bindDefaultLimits() {
+  document.getElementById('defSave')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget; btn.disabled = true;
+    const rows = [...document.querySelectorAll('#defLimitList .def-row')].map((r) => {
+      const v = r.querySelector('.def-val').value;
+      return {
+        feature: r.dataset.feat,
+        limit_value: v === '' ? null : Math.max(0, parseInt(v, 10) || 0),
+        period: r.querySelector('.def-per').value,
+        updated_at: new Date().toISOString(),
+      };
+    });
+    const { error } = await db.from('usage_default_limits').upsert(rows);
+    btn.disabled = false;
+    if (error) return toast('Erreur: ' + error.message, true);
+    toast('Limites par défaut enregistrées ✓');
+  });
+}
 
 /* ── AI consumption card (patient detail) ── */
 function usageCard(rows, callInfo) {
@@ -1257,8 +1390,7 @@ function subModal(pid, sub, onDone) {
         <div><label>Début</label><input id="sStart" type="date" value="${sub?.starts_at ? sub.starts_at.slice(0, 10) : ''}" /></div>
         <div><label>Expire le</label><input id="sEnd" type="date" value="${sub?.expires_at ? sub.expires_at.slice(0, 10) : ''}" /></div>
       </div></div>
-      <div class="field"><label>📞 Minutes d'appel vocal / mois <span style="font-weight:600;color:var(--muted-2)">(vide = illimité)</span></label>
-        <input id="sCallMin" type="number" min="0" step="1" placeholder="∞ illimité" value="${sub?.call_minutes_limit ?? ''}" /></div>
+      <div class="field"><div style="font-size:11.5px;color:var(--muted-2);background:#f6f8fc;border:1px dashed var(--border);border-radius:9px;padding:9px 11px">📞 Les minutes d'appel (et les autres quotas) se gèrent dans la carte <b>« Limites d'utilisation »</b> ci-dessous.</div></div>
       <div class="field"><label>Notes</label><textarea id="sNotes" rows="2">${esc(sub?.notes || '')}</textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" data-close>Annuler</button><button class="btn btn-primary" id="sGo">Enregistrer</button></div>`);
@@ -1274,7 +1406,6 @@ function subModal(pid, sub, onDone) {
       paid_amount: Number(ov.querySelector('#sPaidAmt').value || 0),
       starts_at: ov.querySelector('#sStart').value ? new Date(ov.querySelector('#sStart').value).toISOString() : null,
       expires_at: ov.querySelector('#sEnd').value ? new Date(ov.querySelector('#sEnd').value + 'T23:59:59').toISOString() : null,
-      call_minutes_limit: ov.querySelector('#sCallMin').value === '' ? null : Number(ov.querySelector('#sCallMin').value),
       notes: ov.querySelector('#sNotes').value || null,
       updated_at: new Date().toISOString(),
     };
@@ -1745,7 +1876,9 @@ async function pageUsage() {
       </p>`;
   };
 
+  const defCard = me.role === 'admin' ? await defaultLimitsCardHTML() : '';
   page.innerHTML = `
+    ${defCard}
     <div class="page-actions fade-up">
       <select class="sel" id="uPeriod">
         <option value="month">📅 Ce mois-ci</option>
@@ -1756,6 +1889,7 @@ async function pageUsage() {
     </div>
     <div id="usageBody">${loading}</div>`;
   document.getElementById('uPeriod').addEventListener('change', render);
+  if (me.role === 'admin') bindDefaultLimits();
   await render();
 }
 

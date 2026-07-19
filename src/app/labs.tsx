@@ -23,10 +23,13 @@ import {
   AnimatedRobot,
   ChevronLeft,
   FadeInView,
+  LockedScreen,
 } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import { confirmAsync } from '@/lib/confirm';
+import { isDemoMode, supabase } from '@/lib/supabase';
 import { Speaker } from '@/lib/speech';
+import { isFeatureExhausted, QuotaError } from '@/services/usage';
 import { deleteLabReport, saveLabReport, updateLabReport } from '@/services/data';
 import {
   explainLabValue,
@@ -428,6 +431,8 @@ function LabsScreen() {
   >(null);
   const [wantGraphs, setWantGraphs] = useState(true);
   const [wantReport, setWantReport] = useState(true);
+  /** Set when the report-analysis quota is spent → show the quota lock. */
+  const [quotaBlocked, setQuotaBlocked] = useState(false);
   const [valueModal, setValueModal] = useState<LabValue | null>(null);
   const [valueText, setValueText] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState(false);
@@ -499,6 +504,17 @@ function LabsScreen() {
 
   const analyzeUri = async (uri: string) => {
     setError(null);
+    // Daily/weekly/monthly report-analysis quota (also enforced server-side).
+    if (!isDemoMode && supabase) {
+      try {
+        if (await isFeatureExhausted('labs')) {
+          setQuotaBlocked(true);
+          return;
+        }
+      } catch {
+        // never block on a transient error
+      }
+    }
     setPhase('extracting');
     try {
       const img = await prepare(uri);
@@ -511,8 +527,9 @@ function LabsScreen() {
       setWantGraphs(true);
       setWantReport(true);
       setPending({ ...extraction, thumb: img.thumb });
-    } catch {
-      setError(t('labs.extractError'));
+    } catch (e) {
+      if (e instanceof QuotaError) setQuotaBlocked(true);
+      else setError(t('labs.extractError'));
     } finally {
       setPhase('idle');
     }
@@ -661,6 +678,11 @@ function LabsScreen() {
   );
 
   const busy = phase !== 'idle';
+
+  if (quotaBlocked)
+    return (
+      <LockedScreen featureLabel={t('locked.featLabs')} variant="quota" quotaFeature="labs" />
+    );
 
   return (
     <View style={styles.root}>

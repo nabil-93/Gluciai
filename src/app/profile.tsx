@@ -167,6 +167,12 @@ function RowIcon({ name, color }: { name: string; color: string }) {
         <Path d="M12 9v4M12 17h.01" stroke={color} strokeWidth={2} strokeLinecap="round" />
       </>
     ),
+    gauge: (
+      <>
+        <Path d="M12 14l3.5-3.5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M3.5 18.5a10 10 0 1 1 17 0" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    ),
   };
   return (
     <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
@@ -507,6 +513,15 @@ export default function ProfileScreen() {
             title={t('profile.planRowTitle')}
             sub={t('profile.subPlan')}
             onPress={() => router.push('/subscription' as any)}
+          />
+          <Divider />
+          <Row
+            icon="gauge"
+            tint="#EAF2FC"
+            color="#3B82C4"
+            title={t('profile.sectionUsage')}
+            sub={t('profile.subUsage')}
+            onPress={() => router.push('/usage-limits' as any)}
           />
           <Divider />
           <Row

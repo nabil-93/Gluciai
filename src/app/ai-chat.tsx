@@ -40,6 +40,8 @@ import {
   type DeleteTarget,
   type LoggerAction,
 } from '@/services/aiLogger';
+import { bumpUsage, isFeatureExhausted, QuotaError, usageFor } from '@/services/usage';
+import { isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import type { ChatMessage } from '@/types';
 
@@ -272,11 +274,38 @@ function AiMessageBody({
   );
 }
 
-/* Blocked from the admin dashboard? Show the lock instead of the chat. */
+/* Blocked from the admin dashboard, or the message quota already spent?
+ * Show the lock instead of the chat. */
 export default function AiChatScreenGate() {
   const locked = useAppStore((s) => s.lockedFeatures.includes('ai_chat'));
   const { t } = useTranslation();
+  const [quota, setQuota] = useState<'checking' | 'ok' | 'exceeded'>('checking');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (isDemoMode || !supabase) {
+        if (alive) setQuota('ok');
+        return;
+      }
+      try {
+        const exhausted = await isFeatureExhausted('ai_chat');
+        if (alive) setQuota(exhausted ? 'exceeded' : 'ok');
+      } catch {
+        if (alive) setQuota('ok');
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   if (locked) return <LockedScreen featureLabel={t('locked.featChat')} />;
+  if (quota === 'exceeded')
+    return (
+      <LockedScreen featureLabel={t('locked.featChat')} variant="quota" quotaFeature="ai_chat" />
+    );
+  if (quota === 'checking') return <View style={{ flex: 1, backgroundColor: '#f9fafe' }} />;
   return <AiChatScreen />;
 }
 
@@ -303,6 +332,8 @@ function AiChatScreen() {
   /** Entry the patient asked to DELETE — behind its own red confirm card. */
   const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** Set when the daily/weekly/monthly message quota is spent. */
+  const [quotaHit, setQuotaHit] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   /* ── "Listen" (read the answer out loud) ──
@@ -454,6 +485,14 @@ function AiChatScreen() {
   const send = async (text: string) => {
     const content = text.trim();
     if (!content || thinking) return;
+    // Message quota spent? Show the lock instead of sending (server enforces too).
+    if (!isDemoMode && supabase) {
+      const stat = usageFor(useAppStore.getState().usage, 'ai_chat');
+      if (stat?.exceeded) {
+        setQuotaHit(true);
+        return;
+      }
+    }
     setInput('');
     setPendingAction(null);
     setPendingDelete(null);
@@ -483,6 +522,7 @@ function AiChatScreen() {
       }));
       const reply = await sendChatMessage(history, i18n.language, profile);
       addChatMessage(chatMsg('a', 'assistant', reply));
+      bumpUsage('ai_chat'); // reflect the message just spent
       const extracted = await extraction;
       if (extracted?.remove) {
         loggerPendingRef.current = false;
@@ -499,8 +539,9 @@ function AiChatScreen() {
       } else {
         loggerPendingRef.current = false;
       }
-    } catch {
-      addChatMessage(chatMsg('e', 'assistant', t('common.error')));
+    } catch (e) {
+      if (e instanceof QuotaError) setQuotaHit(true);
+      else addChatMessage(chatMsg('e', 'assistant', t('common.error')));
     } finally {
       setThinking(false);
     }
@@ -540,6 +581,13 @@ function AiChatScreen() {
   // it when the patient described something loggable.
   const sendVoice = async (audio: { mimeType: string; data: string }) => {
     if (thinking) return;
+    if (!isDemoMode && supabase) {
+      const stat = usageFor(useAppStore.getState().usage, 'ai_chat');
+      if (stat?.exceeded) {
+        setQuotaHit(true);
+        return;
+      }
+    }
     setPendingAction(null);
     setPendingDelete(null);
     setThinking(true);
@@ -556,6 +604,7 @@ function AiChatScreen() {
         chatMsg('uv', 'user', heard ? `🎙️ ${heard}` : `🎙️ ${t('logger.voiceNote')}`)
       );
       addChatMessage(chatMsg('a', 'assistant', reply));
+      bumpUsage('ai_chat'); // a voice message counts as one chat message
       // If the spoken message was loggable (or the logger is waiting on a
       // missing detail), extract + offer the confirm card.
       if (heard && (looksLoggable(heard) || loggerPendingRef.current)) {
@@ -579,8 +628,9 @@ function AiChatScreen() {
           })
           .catch(() => {});
       }
-    } catch {
-      addChatMessage(chatMsg('e', 'assistant', t('common.error')));
+    } catch (e) {
+      if (e instanceof QuotaError) setQuotaHit(true);
+      else addChatMessage(chatMsg('e', 'assistant', t('common.error')));
     } finally {
       setThinking(false);
     }
@@ -591,6 +641,11 @@ function AiChatScreen() {
       hour: '2-digit',
       minute: '2-digit',
     });
+
+  if (quotaHit)
+    return (
+      <LockedScreen featureLabel={t('locked.featChat')} variant="quota" quotaFeature="ai_chat" />
+    );
 
   return (
     <KeyboardAvoidingView

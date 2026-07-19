@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import type { FoodItemResult, NutritionResult, Profile } from '@/types';
 
 import { buildAIDayJournal } from './dayLog';
+import { asQuotaError } from './usage';
 import { analyzePlate, resolveFood } from './nutrition/engine';
 import { applyPortionLearning } from './nutrition/learning';
 import type { DetectedFood, Per100g } from './nutrition/types';
@@ -134,8 +135,10 @@ async function detectFoods(
   const { data, error } = await supabase.functions.invoke('analyze-meal', {
     body: { image_base64: imageBase64, language, mode: 'detect' },
   });
+  const quota = await asQuotaError(error, data);
+  if (quota) throw quota;
   if (error) throw error;
-  if (data.error) throw new Error(data.error);
+  if (data?.error) throw new Error(data.error);
 
   // New contract: { detections: [{ name, portion_grams, confidence, ... }] }
   if (Array.isArray(data.detections)) {
@@ -277,8 +280,10 @@ export async function analyzeMenu(
     const { data, error } = await supabase.functions.invoke('analyze-meal', {
       body: { image_base64: imageBase64, language, mode: 'menu' },
     });
+    const quota = await asQuotaError(error, data);
+    if (quota) throw quota;
     if (error) throw error;
-    if (data.error) throw new Error(data.error);
+    if (data?.error) throw new Error(data.error);
     dishNames = Array.isArray(data.dishes) ? (data.dishes as string[]) : [];
   }
 
@@ -570,8 +575,10 @@ export async function sendChatMessage(
   const { data, error } = await supabase.functions.invoke('ai-chat', {
     body: { messages, language, profile, mode, healthData: chatHealthData() },
   });
+  const quota = await asQuotaError(error, data);
+  if (quota) throw quota;
   if (error) throw error;
-  if (data.error) throw new Error(data.error);
+  if (data?.error) throw new Error(data.error);
   const reply = data.reply as string;
 
   // Mirror the chat exchange server-side so the doctor/admin dashboard can
@@ -619,8 +626,10 @@ export async function sendChatVoice(
       audio,
     },
   });
+  const quota = await asQuotaError(error, data);
+  if (quota) throw quota;
   if (error) throw error;
-  if (data.error) throw new Error(data.error);
+  if (data?.error) throw new Error(data.error);
   const reply = data.reply as string;
   const transcript = (data.transcript as string) ?? '';
 

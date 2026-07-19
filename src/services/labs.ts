@@ -1,6 +1,7 @@
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import type { LabReport, LabValue } from '@/types';
+import { asQuotaError } from './usage';
 
 /* ────────────────────────────────────────────────────────────
  * LAB ANALYSES ("ta7alil")
@@ -33,6 +34,8 @@ async function invokeLab<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('lab-analyze', {
     body: { ...body, patientContext: labPatientContext() },
   });
+  const quota = await asQuotaError(error, data);
+  if (quota) throw quota;
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
   return data.result as T;

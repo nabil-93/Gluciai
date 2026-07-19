@@ -6,6 +6,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
 import { featureLocked } from '../_shared/featureGuard.ts';
+import { quotaState } from '../_shared/quota.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_CHAT_MODEL') ?? 'gemini-2.5-flash';
@@ -52,6 +53,18 @@ Deno.serve(async (req) => {
       mode === 'voice' ? 'ai_call' : mode === 'chat' || mode === 'logger' ? 'ai_chat' : null;
     if (lockKey && (await featureLocked(uid, lockKey))) {
       return json({ error: 'feature locked' }, 403);
+    }
+    // Chat message quota (usage_limits). Only real chat messages count — they
+    // are the ones mirrored to chat_history(role='user'). Bolus/logger/voice
+    // are other features and pass through. Fail-open on lookup error.
+    if (mode === 'chat') {
+      const chatQuota = await quotaState(uid, 'ai_chat');
+      if (chatQuota?.exceeded) {
+        return json(
+          { error: 'quota_exceeded', feature: 'ai_chat', period: chatQuota.period, limit: chatQuota.limit, used: chatQuota.used },
+          429
+        );
+      }
     }
 
     const langName = LANGUAGE_NAMES[language] ?? 'English';

@@ -24,6 +24,7 @@ export { BoundingBoxOverlay } from './BoundingBoxOverlay';
 export { DidYouMeanSheet } from './DidYouMeanSheet';
 export { SneakerIcon } from './SneakerIcon';
 export { GlycemicBar, glycemicTone } from './GlycemicBar';
+export { UsageBar, usageColor } from './UsageBar';
 export { LockedScreen, LockChip } from './LockedFeature';
 export {
   FadeInView,

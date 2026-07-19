@@ -14,6 +14,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
 import { featureGranted } from '../_shared/featureGuard.ts';
+import { quotaState } from '../_shared/quota.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_CHAT_MODEL') ?? 'gemini-2.5-flash';
@@ -107,6 +108,15 @@ Deno.serve(async (req) => {
     /* ─────────────────────────── EXTRACT ─────────────────────────── */
     if (task === 'extract') {
       if (!image_base64) return json({ error: 'image_base64 required' }, 400);
+      // A new report analysis counts against the labs quota (usage_limits).
+      // Follow-up tasks (report/script/explain) on an existing report don't.
+      const labQuota = await quotaState(uid, 'labs');
+      if (labQuota?.exceeded) {
+        return json(
+          { error: 'quota_exceeded', feature: 'labs', period: labQuota.period, limit: labQuota.limit, used: labQuota.used },
+          429
+        );
+      }
 
       const prompt = `You are a medical-biology expert assistant.
 Analyze this photo of a laboratory (blood test) report and extract EVERY

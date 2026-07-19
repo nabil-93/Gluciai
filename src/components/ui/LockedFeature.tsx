@@ -8,7 +8,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { ChevronLeft } from '@/components/ui';
 import { isRTL } from '@/i18n';
+import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
+import type { UsageFeature } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F700 = 'PlusJakartaSans_700Bold';
@@ -58,9 +60,13 @@ function BigLock({ size = 34, color = '#b45309' }: { size?: number; color?: stri
 export function LockedScreen({
   featureLabel,
   variant = 'locked',
+  quotaFeature,
 }: {
   featureLabel: string;
   variant?: 'locked' | 'quota' | 'plan';
+  /** For variant="quota": which feature, so the message names the right
+   *  period (today / this week / this month) from the cached usage status. */
+  quotaFeature?: UsageFeature;
 }) {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -68,6 +74,11 @@ export function LockedScreen({
   const rtl = isRTL(i18n.language);
   const isQuota = variant === 'quota';
   const isPlan = variant === 'plan';
+  const period = useAppStore((s) =>
+    quotaFeature
+      ? s.usage.find((u) => u.feature === quotaFeature)?.period ?? 'day'
+      : 'day'
+  );
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -80,7 +91,7 @@ export function LockedScreen({
       ? t('locked.planTitle')
       : t('locked.title');
   const message = isQuota
-    ? t('locked.quotaMessage')
+    ? t('locked.quotaMessage', { period: t(`locked.period_${period}`) })
     : isPlan
       ? t('locked.planMessage')
       : t('locked.message');
@@ -109,36 +120,39 @@ export function LockedScreen({
           <Text style={{ fontSize: 16 }}>{isQuota ? '⏳' : isPlan ? '✨' : '💳'}</Text>
           <Text style={styles.noteText}>
             {isQuota
-              ? t('locked.quotaNote')
+              ? t('locked.quotaNote', { reset: t(`locked.reset_${period}`) })
               : isPlan
                 ? t('locked.planNote')
                 : t('locked.subscribeNote')}
           </Text>
         </View>
 
-        {/* Contact support on WhatsApp to unlock (not shown for quota). */}
-        {!isQuota ? (
-          <Pressable
-            onPress={() =>
-              openSupportWhatsApp(t('locked.waMessage', { feature: featureLabel }))
-            }
-            style={{ alignSelf: 'stretch', marginTop: 22 }}
+        {/* Contact support on WhatsApp — to unlock a feature, or (quota) to ask
+            for a higher limit instead of waiting for the period to reset. */}
+        <Pressable
+          onPress={() =>
+            openSupportWhatsApp(
+              t(isQuota ? 'locked.waQuotaMessage' : 'locked.waMessage', {
+                feature: featureLabel,
+              })
+            )
+          }
+          style={{ alignSelf: 'stretch', marginTop: 22 }}
+        >
+          <LinearGradient
+            colors={['#25D366', '#1ebe5d']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.cta}
           >
-            <LinearGradient
-              colors={['#25D366', '#1ebe5d']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={styles.cta}
-            >
-              <WhatsAppIcon />
-              <Text style={styles.ctaText}>{t('locked.contactWa')}</Text>
-            </LinearGradient>
-          </Pressable>
-        ) : null}
+            <WhatsAppIcon />
+            <Text style={styles.ctaText}>
+              {t(isQuota ? 'locked.contactWaQuota' : 'locked.contactWa')}
+            </Text>
+          </LinearGradient>
+        </Pressable>
 
-        {!isQuota ? (
-          <Text style={styles.waNumber}>{SUPPORT_WA_DISPLAY}</Text>
-        ) : null}
+        <Text style={styles.waNumber}>{SUPPORT_WA_DISPLAY}</Text>
 
         <Pressable onPress={close} style={{ marginTop: isQuota ? 22 : 14 }}>
           <Text style={styles.secondaryText}>{t('locked.understood')}</Text>

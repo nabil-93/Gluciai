@@ -16,6 +16,7 @@ import type {
   MealScan,
   MeasureLog,
   Profile,
+  UsageStat,
 } from '@/types';
 
 /** One chat thread. Conversations are grouped locally on the device; the
@@ -91,6 +92,9 @@ interface AppState {
   /** HIDDEN features explicitly granted to this account by the admin
    *  (feature_access allowed=true). Invisible everywhere unless granted. */
   grantedFeatures: string[];
+  /** Live per-feature usage quotas (my_usage_status RPC). Cached for the
+   *  profile screen + feature gates; refreshed on focus and after actions. */
+  usage: UsageStat[];
   /** Reminders the patient asked the AI to set */
   aiReminders: AiReminder[];
   /** Account events (status changes, parameter edits) — part of the history */
@@ -101,6 +105,7 @@ interface AppState {
   setLanguageChosen: () => void;
   setLockedFeatures: (features: string[]) => void;
   setGrantedFeatures: (features: string[]) => void;
+  setUsage: (usage: UsageStat[]) => void;
   setOnboardingDone: () => void;
   setWizardDone: () => void;
   setConsentAccepted: () => void;
@@ -169,6 +174,7 @@ const initialData = {
   planWelcomeShown: false,
   lockedFeatures: [] as string[],
   grantedFeatures: [] as string[],
+  usage: [] as UsageStat[],
   aiReminders: [] as AiReminder[],
   eventLogs: [] as AppEvent[],
   labReports: [] as LabReport[],
@@ -186,6 +192,7 @@ export const useAppStore = create<AppState>()(
       setLanguageChosen: () => set({ languageChosen: true }),
       setLockedFeatures: (lockedFeatures) => set({ lockedFeatures }),
       setGrantedFeatures: (grantedFeatures) => set({ grantedFeatures }),
+      setUsage: (usage) => set({ usage }),
       setOnboardingDone: () => set({ onboardingDone: true }),
       setWizardDone: () => set({ wizardDone: true }),
       setConsentAccepted: () =>
@@ -341,6 +348,7 @@ export const useAppStore = create<AppState>()(
                 aiJournal: [],
                 aiJournalSeenAt: null,
                 lockedFeatures: [],
+                usage: [],
                 activityStatus: 'active' as ActivityStatus,
                 planWelcomeShown: false,
               }

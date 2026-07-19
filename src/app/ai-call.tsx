@@ -253,7 +253,9 @@ export default function AiCallScreenGate() {
 
   if (locked) return <LockedScreen featureLabel={t('locked.featCall')} />;
   if (quota === 'exceeded')
-    return <LockedScreen featureLabel={t('locked.featCall')} variant="quota" />;
+    return (
+      <LockedScreen featureLabel={t('locked.featCall')} variant="quota" quotaFeature="ai_call" />
+    );
   if (quota === 'checking') return <CallQuotaSplash />;
   return <AiCallScreen />;
 }

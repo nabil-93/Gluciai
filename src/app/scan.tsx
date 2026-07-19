@@ -22,8 +22,10 @@ import Svg, { Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton, LockedScreen, ProgressRing } from '@/components/ui';
+import { isDemoMode, supabase } from '@/lib/supabase';
 import { analyzeMealImage, type ScanStage } from '@/services/ai';
 import { setPendingScan } from '@/services/scanSession';
+import { isFeatureExhausted } from '@/services/usage';
 import { useAppStore } from '@/store/useAppStore';
 
 /* ── Palette taken 1:1 from the Claude-Design "Scanner Repas" reference ── */
@@ -33,11 +35,39 @@ const ACCENT_LIGHT = '#B4FFD0';
 const PROGRESS = '#8A78F0';
 const GRID_LINE = 'rgba(130,235,170,0.06)';
 
-/* Blocked from the admin dashboard? Show the lock instead of the camera. */
+/* Blocked from the admin dashboard, or the daily/weekly/monthly scan quota
+ * spent? Show the lock instead of the camera. The quota is also enforced
+ * server-side (analyze-meal), so this pre-check is just faster UX. */
 export default function ScanScreenGate() {
   const locked = useAppStore((s) => s.lockedFeatures.includes('scanner'));
   const { t } = useTranslation();
+  const [quota, setQuota] = useState<'checking' | 'ok' | 'exceeded'>('checking');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (isDemoMode || !supabase) {
+        if (alive) setQuota('ok');
+        return;
+      }
+      try {
+        const exhausted = await isFeatureExhausted('scanner');
+        if (alive) setQuota(exhausted ? 'exceeded' : 'ok');
+      } catch {
+        if (alive) setQuota('ok'); // never block on a transient error
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   if (locked) return <LockedScreen featureLabel={t('locked.featScanner')} />;
+  if (quota === 'exceeded')
+    return (
+      <LockedScreen featureLabel={t('locked.featScanner')} variant="quota" quotaFeature="scanner" />
+    );
+  if (quota === 'checking') return <View style={{ flex: 1, backgroundColor: BG }} />;
   return <ScanScreen />;
 }
 

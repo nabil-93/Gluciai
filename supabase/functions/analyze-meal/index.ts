@@ -14,6 +14,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
 import { featureLocked } from '../_shared/featureGuard.ts';
+import { quotaState } from '../_shared/quota.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_VISION_MODEL') ?? 'gemini-2.5-flash';
@@ -132,6 +133,14 @@ Deno.serve(async (req) => {
     if (!uid) return json({ error: 'unauthorized' }, 401);
     if (await featureLocked(uid, 'scanner')) {
       return json({ error: 'feature locked' }, 403);
+    }
+    // Daily/weekly/monthly scan quota (usage_limits). Fail-open on lookup error.
+    const scanQuota = await quotaState(uid, 'scanner');
+    if (scanQuota?.exceeded) {
+      return json(
+        { error: 'quota_exceeded', feature: 'scanner', period: scanQuota.period, limit: scanQuota.limit, used: scanQuota.used },
+        429
+      );
     }
 
     // Diagnostic (shows in Supabase logs): size of the image we received —

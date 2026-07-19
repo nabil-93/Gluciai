@@ -325,3 +325,23 @@ export interface FoodCorrection {
   user_value: string;
   created_at: string;
 }
+
+/** The four AI features that carry a usage limit (usage_limits table). */
+export type UsageFeature = 'scanner' | 'ai_chat' | 'ai_call' | 'labs';
+export type UsagePeriod = 'day' | 'week' | 'month';
+
+/**
+ * One feature's live quota status for the signed-in user, as returned by the
+ * `my_usage_status` RPC (migration 0020). `limit`/`remaining` are null when
+ * the feature is unlimited. For `ai_call` the unit is minutes; otherwise a
+ * count (scans / messages / analyses).
+ */
+export interface UsageStat {
+  feature: UsageFeature;
+  period: UsagePeriod;
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  unlimited: boolean;
+  exceeded: boolean;
+}
