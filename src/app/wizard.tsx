@@ -185,6 +185,59 @@ function Field({
   );
 }
 
+/** Build an ISO birth date (YYYY-MM-DD) from the three boxes — only when all
+ *  three are present and form a plausible date, otherwise undefined so a
+ *  half-typed date is never saved. */
+function composeBirthDate(
+  year: string,
+  month: string,
+  day: string
+): string | undefined {
+  const y = year.trim();
+  const mn = Number(month);
+  const dn = Number(day);
+  if (y.length !== 4 || !month || !day) return undefined;
+  const yn = Number(y);
+  const thisYear = new Date().getFullYear();
+  if (yn < 1900 || yn > thisYear) return undefined;
+  if (mn < 1 || mn > 12 || dn < 1 || dn > 31) return undefined;
+  return `${y}-${String(mn).padStart(2, '0')}-${String(dn).padStart(2, '0')}`;
+}
+
+/* ── One box of the birth-date row (its own year / month / day label +
+ *  numeric example placeholder), so entering a date needs no calendar and
+ *  the patient always knows which number goes where. Digits only. */
+function DateBox({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  maxLength,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  placeholder: string;
+  maxLength: number;
+}) {
+  return (
+    <View style={styles.dobCol}>
+      <Text style={styles.dobLabel}>{label}</Text>
+      <View style={styles.dobBox}>
+        <TextInput
+          value={value}
+          onChangeText={(v) => onChangeText(v.replace(/\D/g, '').slice(0, maxLength))}
+          placeholder={placeholder}
+          placeholderTextColor="#c2c9d4"
+          keyboardType="number-pad"
+          maxLength={maxLength}
+          style={styles.dobInput}
+        />
+      </View>
+    </View>
+  );
+}
+
 /* ── Info box (green or gray) ── */
 function InfoBox({
   tone = 'green',
@@ -304,6 +357,9 @@ export default function WizardScreen() {
 
   const [step, setStep] = useState(0);
   const [gender, setGender] = useState<'male' | 'female' | 'other'>();
+  const [birthYear, setBirthYear] = useState('');
+  const [birthMonth, setBirthMonth] = useState('');
+  const [birthDay, setBirthDay] = useState('');
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
   const [diabetesType, setDiabetesType] = useState<DiabetesType>();
@@ -413,6 +469,7 @@ export default function WizardScreen() {
     const profile: Profile = {
       user_id: uid,
       name: existingName,
+      birth_date: composeBirthDate(birthYear, birthMonth, birthDay),
       gender,
       height: Number(height) || undefined,
       weight: Number(weight) || undefined,
@@ -570,6 +627,32 @@ export default function WizardScreen() {
                     </Pressable>
                   );
                 })}
+              </View>
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.fieldLabel}>{t('wizard.birthDate')}</Text>
+                <View style={styles.dobRow}>
+                  <DateBox
+                    label={t('wizard.birthYear')}
+                    value={birthYear}
+                    onChangeText={setBirthYear}
+                    placeholder="1990"
+                    maxLength={4}
+                  />
+                  <DateBox
+                    label={t('wizard.birthMonth')}
+                    value={birthMonth}
+                    onChangeText={setBirthMonth}
+                    placeholder="05"
+                    maxLength={2}
+                  />
+                  <DateBox
+                    label={t('wizard.birthDay')}
+                    value={birthDay}
+                    onChangeText={setBirthDay}
+                    placeholder="21"
+                    maxLength={2}
+                  />
+                </View>
               </View>
               <Field
                 label={t('wizard.height')}
@@ -1098,6 +1181,38 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   fieldUnit: { fontFamily: N600, fontSize: 14, color: '#98a1af' },
+
+  /* Birth-date: three labelled boxes (year / month / day) */
+  dobRow: { flexDirection: 'row', gap: 10 },
+  dobCol: { flex: 1, minWidth: 0 },
+  dobLabel: {
+    fontFamily: N600,
+    fontSize: 12.5,
+    color: '#8a93a3',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  dobBox: {
+    height: 54,
+    backgroundColor: '#ffffff',
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: 'rgba(20,28,45,1)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  dobInput: {
+    width: '100%',
+    fontFamily: N700,
+    fontSize: 18,
+    letterSpacing: 1,
+    color: '#101a2b',
+    textAlign: 'center',
+    padding: 0,
+  },
 
   /* Doctor promo code */
   promoCard: {
