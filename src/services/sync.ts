@@ -96,6 +96,8 @@ function mapProfile(row: any): Profile {
     emergency_contact_name: row.emergency_contact_name ?? undefined,
     emergency_contact_phone: row.emergency_contact_phone ?? undefined,
     doctor_name: row.doctor_name ?? undefined,
+    doctor_phone: row.doctor_phone ?? undefined,
+    home_address: row.home_address ?? undefined,
   };
 }
 

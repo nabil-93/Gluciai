@@ -314,7 +314,9 @@ export default function WizardScreen() {
   const [targetHigh, setTargetHigh] = useState('180');
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
+  const [homeAddress, setHomeAddress] = useState('');
   const [doctorName, setDoctorName] = useState('');
+  const [doctorPhone, setDoctorPhone] = useState('');
   const [consents, setConsents] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   /* Doctor promo code (optional): links the patient to their doctor + discount */
@@ -404,7 +406,9 @@ export default function WizardScreen() {
       correction_factor: usesInsulin ? Number(correction) || undefined : undefined,
       emergency_contact_name: contactName || undefined,
       emergency_contact_phone: contactPhone || undefined,
+      home_address: homeAddress.trim() || undefined,
       doctor_name: doctorName || undefined,
+      doctor_phone: doctorPhone || undefined,
     };
     try {
       await saveProfile(profile);
@@ -708,6 +712,14 @@ export default function WizardScreen() {
                 placeholder={t('wizard.contactPhonePlaceholder')}
                 keyboardType="phone-pad"
               />
+              <Field
+                label={t('wizard.homeAddress')}
+                icon={<Text style={{ fontSize: 16 }}>📍</Text>}
+                value={homeAddress}
+                onChangeText={setHomeAddress}
+                placeholder={t('wizard.homeAddressPlaceholder')}
+                autoCapitalize="words"
+              />
               <InfoBox
                 tone="gray"
                 title={t('wizard.whyImportant')}
@@ -726,6 +738,14 @@ export default function WizardScreen() {
                 onChangeText={setDoctorName}
                 placeholder={t('wizard.doctorNamePlaceholder')}
                 autoCapitalize="words"
+              />
+              <Field
+                label={t('wizard.doctorPhone')}
+                icon={<PhoneIcon />}
+                value={doctorPhone}
+                onChangeText={setDoctorPhone}
+                placeholder={t('wizard.doctorPhonePlaceholder')}
+                keyboardType="phone-pad"
               />
               <InfoBox
                 tone="gray"

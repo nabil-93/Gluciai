@@ -298,8 +298,10 @@ export default function ProfileScreen() {
     'target_high',
     'avatar_url',
     'doctor_name',
+    'doctor_phone',
     'emergency_contact_name',
     'emergency_contact_phone',
+    'home_address',
   ];
   const filled = fields.filter((k) => {
     const v = profile[k];

@@ -309,6 +309,12 @@ export default function ProfileEditScreen() {
                 value={draft.doctor_name ?? ''}
                 onChangeText={(v) => set('doctor_name', v)}
               />
+              <Field
+                label={t('profile.doctorPhone')}
+                value={draft.doctor_phone ?? ''}
+                onChangeText={(v) => set('doctor_phone', v)}
+                keyboardType="phone-pad"
+              />
               <Pressable
                 onPress={() => router.push('/doctor-code' as any)}
                 style={({ pressed }) => [styles.linkCard, pressed && { opacity: 0.7 }]}
@@ -341,6 +347,12 @@ export default function ProfileEditScreen() {
                 value={draft.emergency_contact_phone ?? ''}
                 onChangeText={(v) => set('emergency_contact_phone', v)}
                 keyboardType="phone-pad"
+              />
+              <Field
+                label={t('profile.homeAddress')}
+                value={draft.home_address ?? ''}
+                onChangeText={(v) => set('home_address', v)}
+                autoCapitalize="words"
               />
             </>
           ) : null}

@@ -20,6 +20,10 @@ export interface Profile {
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   doctor_name?: string;
+  doctor_phone?: string;
+  /** Home address shown on the SOS screen (opens Google Maps) so a
+   *  bystander can bring the patient home. */
+  home_address?: string;
 }
 
 /** Where the nutrition values came from — always shown to the user. */
