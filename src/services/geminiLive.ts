@@ -366,6 +366,16 @@ function downsampleTo16k(input: Float32Array, inputRate: number): Float32Array {
  *  the silence-hangup detector) — quieter frames are echo/room noise. */
 const SPEECH_RMS = 0.02;
 
+/** Echo-gate thresholds while the AI's voice is on the speaker. Barging in
+ *  over a talking AI is naturally LOUDER than normal speech, so the gate
+ *  can demand more energy than SPEECH_RMS without blocking real barge-in.
+ *  The FIRST model turn gets the strictest gate: the browser's echo
+ *  canceller hasn't converged yet and the audio route just switched, so
+ *  the speaker echo is at its loudest exactly then (the "greeting cuts
+ *  and never finishes" bug). */
+export const GATE_RMS_FIRST_TURN = 0.06;
+export const GATE_RMS_STEADY = 0.035;
+
 /** Captures the mic and emits base64 16 kHz PCM chunks (~250 ms each). */
 export class MicStreamer {
   private ctx: AudioContext | null = null;
@@ -377,17 +387,25 @@ export class MicStreamer {
   private lastSpeechEmit = 0;
   /** Echo gate — see setEchoGate(). */
   private echoGate = false;
+  private gateRms = GATE_RMS_STEADY;
+  /** Wall-clock ms of the last frame that PASSED the gate while gating —
+   *  i.e. the last moment the server could have heard real barge-in
+   *  speech. A server "interrupted" with no recent pass is echo. */
+  lastGatePassAt = 0;
 
   /**
    * While the AI is speaking, browser echo cancellation doesn't always
    * remove the phone-speaker echo of its own voice; Gemini's VAD then
    * hears "speech" and interrupts the answer mid-sentence. With the gate
-   * ON, frames BELOW the speech threshold are streamed as pure silence —
-   * the timing the server VAD needs is preserved, echo/noise is not, and
-   * real barge-in speech (louder than the threshold) still passes through.
+   * ON, frames BELOW `threshold` are streamed as pure silence — the
+   * timing the server VAD needs is preserved, echo/noise is not, and
+   * real barge-in speech (louder than the threshold) still passes
+   * through. Pass GATE_RMS_FIRST_TURN for the AI's first turn (coldest
+   * echo canceller), GATE_RMS_STEADY afterwards.
    */
-  setEchoGate(on: boolean) {
+  setEchoGate(on: boolean, threshold = GATE_RMS_STEADY) {
     this.echoGate = on;
+    this.gateRms = threshold;
   }
 
   /** MUST be called synchronously inside a user gesture on iOS Safari —
@@ -430,10 +448,13 @@ export class MicStreamer {
           this.onSpeech();
         }
       }
-      // Echo gate active (AI speaking) + frame below speech level → stream
-      // silence instead, so speaker echo can't falsely interrupt the model.
-      const frame =
-        this.echoGate && rms < SPEECH_RMS ? new Float32Array(f32.length) : f32;
+      // Echo gate active (AI speaking) + frame below the gate level →
+      // stream silence instead, so speaker echo can't falsely interrupt
+      // the model. Frames loud enough to pass are remembered: they are
+      // the only thing the server can legitimately call a barge-in.
+      const gated = this.echoGate && rms < this.gateRms;
+      if (this.echoGate && !gated) this.lastGatePassAt = Date.now();
+      const frame = gated ? new Float32Array(f32.length) : f32;
       onChunk(floatTo16BitBase64(downsampleTo16k(frame, rate)));
     };
     src.connect(this.proc);

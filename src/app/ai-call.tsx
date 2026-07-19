@@ -32,6 +32,8 @@ import {
   type LoggerAction,
 } from '@/services/aiLogger';
 import {
+  GATE_RMS_FIRST_TURN,
+  GATE_RMS_STEADY,
   GeminiLiveSession,
   LIVE_MODELS,
   LIVE_VAD_TUNING,
@@ -661,6 +663,11 @@ ${liveLogInstruction(langName)}`;
   };
 
   /* ────────────── LIVE ENGINE (Gemini Live API) ────────────── */
+  /** False after the AI's FIRST spoken turn of the call — that one gets
+   *  the strictest echo gate (echo canceller still cold). */
+  const firstAiTurnDoneRef = useRef(false);
+  /** Echo-interrupt recoveries used during the current model turn. */
+  const echoResumesRef = useRef(0);
   const startLive = async (player: PcmPlayer, mic: MicStreamer): Promise<boolean> => {
     if (Platform.OS !== 'web') return false;
     const token = await getLiveToken();
@@ -693,7 +700,12 @@ ${liveLogInstruction(langName)}`;
         // While the AI's voice is on the speaker, gate the mic: quiet
         // frames (its own echo, room noise) go out as silence so the
         // model never thinks the patient barged in and cuts its answer.
-        mic.setEchoGate(true);
+        // The first turn gets the strictest gate — the echo canceller is
+        // coldest right after the call connects.
+        mic.setEchoGate(
+          true,
+          firstAiTurnDoneRef.current ? GATE_RMS_STEADY : GATE_RMS_FIRST_TURN
+        );
         player.play(chunk);
         if (statusRef.current !== 'speaking') setStatusSafe('speaking');
       },
@@ -714,6 +726,23 @@ ${liveLogInstruction(langName)}`;
         }
       },
       onInterrupted: () => {
+        // FALSE barge-in guard: if no mic frame above the gate threshold
+        // was streamed recently, the server cannot have heard the patient
+        // — it heard the AI's own speaker echo (typical right after the
+        // call connects, before echo cancellation converges). Keep the
+        // buffered audio playing and tell the model to FINISH its
+        // sentence instead of leaving it hanging until the patient talks.
+        const falseBargeIn =
+          Date.now() - mic.lastGatePassAt > 1500 && echoResumesRef.current < 2;
+        if (falseBargeIn && statusRef.current === 'speaking' && !endedRef.current) {
+          echoResumesRef.current += 1;
+          liveRef.current?.sendText(
+            '(SYSTEM: that interruption was your own speaker echo — the ' +
+              'patient did NOT speak. Continue your answer right where it ' +
+              'stopped, without repeating what you already said.)'
+          );
+          return;
+        }
         // The patient is really talking — stop gating so every nuance of
         // their speech reaches the model.
         mic.setEchoGate(false);
@@ -727,6 +756,10 @@ ${liveLogInstruction(langName)}`;
         // completion, not a network under-run (jitter-buffer bookkeeping).
         player.endOfTurn();
         if (!player.isPlaying()) mic.setEchoGate(false);
+        // First full AI turn done: echo canceller has converged, the
+        // steady (more permissive) gate threshold applies from now on.
+        firstAiTurnDoneRef.current = true;
+        echoResumesRef.current = 0;
         // Fresh user turn starts after each model turn.
         userTurnBufRef.current = '';
         // The patient said goodbye and the model finished its reply →
