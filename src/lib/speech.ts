@@ -45,11 +45,13 @@ export function textForSpeech(raw: string): string {
 }
 
 /* ── Sentence chunking ──
- * First chunk is short so the voice starts fast; later ones are bigger so
- * a long text costs few requests. A sentence longer than a chunk (rare,
- * e.g. no punctuation) is hard-split on a word boundary. */
-const FIRST_CHUNK = 220;
-const NEXT_CHUNK = 700;
+ * Gemini-TTS generation time grows with chunk LENGTH, so chunks are kept
+ * SMALL and fetched in parallel (sliding window): the first one tiny so
+ * the voice starts in ~3-4 s, the next ones generating while the current
+ * one plays — no silent gap mid-text. A sentence longer than a chunk
+ * (rare, e.g. no punctuation) is hard-split on a word boundary. */
+const FIRST_CHUNK = 120;
+const NEXT_CHUNK = 300;
 
 function chunkForTts(text: string): string[] {
   const out: string[] = [];
@@ -120,6 +122,10 @@ export class Speaker {
   private nextTime = 0;
   /** True once the fetch loop delivered its last chunk to the scheduler. */
   private doneFeeding = true;
+  /** True once any audio actually started for the current speak(). */
+  private audioStarted = false;
+  /** True when the current speak() runs on the fallback engine. */
+  private usingSynth = false;
   /** Fired when speech ends by itself or on stop(). */
   onEnd: (() => void) | null = null;
   /** Fired when audio actually starts playing (after the first fetch). */
@@ -145,7 +151,7 @@ export class Speaker {
     if (typeof window === 'undefined') return;
     const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AC) return;
-    if (!this.ctx) this.ctx = new AC();
+    if (!this.ctx || this.ctx.state === 'closed') this.ctx = new AC();
     this.ctx!.resume().catch(() => {});
   }
 
@@ -158,18 +164,39 @@ export class Speaker {
 
     const session = ++this.session;
     this.speaking = true;
+    this.audioStarted = false;
+    this.usingSynth = false;
 
     // Natural Gemini voice; robotic engine only when it can't work.
     if (isDemoMode || !supabase || !this.ctx) {
       this.speakWithSynth(clean, language, session);
       return;
     }
-    this.speakNatural(clean, language, session).then((ok) => {
-      if (!ok && this.session === session) {
-        // First chunk failed (offline / function down) → fallback voice.
-        this.speakWithSynth(clean, language, session);
+    this.speakNatural(clean, language, session)
+      .then((ok) => {
+        if (!ok && this.session === session) {
+          // First chunk failed (offline / function down) → fallback voice.
+          this.speakWithSynth(clean, language, session);
+        }
+      })
+      .catch(() => {
+        // ANY unexpected pipeline error must never end in silence.
+        if (this.session === session) this.failoverToSynth(clean, language);
+      });
+    // Watchdog: whatever happens, the patient must HEAR something within
+    // 15 s of the tap — if the natural voice hasn't started by then
+    // (mobile network + TTS generation too slow, hung request…), switch
+    // to the fallback engine.
+    setTimeout(() => {
+      if (
+        this.session === session &&
+        this.speaking &&
+        !this.audioStarted &&
+        !this.usingSynth
+      ) {
+        this.failoverToSynth(clean, language);
       }
-    });
+    }, 15000);
   }
 
   stop() {
@@ -190,9 +217,20 @@ export class Speaker {
       return true;
     }
     this.doneFeeding = false;
-    let next = fetchTtsChunk(chunks[0], language);
+    // Sliding window of 2 requests in flight: the tiny first chunk starts
+    // fast while the second already generates; each play-out kicks the
+    // fetch after next, so audio never has to wait on a cold request.
+    const fetches: (Promise<{ audio: string; rate: number } | null> | null)[] =
+      new Array(chunks.length).fill(null);
+    const kick = (i: number) => {
+      if (i < chunks.length && !fetches[i]) {
+        fetches[i] = fetchTtsChunk(chunks[i], language);
+      }
+    };
+    kick(0);
+    kick(1);
     for (let i = 0; i < chunks.length; i++) {
-      const entry = await next;
+      const entry = await fetches[i];
       if (this.session !== session) return true; // stopped meanwhile
       if (!entry) {
         if (i === 0) {
@@ -201,8 +239,8 @@ export class Speaker {
         }
         break; // mid-way failure: end gracefully with what played
       }
-      // Prefetch the next chunk while this one plays.
-      if (i + 1 < chunks.length) next = fetchTtsChunk(chunks[i + 1], language);
+      kick(i + 1);
+      kick(i + 2);
       this.schedule(entry, session, i === 0);
     }
     this.doneFeeding = true;
@@ -241,7 +279,26 @@ export class Speaker {
       this.live.delete(src);
       if (this.live.size === 0 && this.doneFeeding) this.finish(session);
     };
-    if (first) this.onStart?.();
+    if (first) {
+      this.audioStarted = true;
+      this.onStart?.();
+    }
+  }
+
+  /** Natural pipeline died (error or too slow): make SURE the patient
+   *  still hears the text with the fallback engine. */
+  private failoverToSynth(clean: string, language: string) {
+    this.session++;
+    for (const s of this.live) {
+      try {
+        s.stop();
+      } catch {}
+    }
+    this.live.clear();
+    this.nextTime = 0;
+    this.doneFeeding = true;
+    this.speaking = true;
+    this.speakWithSynth(clean, language, this.session);
   }
 
   private finish(session: number) {
@@ -253,6 +310,7 @@ export class Speaker {
   /* ── Fallback: browser speechSynthesis (offline / demo) ── */
 
   private speakWithSynth(clean: string, language: string, session: number) {
+    this.usingSynth = true;
     const synth =
       typeof window !== 'undefined' ? (window as any).speechSynthesis : null;
     if (!synth) {
@@ -284,7 +342,10 @@ export class Speaker {
       u.pitch = 1;
       if (i === 0) {
         u.onstart = () => {
-          if (this.session === session) this.onStart?.();
+          if (this.session === session) {
+            this.audioStarted = true;
+            this.onStart?.();
+          }
         };
       }
       if (i === sentences.length - 1) {
@@ -297,6 +358,11 @@ export class Speaker {
       };
       synth.speak(u);
     });
+    // Chrome (esp. Android) can leave the engine stuck "paused" after a
+    // cancel() — a queued utterance then never speaks. Kick it.
+    try {
+      synth.resume();
+    } catch {}
   }
 
   /* ── Teardown shared by stop() and a new speak() ── */

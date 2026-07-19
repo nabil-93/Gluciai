@@ -16,7 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, LockedScreen, Spinner } from '@/components/ui';
 import { DeleteConfirmCard, LoggerConfirmCard } from '@/components/LoggerConfirmCard';
 import { VoiceRecorderBar } from '@/components/VoiceRecorderBar';
 import {
@@ -312,10 +312,14 @@ function AiChatScreen() {
   const speakerRef = useRef<Speaker | null>(null);
   if (!speakerRef.current) speakerRef.current = new Speaker();
   const ttsSupported = speakerRef.current.isSupported;
-  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  /** Which message the listen button belongs to, and whether sound is
+   *  already coming out (false = natural voice still being fetched — the
+   *  button shows a spinner so the wait never looks broken). */
+  const [speaking, setSpeaking] = useState<{ id: string; playing: boolean } | null>(null);
+  const speakingId = speaking?.id ?? null;
   useEffect(() => {
     const sp = speakerRef.current;
-    if (sp) sp.onEnd = () => setSpeakingId(null);
+    if (sp) sp.onEnd = () => setSpeaking(null);
     return () => sp?.stop();
   }, []);
   const toggleSpeak = (id: string, text: string) => {
@@ -323,11 +327,12 @@ function AiChatScreen() {
     if (!sp) return;
     if (speakingId === id) {
       sp.stop();
-      setSpeakingId(null);
+      setSpeaking(null);
       return;
     }
+    sp.onStart = () => setSpeaking({ id, playing: true });
     sp.speak(text, i18n.language);
-    setSpeakingId(id);
+    setSpeaking({ id, playing: false });
   };
 
   /* The logger sometimes needs ONE more detail before it can build the
@@ -416,7 +421,7 @@ function AiChatScreen() {
   // Stop any ongoing "listen" playback when the patient switches thread.
   useEffect(() => {
     speakerRef.current?.stop();
-    setSpeakingId(null);
+    setSpeaking(null);
   }, [activeConversationId]);
 
   // Fresh conversation each new day: if the active thread's last message is
@@ -670,7 +675,11 @@ function AiChatScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={t('chat.listen')}
                     >
-                      <SpeakerIcon on={speakingId === m.id} />
+                      {speaking?.id === m.id && !speaking.playing ? (
+                        <Spinner size={14} color="#0f7a45" />
+                      ) : (
+                        <SpeakerIcon on={speakingId === m.id} />
+                      )}
                       <Text style={styles.listenText}>
                         {speakingId === m.id ? t('chat.stopListen') : t('chat.listen')}
                       </Text>
