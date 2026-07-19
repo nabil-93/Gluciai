@@ -189,9 +189,15 @@ function TypingDots() {
 
 /**
  * Defensive cleanup so the chat NEVER shows raw "code": if a model JSON
- * blob ever reaches a bubble, keep only its "reply"; and drop malformed
- * [[…]] tokens that aren't valid food links (the AI sometimes invents
- * ones like "[[the menthe sans sucre]]").
+ * blob ever reaches a bubble, keep only its "reply"; and NORMALIZE the
+ * [[…]] food-link tokens so their cards always render.
+ *
+ * The model is asked for `[[food:id]]` but frequently drops the prefix
+ * (`[[oeufs-avocat]]`) or wraps the token in a bullet (`* [[oeufs-avocat]]`).
+ * Those slipped straight through as raw text / empty bullets before. Here we
+ * accept a bare id too, strip a leading bullet marker (the card replaces it),
+ * canonicalize every real entry to `[[food:id]]`, and drop any [[…]] that
+ * isn't an actual food id so no code ever shows.
  */
 function cleanAssistantText(raw: string): string {
   const unescape = (s: string) =>
@@ -206,17 +212,49 @@ function cleanAssistantText(raw: string): string {
       s = unescape(s.slice(i).replace(/^"reply"\s*:\s*"?/, '').replace(/[}"]+\s*$/, ''));
     }
   }
-  // Keep valid [[food:id]] tokens; strip any other [[…]] so no code shows.
-  s = s.replace(/\[\[([^\]]*)\]\]/g, (full, inner) =>
-    /^food:[a-z0-9-]+(\|.*)?$/i.test(String(inner).trim()) ? full : ''
-  );
-  return s.replace(/[ \t]+\n/g, '\n').trim();
+  // A line that is just a bulleted food token → drop the bullet so the card
+  // stands on its own ("* [[oeufs-avocat]]" → "[[oeufs-avocat]]").
+  s = s.replace(/^[ \t]*[-*•][ \t]+(\[\[[^\]]+\]\])[ \t]*$/gm, '$1');
+  // Canonicalize/validate every token: bare or "food:"-prefixed id, optional
+  // "|label" suffix. Real entry → [[food:id]]; anything else → removed.
+  s = s.replace(/\[\[([^\]]+)\]\]/g, (_full, inner) => {
+    const id = String(inner).trim().replace(/^food:/i, '').split('|')[0].trim();
+    return getHealthyFood(id) ? `[[food:${id}]]` : '';
+  });
+  return s
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**
- * Assistant message body: renders plain text, and turns [[food:id]]
- * tokens (the AI's healthy-food recommendations) into tappable cards
- * that open the food's detail page (photo, nutrition, cooking steps).
+ * A block of assistant prose: renders **bold** as bold and tidies leftover
+ * markdown list markers ("* item" / "- item") into a bullet dot, so meal
+ * plans read cleanly instead of showing raw asterisks.
+ */
+function RichText({ text }: { text: string }) {
+  const normalized = text.replace(/^[ \t]*[-*][ \t]+/gm, '• ');
+  const segments = normalized.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <Text style={styles.aiText}>
+      {segments.map((seg, i) => {
+        const b = seg.match(/^\*\*([^*]+)\*\*$/);
+        return b ? (
+          <Text key={i} style={styles.aiBold}>
+            {b[1]}
+          </Text>
+        ) : (
+          seg
+        );
+      })}
+    </Text>
+  );
+}
+
+/**
+ * Assistant message body: renders prose (with light markdown), and turns
+ * [[food:id]] tokens (the AI's healthy-food recommendations) into tappable
+ * cards that open the food's detail page (photo, nutrition, cooking steps).
  */
 function AiMessageBody({
   content: rawContent,
@@ -232,7 +270,7 @@ function AiMessageBody({
   const content = cleanAssistantText(rawContent);
   const parts = content.split(/\[\[food:([a-z0-9-]+)(?:\|[^\]]*)?\]\]/g);
   if (parts.length === 1) {
-    return <Text style={styles.aiText}>{content}</Text>;
+    return <RichText text={content} />;
   }
   return (
     <View style={{ gap: 8 }}>
@@ -264,11 +302,7 @@ function AiMessageBody({
         }
         const txt = p.trim();
         if (!txt) return null;
-        return (
-          <Text key={i} style={styles.aiText}>
-            {txt}
-          </Text>
-        );
+        return <RichText key={i} text={txt} />;
       })}
     </View>
   );
@@ -1029,6 +1063,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   aiText: { fontFamily: F500, fontSize: 13.5, lineHeight: 19.5, color: '#26313f' },
+  aiBold: { fontFamily: F700, color: '#111827' },
   aiFooter: {
     flexDirection: 'row',
     alignItems: 'center',

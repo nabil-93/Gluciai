@@ -30,16 +30,29 @@ const TTS_LANG_TAGS: Record<string, string> = {
 };
 
 /**
- * Pick the fallback voice language. Replies are often in Moroccan Darija:
- * when the text is written mostly in ARABIC SCRIPT, read it with an Arabic
- * voice whatever the UI language; otherwise use the UI language (Darija
- * written in Latin letters reads best with the French/English voice).
+ * The EFFECTIVE spoken language of a reply — the whole reason Darija answers
+ * used to stay silent. The chat mirrors the patient's language, so a
+ * French-UI patient chatting in Darija gets answers written in ARABIC
+ * SCRIPT. Reading those needs the Arabic voice, not the UI's French one.
+ *
+ * Rule: mostly Arabic letters → speak Arabic whatever the UI language;
+ * otherwise the UI language (Darija in Latin letters reads fine with the
+ * French/English voice). Used for BOTH the natural Gemini voice (the edge
+ * function pronounces the text in this language) AND the browser fallback.
+ * Before, only the fallback adapted and the natural path always sent the UI
+ * language, so long Darija answers were generated as if French — slow,
+ * error-prone, and often ending in silence.
  */
-function speechTag(text: string, uiLang: string): string {
+function ttsLangForText(text: string, uiLang: string): string {
   const arabic = (text.match(/[؀-ۿ]/g) || []).length;
   const latin = (text.match(/[A-Za-z]/g) || []).length;
-  if (arabic > latin && arabic > 3) return 'ar-SA';
-  return TTS_LANG_TAGS[uiLang] ?? 'en-US';
+  if (arabic > 3 && arabic >= latin) return 'ar';
+  return uiLang;
+}
+
+/** BCP-47 tag for the browser speechSynthesis fallback. */
+function speechTag(lang: string): string {
+  return TTS_LANG_TAGS[lang] ?? 'en-US';
 }
 
 /** Strip chat tokens/markup that shouldn't be spoken (food-link tokens,
@@ -270,7 +283,10 @@ export class Speaker {
     this.stopInternal(false);
     const clean = textForSpeech(text);
     if (!clean) return;
-    this.language = language;
+    // Speak in the language of the TEXT, not just the UI: Darija answers come
+    // back in Arabic script even when the app is set to French.
+    const lang = ttsLangForText(clean, language);
+    this.language = lang;
     this.warm();
 
     const session = ++this.session;
@@ -280,19 +296,19 @@ export class Speaker {
 
     // Natural Gemini voice; robotic engine only when it can't work.
     if (isDemoMode || !supabase || !this.pool.length) {
-      this.speakWithSynth(clean, language, session);
+      this.speakWithSynth(clean, lang, session);
       return;
     }
-    this.speakNatural(clean, language, session)
+    this.speakNatural(clean, lang, session)
       .then((ok) => {
         if (!ok && this.session === session) {
           // First chunk failed (offline / function down) → fallback voice.
-          this.failoverToSynth(clean, language);
+          this.failoverToSynth(clean, lang);
         }
       })
       .catch(() => {
         // ANY unexpected pipeline error must never end in silence.
-        if (this.session === session) this.failoverToSynth(clean, language);
+        if (this.session === session) this.failoverToSynth(clean, lang);
       });
     // Watchdog: whatever happens, the patient must HEAR something within
     // 15 s of the tap — if the natural voice hasn't AUDIBLY started by
@@ -306,7 +322,7 @@ export class Speaker {
         !this.audioStarted &&
         !this.usingSynth
       ) {
-        this.failoverToSynth(clean, language);
+        this.failoverToSynth(clean, lang);
       }
     }, 15000);
   }
@@ -475,7 +491,7 @@ export class Speaker {
       return;
     }
     synth.cancel();
-    const tag = speechTag(clean, language);
+    const tag = speechTag(language);
     let voice: SpeechSynthesisVoice | null = null;
     try {
       const voices = synth.getVoices() as SpeechSynthesisVoice[];
@@ -491,27 +507,47 @@ export class Speaker {
       this.finish(session);
       return;
     }
+    // SILENCE SAFETY NET (the Darija "spinner spins forever" bug): a browser
+    // with no voice for this language (e.g. no Arabic voice installed) can
+    // accept the utterances yet produce NO sound and fire NO start/end
+    // events — the listen button would then hang indefinitely. If nothing
+    // has audibly started shortly after we queue them, stop and release the
+    // UI instead of leaving it stuck loading.
+    let started = false;
+    const releaseIfSilent = setTimeout(() => {
+      if (this.session === session && this.speaking && !started) {
+        try {
+          synth.cancel();
+        } catch {}
+        this.finish(session);
+      }
+    }, 4000);
     sentences.forEach((sentence, i) => {
       const u = new (window as any).SpeechSynthesisUtterance(sentence);
       u.lang = tag;
       if (voice) u.voice = voice;
       u.rate = 0.98;
       u.pitch = 1;
-      if (i === 0) {
-        u.onstart = () => {
-          if (this.session === session && !this.audioStarted) {
-            this.audioStarted = true;
-            this.onStart?.();
-          }
-        };
-      }
+      u.onstart = () => {
+        started = true;
+        if (this.session === session && !this.audioStarted) {
+          this.audioStarted = true;
+          this.onStart?.();
+        }
+      };
       if (i === sentences.length - 1) {
-        u.onend = () => this.finish(session);
+        u.onend = () => {
+          clearTimeout(releaseIfSilent);
+          this.finish(session);
+        };
       }
       u.onerror = () => {
         // A cancelled queue fires error on pending utterances — only the
         // final state matters.
-        if (i === sentences.length - 1) this.finish(session);
+        if (i === sentences.length - 1) {
+          clearTimeout(releaseIfSilent);
+          this.finish(session);
+        }
       };
       synth.speak(u);
     });
