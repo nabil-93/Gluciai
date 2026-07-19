@@ -391,9 +391,28 @@ export default function WizardScreen() {
     }
     // Finish
     setSaving(true);
+    // Save under the REAL signed-in account so the profile reaches Supabase
+    // (saveProfile skips the server upsert for 'demo-user'). Without this the
+    // whole wizard — targets, insulin, emergency contact, doctor, address —
+    // stayed in memory only and vanished on the next hydrate.
+    let uid = 'demo-user';
+    // Keep the name captured at sign-up: the wizard never asks for it, and an
+    // empty value here would otherwise overwrite it on the server.
+    let existingName = useAppStore.getState().profile?.name ?? '';
+    if (!isDemoMode && supabase) {
+      try {
+        const { data } = await supabase.auth.getUser();
+        uid = data.user?.id ?? 'demo-user';
+        if (!existingName) {
+          existingName = (data.user?.user_metadata?.name as string) ?? '';
+        }
+      } catch {
+        // stay on 'demo-user' → local-only save, retried on next launch
+      }
+    }
     const profile: Profile = {
-      user_id: 'demo-user',
-      name: '',
+      user_id: uid,
+      name: existingName,
       gender,
       height: Number(height) || undefined,
       weight: Number(weight) || undefined,
