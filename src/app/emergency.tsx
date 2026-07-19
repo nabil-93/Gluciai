@@ -21,14 +21,13 @@ function isToday(iso: string) {
 
 /** Medical-emergency number per app language — the patient picked the
  *  language of the country they live in / call for help in:
- *  fr = SAMU France (15), ar = SAMU Maroc (141), de = Notruf (112),
- *  en = 112 (EU standard, redirected by mobiles in most countries).
- *  The label is what locals actually call the service. */
+ *  fr = SAMU France (15), ar = SAMU Maroc (141), de = Notruf Deutschland
+ *  (112), en = USA (911). The label is what locals call the service. */
 const EMERGENCY: Record<string, { num: string; label: string }> = {
   fr: { num: '15', label: 'SAMU' },
   ar: { num: '141', label: 'الإسعاف' },
   de: { num: '112', label: 'Notruf' },
-  en: { num: '112', label: 'Emergency' },
+  en: { num: '911', label: 'Emergency' },
 };
 
 export default function EmergencyScreen() {
