@@ -80,6 +80,23 @@ function sameDay(iso: string, ref: Date) {
   return new Date(iso).toDateString() === ref.toDateString();
 }
 
+/** Which home slot a meal files under. The meal_type the patient CONFIRMED
+ *  (scan picker / AI confirm card) always wins — "klit f lghda" logged at
+ *  night must land under lunch; the hour of created_at only classifies
+ *  legacy rows without a meal_type (snacks fall back to the hour too,
+ *  since the home view has no snack slot). */
+function slotOfMeal(m: MealScan): 'breakfast' | 'lunch' | 'dinner' {
+  if (
+    m.meal_type === 'breakfast' ||
+    m.meal_type === 'lunch' ||
+    m.meal_type === 'dinner'
+  ) {
+    return m.meal_type;
+  }
+  const h = new Date(m.created_at).getHours();
+  return h < 11 ? 'breakfast' : h < 16 ? 'lunch' : 'dinner';
+}
+
 /* Small inline SVG glyphs from the prototype (chevrons/arrows) */
 function ChevDown({ size = 14, color = '#6b7280' }: { size?: number; color?: string }) {
   return (
@@ -1474,11 +1491,9 @@ export default function HomeScreen() {
   // Meals for the day chosen in the calendar (defaults to today), bucketed
   // into breakfast / lunch / dinner. Each slot keeps the most recent scan.
   const mealSlots = useMemo(() => {
-    const slotOf = (h: number): 'breakfast' | 'lunch' | 'dinner' =>
-      h < 11 ? 'breakfast' : h < 16 ? 'lunch' : 'dinner';
     const bySlot: Record<string, MealScan | undefined> = {};
     for (const m of dayMeals) {
-      const s = slotOf(new Date(m.created_at).getHours());
+      const s = slotOfMeal(m);
       // keep the latest in each slot
       if (!bySlot[s] || new Date(m.created_at) > new Date(bySlot[s]!.created_at)) {
         bySlot[s] = m;
@@ -1489,13 +1504,10 @@ export default function HomeScreen() {
 
   // Which meal slots exist for any given day — powers the calendar dots.
   const mealsByDay = useMemo(() => {
-    const slotOf = (h: number): 'breakfast' | 'lunch' | 'dinner' =>
-      h < 11 ? 'breakfast' : h < 16 ? 'lunch' : 'dinner';
     const map: Record<string, Set<'breakfast' | 'lunch' | 'dinner'>> = {};
     for (const m of meals) {
-      const d = new Date(m.created_at);
-      const key = d.toDateString();
-      (map[key] ??= new Set()).add(slotOf(d.getHours()));
+      const key = new Date(m.created_at).toDateString();
+      (map[key] ??= new Set()).add(slotOfMeal(m));
     }
     return map;
   }, [meals]);
@@ -1596,14 +1608,27 @@ export default function HomeScreen() {
 
   // Timeline (max 2 rows like the design, then "Voir tout l'historique")
   const timeline = useMemo(() => {
-    const mealLabel = (h: number) =>
-      h < 11
+    // The confirmed meal_type wins; the hour only labels legacy rows.
+    const mealLabel = (m: MealScan) => {
+      switch (m.meal_type) {
+        case 'breakfast':
+          return t('home.mealBreakfast');
+        case 'lunch':
+          return t('home.mealLunch');
+        case 'dinner':
+          return t('home.mealDinner');
+        case 'snack':
+          return t('home.mealSnack');
+      }
+      const h = new Date(m.created_at).getHours();
+      return h < 11
         ? t('home.mealBreakfast')
         : h < 15
           ? t('home.mealLunch')
           : h < 19
             ? t('home.mealSnack')
             : t('home.mealDinner');
+    };
     const intensityLabel = (i: string) =>
       i === 'high'
         ? t('home.intensityHigh')
@@ -1635,7 +1660,7 @@ export default function HomeScreen() {
         icon: 'meal' as const,
         title: t('home.tlMeal'),
         detail: t('home.mealDetail', {
-          meal: mealLabel(new Date(m.created_at).getHours()),
+          meal: mealLabel(m),
           carbs: Math.round(m.result.carbohydrates),
         }),
         dot: '#d3d6e2',

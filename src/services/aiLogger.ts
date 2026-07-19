@@ -441,6 +441,44 @@ export function actionCreatedAt(action: { minutes_ago?: number }): string | unde
   return new Date(Date.now() - action.minutes_ago * 60_000).toISOString();
 }
 
+/* Typical hour windows of each meal moment + the representative hour an
+ * entry is filed at when it's logged OUTSIDE its window ("klit f lghda"
+ * said at night → the entry lands at 13:00, not 23:00). */
+const MEAL_WINDOWS: Record<
+  'breakfast' | 'lunch' | 'dinner',
+  { start: number; end: number; rep: number }
+> = {
+  breakfast: { start: 5, end: 11, rep: 8 },
+  lunch: { start: 11, end: 16, rep: 13 },
+  dinner: { start: 16, end: 23, rep: 20 },
+};
+
+/**
+ * When the patient logs a meal AFTER the fact ("klit tajine f lghda" said
+ * in the evening) the entry must carry the time of the MEAL MOMENT they
+ * confirmed, not the time they happened to tell the AI — otherwise every
+ * hour-based view (home slots, carb chart, doctor dashboard) files it
+ * under the wrong meal. Returns undefined when "now" is already fine
+ * (logging during the meal's own window, snacks, or a moment further than
+ * ~12 h back — those are refused upstream anyway).
+ */
+export function mealMomentBackdate(
+  mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+): string | undefined {
+  if (!mealType || mealType === 'snack') return undefined;
+  const win = MEAL_WINDOWS[mealType];
+  const now = new Date();
+  const h = now.getHours();
+  if (h >= win.start && h < win.end) return undefined; // logged in-window → keep now
+  const cand = new Date(now);
+  cand.setHours(win.rep, 0, 0, 0);
+  // "l3cha" said at 2 am → yesterday's dinner 20:00.
+  if (cand.getTime() > now.getTime()) cand.setDate(cand.getDate() - 1);
+  // Never invent an entry more than ~12 h in the past.
+  if (now.getTime() - cand.getTime() > 12 * 3_600_000) return undefined;
+  return cand.toISOString();
+}
+
 /**
  * Persist a CONFIRMED action through the normal save pipeline (store +
  * Supabase) so it shows up everywhere: history, per-topic screens, the
@@ -491,7 +529,11 @@ export async function applyLoggerAction(action: LoggerAction): Promise<void> {
         source: 'ai_estimate',
         warnings: [],
       };
-      await saveMeal(result, undefined, undefined, at, action.meal_type);
+      // An explicit "30 min ago" from the patient wins; otherwise file the
+      // entry at the hour of the CONFIRMED meal moment ("f lghda" said at
+      // night → 13:00), so time-based views agree with what they chose.
+      const mealAt = at ?? mealMomentBackdate(action.meal_type);
+      await saveMeal(result, undefined, undefined, mealAt, action.meal_type);
       resolveFollowUps('meal');
       return;
     }
