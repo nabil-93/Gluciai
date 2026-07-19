@@ -68,6 +68,13 @@ const LANGUAGE_NAMES: Record<string, string> = {
   en: 'English',
 };
 
+/** AI-voice volume chosen on the last call — survives leaving the screen
+ *  (module scope) so the patient doesn't re-adjust on every call. */
+let lastCallVolume = 1;
+const VOLUME_MIN = 0.25;
+const VOLUME_MAX = 2;
+const VOLUME_STEP = 0.25;
+
 type CallStatus =
   | 'incoming'
   | 'connecting'
@@ -269,6 +276,8 @@ function AiCallScreen() {
   const [seconds, setSeconds] = useState(0);
   const [micOn, setMicOn] = useState(true);
   const [speakerOn, setSpeakerOn] = useState(true);
+  const [volume, setVolume] = useState(lastCallVolume);
+  const volumeRef = useRef(lastCallVolume);
 
   const statusRef = useRef<CallStatus>('incoming');
   const micOnRef = useRef(true);
@@ -289,6 +298,38 @@ function AiCallScreen() {
   const setStatusSafe = (s: CallStatus) => {
     statusRef.current = s;
     setStatus(s);
+  };
+
+  /* Transcription chunks arrive many times per second; re-rendering the
+   * whole screen on every chunk causes audio jank exactly while the AI is
+   * speaking (part of the start-of-call stutter). Batch the advice-card
+   * updates to ~4 per second instead. */
+  const adviceBufRef = useRef<string | null>(null);
+  const adviceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushAdvice = (text: string) => {
+    adviceBufRef.current = text;
+    if (adviceTimerRef.current) return;
+    adviceTimerRef.current = setTimeout(() => {
+      adviceTimerRef.current = null;
+      if (!endedRef.current && adviceBufRef.current !== null) {
+        setAdvice(adviceBufRef.current);
+      }
+    }, 250);
+  };
+
+  /** −/+ buttons: AI voice volume (live PCM gain; classic TTS caps at 1). */
+  const changeVolume = (delta: number) => {
+    const next = Math.min(
+      VOLUME_MAX,
+      Math.max(VOLUME_MIN, Math.round((volumeRef.current + delta) * 4) / 4)
+    );
+    volumeRef.current = next;
+    lastCallVolume = next;
+    setVolume(next);
+    playerRef.current?.setVolume(next);
+    // A tap is also a user gesture — piggyback to keep audio contexts alive.
+    playerRef.current?.resume();
+    micRef.current?.resume();
   };
 
   const langTag = SR_LANG_TAGS[i18n.language] ?? 'en-US';
@@ -491,10 +532,12 @@ function AiCallScreen() {
     if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
     if (hangupTimerRef.current) clearTimeout(hangupTimerRef.current);
     if (farewellTimerRef.current) clearTimeout(farewellTimerRef.current);
+    if (adviceTimerRef.current) clearTimeout(adviceTimerRef.current);
     silenceTimerRef.current = null;
     maxTimerRef.current = null;
     hangupTimerRef.current = null;
     farewellTimerRef.current = null;
+    adviceTimerRef.current = null;
   };
   /** Reset the silence countdown — called on any speech (mic or AI). */
   const bumpActivity = () => {
@@ -624,16 +667,21 @@ ${LIVE_LOG_INSTRUCTION}`;
     if (!token || endedRef.current) return false;
 
     playerRef.current = player;
-    player.onDrain = () => {
+    player.setVolume(volumeRef.current);
+    player.onDrain = (underrun) => {
       // Speaker went quiet → stop gating the mic (echo can't happen now).
       mic.setEchoGate(false);
       if (endedRef.current) return;
       // The patient said goodbye: once the farewell has finished playing, close.
       if (hangupPendingRef.current) {
-        endCallRef.current();
+        // Mid-sentence network gap during the farewell → more audio is
+        // coming, let the next drain (or the hangup ceiling) close the call.
+        if (!underrun) endCallRef.current();
         return;
       }
-      if (statusRef.current === 'speaking') {
+      // A mid-turn under-run is NOT the end of the AI's sentence — keep
+      // showing "speaking" so the status doesn't flicker while it resumes.
+      if (!underrun && statusRef.current === 'speaking') {
         setStatusSafe(micOnRef.current ? 'listening' : 'muted');
       }
     };
@@ -649,7 +697,7 @@ ${LIVE_LOG_INSTRUCTION}`;
         player.play(chunk);
         if (statusRef.current !== 'speaking') setStatusSafe('speaking');
       },
-      onText: (text) => setAdvice(text),
+      onText: (text) => pushAdvice(text),
       onUserText: (text) => {
         // The patient's own words (input transcription). Watch for a clear
         // goodbye so the call ALWAYS hangs up, even if the model forgets
@@ -998,6 +1046,7 @@ ${LIVE_LOG_INSTRUCTION}`;
     const u = new (window as any).SpeechSynthesisUtterance(text);
     u.lang = langTag;
     u.rate = 1;
+    u.volume = Math.min(1, volumeRef.current);
     u.onend = () => {
       if (!endedRef.current) startClassicListening();
     };
@@ -1285,6 +1334,33 @@ ${LIVE_LOG_INSTRUCTION}`;
         </View>
       )}
 
+      {/* ── AI voice volume (−/+, 25% steps, up to 200% boost) ── */}
+      {status !== 'incoming' ? (
+        <View style={styles.volRow}>
+          <Pressable
+            onPress={() => changeVolume(-VOLUME_STEP)}
+            style={styles.volBtn}
+            hitSlop={8}
+            disabled={volume <= VOLUME_MIN}
+          >
+            <Text style={[styles.volBtnText, volume <= VOLUME_MIN && styles.volBtnOff]}>
+              −
+            </Text>
+          </Pressable>
+          <Text style={styles.volValue}>🔊 {Math.round(volume * 100)}%</Text>
+          <Pressable
+            onPress={() => changeVolume(VOLUME_STEP)}
+            style={styles.volBtn}
+            hitSlop={8}
+            disabled={volume >= VOLUME_MAX}
+          >
+            <Text style={[styles.volBtnText, volume >= VOLUME_MAX && styles.volBtnOff]}>
+              +
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {/* ── Controls ── */}
       {status === 'incoming' ? (
         /* Answer button — the call (audio contexts, mic, WebSocket) starts
@@ -1453,11 +1529,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  volRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    marginTop: 16,
+  },
+  volBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: 'rgba(30,50,70,1)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  volBtnText: { fontFamily: F800, fontSize: 20, lineHeight: 23, color: '#3b4657' },
+  volBtnOff: { opacity: 0.3 },
+  volValue: {
+    fontFamily: F700,
+    fontSize: 13,
+    color: '#3b4657',
+    minWidth: 82,
+    textAlign: 'center',
+  },
+
   controls: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-evenly',
-    marginTop: 22,
+    marginTop: 14,
   },
   controlCol: { alignItems: 'center', gap: 7, width: 90 },
   roundBtn: {

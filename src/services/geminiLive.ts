@@ -164,7 +164,11 @@ export class GeminiLiveSession {
       }, timeoutMs);
 
       // A session may connect() more than once (retry without VAD tuning) —
-      // reset the flag and make every handler ignore superseded sockets.
+      // close any previous socket so it can't keep a live session billing,
+      // reset the flag, and make every handler ignore superseded sockets.
+      try {
+        this.ws?.close();
+      } catch {}
       this.closedByUs = false;
       // NOTE: the token must be passed RAW (its slash unencoded) — verified.
       const url = token.startsWith('auth_tokens/')
@@ -480,8 +484,21 @@ export class PcmPlayer {
    *  bigger jitter buffer so the sentence resumes smoothly instead of
    *  stuttering again ("lhedra kat9te3" fix). */
   private lastUnderrunAt = 0;
-  /** Called when the playback queue fully drains. */
-  onDrain?: () => void;
+  /** The connection is coldest at the START of the call (TCP/TLS warm-up):
+   *  the very first turn buffers extra before speaking so the greeting
+   *  doesn't stutter. Cleared after the first complete turn. */
+  private firstTurnDone = false;
+  /** Grows a little with every under-run this call (persistent adaptive
+   *  jitter buffer for a bad network); capped so latency stays phone-like. */
+  private bumpLead = 0;
+  /** User volume (0.25 – 2). Kept separate from mute so unmuting restores
+   *  the chosen level. */
+  private volume = 1;
+  private muted = false;
+  /** Called when the playback queue fully drains. `underrun` is true when
+   *  the model was still mid-sentence (network gap) — the UI should keep
+   *  showing "speaking", more audio is coming. */
+  onDrain?: (underrun: boolean) => void;
 
   constructor() {
     const AC =
@@ -495,6 +512,10 @@ export class PcmPlayer {
   }
 
   play(base64Pcm24k: string) {
+    // Mobile browsers sometimes re-suspend the context between the answer
+    // tap and the first audio — waking it here is what makes the very
+    // first words of the call audible.
+    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
     const bin = atob(base64Pcm24k);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -508,16 +529,24 @@ export class PcmPlayer {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.connect(this.gain);
-    // Jitter buffer: when the queue is empty (start of a turn) give the
-    // network a ~150 ms head start before playing, so the first words of
-    // the AI never stutter. If the queue just drained MID-TURN (network
-    // under-run cut the sentence), buffer ~350 ms before resuming so it
-    // doesn't immediately stutter again. Mid-stream chunks keep the tight
-    // 20 ms scheduling for gapless playback.
+    // ADAPTIVE jitter buffer, sized for where the call actually breaks:
+    //  - very first turn of the call (connection still cold — TCP/TLS
+    //    warm-up makes the first chunks the most jittery): ~450 ms;
+    //  - normal start of a turn: ~150 ms, plus whatever bumpLead the
+    //    call's under-runs have taught us this network needs;
+    //  - resuming after a mid-sentence under-run: at least ~350 ms so it
+    //    doesn't immediately stutter again.
+    // Mid-stream chunks keep the tight 20 ms scheduling for gapless audio.
     const resumingAfterUnderrun =
       this.lastUnderrunAt > 0 && this.ctx.currentTime - this.lastUnderrunAt < 3;
     const lead =
-      this.live.size === 0 ? (resumingAfterUnderrun ? 0.35 : 0.15) : 0.02;
+      this.live.size === 0
+        ? Math.max(
+            this.firstTurnDone ? 0.15 : 0.45,
+            this.bumpLead,
+            resumingAfterUnderrun ? 0.35 : 0
+          )
+        : 0.02;
     const at = Math.max(this.ctx.currentTime + lead, this.nextTime);
     src.start(at);
     this.midTurn = true;
@@ -526,9 +555,14 @@ export class PcmPlayer {
     src.onended = () => {
       this.live.delete(src);
       if (this.live.size === 0) {
-        // Drained while the model was still talking → under-run.
-        if (this.midTurn) this.lastUnderrunAt = this.ctx.currentTime;
-        this.onDrain?.();
+        // Drained while the model was still talking → under-run. Remember
+        // it (bigger buffer on resume) and teach the call's baseline lead.
+        const underrun = this.midTurn;
+        if (underrun) {
+          this.lastUnderrunAt = this.ctx.currentTime;
+          this.bumpLead = Math.min(0.5, this.bumpLead + 0.1);
+        }
+        this.onDrain?.(underrun);
       }
     };
   }
@@ -538,6 +572,7 @@ export class PcmPlayer {
   endOfTurn() {
     this.midTurn = false;
     this.lastUnderrunAt = 0;
+    this.firstTurnDone = true;
   }
 
   isPlaying(): boolean {
@@ -555,10 +590,19 @@ export class PcmPlayer {
     this.nextTime = 0;
     this.midTurn = false;
     this.lastUnderrunAt = 0;
+    this.firstTurnDone = true;
   }
 
   setMuted(m: boolean) {
-    this.gain.gain.value = m ? 0 : 1;
+    this.muted = m;
+    this.gain.gain.value = m ? 0 : this.volume;
+  }
+
+  /** AI voice volume, 0.25 – 2 (values above 1 boost a too-quiet voice).
+   *  Independent from mute: unmuting restores the chosen level. */
+  setVolume(v: number) {
+    this.volume = Math.min(2, Math.max(0.25, v));
+    if (!this.muted) this.gain.gain.value = this.volume;
   }
 
   resume() {
