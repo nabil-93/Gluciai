@@ -64,26 +64,35 @@ Deno.serve(async (req) => {
       `Read the text exactly as written, without adding or skipping anything:\n\n` +
       clean;
 
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseModalities: ['AUDIO'],
-            speechConfig: {
-              voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } },
+    // The preview TTS model rate-limits under load (429/503) and those
+    // hiccups clear within seconds: retry here so one client request
+    // (= one chunk of speech) almost always comes back with audio instead
+    // of a 502 that would drop a piece of the spoken text.
+    let r: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise((res) => setTimeout(res, 1300 * attempt));
+      r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } },
+              },
             },
-          },
-        }),
-      }
-    );
-    if (!r.ok) {
-      return json({ error: `AI provider error (${r.status}): ${await r.text()}` }, 502);
+          }),
+        }
+      );
+      if (r.ok || (r.status !== 429 && r.status < 500)) break;
     }
-    const data = await r.json();
+    if (!r!.ok) {
+      return json({ error: `AI provider error (${r!.status}): ${await r!.text()}` }, 502);
+    }
+    const data = await r!.json();
     const part = (data.candidates?.[0]?.content?.parts ?? []).find(
       (p: { inlineData?: { data?: string } }) => p.inlineData?.data
     );
