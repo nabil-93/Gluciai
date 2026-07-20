@@ -28,7 +28,7 @@ const INK = '#0C1D16';
 const MUTED = '#8CA097';
 const GREEN = '#21C57E';
 
-const GENDERS: Profile['gender'][] = ['male', 'female', 'other'];
+const GENDERS: Profile['gender'][] = ['male', 'female'];
 const DIABETES: DiabetesType[] = ['type1', 'type2', 'gestational', 'prediabetes'];
 const INSULINS: InsulinType[] = ['rapid', 'long', 'mixed'];
 

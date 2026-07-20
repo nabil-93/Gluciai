@@ -526,7 +526,6 @@ export default function WizardScreen() {
   const GENDERS = [
     { v: 'male' as const, label: t('wizard.male'), icon: '♂', bg: '#2ec97e' },
     { v: 'female' as const, label: t('wizard.female'), icon: '♀', bg: '#8b5cf6' },
-    { v: 'other' as const, label: t('wizard.other'), icon: '⚇', bg: '#f0902f' },
   ];
 
   const DIABETES: { v: DiabetesType; icon: string }[] = [
