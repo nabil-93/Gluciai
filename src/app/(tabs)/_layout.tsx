@@ -5,10 +5,12 @@ import { useTranslation } from 'react-i18next';
 import { BevelTabBar } from '@/components/ui';
 import { TabBarVisibilityProvider } from '@/components/ui/TabBarVisibility';
 import { PlanWelcome } from '@/components/PlanWelcome';
+import { AppAlert } from '@/components/AppAlert';
 import { refreshFeatureLocks } from '@/services/features';
 import { refreshUsage } from '@/services/usage';
 import { refreshSmartReminders } from '@/services/notifications';
 import { checkReminders } from '@/services/reminders';
+import { startPresence } from '@/services/presence';
 import { hydrateFromServer } from '@/services/sync';
 import { colors } from '@/theme';
 
@@ -24,9 +26,14 @@ export default function TabsLayout() {
     refreshFeatureLocks();
     refreshUsage();
     hydrateFromServer().then(() => checkReminders());
+    // "Dernière connexion" heartbeat for the dashboard (now + on foreground).
+    const stopPresence = startPresence();
     // AI reminders tick: fire due ones + "did you do it?" follow-ups.
     const id = setInterval(checkReminders, 60_000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      stopPresence();
+    };
   }, []);
 
   return (
@@ -44,6 +51,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="biology" options={{ title: t('tabs.biology') }} />
       </Tabs>
       <PlanWelcome />
+      <AppAlert />
     </TabBarVisibilityProvider>
   );
 }

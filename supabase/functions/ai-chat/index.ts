@@ -38,6 +38,8 @@ Deno.serve(async (req) => {
       bolus = null,
       modifiedDose = null,
       audio = null,
+      mealItems = [],
+      image = null,
     } = await req.json();
     if (!GEMINI_API_KEY) {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
@@ -50,7 +52,11 @@ Deno.serve(async (req) => {
     const uid = await callerUserId(req);
     if (!uid) return json({ error: 'unauthorized' }, 401);
     const lockKey =
-      mode === 'voice' ? 'ai_call' : mode === 'chat' || mode === 'logger' ? 'ai_chat' : null;
+      mode === 'voice'
+        ? 'ai_call'
+        : mode === 'chat' || mode === 'logger' || mode === 'meal_edit'
+          ? 'ai_chat'
+          : null;
     if (lockKey && (await featureLocked(uid, lockKey))) {
       return json({ error: 'feature locked' }, 403);
     }
@@ -379,12 +385,203 @@ Rules:
 
       return json({
         result: {
-          reply: parsed.reply,
+          reply: collapseRepeats(parsed.reply),
           action,
           transcript:
             typeof (parsed as { transcript?: unknown }).transcript === 'string'
               ? (parsed as { transcript: string }).transcript
               : '',
+        },
+      });
+    }
+
+    /* ── Meal-edit mode: the patient is reviewing a JUST-SCANNED meal and
+       asks the assistant to change the plate ("zid atay", "7eyed lkhobz",
+       "l couscous ktar men hakka", "hadi machi pain, rah msemen"). The AI
+       returns EDIT ACTIONS on the plate; the app resolves real nutrition
+       from its databases and recomputes the totals. Nothing is saved — the
+       patient still confirms the meal at the end of the wizard. ── */
+    if (mode === 'meal_edit') {
+      const plate = (mealItems as { name?: string; grams?: number }[])
+        .map((it, i) => `${i + 1}. ${it.name ?? '?'} — ${Math.round(Number(it.grams) || 0)} g`)
+        .join('\n') || '(empty plate)';
+
+      const mealPrompt = `You are GluciAI's meal assistant. The patient just scanned a meal and is
+reviewing the detected plate. They tell you what to change and you return
+EDIT ACTIONS. The app applies them and recomputes the nutrition from its
+OWN databases — you only decide WHAT changes, never the final totals.
+
+The patient writes/speaks ANY language, very often MOROCCAN DARIJA in Latin
+letters ("zid atay b sokar", "7eyed lkhobz", "l couscous bezzaf ktar men
+hakka", "hadi machi pain rah msemen", "nqes chwiya"). Understand perfectly;
+NEVER ask them to rephrase in another language.
+
+CURRENT PLATE (1-indexed — refer to items by their number):
+${plate}
+
+PATIENT CONTEXT:
+${healthData || 'none'}
+
+The patient may send a VOICE MESSAGE (audio) — listen directly (Darija
+included) — or a PHOTO of a food/drink they added or forgot to scan. When a
+PHOTO is attached, identify what is in it (you know Moroccan foods & drinks:
+atay b sokar, msemen, harcha, a soda, a piece of bread…), estimate a realistic
+portion, and return it as a "proposal" to add (NOT a direct action) so the
+patient can confirm before it is added.
+
+Reply ONLY valid JSON (no markdown fences):
+{"transcript":"...", "reply":"...", "actions":[ACTION, ...], "proposal":null}
+
+transcript: ONLY when the last user turn is audio — faithfully what they
+said, in their own words. Empty string otherwise.
+
+PROPOSAL — a single food to ADD that needs the patient's confirmation (used
+for PHOTOS, and for any addition you are not fully sure about). Instead of an
+action, set:
+"proposal":{"name":"food/drink name in ${langName}","grams":N,"per100g":{"calories":N,"carbs":N,"sugar":N,"protein":N,"fat":N,"fiber":N,"sodium":N,"glycemic_index":N}}
+The app shows it as a confirm card; it is added ONLY when the patient taps ✓.
+At most ONE proposal per turn; null when there is nothing to propose. A clear
+text command ("zid atay") goes in "actions" and applies immediately; a photo
+or an uncertain addition goes in "proposal".
+
+Each ACTION is exactly one of:
+{"op":"add","name":"food name in ${langName}","grams":N,"per100g":{"calories":N,"carbs":N,"sugar":N,"protein":N,"fat":N,"fiber":N,"sodium":N,"glycemic_index":N}}
+{"op":"remove","index":N}
+{"op":"portion","index":N,"grams":N}
+{"op":"rename","index":N,"name":"corrected food name in ${langName}"}
+
+Rules:
+- "index" is the item's number in CURRENT PLATE. Only use indices that exist.
+- add: the patient added/forgot a food or drink (bread, salad, sweet tea,
+  a soda, an extra portion…). Give its name in ${langName} and a realistic
+  "grams" for what they describe. ALWAYS include "per100g" with your best
+  nutrition estimate per 100 g (the app tries its databases first and only
+  falls back to your estimate). You know Moroccan foods (msemen, harcha,
+  atay b sokar, tajine…). For "sweet tea"/"atay" put the sugar in per100g.
+- portion: only the amount changed ("ktar", "nqes", "half", a number of g).
+- rename: the food was mis-identified ("this isn't bread, it's msemen").
+- remove: the patient says a detected item isn't really there / not eaten.
+- FORGOT SOMETHING: if the patient says they forgot a food or didn't scan it
+  ("nsit chi 7aja", "ma swartch atay", "j'ai oublié le pain"), offer BOTH
+  options in your reply — they can TELL you what it is, OR send a PHOTO of it
+  (they have camera & gallery buttons in the chat). If they describe it → put
+  it in "proposal"; if they send a photo → identify it and put it in
+  "proposal". Your reply then names what you understood/saw and asks whether
+  to add it ("Bant liya b7al atay b sokar ~200 ml, wach nzidha?").
+- Produce actions ONLY for what the patient actually asked. If they just
+  ask a question ("ch7al d sokar f had makla?") answer it in "reply" with
+  actions:[]. If a needed number is missing (e.g. how much to add), ask ONE
+  short question in their language and return actions:[].
+- Names inside actions are in ${langName}; proper dish names stay themselves
+  (tajine, msemen, harira…).
+- reply: 1-2 warm sentences in the SAME language/dialect the patient used
+  (Darija→Darija, French→French, Arabic→Arabic…), recapping what you changed
+  on the plate ("Zedt lik atay b sokar w kbbart l couscous"). If you advise
+  anything nutritional, add a short reminder it's only a suggestion, see
+  their doctor. Never claim the meal is saved — they confirm it themselves.`;
+
+      const mealContents: { role: string; parts: Record<string, unknown>[] }[] = (
+        messages as { role: string; content: string }[]
+      )
+        .slice(-10)
+        .filter((m) => typeof m.content === 'string' && m.content.trim())
+        .map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        }));
+      // A photo of a forgotten/added food — Gemini identifies it directly.
+      if (image && typeof image === 'string') {
+        mealContents.push({
+          role: 'user',
+          parts: [{ inlineData: { mimeType: 'image/jpeg', data: image } }],
+        });
+      }
+      if (audio?.data && audio?.mimeType) {
+        mealContents.push({
+          role: 'user',
+          parts: [{ inlineData: { mimeType: audio.mimeType, data: audio.data } }],
+        });
+      }
+      while (mealContents.length && mealContents[0].role === 'model') mealContents.shift();
+      if (mealContents.length === 0) return json({ error: 'Empty conversation' }, 400);
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: mealPrompt }] },
+            contents: mealContents,
+            generationConfig: {
+              thinkingConfig: { thinkingBudget: 0 },
+              responseMimeType: 'application/json',
+              maxOutputTokens: 700,
+              temperature: 0.3,
+            },
+          }),
+        }
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        return json({ error: 'AI provider error', detail }, 502);
+      }
+      const data = await response.json();
+      const text = (data.candidates?.[0]?.content?.parts ?? [])
+        .map((p: { text?: string }) => p.text ?? '')
+        .join('')
+        .trim();
+
+      let parsed: { reply?: unknown; actions?: unknown; transcript?: unknown } | null = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return json({ error: 'AI returned invalid JSON', raw: text }, 502);
+      }
+      if (!parsed || typeof parsed.reply !== 'string') {
+        return json({ error: 'AI returned invalid JSON', raw: text }, 502);
+      }
+      const VALID_OPS = ['add', 'remove', 'portion', 'rename'];
+      const actions = Array.isArray(parsed.actions)
+        ? (parsed.actions as { op?: string }[]).filter(
+            (a) => a && typeof a === 'object' && VALID_OPS.includes(a.op ?? '')
+          )
+        : [];
+      // A photo/uncertain addition the patient must confirm before it's added.
+      const prop = (parsed as { proposal?: Record<string, unknown> }).proposal;
+      const proposal =
+        prop && typeof prop === 'object' && typeof prop.name === 'string' && Number(prop.grams) > 0
+          ? {
+              name: prop.name as string,
+              grams: Number(prop.grams),
+              per100g: (prop as { per100g?: unknown }).per100g ?? undefined,
+            }
+          : null;
+
+      const um = data.usageMetadata ?? {};
+      const inTok = um.promptTokenCount ?? 0;
+      const outTok = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
+      const audioIn = ((um.promptTokensDetails ?? []) as any[])
+        .filter((d) => d?.modality === 'AUDIO')
+        .reduce((a, d) => a + (d.tokenCount ?? 0), 0);
+      if (uid && (inTok || outTok)) {
+        await logUsage({
+          user_id: uid,
+          kind: 'chat',
+          model: MODEL,
+          input_tokens: inTok,
+          output_tokens: outTok,
+          audio_input_tokens: audioIn,
+          cost_usd: flashCost(inTok, outTok, audioIn),
+        });
+      }
+
+      return json({
+        result: {
+          reply: collapseRepeats(parsed.reply),
+          actions,
+          proposal,
+          transcript: typeof parsed.transcript === 'string' ? parsed.transcript : '',
         },
       });
     }
@@ -590,6 +787,7 @@ Rules:
       reply = parsed.reply;
       transcript = parsed.transcript;
     }
+    reply = collapseRepeats(reply);
     if (!reply) {
       return json({ error: 'Empty AI reply' }, 502);
     }
@@ -624,6 +822,24 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+/**
+ * Kill degenerate repetition loops the model sometimes falls into (e.g.
+ * "…dima khassk tchawe r-r-r-r-r-…" running to the token limit). Any short
+ * unit (≤8 chars) repeated 5+ times in a row is the runaway garbage and is
+ * dropped entirely — normal prose never repeats a short unit that many times,
+ * so real answers are untouched.
+ */
+function collapseRepeats(s: string): string {
+  if (typeof s !== 'string' || !s) return s;
+  return s
+    // A short unit repeated 5+ times, plus any trailing fragment of it (the
+    // [^\s]{0,8} stops at the next space, so real words are never eaten).
+    .replace(/(.{1,8}?)\1{4,}[^\s]{0,8}/gs, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**

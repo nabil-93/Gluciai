@@ -25,6 +25,7 @@ import {
   FadeInView,
   ScanStepper,
 } from '@/components/ui';
+import { MealAssistant, MealRobotButton } from '@/components/MealAssistant';
 import { computeBolus, saveMeal } from '@/services/data';
 import {
   aggregateItems,
@@ -111,6 +112,8 @@ export default function ScanResultScreen() {
   const insets = useSafeAreaInsets();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Meal-assistant chat sheet (opened from the robot next to "Aliments détectés").
+  const [assistantOpen, setAssistantOpen] = useState(false);
   // Which meal of the day — defaulted from the current time, user can change.
   const [mealType, setMealType] = useState<MealType>(() => defaultMealType());
   // Stable snapshot of the scan for this screen's lifetime
@@ -564,9 +567,13 @@ export default function ScanResultScreen() {
               }}
             >
             <BevelCard noPadding style={{ marginTop: 12 }}>
-              <Text style={styles.itemsTitle}>
-                {t('result.detectedFoods')} ({items.length})
-              </Text>
+              <View style={styles.detHeaderRow}>
+                <Text style={[styles.itemsTitle, { paddingHorizontal: 0, paddingTop: 0 }]}>
+                  {t('result.detectedFoods')} ({items.length})
+                </Text>
+                {/* AI robot — tap to open the meal-edit chat. */}
+                <MealRobotButton onPress={() => setAssistantOpen(true)} />
+              </View>
               <Text style={styles.itemsHint}>{t('result.editHint')}</Text>
               {items.map((it, i) => {
                 const color = SOURCE_COLOR[it.source];
@@ -1132,6 +1139,16 @@ export default function ScanResultScreen() {
         )}
       </View>
 
+      {/* AI meal assistant — opened from the robot next to "Aliments détectés".
+          Edit the plate by chat/voice/photo; totals update live before save. */}
+      <MealAssistant
+        items={items}
+        onApply={setItems}
+        carbs={result.carbohydrates}
+        open={assistantOpen}
+        onOpenChange={setAssistantOpen}
+      />
+
       {/* Low-confidence "Did you mean?" bottom sheet */}
       <DidYouMeanSheet
         item={sheetIndex != null ? items[sheetIndex] ?? null : null}
@@ -1380,6 +1397,13 @@ const styles = StyleSheet.create({
     color: '#3E3E44',
   },
 
+  detHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
   itemsTitle: {
     fontSize: 16,
     fontWeight: '700',

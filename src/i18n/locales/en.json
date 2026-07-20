@@ -1014,6 +1014,36 @@
     "dinner": "Dinner",
     "snack": "Snack"
   },
+  "healthyAI": {
+    "title": "Healthy meal advisor",
+    "sub": "It knows your health data",
+    "hint": "🥗 Craving something healthy? I can suggest.",
+    "greeting": "🥗 I know healthy dishes that fit your diabetes. Tell me what you feel like — and any allergies or foods you dislike.",
+    "placeholder": "Write or speak…"
+  },
+  "mealAI": {
+    "title": "Meal assistant",
+    "sub": "Edit the plate by chatting",
+    "hint": "🤖 I'm here — tell me if you want to add or change anything on the plate.",
+    "greeting": "🤖 I saw your meal (~{{carbs}} g carbs). What would you like to add, remove or change?",
+    "placeholder": "Add, remove, correct…",
+    "added": "Added: {{list}}",
+    "removed": "Removed: {{list}}",
+    "changed": "Changed: {{list}}",
+    "done": "Done.",
+    "propYes": "Add",
+    "propAdded": "Added to your meal ✓",
+    "addedConfirm": "{{name}} added to your meal ✓",
+    "camera": "Take a photo",
+    "gallery": "Choose an image"
+  },
+  "appAlert": {
+    "defaultTitle": "Important message",
+    "contactSupport": "Contact support",
+    "contactDoctor": "Call my doctor",
+    "ok": "OK, got it",
+    "waMessage": "Hello, I'm reaching out about a message I received in the GluciAI app."
+  },
   "plan": {
     "welcomeTitle": "Welcome to GluciAI 👋",
     "welcomeBody": "You're starting on the free plan. To enjoy everything — meal scanner, AI assistant, voice call, insulin calculation — upgrade to the full version.",

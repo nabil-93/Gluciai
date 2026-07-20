@@ -44,12 +44,13 @@ const MOMENT_EMOJI: Record<MealMoment, string> = {
  * for that moment, diabetes-appropriate, with real photos. The floating
  * robot opens a chat that asks about allergies/dislikes then recommends.
  */
-/* Gate: "Plats du monde" is a hideable section. When the admin hid it for
- * this account (feature_access world_recipes allowed=false) the screen
- * silently redirects home — its Biology entry point is gone too. */
+/* Gate: "Plats du monde" is a HIDDEN feature. Only accounts the admin
+ * explicitly granted (feature_access world_recipes allowed=true) can reach
+ * this screen — otherwise it silently redirects home, and its entry points
+ * (Biology card + add-menu shortcut) don't exist either. */
 export default function WorldRecipesGate() {
-  const hidden = useAppStore((s) => s.lockedFeatures.includes('world_recipes'));
-  if (hidden) return <Redirect href="/(tabs)" />;
+  const granted = useAppStore((s) => s.grantedFeatures.includes('world_recipes'));
+  if (!granted) return <Redirect href="/(tabs)" />;
   return <WorldRecipesScreen />;
 }
 

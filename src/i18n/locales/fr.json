@@ -1014,6 +1014,36 @@
     "dinner": "Dîner",
     "snack": "Collation"
   },
+  "healthyAI": {
+    "title": "Conseiller repas sain",
+    "sub": "Il connaît vos données de santé",
+    "hint": "🥗 Envie d'un plat sain ? Je peux vous conseiller.",
+    "greeting": "🥗 Je connais des plats sains adaptés à votre diabète. Dites-moi ce qui vous ferait plaisir — et si vous avez des allergies ou des aliments que vous n'aimez pas.",
+    "placeholder": "Écrivez ou parlez…"
+  },
+  "mealAI": {
+    "title": "Assistant repas",
+    "sub": "Modifiez le plat en discutant",
+    "hint": "🤖 Je suis là — dites-moi si vous voulez ajouter ou changer quelque chose dans le plat.",
+    "greeting": "🤖 J'ai vu votre repas (~{{carbs}} g de glucides). Que voulez-vous ajouter, retirer ou modifier ?",
+    "placeholder": "Ajouter, retirer, corriger…",
+    "added": "Ajouté : {{list}}",
+    "removed": "Retiré : {{list}}",
+    "changed": "Modifié : {{list}}",
+    "done": "C'est fait.",
+    "propYes": "Ajouter",
+    "propAdded": "Ajouté à votre repas ✓",
+    "addedConfirm": "{{name}} ajouté à votre repas ✓",
+    "camera": "Prendre une photo",
+    "gallery": "Choisir une image"
+  },
+  "appAlert": {
+    "defaultTitle": "Message important",
+    "contactSupport": "Contacter le support",
+    "contactDoctor": "Contacter mon médecin",
+    "ok": "OK, compris",
+    "waMessage": "Bonjour, je vous contacte suite à un message reçu dans l'application GluciAI."
+  },
   "plan": {
     "welcomeTitle": "Bienvenue sur GluciAI 👋",
     "welcomeBody": "Vous démarrez en version gratuite. Pour profiter de tout — scanner de repas, assistant IA, appel vocal, calcul d'insuline — passez à la version complète.",

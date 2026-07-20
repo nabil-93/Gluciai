@@ -44,10 +44,11 @@ const RATING: Record<RecipeRating, { color: string; bg: string; key: string }> =
  * Full world recipe: HD photo hero, AI diabetes verdict + advice, animated
  * nutrition gauge rings (per serving), ingredients and translated steps.
  */
-/* Gate: hidden when the admin turned off "Plats du monde" for this account. */
+/* Gate: "Plats du monde" is a HIDDEN feature — reachable only when the admin
+ * granted it (feature_access world_recipes allowed=true), else redirect home. */
 export default function WorldRecipeGate() {
-  const hidden = useAppStore((s) => s.lockedFeatures.includes('world_recipes'));
-  if (hidden) return <Redirect href="/(tabs)" />;
+  const granted = useAppStore((s) => s.grantedFeatures.includes('world_recipes'));
+  if (!granted) return <Redirect href="/(tabs)" />;
   return <WorldRecipeScreen />;
 }
 

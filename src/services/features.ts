@@ -12,9 +12,12 @@ export const ALL_FEATURES: FeatureKey[] = ['scanner', 'ai_chat', 'ai_call'];
  * exist for NOBODY unless the admin explicitly grants them (a
  * feature_access row with allowed=true). They never appear on the
  * subscription screen, never show a "locked" teaser, and leave no trace
- * in the UI for non-granted accounts. Currently: 'labs' (lab analyses).
+ * in the UI for non-granted accounts (no icon, no entry point at all).
+ *  - 'labs'          → lab analyses (photo → AI report)
+ *  - 'world_recipes' → "Plats du monde" (AI world recipes). Hidden by default
+ *    for every account until the admin releases it from the dashboard.
  */
-export const HIDDEN_FEATURES = ['labs'] as const;
+export const HIDDEN_FEATURES = ['labs', 'world_recipes'] as const;
 
 /**
  * HIDEABLE content sections — VISIBLE to everyone by default, but the admin
@@ -25,12 +28,13 @@ export const HIDDEN_FEATURES = ['labs'] as const;
  * on the same `lockedFeatures` list (allowed=false) as the premium locks.
  *  - healthy_selection → "Sélection Santé" (curated dishes)
  *  - world_foods       → "Base Mondiale" (Open Food Facts search)
- *  - world_recipes     → "Plats du monde" (AI world recipes)
+ *
+ * NB: "Plats du monde" (world_recipes) used to live here but is now a HIDDEN
+ * feature — hidden by default and released per account by the admin.
  */
 export const HIDEABLE_SECTIONS = [
   'healthy_selection',
   'world_foods',
-  'world_recipes',
 ] as const;
 export type HideableSection = (typeof HIDEABLE_SECTIONS)[number];
 

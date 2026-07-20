@@ -60,3 +60,4 @@ supabase/.branches/
 .mcp.json
 
 .vercel
+.env*

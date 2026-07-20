@@ -28,6 +28,7 @@ import { isRTL } from '@/i18n';
 import { uniqueId } from '@/lib/clock';
 import { confirmAsync } from '@/lib/confirm';
 import { Speaker } from '@/lib/speech';
+import { collapseRepeats } from '@/lib/textSanitize';
 import { sendChatMessage, sendChatVoice } from '@/services/ai';
 import {
   actionSummary,
@@ -221,10 +222,9 @@ function cleanAssistantText(raw: string): string {
     const id = String(inner).trim().replace(/^food:/i, '').split('|')[0].trim();
     return getHealthyFood(id) ? `[[food:${id}]]` : '';
   });
-  return s
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  return collapseRepeats(
+    s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  );
 }
 
 /**

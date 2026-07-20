@@ -54,6 +54,7 @@ const FEATURES = [
  * (feature_access allowed=true). Visibles uniquement par l'admin ici. */
 const HIDDEN_FEATURES = [
   { key: 'labs', label: 'Analyses biologiques', desc: 'Photo du bilan → IA : valeurs, graphiques, rapport, docteur vocal', icon: '🧪', bg: '#fdf2ff' },
+  { key: 'world_recipes', label: 'Plats du monde', desc: 'Recettes du monde générées par IA — invisible tant que non activée', icon: '🍽️', bg: '#fef3e8' },
 ];
 
 /* Rubriques de CONTENU : visibles par défaut, mais l'admin peut les masquer
@@ -62,7 +63,6 @@ const HIDDEN_FEATURES = [
 const CONTENT_SECTIONS = [
   { key: 'healthy_selection', label: 'Sélection Santé', desc: 'Plats sains sélectionnés (Makla saine)', icon: '🥗', bg: '#e9fbf2' },
   { key: 'world_foods', label: 'Base Mondiale', desc: 'Recherche produits Open Food Facts (Makla saine)', icon: '🌍', bg: '#e8f1fe' },
-  { key: 'world_recipes', label: 'Plats du monde', desc: 'Recettes du monde générées par IA', icon: '🍽️', bg: '#fef3e8' },
 ];
 
 /* Usage limits (quotas) — the four AI features that carry a day/week/month
@@ -151,6 +151,34 @@ function glyBadge(v) {
   if (n <= 180) return `<span class="badge green">${n} · Bon</span>`;
   if (n <= 250) return `<span class="badge amber">${n} · Modéré</span>`;
   return `<span class="badge red">${n} · Élevé</span>`;
+}
+
+/* Glucose risk flag from the 14-day window in patient_overview. Target range
+ * is 70–180 mg/dL; "severe" means < 54 or > 250. A patient is flagged when a
+ * meaningful share of recent readings fall out of range. */
+function glyFlag(p) {
+  const total = Number(p.gly_14d || 0);
+  const out = Number(p.gly_out_14d || 0);
+  const severe = Number(p.gly_severe_14d || 0);
+  if (!total) return { level: 'none', label: '—', cls: 'gray' };
+  const ratio = out / total;
+  if (severe >= 2 || (ratio >= 0.5 && total >= 4)) return { level: 'critique', label: '🔴 Critique', cls: 'red' };
+  if (out >= 3 || ratio >= 0.25) return { level: 'surveiller', label: '🟠 À surveiller', cls: 'amber' };
+  return { level: 'ok', label: '🟢 OK', cls: 'green' };
+}
+
+/* Time-bucket test shared by the "dernière connexion" and "dernière activité"
+ * filters. Buckets: today (<1j), 7d (<7j), 30d (<30j), old (≥30j), never. */
+function inTimeBucket(iso, bucket) {
+  if (!bucket) return true;
+  if (bucket === 'never') return !iso;
+  if (!iso) return false;
+  const days = (Date.now() - new Date(iso).getTime()) / 86400000;
+  if (bucket === 'today') return days < 1;
+  if (bucket === '7d') return days < 7;
+  if (bucket === '30d') return days < 30;
+  if (bucket === 'old') return days >= 30;
+  return true;
 }
 const daysLeft = (iso) => {
   if (!iso) return null;
@@ -458,19 +486,24 @@ function barChart(days) {
 function patientTable(rows, opts = {}) {
   if (!rows.length) return `<div class="empty"><div class="e">🩺</div><div class="t">Aucun patient</div><div class="s">Les patients apparaîtront ici dès leur inscription.</div></div>`;
   return `<div class="table-wrap"><table class="data">
-    <thead><tr><th>Patient</th>${me.role === 'admin' && !opts.hideDoctor ? '<th>Médecin</th>' : ''}<th>Type</th><th>Abonnement</th><th>Scans</th><th>Glycémies</th><th>Dernière activité</th><th></th></tr></thead>
+    <thead><tr><th>Patient</th>${me.role === 'admin' && !opts.hideDoctor ? '<th>Médecin</th>' : ''}<th>Type</th><th>Abonnement</th><th>État glycémie</th><th>Scans</th><th>Glycémies</th><th>Connexion</th><th>Activité</th><th></th></tr></thead>
     <tbody>
-      ${rows.map((p) => `
+      ${rows.map((p) => {
+        const fl = glyFlag(p);
+        return `
         <tr class="click" data-pid="${p.user_id}">
           <td><div class="cell-user">${avatar(p.name, p.email)}<div style="min-width:0"><div class="nm">${esc(p.name || 'Sans nom')}</div><div class="em">${esc(p.email || '')}</div></div></div></td>
           ${me.role === 'admin' && !opts.hideDoctor ? `<td>${p.doctor_name ? `<span class="badge violet">Dr. ${esc(p.doctor_name)}</span>` : '<span class="badge gray">—</span>'}</td>` : ''}
           <td>${p.diabetes_type ? `<span class="badge indigo">${esc(String(p.diabetes_type).replace('type', 'Type '))}</span>` : '—'}</td>
           <td>${subBadge(p)}</td>
+          <td><span class="badge ${fl.cls}">${fl.label}</span></td>
           <td><b>${p.meals_count ?? 0}</b></td>
           <td><b>${p.glucose_count ?? 0}</b></td>
-          <td style="color:var(--muted);font-size:12px">${p.last_activity ? timeAgo(p.last_activity) : '—'}</td>
+          <td style="color:var(--muted);font-size:12px" title="${p.last_seen_at ? fmtDT(p.last_seen_at) : ''}">${p.last_seen_at ? timeAgo(p.last_seen_at) : '—'}</td>
+          <td style="color:var(--muted);font-size:12px" title="${p.last_activity ? fmtDT(p.last_activity) : ''}">${p.last_activity ? timeAgo(p.last_activity) : '—'}</td>
           <td style="color:var(--muted-2);width:20px">${I.chevR}</td>
-        </tr>`).join('')}
+        </tr>`;
+      }).join('')}
     </tbody></table></div>`;
 }
 function bindPatientRows(scope) {
@@ -483,18 +516,31 @@ async function pagePatients() {
   const patients = await fetchPatients();
   const doctors = me.role === 'admin' ? await fetchDoctors() : [];
 
+  // The list currently shown after all filters — the "envoi groupé" alert
+  // targets exactly this set, so the admin sees who will receive it.
+  let currentList = patients;
+
   const renderList = () => {
     const q = (document.getElementById('psearch')?.value || '').trim().toLowerCase();
     const fDoc = document.getElementById('fDoc')?.value || '';
     const fSub = document.getElementById('fSub')?.value || '';
+    const fState = document.getElementById('fState')?.value || '';
+    const fConn = document.getElementById('fConn')?.value || '';
+    const fAct = document.getElementById('fAct')?.value || '';
     let f = patients;
     if (q) f = f.filter((p) => (p.name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q) || (p.doctor_name || '').toLowerCase().includes(q));
     if (fDoc === 'none') f = f.filter((p) => !p.doctor_id);
     else if (fDoc) f = f.filter((p) => p.doctor_id === fDoc);
     if (fSub) f = f.filter((p) => statusOf(p) === fSub);
+    if (fState) f = f.filter((p) => glyFlag(p).level === fState);
+    if (fConn) f = f.filter((p) => inTimeBucket(p.last_seen_at, fConn));
+    if (fAct) f = f.filter((p) => inTimeBucket(p.last_activity, fAct));
+    currentList = f;
     document.getElementById('plist').innerHTML = patientTable(f);
     bindPatientRows(document.getElementById('plist'));
     document.getElementById('pcount').textContent = `${f.length} / ${patients.length}`;
+    const bulk = document.getElementById('bulkAlert');
+    if (bulk) bulk.textContent = `📢 Alerte (${f.length})`;
   };
 
   page.innerHTML = `
@@ -515,8 +561,32 @@ async function pagePatients() {
         <option value="canceled">Annulé</option>
         <option value="none">Aucun</option>
       </select>
+      <select class="sel" id="fState">
+        <option value="">🩸 État glycémie</option>
+        <option value="critique">🔴 Critique</option>
+        <option value="surveiller">🟠 À surveiller</option>
+        <option value="ok">🟢 OK</option>
+        <option value="none">Sans donnée</option>
+      </select>
+      <select class="sel" id="fConn">
+        <option value="">📲 Dernière connexion</option>
+        <option value="today">Aujourd'hui</option>
+        <option value="7d">7 derniers jours</option>
+        <option value="30d">30 derniers jours</option>
+        <option value="old">+ de 30 jours</option>
+        <option value="never">Jamais connecté</option>
+      </select>
+      <select class="sel" id="fAct">
+        <option value="">⏱️ Dernière activité</option>
+        <option value="today">Aujourd'hui</option>
+        <option value="7d">7 derniers jours</option>
+        <option value="30d">30 derniers jours</option>
+        <option value="old">+ de 30 jours</option>
+        <option value="never">Aucune activité</option>
+      </select>
       <span class="badge gray" id="pcount"></span>
       <div class="spacer" style="flex:1"></div>
+      <button class="btn btn-ghost" id="bulkAlert">📢 Alerte</button>
       <button class="btn btn-primary" id="addPatient">${I.plus} Ajouter un patient</button>
     </div>
     <div class="card fade-up" style="animation-delay:.05s" id="plist"></div>`;
@@ -524,7 +594,11 @@ async function pagePatients() {
   document.getElementById('psearch').addEventListener('input', renderList);
   document.getElementById('fDoc')?.addEventListener('change', renderList);
   document.getElementById('fSub')?.addEventListener('change', renderList);
+  document.getElementById('fState')?.addEventListener('change', renderList);
+  document.getElementById('fConn')?.addEventListener('change', renderList);
+  document.getElementById('fAct')?.addEventListener('change', renderList);
   document.getElementById('addPatient').addEventListener('click', () => addUserModal('patient', doctors, () => pagePatients()));
+  document.getElementById('bulkAlert').addEventListener('click', () => alertModal(currentList));
 }
 
 function addUserModal(kind, doctors, onDone, forcedDoctorId) {
@@ -553,6 +627,50 @@ function addUserModal(kind, doctors, onDone, forcedDoctorId) {
     });
     if (!res.ok) { toast(res.error || 'Erreur', true); btn.disabled = false; btn.textContent = 'Créer le compte'; return; }
     ov.remove(); toast(isDoc ? 'Médecin créé ✓' : 'Patient créé ✓'); onDone?.();
+  });
+}
+
+/* ════════════════ ALERTE IN-APP ════════════════
+   Envoie un message à un patient (ou à toute une liste filtrée). Il s'affiche
+   au centre de l'écran dans l'app, avec un bouton de contact optionnel :
+     support → ouvre le WhatsApp support   |   doctor → appelle son médecin. */
+function alertModal(target, onDone) {
+  const recipients = (Array.isArray(target) ? target : [target]).filter((p) => p && p.user_id);
+  const n = recipients.length;
+  if (!n) { toast('Aucun destinataire', true); return; }
+  const who = n === 1
+    ? `<b>${esc(recipients[0].name || recipients[0].email || 'ce patient')}</b>`
+    : `<b>${n} patient${n > 1 ? 's' : ''}</b> (liste filtrée actuelle)`;
+  const ov = modal(`
+    <div class="modal-head"><h3>📢 Envoyer une alerte</h3><button class="icon-btn" data-close>${I.x}</button></div>
+    <div class="modal-body">
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;line-height:1.5">
+        Destinataire : ${who}.<br />Le message s'affiche <b>au centre de l'écran</b> dans l'application du patient.
+      </div>
+      <div class="field"><label>Titre (optionnel)</label><input id="alTitle" maxlength="80" placeholder="Ex. Message de votre équipe" /></div>
+      <div class="field"><label>Message</label><textarea id="alBody" rows="4" maxlength="500" placeholder="Écrivez votre message…" style="resize:vertical;font:inherit;width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;background:#fbfcfe"></textarea></div>
+      <div class="field"><label>Bouton de contact</label>
+        <select id="alCta">
+          <option value="none">Aucun — juste « OK »</option>
+          <option value="support">📞 Contacter le support (WhatsApp)</option>
+          <option value="doctor">👨‍⚕️ Contacter le médecin (appel)</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Annuler</button><button class="btn btn-primary" id="alGo">Envoyer${n > 1 ? ` à ${n}` : ''}</button></div>`);
+  ov.querySelector('#alGo').addEventListener('click', async () => {
+    const body = ov.querySelector('#alBody').value.trim();
+    const title = ov.querySelector('#alTitle').value.trim();
+    const cta = ov.querySelector('#alCta').value;
+    if (!body) { toast('Le message est vide', true); return; }
+    const btn = ov.querySelector('#alGo');
+    btn.disabled = true; btn.textContent = 'Envoi…';
+    const rows = recipients.map((p) => ({ user_id: p.user_id, title: title || null, body, cta, created_by: me.id }));
+    const { error } = await db.from('app_alerts').insert(rows);
+    if (error) { btn.disabled = false; btn.textContent = 'Envoyer'; toast('Erreur: ' + error.message, true); return; }
+    ov.remove();
+    toast(n === 1 ? 'Alerte envoyée ✓' : `Alerte envoyée à ${n} patients ✓`);
+    onDone?.();
   });
 }
 
@@ -633,6 +751,7 @@ async function pagePatient(pid, initTab) {
       <div class="page-actions fade-up" style="margin-bottom:0">
         <button class="btn btn-ghost" id="backBtn">${I.back} Retour</button>
         <div class="spacer" style="flex:1"></div>
+        ${isPatient ? `<button class="btn btn-ghost" id="alertBtn">📢 Envoyer une alerte</button>` : ''}
         ${me.role === 'admin' ? `<button class="btn btn-ghost" id="pwBtn">${I.key} Mot de passe</button>${pid !== me.id ? `<button class="btn btn-danger" id="delBtn">${I.trash} Supprimer</button>` : ''}` : ''}
       </div>
 
@@ -799,6 +918,8 @@ async function pagePatient(pid, initTab) {
     </div>`;
 
   document.getElementById('backBtn').addEventListener('click', () => history.back());
+  document.getElementById('alertBtn')?.addEventListener('click', () =>
+    alertModal({ user_id: pid, name: prof.name, email: prof.email }));
 
   /* data tabs */
   const panel = document.getElementById('dataPanel');

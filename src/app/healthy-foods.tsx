@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChevronLeft, FadeInView, PressableScale } from '@/components/ui';
+import { HealthyAssistant } from '@/components/HealthyAssistant';
 import { isRTL } from '@/i18n';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -512,6 +513,10 @@ function HealthyFoodsScreen({
           </View>
         </View>
       </Modal>
+
+      {/* Floating AI advisor — recommends curated healthy dishes as tappable
+          cards (like the Plats du monde robot). */}
+      {allowSelection ? <HealthyAssistant /> : null}
     </View>
   );
 }

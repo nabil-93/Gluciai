@@ -42,15 +42,18 @@ export default function BiologyScreen() {
   const { t, i18n } = useTranslation();
   const { onScroll } = useTabBarScroll();
   const { measureLogs, profile } = useAppStore();
-  // Labs is a HIDDEN feature: the card exists only for accounts the admin
-  // explicitly granted (feature_access labs allowed=true). No trace otherwise.
+  // Labs and world recipes are HIDDEN features: their cards exist only for
+  // accounts the admin explicitly granted (feature_access allowed=true). No
+  // icon, no entry point otherwise.
   const labsGranted = useAppStore((s) => s.grantedFeatures.includes('labs'));
+  const worldRecipesGranted = useAppStore((s) =>
+    s.grantedFeatures.includes('world_recipes')
+  );
   // Hideable content sections — visible by default, hidden per patient from
   // the dashboard (feature_access allowed=false → lands in lockedFeatures).
   const locked = useAppStore((s) => s.lockedFeatures);
   const hideSelection = locked.includes('healthy_selection');
   const hideWorldFoods = locked.includes('world_foods');
-  const hideWorldRecipes = locked.includes('world_recipes');
   // "Makla saine" hosts both sub-sections — its card stays as long as at
   // least one of them is visible.
   const showHealthy = !hideSelection || !hideWorldFoods;
@@ -132,8 +135,8 @@ export default function BiologyScreen() {
           </BevelCard>
         ) : null}
 
-        {/* World recipes */}
-        {!hideWorldRecipes ? (
+        {/* World recipes — hidden feature, shown only when the admin granted it */}
+        {worldRecipesGranted ? (
           <BevelCard
             style={styles.integrationsCard}
             onPress={() => router.push('/world-recipes')}

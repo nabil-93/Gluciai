@@ -1014,6 +1014,36 @@
     "dinner": "Abendessen",
     "snack": "Snack"
   },
+  "healthyAI": {
+    "title": "Gesunde-Mahlzeit-Berater",
+    "sub": "Kennt deine Gesundheitsdaten",
+    "hint": "🥗 Lust auf etwas Gesundes? Ich berate dich.",
+    "greeting": "🥗 Ich kenne gesunde Gerichte, die zu deinem Diabetes passen. Sag mir, worauf du Lust hast — und ob du Allergien oder Abneigungen hast.",
+    "placeholder": "Schreiben oder sprechen…"
+  },
+  "mealAI": {
+    "title": "Mahlzeit-Assistent",
+    "sub": "Teller per Chat bearbeiten",
+    "hint": "🤖 Ich bin da — sag mir, wenn du etwas am Teller ändern möchtest.",
+    "greeting": "🤖 Ich habe deine Mahlzeit gesehen (~{{carbs}} g Kohlenhydrate). Was möchtest du hinzufügen, entfernen oder ändern?",
+    "placeholder": "Hinzufügen, entfernen, korrigieren…",
+    "added": "Hinzugefügt: {{list}}",
+    "removed": "Entfernt: {{list}}",
+    "changed": "Geändert: {{list}}",
+    "done": "Erledigt.",
+    "propYes": "Hinzufügen",
+    "propAdded": "Zur Mahlzeit hinzugefügt ✓",
+    "addedConfirm": "{{name}} zur Mahlzeit hinzugefügt ✓",
+    "camera": "Foto aufnehmen",
+    "gallery": "Bild auswählen"
+  },
+  "appAlert": {
+    "defaultTitle": "Wichtige Nachricht",
+    "contactSupport": "Support kontaktieren",
+    "contactDoctor": "Meinen Arzt anrufen",
+    "ok": "OK, verstanden",
+    "waMessage": "Hallo, ich melde mich wegen einer Nachricht in der GluciAI-App."
+  },
   "plan": {
     "welcomeTitle": "Willkommen bei GluciAI 👋",
     "welcomeBody": "Du startest in der kostenlosen Version. Um alles zu nutzen — Mahlzeiten-Scanner, KI-Assistent, Sprachanruf, Insulinberechnung — wechsle zur Vollversion.",

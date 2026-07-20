@@ -144,9 +144,17 @@ export default function AddMenuScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  // Hidden feature: the labs shortcut only exists for granted accounts.
+  // Hidden features: the labs and world-recipes shortcuts only exist for
+  // accounts the admin explicitly granted.
   const labsGranted = useAppStore((s) => s.grantedFeatures.includes('labs'));
-  const items = ITEMS.filter((i) => i.href !== '/labs' || labsGranted);
+  const worldRecipesGranted = useAppStore((s) =>
+    s.grantedFeatures.includes('world_recipes')
+  );
+  const items = ITEMS.filter(
+    (i) =>
+      (i.href !== '/labs' || labsGranted) &&
+      (i.href !== '/world-recipes' || worldRecipesGranted)
+  );
 
   const close = () => {
     if (router.canGoBack()) router.back();
