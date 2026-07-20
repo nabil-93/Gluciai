@@ -508,7 +508,16 @@
     "savedAt": "Aujourd'hui, {{time}}",
     "viewJournal": "Voir mon journal",
     "tapBoxHint": "Touchez un aliment sur la photo pour le voir en détail",
-    "mealMoment": "Quel repas ?"
+    "mealMoment": "Quel repas ?",
+    "scoreLabel": "Score du repas",
+    "calcBolus": "Calculer le bolus",
+    "warn": {
+      "high_gi": "Index glycémique élevé — mesurez votre glycémie 2 h après le repas.",
+      "sugar_high": "{{value}} g de sucre — impact glycémique important.",
+      "unmatched": "Sans valeurs nutritionnelles (introuvable dans les bases) : {{value}} — touchez « Modifier l'aliment » pour corriger.",
+      "ai_estimate": "Certaines valeurs sont estimées par IA (aliment absent des bases officielles).",
+      "portions_adjusted": "Portions ajustées selon vos habitudes : {{value}}."
+    }
   },
   "chat": {
     "title": "Coach IA",
@@ -822,7 +831,26 @@
     "predRisk": "⚠️ Période à risque {{type}} : {{window}}",
     "predHypo": "d'hypo",
     "predHyper": "d'hyper",
-    "predDisclaimer": "Estimation statistique basée sur ton historique — pas une mesure réelle ni un avis médical."
+    "predDisclaimer": "Estimation statistique basée sur ton historique — pas une mesure réelle ni un avis médical.",
+    "current": "Glycémie actuelle",
+    "trend": "Tendance",
+    "trend7days": "Sur les 7 derniers jours",
+    "trendStable": "Stable",
+    "trendRising": "En hausse",
+    "trendFalling": "En baisse",
+    "evolution7days": "Évolution des 7 derniers jours",
+    "limitHigh": "Limite haute",
+    "limitLow": "Limite basse",
+    "aiTip": "Conseil IA",
+    "tipGood": "Très bon équilibre !",
+    "tipGoodSub": "Ta glycémie est bien contrôlée aujourd'hui. Continue comme ça et pense à boire suffisamment d'eau.",
+    "tipWatch": "À surveiller",
+    "tipWatchSub": "Ta glycémie sort souvent de la cible. Mesure régulièrement et parles-en à ton médecin.",
+    "recentMeasures": "Dernières mesures",
+    "ranges": "Plages de glycémie",
+    "rangeHigh": "Élevée",
+    "rangeLow": "Basse",
+    "addMeasureSub": "Enregistre ta glycémie manuellement"
   },
   "bolus": {
     "title": "Dose d'insuline",
@@ -1226,7 +1254,27 @@
     "calcBolus": "Calculer un bolus",
     "injections": "Injections",
     "emptyTitle": "Aucune injection enregistrée",
-    "emptyMessage": "Ajoutez une dose avec le bouton + ou laissez le calculateur de bolus la proposer."
+    "emptyMessage": "Ajoutez une dose avec le bouton + ou laissez le calculateur de bolus la proposer.",
+    "today": "Aujourd'hui",
+    "hello": "Bonjour {{name}} 👋",
+    "helloNoName": "Bonjour 👋",
+    "subtitle": "Voici ton suivi d'insuline aujourd'hui.",
+    "goal": "Objectif : {{n}} U",
+    "goalShort": "Objectif {{n}} U",
+    "ofGoal": "{{pct}}% de l'objectif quotidien",
+    "unitsShort": "Unités (U)",
+    "aiTip": "Conseil IA",
+    "tipBalanced": "Ton insuline est bien équilibrée aujourd'hui.",
+    "tipEmpty": "Aucune insuline enregistrée aujourd'hui.",
+    "tipContinue": "Continue comme ça !",
+    "tipAdd": "Ajoute ta première dose du jour.",
+    "recent": "Dernières injections",
+    "noneYet": "Aucune injection",
+    "seeAll": "Voir tout",
+    "split": "Répartition aujourd'hui",
+    "stable": "Injection stable",
+    "noRisk": "Aucun risque détecté aujourd'hui.",
+    "calcSub": "Calcule la dose d'insuline recommandée"
   },
   "foodsPage": {
     "title": "Cuisine marocaine",
@@ -1281,7 +1329,33 @@
     "emptyMessage": "Scannez votre repas pour estimer glucides, sucre et calories — puis votre bolus.",
     "scanMeal": "Scanner un repas",
     "scanAnother": "Scanner un autre repas",
-    "bolusLink": "Calculer le bolus pour ce repas →"
+    "bolusLink": "Calculer le bolus pour ce repas →",
+    "today": "Aujourd'hui",
+    "hello": "Bonjour {{name}} 👋",
+    "helloNoName": "Bonjour 👋",
+    "subtitle": "Voici ton suivi nutritionnel aujourd'hui.",
+    "remaining": "{{n}} g restants",
+    "goalReached": "Objectif atteint",
+    "fiber": "Fibres",
+    "aiCoach": "AI Coach",
+    "recoTitle": "Recommandation personnalisée ✨",
+    "mealsTitle": "Repas du jour",
+    "mealsAdded": "{{count}} repas ajouté",
+    "mealSummary": "{{count}} repas · {{carbs}} g",
+    "mt": {
+      "breakfast": "Petit déjeuner",
+      "lunch": "Déjeuner",
+      "dinner": "Dîner",
+      "snack": "Collations"
+    },
+    "mtAdd": {
+      "breakfast": "Ajoute ton petit déjeuner",
+      "lunch": "Ajoute ton déjeuner",
+      "dinner": "Ajoute ton dîner",
+      "snack": "Ajoute une collation"
+    },
+    "scanSub": "Scanne ton repas pour estimer les glucides, calories et plus encore.",
+    "sodium": "Sodium"
   },
   "menuScanPage": {
     "title": "Menu restaurant",

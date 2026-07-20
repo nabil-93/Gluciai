@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Image,
   Modal,
@@ -7,27 +7,26 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import Svg, {
   Circle,
   Defs,
-  Ellipse,
   Line,
   LinearGradient as SvgLinearGradient,
   Path,
-  RadialGradient,
+  Polyline,
   Rect,
   Stop,
+  Text as SvgText,
 } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, FadeInView, PlusGlyph } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
+import { nowMs } from '@/lib/clock';
 import { deleteGlucose } from '@/services/data';
-import { predictGlucose } from '@/services/prediction';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
 
@@ -36,21 +35,22 @@ const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
-const GREEN = '#12B76A';
+const INK = '#14231C';
+const GREEN = '#1FB268';
+const GREEN_D = '#159A57';
 
-/* ── Zones: the exact same 4-colour scale as the home dashboard ── */
+/* ── Zones (same 4-colour scale as the home dashboard) ── */
 type GlyZone = {
   key: 'low' | 'normal' | 'moderate' | 'high';
   color: string;
   pale: string;
-  strong: string;
   labelKey: string;
 };
 const GLY_ZONES: GlyZone[] = [
-  { key: 'low', color: '#3b82f6', pale: '#dbeafe', strong: '#3b82f6', labelKey: 'home.glyLow' },
-  { key: 'normal', color: '#22b95e', pale: '#cdeed9', strong: '#3fc873', labelKey: 'home.glyNormal' },
-  { key: 'moderate', color: '#f5b60a', pale: '#fbeab9', strong: '#f6bc1c', labelKey: 'home.glyModerate' },
-  { key: 'high', color: '#ef4444', pale: '#fbd0d0', strong: '#f05656', labelKey: 'home.glyVeryHigh' },
+  { key: 'low', color: '#3b82f6', pale: '#dbeafe', labelKey: 'home.glyLow' },
+  { key: 'normal', color: '#22b95e', pale: '#cdeed9', labelKey: 'home.glyNormal' },
+  { key: 'moderate', color: '#f5b60a', pale: '#fbeab9', labelKey: 'home.glyModerate' },
+  { key: 'high', color: '#ef4444', pale: '#fbd0d0', labelKey: 'home.glyVeryHigh' },
 ];
 function zoneFor(value: number, low: number, high: number): GlyZone {
   if (value < low) return GLY_ZONES[0];
@@ -58,184 +58,175 @@ function zoneFor(value: number, low: number, high: number): GlyZone {
   if (value <= high * 1.4) return GLY_ZONES[2];
   return GLY_ZONES[3];
 }
-/** Same knob mapping as the home ring (Bas→Haut). */
-function sliderFrac(value: number, low: number, high: number): number {
-  const lo = low * 0.55;
-  const hi = high * 1.6;
-  return Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
-}
-function mixHex(a: string, b: string, t: number) {
-  const pa = parseInt(a.slice(1), 16);
-  const pb = parseInt(b.slice(1), 16);
-  const ch = (sh: number) => {
-    const va = (pa >> sh) & 255;
-    const vb = (pb >> sh) & 255;
-    return Math.round(va + (vb - va) * t);
-  };
-  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+
+function sameDay(iso: string, ref: Date) {
+  return new Date(iso).toDateString() === ref.toDateString();
 }
 
-/* ── The home-page degradé ring, 1:1 (same geometry & conic gradient) ── */
-function GlucoseRing({
+/* ─────────────────────────── Icons ─────────────────────────── */
+function CalendarIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Rect x={3.5} y={5} width={17} height={16} rx={3.5} stroke={GREEN} strokeWidth={2} />
+      <Path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" stroke={GREEN} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+function ChevronDown({ color = '#8A988F', size = 14 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M6 9l6 6 6-6" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+function ChevronRight({ color = '#B7C2BB', size = 18 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 6l6 6-6 6" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+function DotsIcon() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill={INK}>
+      <Circle cx={12} cy={5} r={1.8} />
+      <Circle cx={12} cy={12} r={1.8} />
+      <Circle cx={12} cy={19} r={1.8} />
+    </Svg>
+  );
+}
+function TrendIcon({ color = GREEN, size = 13 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 17l6-6 4 4 8-8" />
+      <Path d="M15 7h6v6" />
+    </Svg>
+  );
+}
+function TargetIcon() {
+  return (
+    <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={8.5} stroke="#8B5CF6" strokeWidth={2.2} />
+      <Circle cx={12} cy={12} r={4} stroke="#8B5CF6" strokeWidth={2.2} />
+      <Circle cx={12} cy={12} r={1.4} fill="#8B5CF6" />
+    </Svg>
+  );
+}
+function ClockIcon({ color = GREEN, size = 14 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx={12} cy={12} r={8.5} />
+      <Path d="M12 7.5V12l3 2" />
+    </Svg>
+  );
+}
+function PlusThin({ color = '#fff', size = 22 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 5v14M5 12h14" stroke={color} strokeWidth={2.6} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/* ── Half-gauge (270° arc) showing the latest reading vs the target range ── */
+function Gauge({
   value,
-  zone,
-  zoneLabel,
   frac,
-  width = 206,
+  zone,
+  low,
+  high,
+  zoneLabel,
   emptyText,
 }: {
   value: number | null;
-  zone: GlyZone | null;
-  zoneLabel: string;
   frac: number;
-  width?: number;
-  emptyText?: string;
+  zone: GlyZone | null;
+  low: number;
+  high: number;
+  zoneLabel: string;
+  emptyText: string;
 }) {
-  const VB = 280;
-  const H = 330;
-  const s = width / VB;
-  const cx = 140;
-  const cy = 140;
-  const R_RING = 128.5;
-  const RING_W = 23;
-  const pale = zone?.pale ?? '#e9edf2';
-  const strong = zone?.strong ?? '#ccd5df';
-  const tint = zone?.strong ?? '#ccd5df';
-
-  const colorAt = (deg: number) => {
-    const d = ((deg % 360) + 360) % 360;
-    const t = d <= 78 ? d / 78 : d >= 282 ? (360 - d) / 78 : 1;
-    return mixHex(pale, strong, t);
-  };
-  const pt = (deg: number, r: number) => ({
-    x: cx + r * Math.sin((deg * Math.PI) / 180),
-    y: cy - r * Math.cos((deg * Math.PI) / 180),
-  });
-  const SEGS = 72;
-  const STEP = 360 / SEGS;
-  const segs = Array.from({ length: SEGS }, (_, i) => {
-    const a0 = i * STEP;
-    const p0 = pt(a0, R_RING);
-    const p1 = pt(a0 + STEP + 0.8, R_RING);
-    return {
-      d: `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${R_RING} ${R_RING} 0 0 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`,
-      color: colorAt(a0 + STEP / 2),
-    };
-  });
-  const knob = pt(-55 + 150 * frac, 130);
-
+  const S = 150;
+  const cx = 75;
+  const r = 61;
+  const C = 2 * Math.PI * r;
+  const ARC = 0.75 * C; // 270°
+  const valueDash = Math.max(0, Math.min(1, frac)) * ARC;
+  const valueStroke = zone && zone.key === 'normal' ? 'url(#gaugeGrad)' : zone?.color ?? '#CBD5E1';
   return (
-    <View style={{ width, height: Math.round(H * s) }}>
-      <Svg width={width} height={Math.round(H * s)} viewBox={`0 0 ${VB} ${H}`}>
+    <View style={{ width: S, height: 134 }}>
+      <Svg width={S} height={S} style={{ position: 'absolute', top: 0, left: 0 }}>
         <Defs>
-          <RadialGradient id="gpFace" cx="50%" cy="35%" r="75%">
-            <Stop offset="0" stopColor="#ffffff" />
-            <Stop offset="1" stopColor="#f5faf6" />
-          </RadialGradient>
-          <RadialGradient id="gpFaceShadow" cx="50%" cy="50%" r="50%">
-            <Stop offset="0.82" stopColor="#28503a" stopOpacity="0.26" />
-            <Stop offset="1" stopColor="#28503a" stopOpacity="0" />
-          </RadialGradient>
-          <RadialGradient id="gpReflect" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={tint} stopOpacity="0.3" />
-            <Stop offset="0.72" stopColor={tint} stopOpacity="0" />
-            <Stop offset="1" stopColor={tint} stopOpacity="0" />
-          </RadialGradient>
+          <SvgLinearGradient id="gaugeGrad" x1="0" y1="1" x2="1" y2="0">
+            <Stop offset="0" stopColor="#9BDDB6" />
+            <Stop offset="1" stopColor={GREEN} />
+          </SvgLinearGradient>
         </Defs>
-
-        {segs.map((g, i) => (
-          <Path key={i} d={g.d} stroke={g.color} strokeWidth={RING_W} fill="none" />
-        ))}
-        <Circle cx={cx} cy={cy + 8} r={119} fill="url(#gpFaceShadow)" />
-        <Circle cx={cx} cy={cy} r={120} fill="url(#gpFace)" />
-
-        <Ellipse cx={cx} cy={287} rx={120} ry={19} fill="url(#gpReflect)" />
-        <Path
-          d={`M ${cx - 98} 288 A 98 15 0 0 1 ${cx + 98} 288`}
-          stroke="rgba(255,255,255,0.85)"
-          strokeWidth={2}
+        <Circle
+          cx={cx}
+          cy={cx}
+          r={r}
           fill="none"
+          stroke="#EAF3EC"
+          strokeWidth={12}
+          strokeLinecap="round"
+          strokeDasharray={`${ARC} ${C}`}
+          transform={`rotate(135 ${cx} ${cx})`}
         />
-
         {value != null ? (
-          <>
-            <Circle cx={knob.x} cy={knob.y + 2} r={13.5} fill="rgba(0,0,0,0.14)" />
-            <Circle cx={knob.x} cy={knob.y} r={13} fill="#ffffff" />
-            <Circle cx={knob.x} cy={knob.y} r={6.5} fill={zone?.color ?? '#ccd5df'} />
-          </>
+          <Circle
+            cx={cx}
+            cy={cx}
+            r={r}
+            fill="none"
+            stroke={valueStroke}
+            strokeWidth={12}
+            strokeLinecap="round"
+            strokeDasharray={`${valueDash} ${C}`}
+            transform={`rotate(135 ${cx} ${cx})`}
+          />
         ) : null}
       </Svg>
 
-      <View
-        style={{
-          position: 'absolute',
-          left: 20 * s,
-          top: 20 * s,
-          width: 240 * s,
-          height: 240 * s,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
+      <View style={styles.gaugeCenter}>
+        <View style={styles.gaugeUnitRow}>
+          <Text style={{ fontSize: 11 }}>🩸</Text>
+          <Text style={styles.gaugeUnit}>mg/dL</Text>
+        </View>
         {value != null ? (
           <>
-            <Text style={[styles.ringValue, { fontSize: 62 * s, lineHeight: 66 * s }]}>
-              {value}
-            </Text>
-            <Text style={[styles.ringUnit, { fontSize: 20 * s }]}>mg/dL</Text>
+            <Text style={styles.gaugeValue}>{value}</Text>
             {zone ? (
-              <View style={[styles.ringPill, { backgroundColor: zone.color }]}>
-                <Text style={styles.ringPillText}>{zoneLabel}</Text>
+              <View style={[styles.gaugePill, { backgroundColor: zone.pale }]}>
+                <Text style={[styles.gaugePillText, { color: zone.color }]}>{zoneLabel}</Text>
               </View>
             ) : null}
           </>
         ) : (
           <>
-            <View style={styles.ringDash} />
-            <Text style={[styles.ringUnit, { fontSize: 20 * s }]}>mg/dL</Text>
-            {emptyText ? <Text style={styles.ringEmpty}>{emptyText}</Text> : null}
+            <Text style={styles.gaugeDash}>—</Text>
+            <Text style={styles.gaugeEmpty}>{emptyText}</Text>
           </>
         )}
       </View>
+
+      <Text style={[styles.gaugeEnd, { left: 8 }]}>{low}</Text>
+      <Text style={[styles.gaugeEnd, { right: 8 }]}>{high}</Text>
+      <View style={styles.gaugePointer} />
     </View>
   );
-}
-
-/* ── Smooth (Catmull-Rom) path through chart points ── */
-function smoothPath(pts: { x: number; y: number }[]): string {
-  if (pts.length === 0) return '';
-  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
-  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[Math.min(pts.length - 1, i + 2)];
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
-  }
-  return d;
-}
-
-function sameDay(iso: string, ref: Date) {
-  return new Date(iso).toDateString() === ref.toDateString();
 }
 
 export default function GlucoseScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { width: winW } = useWindowDimensions();
-  const { glucoseLogs, meals, profile } = useAppStore();
+  const { glucoseLogs, profile } = useAppStore();
 
   const low = profile?.target_low ?? 70;
   const high = profile?.target_high ?? 180;
   const firstName = (profile?.name || '').trim().split(/\s+/)[0] || '';
 
-  /* ── Day picker: 0 = today … 6 = six days ago ── */
   const [dayOffset, setDayOffset] = useState(0);
   const [pickerOpen, setPickerOpen] = useState(false);
   const selectedDate = useMemo(() => {
@@ -258,69 +249,100 @@ export default function GlucoseScreen() {
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [glucoseLogs, selectedDate]
   );
-
   const latest = dayLogs.length ? dayLogs[dayLogs.length - 1] : null;
   const zone = latest ? zoneFor(latest.value, low, high) : null;
+  const gaugeFrac = latest ? (latest.value - low) / (high - low) : 0;
 
-  const stats = useMemo(() => {
-    if (dayLogs.length === 0) return null;
-    const values = dayLogs.map((g) => g.value);
-    const avg = Math.round(values.reduce((s, v) => s + v, 0) / values.length);
-    const max = Math.max(...values);
-    const inRange = values.filter((v) => v >= low && v <= high).length;
-    const tir = Math.round((inRange / values.length) * 100);
-    return { avg, max, tir };
-  }, [dayLogs, low, high]);
+  /* ── 7-day window (daily averages + trend + TIR bands) ── */
+  const week = useMemo(() => {
+    const days: { label: string; avg: number | null }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const vals = glucoseLogs.filter((g) => sameDay(g.created_at, d)).map((g) => g.value);
+      days.push({
+        label: d.toLocaleDateString(i18n.language, { weekday: 'short' }),
+        avg: vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null,
+      });
+    }
+    return days;
+  }, [glucoseLogs, i18n.language]);
 
-  const prediction = useMemo(
-    () => (dayOffset === 0 ? predictGlucose(glucoseLogs, meals, profile) : null),
-    [glucoseLogs, meals, profile, dayOffset]
+  const weekStats = useMemo(() => {
+    const now = nowMs();
+    const vals = glucoseLogs
+      .filter((g) => now - new Date(g.created_at).getTime() <= 7 * 24 * 3600 * 1000)
+      .map((g) => g.value);
+    if (!vals.length) return null;
+    const avg = Math.round(vals.reduce((s, v) => s + v, 0) / vals.length);
+    const inR = vals.filter((v) => v >= low && v <= high).length;
+    const hi = vals.filter((v) => v > high).length;
+    const lo = vals.filter((v) => v < low).length;
+    const pct = (n: number) => Math.round((n / vals.length) * 100);
+    return { avg, tir: pct(inR), high: pct(hi), low: pct(lo) };
+  }, [glucoseLogs, low, high]);
+
+  const trend = useMemo(() => {
+    const pts = week.filter((d) => d.avg != null).map((d) => d.avg as number);
+    if (pts.length < 2) return 'stable' as const;
+    const half = Math.max(1, Math.floor(pts.length / 2));
+    const early = pts.slice(0, half);
+    const late = pts.slice(-half);
+    const a = early.reduce((s, v) => s + v, 0) / early.length;
+    const b = late.reduce((s, v) => s + v, 0) / late.length;
+    if (b - a > 12) return 'rising' as const;
+    if (a - b > 12) return 'falling' as const;
+    return 'stable' as const;
+  }, [week]);
+  const trendLabel =
+    trend === 'rising'
+      ? t('glucosePage.trendRising')
+      : trend === 'falling'
+        ? t('glucosePage.trendFalling')
+        : t('glucosePage.trendStable');
+
+  const recentMeasures = useMemo(
+    () =>
+      [...glucoseLogs]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 3),
+    [glucoseLogs]
   );
-
-  /* ── Day-curve geometry (330×110, y = 103 − v/3 like the mockup) ── */
-  const CW = 330;
-  const vy = (v: number) => Math.max(3, Math.min(103, 103 - v / 3));
-  const chartPts = dayLogs.map((g) => {
-    const d = new Date(g.created_at);
-    const mins = d.getHours() * 60 + d.getMinutes();
-    return { x: (mins / 1440) * CW, y: vy(g.value), v: g.value };
-  });
-  const linePath = smoothPath(chartPts);
-  const fillPath = chartPts.length
-    ? `${linePath} L ${chartPts[chartPts.length - 1].x.toFixed(1)} 103 L ${chartPts[0].x.toFixed(1)} 103 Z`
-    : '';
-
-  /* "Voir tout" scrolls to the readings list */
-  const scrollRef = useRef<ScrollView>(null);
-  const readingsYRef = useRef(0);
 
   const close = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
   };
 
-  const HERO_H = insets.top + 342;
-  const ringW = Math.min(214, winW - 172);
+  /* ── 7-day chart geometry (viewBox 340×175) ── */
+  const yOf = (v: number) => Math.max(14, Math.min(140, 134 - v * 0.59));
+  const xOf = (i: number) => 34 + i * 39;
+  const pointsWithData = week
+    .map((d, i) => (d.avg != null ? { x: xOf(i), y: yOf(d.avg), v: d.avg } : null))
+    .filter((p): p is { x: number; y: number; v: number } => p !== null);
+  const polyPoints = pointsWithData.map((p) => `${p.x},${p.y}`).join(' ');
+  const areaPath = pointsWithData.length
+    ? `M${pointsWithData[0].x},${pointsWithData[0].y} ` +
+      pointsWithData.slice(1).map((p) => `L${p.x},${p.y}`).join(' ') +
+      ` L${pointsWithData[pointsWithData.length - 1].x},134 L${pointsWithData[0].x},134 Z`
+    : '';
+
+  const HERO_H = insets.top + 300;
 
   return (
     <View style={styles.root}>
-      <ScrollView
-        ref={scrollRef}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 120 }}
-      >
-        {/* ── Hero: photo background fading into white ── */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+        {/* ── Hero ── */}
         <View>
           <Image
             source={require('../assets/glucose/hero-bg.png')}
             style={[styles.heroImg, { height: HERO_H }]}
             resizeMode="cover"
           />
-          {/* fade to white so the photo melts into the content */}
           <LinearGradient
-            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.65)', '#ffffff']}
-            locations={[0, 0.5, 0.92]}
-            style={[styles.heroFade, { top: HERO_H - 120 }]}
+            colors={['rgba(246,249,245,0)', 'rgba(246,249,245,0.7)', '#F6F9F5']}
+            locations={[0, 0.55, 0.95]}
+            style={[styles.heroFade, { top: HERO_H - 150, height: 150 }]}
             pointerEvents="none"
           />
 
@@ -330,271 +352,258 @@ export default function GlucoseScreen() {
               <ChevronLeft size={16} />
             </Pressable>
             <Text style={styles.headTitle}>{t('glucosePage.title')}</Text>
-            <Pressable onPress={() => setPickerOpen(true)} style={styles.dateChip}>
-              <Svg width={13} height={13} viewBox="0 0 14 14" fill="none">
-                <Rect x={1.5} y={2.5} width={11} height={10} rx={2} stroke="#101828" strokeWidth={1.4} />
-                <Path d="M1.5 5.5H12.5" stroke="#101828" strokeWidth={1.4} />
-                <Path d="M4.5 1V3.5M9.5 1V3.5" stroke="#101828" strokeWidth={1.4} strokeLinecap="round" />
-              </Svg>
-              <Text style={styles.dateChipText} numberOfLines={1}>
-                {dayLabel(dayOffset)}
-              </Text>
-              <Svg width={10} height={10} viewBox="0 0 10 10" fill="none">
-                <Path d="M2.5 4L5 6.5L7.5 4" stroke="#101828" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            </Pressable>
+            <View style={styles.headRight}>
+              <Pressable onPress={() => setPickerOpen(true)} style={styles.dateChip}>
+                <CalendarIcon />
+                <Text style={styles.dateChipText} numberOfLines={1}>
+                  {dayLabel(dayOffset)}
+                </Text>
+                <ChevronDown />
+              </Pressable>
+              <Pressable onPress={() => setPickerOpen(true)} style={styles.dotsBtn}>
+                <DotsIcon />
+              </Pressable>
+            </View>
           </View>
 
           {/* Greeting */}
-          <FadeInView delay={30}>
+          <FadeInView delay={30} style={{ paddingHorizontal: 22, marginTop: 12 }}>
             <Text style={styles.hello}>
-              {firstName
-                ? t('glucosePage.hello', { name: firstName })
-                : t('glucosePage.helloNoName')}
+              {firstName ? t('glucosePage.hello', { name: firstName }) : t('glucosePage.helloNoName')}
             </Text>
             <Text style={styles.helloSub}>
               {dayOffset === 0 ? t('glucosePage.subtitle') : t('glucosePage.subtitleDay')}
             </Text>
           </FadeInView>
-
-          {/* Ring — same architecture as the home dashboard */}
-          <FadeInView delay={80} style={{ alignItems: 'center', marginTop: 14 }}>
-            <GlucoseRing
-              value={latest ? latest.value : null}
-              zone={zone}
-              zoneLabel={zone ? t(zone.labelKey) : ''}
-              frac={latest ? sliderFrac(latest.value, low, high) : 0}
-              width={ringW}
-              emptyText={t('glucosePage.noMeasure')}
-            />
-            <View style={styles.scaleRow}>
-              <Text style={styles.scaleText}>0</Text>
-              <Text style={styles.scaleText}>300</Text>
-            </View>
-          </FadeInView>
         </View>
 
-        {/* ── Stats row ── */}
-        <FadeInView delay={130} style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <View style={styles.statHead}>
-              <View style={[styles.statIcon, { backgroundColor: '#E7F8F0' }]}>
-                <Svg width={12} height={12} viewBox="0 0 12 12" fill="none">
-                  <Circle cx={6} cy={6} r={4.6} stroke={GREEN} strokeWidth={1.3} />
-                  <Path d="M4 6.1L5.4 7.5L8 4.7" stroke={GREEN} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
-              </View>
-              <Text style={styles.statLabel}>{t('glucosePage.avg')}</Text>
-            </View>
-            <Text style={styles.statValue}>{stats ? stats.avg : '—'}</Text>
-            <Text style={styles.statUnit}>mg/dL</Text>
+        {/* ── Gauge + stats ── */}
+        <FadeInView delay={80} style={styles.topRow}>
+          <View style={styles.gaugeCard}>
+            <Text style={styles.gaugeCardLabel}>{t('glucosePage.current')}</Text>
+            <Gauge
+              value={latest ? latest.value : null}
+              frac={gaugeFrac}
+              zone={zone}
+              low={low}
+              high={high}
+              zoneLabel={zone ? t('glucosePage.inRange') : ''}
+              emptyText={t('glucosePage.noMeasure')}
+            />
           </View>
 
-          <View style={styles.statCard}>
-            <View style={styles.statHead}>
-              <View style={[styles.statIcon, { backgroundColor: '#EFECFE' }]}>
-                <Svg width={12} height={12} viewBox="0 0 12 12" fill="none">
-                  <Path d="M2 8.5L4.8 5.7L6.8 7.4L10 3.8" stroke="#7A5AF8" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d="M7.4 3.8H10V6.3" stroke="#7A5AF8" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
+          <View style={styles.statsCol}>
+            <View style={styles.miniDuo}>
+              <View style={styles.miniHalf}>
+                <View style={styles.miniHead}>
+                  <View style={[styles.miniIcon, { backgroundColor: '#E4F6EC' }]}>
+                    <TrendIcon />
+                  </View>
+                  <Text style={styles.miniLabel} numberOfLines={2}>{t('glucosePage.avg')}</Text>
+                </View>
+                <Text style={styles.miniValue}>{weekStats ? weekStats.avg : '—'}</Text>
+                <Text style={styles.miniUnit}>mg/dL</Text>
               </View>
-              <Text style={styles.statLabel}>{t('glucosePage.inTarget')}</Text>
+              <View style={[styles.miniHalf, styles.miniHalfBorder]}>
+                <View style={styles.miniHead}>
+                  <View style={[styles.miniIcon, { backgroundColor: '#F0EBFD' }]}>
+                    <TargetIcon />
+                  </View>
+                  <Text style={styles.miniLabel} numberOfLines={2}>{t('glucosePage.inTarget')}</Text>
+                </View>
+                <Text style={styles.miniValue}>{weekStats ? `${weekStats.tir}%` : '—'}</Text>
+                <Text style={styles.miniUnit}>{t('glucosePage.ofTime')}</Text>
+              </View>
             </View>
-            <Text style={styles.statValue}>{stats ? `${stats.tir}%` : '—'}</Text>
-            <Text style={styles.statUnit}>{t('glucosePage.ofTime')}</Text>
-          </View>
 
-          <View style={styles.statCard}>
-            <View style={styles.statHead}>
-              <View style={[styles.statIcon, { backgroundColor: '#FEF4E6' }]}>
-                <Svg width={12} height={12} viewBox="0 0 12 12" fill="none">
-                  <Path d="M2 9L5 6L7 7.6L10 4" stroke="#F79009" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d="M7.6 4H10V6.4" stroke="#F79009" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
+            <View style={styles.trendCard}>
+              <View style={[styles.miniIcon, { width: 34, height: 34, borderRadius: 11, backgroundColor: '#E7F0FE' }]}>
+                <TrendIcon color="#3B82F6" size={17} />
               </View>
-              <Text style={styles.statLabel}>{t('glucosePage.max')}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.miniLabel}>{t('glucosePage.trend')}</Text>
+                <Text style={styles.trendValue}>{trendLabel}</Text>
+                <Text style={styles.trendSub}>{t('glucosePage.trend7days')}</Text>
+              </View>
+              <ChevronRight />
             </View>
-            <Text style={styles.statValue}>{stats ? stats.max : '—'}</Text>
-            <Text style={styles.statUnit}>mg/dL</Text>
           </View>
         </FadeInView>
 
-        {/* ── Courbe du jour ── */}
-        {dayLogs.length > 0 ? (
-          <FadeInView delay={180} style={styles.chartCard}>
-            <View style={styles.chartHead}>
-              <Text style={styles.chartTitle}>{t('glucosePage.dayCurve')}</Text>
-              <Pressable
-                onPress={() =>
-                  scrollRef.current?.scrollTo({ y: readingsYRef.current - 60, animated: true })
-                }
-              >
-                <Text style={styles.seeAll}>{t('glucosePage.seeAll')}</Text>
-              </Pressable>
+        {/* ── 7-day evolution chart ── */}
+        <FadeInView delay={130} style={{ paddingHorizontal: 20, marginTop: 14 }}>
+          <View style={styles.card}>
+            <View style={styles.cardHead}>
+              <Text style={styles.cardTitle}>{t('glucosePage.evolution7days')}</Text>
+              <View style={styles.unitPill}>
+                <Text style={styles.unitPillText}>mg/dL</Text>
+                <ChevronDown size={13} />
+              </View>
             </View>
 
-            <View style={{ flexDirection: 'row', gap: 6 }}>
-              <View style={styles.yAxis}>
-                <Text style={styles.axisText}>300</Text>
-                <Text style={styles.axisText}>200</Text>
-                <Text style={styles.axisText}>100</Text>
-                <Text style={styles.axisText}>0</Text>
-              </View>
-              <Svg width="100%" height={110} viewBox={`0 0 ${CW} 110`} preserveAspectRatio="none" style={{ flex: 1 }}>
+            {pointsWithData.length >= 1 ? (
+              <Svg width="100%" viewBox="0 0 340 175" style={{ marginTop: 12 }}>
                 <Defs>
-                  <SvgLinearGradient id="gpLine" x1="0" y1="0" x2="0" y2="110" gradientUnits="userSpaceOnUse">
-                    <Stop offset="0" stopColor="#EF4444" />
-                    <Stop offset="0.28" stopColor="#F59E0B" />
-                    <Stop offset="0.55" stopColor={GREEN} />
-                    <Stop offset="1" stopColor={GREEN} />
-                  </SvgLinearGradient>
-                  <SvgLinearGradient id="gpFill" x1="0" y1="0" x2="0" y2="110" gradientUnits="userSpaceOnUse">
-                    <Stop offset="0" stopColor="#F59E0B" stopOpacity="0.35" />
-                    <Stop offset="0.45" stopColor={GREEN} stopOpacity="0.28" />
-                    <Stop offset="1" stopColor={GREEN} stopOpacity="0.04" />
+                  <SvgLinearGradient id="lineArea" x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0" stopColor="rgba(31,178,104,0.20)" />
+                    <Stop offset="1" stopColor="rgba(31,178,104,0)" />
                   </SvgLinearGradient>
                 </Defs>
-                {/* Target band */}
-                <Rect x={0} y={vy(high)} width={CW} height={vy(low) - vy(high)} fill={GREEN} opacity={0.07} />
-                <Line x1={0} y1={3} x2={CW} y2={3} stroke="#F1F3F6" strokeWidth={1} />
-                <Line x1={0} y1={36} x2={CW} y2={36} stroke="#F1F3F6" strokeWidth={1} />
-                <Line x1={0} y1={70} x2={CW} y2={70} stroke="#F1F3F6" strokeWidth={1} />
-                <Line x1={0} y1={103} x2={CW} y2={103} stroke="#F1F3F6" strokeWidth={1} />
-                {fillPath ? <Path d={fillPath} fill="url(#gpFill)" /> : null}
-                {linePath ? (
-                  <Path d={linePath} fill="none" stroke="url(#gpLine)" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+                {/* grid */}
+                <Line x1={34} y1={16} x2={268} y2={16} stroke="#EEF2EF" strokeWidth={1} />
+                <Line x1={34} y1={51.4} x2={268} y2={51.4} stroke="#EEF2EF" strokeWidth={1} />
+                <Line x1={34} y1={134} x2={268} y2={134} stroke="#EEF2EF" strokeWidth={1} />
+                <SvgText x={26} y={20} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">200</SvgText>
+                <SvgText x={26} y={55} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">140</SvgText>
+                <SvgText x={26} y={96} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">70</SvgText>
+                <SvgText x={26} y={138} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">0</SvgText>
+                {/* limits */}
+                <Line x1={34} y1={yOf(high)} x2={268} y2={yOf(high)} stroke="#8FD3AC" strokeWidth={1.5} strokeDasharray="5 4" />
+                <Line x1={34} y1={yOf(low)} x2={268} y2={yOf(low)} stroke="#F0A9A9" strokeWidth={1.5} strokeDasharray="5 4" />
+                <SvgText x={273} y={yOf(high) - 4} fontFamily={F700} fontSize={11} fill={GREEN_D}>{high}</SvgText>
+                <SvgText x={273} y={yOf(high) + 7} fontFamily={F600} fontSize={9} fill="#4FAE7B">{t('glucosePage.limitHigh')}</SvgText>
+                <SvgText x={273} y={yOf(low) - 2} fontFamily={F700} fontSize={11} fill={GREEN_D}>{low}</SvgText>
+                <SvgText x={273} y={yOf(low) + 9} fontFamily={F600} fontSize={9} fill="#4FAE7B">{t('glucosePage.limitLow')}</SvgText>
+                {/* area + line */}
+                {areaPath ? <Path d={areaPath} fill="url(#lineArea)" /> : null}
+                {pointsWithData.length >= 2 ? (
+                  <Polyline points={polyPoints} fill="none" stroke={GREEN} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
                 ) : null}
-                {chartPts.map((p, i) => (
-                  <Circle
-                    key={i}
-                    cx={p.x}
-                    cy={p.y}
-                    r={2.6}
-                    fill={zoneFor(p.v, low, high).color}
-                    stroke="#fff"
-                    strokeWidth={1.2}
-                  />
+                {pointsWithData.map((p, i) => (
+                  <React.Fragment key={i}>
+                    <Circle cx={p.x} cy={p.y} r={4} fill={GREEN} stroke="#fff" strokeWidth={2} />
+                    <SvgText x={p.x} y={p.y - 10} textAnchor="middle" fontFamily={F700} fontSize={10} fill="#5C6E63">{p.v}</SvgText>
+                  </React.Fragment>
+                ))}
+                {week.map((d, i) => (
+                  <SvgText key={`l${i}`} x={xOf(i)} y={166} textAnchor="middle" fontFamily={F600} fontSize={11} fill="#9AA8A0">
+                    {d.label}
+                  </SvgText>
                 ))}
               </Svg>
-            </View>
-            <View style={styles.xAxis}>
-              {['00:00', '06:00', '12:00', '18:00', '24:00'].map((h) => (
-                <Text key={h} style={styles.axisText}>
-                  {h}
-                </Text>
-              ))}
-            </View>
+            ) : (
+              <Text style={styles.chartEmpty}>{t('glucosePage.emptyMsg')}</Text>
+            )}
+          </View>
+        </FadeInView>
 
-            {/* Legend */}
-            <View style={styles.legend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: GREEN }]} />
-                <Text style={styles.legendText}>{t('home.glyNormal')}</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#FACC15' }]} />
-                <Text style={styles.legendText}>{t('home.glyModerate')}</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-                <Text style={styles.legendText}>{t('home.glyVeryHigh')}</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#CBD5E1' }]} />
-                <Text style={[styles.legendText, { color: '#98A2B3' }]}>{t('home.glyLow')}</Text>
-              </View>
+        {/* ── Conseil IA ── */}
+        <FadeInView delay={170} style={{ paddingHorizontal: 20, marginTop: 14 }}>
+          <Pressable style={styles.coachCard} onPress={() => router.push('/ai-chat')}>
+            <View style={styles.coachRobot}>
+              <AnimatedRobot size={44} mood="happy" />
             </View>
-          </FadeInView>
-        ) : null}
-
-        {/* ── Prediction (today only) ── */}
-        {prediction && dayOffset === 0 ? (
-          <FadeInView delay={220} style={styles.predCard}>
-            <View style={styles.predHead}>
-              <Text style={styles.predTitle}>
-                {prediction.direction === 'rise'
-                  ? t('glucosePage.predRise')
-                  : prediction.direction === 'drop'
-                    ? t('glucosePage.predDrop')
-                    : t('glucosePage.predStable')}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={styles.coachPill}>
+                <Text style={styles.coachPillText}>{t('glucosePage.aiTip')}</Text>
+              </View>
+              <Text style={styles.coachTitle}>
+                {weekStats && weekStats.tir >= 70 ? t('glucosePage.tipGood') : t('glucosePage.tipWatch')}
               </Text>
-              {prediction.expectedValue !== null ? (
-                <Text style={styles.predValue}>
-                  ≈ {prediction.expectedValue}{' '}
-                  <Text style={styles.predUnit}>{t('glucosePage.predIn2h')}</Text>
-                </Text>
-              ) : null}
-            </View>
-            {prediction.riskWindow ? (
-              <Text style={styles.predRisk}>
-                {t('glucosePage.predRisk', {
-                  type:
-                    prediction.riskType === 'hypo'
-                      ? t('glucosePage.predHypo')
-                      : t('glucosePage.predHyper'),
-                  window: prediction.riskWindow,
-                })}
+              <Text style={styles.coachSub}>
+                {weekStats && weekStats.tir >= 70 ? t('glucosePage.tipGoodSub') : t('glucosePage.tipWatchSub')}
               </Text>
-            ) : null}
-            <Text style={styles.predDisclaimer}>{t('glucosePage.predDisclaimer')}</Text>
-          </FadeInView>
-        ) : null}
-
-        {/* ── Empty state (robot) ── */}
-        {dayLogs.length === 0 ? (
-          <FadeInView delay={180} style={styles.emptyCard}>
-            <AnimatedRobot size={84} mood="happy" />
-            <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
-              <Text style={styles.emptyTitle}>
-                {dayOffset === 0
-                  ? t('glucosePage.emptyTitle')
-                  : t('glucosePage.emptyTitleDay')}
-              </Text>
-              <Text style={styles.emptyMsg}>{t('glucosePage.emptyMsg')}</Text>
-              {dayOffset === 0 ? (
-                <Pressable onPress={() => router.push('/log-glucose')} style={styles.emptyBtn}>
-                  <PlusGlyph size={12} color="#fff" />
-                  <Text style={styles.emptyBtnText}>{t('glucosePage.addMeasure')}</Text>
-                </Pressable>
-              ) : null}
             </View>
-          </FadeInView>
-        ) : null}
+            <ChevronRight color="#4A5A51" size={20} />
+          </Pressable>
+        </FadeInView>
 
-        {/* ── Readings of the selected day ── */}
-        {dayLogs.length > 0 ? (
-          <View onLayout={(e) => (readingsYRef.current = e.nativeEvent.layout.y)}>
-            <Text style={styles.section}>
-              {dayLabel(dayOffset)} · {dayLogs.length}{' '}
-              {dayLogs.length > 1 ? t('glucosePage.measures') : t('glucosePage.measure')}
-            </Text>
-            <View style={{ gap: 9, paddingHorizontal: 14 }}>
-              {[...dayLogs].reverse().map((g) => {
+        {/* ── Dernières mesures + Plages ── */}
+        <FadeInView delay={210} style={styles.duoRow}>
+          {/* Dernières mesures */}
+          <View style={[styles.card, styles.duoCard]}>
+            <Text style={styles.duoTitle}>{t('glucosePage.recentMeasures')}</Text>
+            {recentMeasures.length === 0 ? (
+              <Text style={styles.emptyMini}>{t('glucosePage.noMeasure')}</Text>
+            ) : (
+              recentMeasures.map((g, i) => {
                 const z = zoneFor(g.value, low, high);
                 return (
-                  <View key={g.id} style={styles.readingRow}>
-                    <View style={[styles.dot, { backgroundColor: z.color }]} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.readingValue}>
-                        {g.value} <Text style={styles.readingUnit}>mg/dL</Text>
-                      </Text>
-                      {g.notes ? <Text style={styles.readingNotes}>{g.notes}</Text> : null}
+                  <View
+                    key={g.id}
+                    style={[styles.measureRow, i < recentMeasures.length - 1 && styles.measureRowBorder]}
+                  >
+                    <View style={styles.measureChip}>
+                      <ClockIcon />
                     </View>
-                    <Text style={styles.readingTime}>
-                      {new Date(g.created_at).toLocaleTimeString(i18n.language, {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                    <Text style={styles.measureTime}>
+                      {new Date(g.created_at).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })}
                     </Text>
-                    <Pressable onPress={() => deleteGlucose(g.id)} hitSlop={8} style={styles.deleteBtn}>
-                      <Text style={styles.deleteText}>✕</Text>
-                    </Pressable>
+                    <Text style={styles.measureValue} numberOfLines={1}>
+                      {g.value}
+                      <Text style={styles.measureUnit}> mg/dL</Text>
+                    </Text>
+                    <View style={styles.measureStatus}>
+                      <View style={[styles.measureDot, { backgroundColor: z.color }]} />
+                      <Text style={[styles.measureStatusText, { color: z.color }]} numberOfLines={1}>
+                        {t(z.labelKey)}
+                      </Text>
+                      <Pressable onPress={() => deleteGlucose(g.id)} hitSlop={6} style={styles.measureDel}>
+                        <Text style={styles.measureDelX}>✕</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 );
-              })}
-            </View>
+              })
+            )}
           </View>
+
+          {/* Plages de glycémie */}
+          <View style={[styles.card, styles.duoCard]}>
+            <Text style={styles.duoTitle}>{t('glucosePage.ranges')}</Text>
+            <RangeBar
+              label={t('glucosePage.inRange')}
+              hint={`(${low}-${high})`}
+              pct={weekStats?.tir ?? 0}
+              track="#EAF3EC"
+              fill={GREEN}
+            />
+            <RangeBar
+              label={t('glucosePage.rangeHigh')}
+              hint={`(> ${high})`}
+              pct={weekStats?.high ?? 0}
+              track="#FBEFDD"
+              fill="#F59E0B"
+            />
+            <RangeBar
+              label={t('glucosePage.rangeLow')}
+              hint={`(< ${low})`}
+              pct={weekStats?.low ?? 0}
+              track="#FBE3E3"
+              fill="#EF4444"
+              last
+            />
+          </View>
+        </FadeInView>
+
+        {/* ── Empty state (robot) ── */}
+        {recentMeasures.length === 0 ? (
+          <FadeInView delay={180} style={styles.emptyCard}>
+            <AnimatedRobot size={72} mood="happy" />
+            <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+              <Text style={styles.emptyTitle}>{t('glucosePage.emptyTitle')}</Text>
+              <Text style={styles.emptyMsg}>{t('glucosePage.emptyMsg')}</Text>
+            </View>
+          </FadeInView>
         ) : null}
+
+        {/* ── Ajouter une mesure ── */}
+        <FadeInView delay={250} style={styles.addRow}>
+          <Pressable style={styles.addCard} onPress={() => router.push('/log-glucose')}>
+            <LinearGradient colors={['#2FC178', '#149A57']} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.addGrad}>
+              <View style={styles.addChip}>
+                <Text style={{ fontSize: 20 }}>🩸</Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.addTitle}>{t('glucosePage.addMeasure')}</Text>
+                <Text style={styles.addSub}>{t('glucosePage.addMeasureSub')}</Text>
+              </View>
+              <View style={styles.addChevron}>
+                <ChevronRight color="#fff" size={18} />
+              </View>
+            </LinearGradient>
+          </Pressable>
+        </FadeInView>
       </ScrollView>
 
       {/* ── FAB ── */}
@@ -602,7 +611,9 @@ export default function GlucoseScreen() {
         onPress={() => router.push('/log-glucose')}
         style={[styles.fab, { bottom: Math.max(insets.bottom, 12) + 16 }]}
       >
-        <PlusGlyph size={22} color="#fff" />
+        <LinearGradient colors={['#2FC178', '#149A57']} style={styles.fabGrad}>
+          <PlusThin />
+        </LinearGradient>
       </Pressable>
 
       {/* ── Day picker ── */}
@@ -627,9 +638,7 @@ export default function GlucoseScreen() {
                   }}
                   style={[styles.pickerRow, active && styles.pickerRowActive]}
                 >
-                  <Text style={[styles.pickerDay, active && { color: GREEN }]}>
-                    {dayLabel(off)}
-                  </Text>
+                  <Text style={[styles.pickerDay, active && { color: GREEN }]}>{dayLabel(off)}</Text>
                   <Text style={styles.pickerCount}>
                     {count > 0 ? `${count} ${count > 1 ? t('glucosePage.measures') : t('glucosePage.measure')}` : '—'}
                   </Text>
@@ -651,281 +660,266 @@ export default function GlucoseScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#ffffff' },
+function RangeBar({
+  label,
+  hint,
+  pct,
+  track,
+  fill,
+  last,
+}: {
+  label: string;
+  hint: string;
+  pct: number;
+  track: string;
+  fill: string;
+  last?: boolean;
+}) {
+  return (
+    <View style={{ marginBottom: last ? 0 : 12 }}>
+      <View style={styles.rangeHead}>
+        <Text style={styles.rangeLabel}>
+          {label} <Text style={styles.rangeHint}>{hint}</Text>
+        </Text>
+        <Text style={styles.rangePct}>{pct}%</Text>
+      </View>
+      <View style={[styles.rangeTrack, { backgroundColor: track }]}>
+        <View style={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: '100%', borderRadius: 99, backgroundColor: fill }} />
+      </View>
+    </View>
+  );
+}
 
-  /* Hero */
+const cardShadow = {
+  shadowColor: 'rgba(20,50,34,1)',
+  shadowOffset: { width: 0, height: 12 },
+  shadowOpacity: 0.12,
+  shadowRadius: 22,
+  elevation: 3,
+};
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#F6F9F5' },
+
   heroImg: { position: 'absolute', top: 0, left: 0, right: 0, width: '100%' },
-  heroFade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 120,
-  },
+  heroFade: { position: 'absolute', left: 0, right: 0 },
 
   headRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
   },
   backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#ffffff',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.card,
   },
-  headTitle: { fontFamily: F700, fontSize: 19, color: '#101828' },
+  headTitle: { fontFamily: F800, fontSize: 20, color: INK },
+  headRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dateChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    paddingVertical: 9,
     paddingHorizontal: 12,
-    maxWidth: 148,
+    maxWidth: 150,
     ...shadows.card,
   },
-  dateChipText: { fontFamily: F700, fontSize: 12.5, color: '#101828', textTransform: 'capitalize' },
-
-  hello: { fontFamily: F700, fontSize: 15, color: '#101828', marginTop: 14, marginHorizontal: 16 },
-  helloSub: { fontFamily: F500, fontSize: 12.5, color: '#667085', marginTop: 3, marginHorizontal: 16 },
-
-  scaleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: 190,
-    marginTop: -26,
-  },
-  scaleText: { fontFamily: F600, fontSize: 11, color: '#98A2B3' },
-
-  /* Ring centre */
-  ringValue: { fontFamily: F800, color: '#152a1c', letterSpacing: -1 },
-  ringUnit: { fontFamily: F600, color: '#7c9585', marginTop: 2 },
-  ringPill: { marginTop: 8, paddingVertical: 7, paddingHorizontal: 20, borderRadius: 18 },
-  ringPillText: { fontFamily: F600, fontSize: 14, color: '#ffffff' },
-  ringDash: { width: 34, height: 5, borderRadius: 3, backgroundColor: '#c7d0dc', marginBottom: 6 },
-  ringEmpty: {
-    fontFamily: F600,
-    fontSize: 12.5,
-    color: '#8aa693',
-    textAlign: 'center',
-    marginTop: 8,
-    paddingHorizontal: 24,
-  },
-
-  /* Stats */
-  statsRow: { flexDirection: 'row', gap: 9, paddingHorizontal: 14, marginTop: 12 },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#F1F3F6',
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-  },
-  statHead: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 7 },
-  statIcon: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  statLabel: { fontFamily: F600, fontSize: 10.5, color: '#667085' },
-  statValue: { fontFamily: F800, fontSize: 21, color: '#101828', lineHeight: 24 },
-  statUnit: { fontFamily: F500, fontSize: 11, color: '#98A2B3', marginTop: 2 },
-
-  /* Chart */
-  chartCard: {
-    marginTop: 14,
-    marginHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#EEF1F4',
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: '#ffffff',
-  },
-  chartHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  chartTitle: { fontFamily: F700, fontSize: 14, color: '#101828' },
-  seeAll: { fontFamily: F700, fontSize: 12, color: GREEN },
-  yAxis: { justifyContent: 'space-between', height: 104, paddingBottom: 2 },
-  axisText: { fontFamily: F500, fontSize: 9.5, color: '#98A2B3', textAlign: 'right' },
-  xAxis: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 4,
-    marginLeft: 26,
-    marginBottom: 10,
-  },
-  legend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 13,
-    flexWrap: 'wrap',
-  },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 7, height: 7, borderRadius: 4 },
-  legendText: { fontFamily: F500, fontSize: 10.5, color: '#667085' },
-
-  /* Prediction */
-  predCard: {
-    marginTop: 12,
-    marginHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#EEF1F4',
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: '#ffffff',
-  },
-  predHead: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  predTitle: { fontFamily: F700, fontSize: 14.5, color: '#101828' },
-  predValue: { fontFamily: F800, fontSize: 15, color: '#101828' },
-  predUnit: { fontFamily: F500, fontSize: 12, color: '#667085' },
-  predRisk: { fontFamily: F500, marginTop: 8, fontSize: 12.5, lineHeight: 18, color: '#B45D22' },
-  predDisclaimer: { fontFamily: F500, marginTop: 8, fontSize: 11, lineHeight: 15, color: '#98A2B3' },
-
-  /* Empty state */
-  emptyCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#F7F9FA',
-    borderRadius: 18,
-    padding: 16,
-    marginTop: 14,
-    marginHorizontal: 14,
-  },
-  emptyTitle: { fontFamily: F700, fontSize: 14.5, color: '#101828' },
-  emptyMsg: { fontFamily: F500, fontSize: 12, lineHeight: 17, color: '#667085' },
-  emptyBtn: {
-    marginTop: 5,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: GREEN,
-    borderRadius: 18,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    shadowColor: GREEN,
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  emptyBtnText: { fontFamily: F700, fontSize: 12, color: '#ffffff' },
-
-  /* Readings */
-  section: {
-    fontFamily: F700,
-    fontSize: 15,
-    color: '#101828',
-    marginTop: 22,
-    marginBottom: 10,
-    marginHorizontal: 16,
-    textTransform: 'capitalize',
-  },
-  readingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#EEF1F4',
-    borderRadius: 14,
-    paddingVertical: 11,
-    paddingHorizontal: 13,
-  },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  readingValue: { fontFamily: F700, fontSize: 16.5, color: '#101828' },
-  readingUnit: { fontFamily: F500, fontSize: 12, color: '#667085' },
-  readingNotes: { fontFamily: F500, marginTop: 1, fontSize: 12, color: '#667085' },
-  readingTime: { fontFamily: F600, fontSize: 12.5, color: '#667085' },
-  deleteBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#F2F4F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteText: { fontSize: 12, color: '#667085', fontWeight: '700' },
-
-  /* FAB */
-  fab: {
-    position: 'absolute',
-    right: 16,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: GREEN,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: GREEN,
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
-  },
-
-  /* Day picker */
-  pickerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(16,24,40,0.45)',
-    justifyContent: 'flex-end',
-  },
-  pickerSheet: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 30,
-  },
-  pickerHandle: {
-    alignSelf: 'center',
+  dateChipText: { fontFamily: F600, fontSize: 13, color: INK, flexShrink: 1 },
+  dotsBtn: {
     width: 40,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#E4E7EC',
-    marginBottom: 12,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
   },
-  pickerTitle: { fontFamily: F800, fontSize: 16, color: '#101828', marginBottom: 10 },
-  pickerRow: {
+
+  hello: { fontFamily: F800, fontSize: 26, color: INK, letterSpacing: -0.3 },
+  helloSub: { fontFamily: F500, fontSize: 15, color: '#63736A', marginTop: 4 },
+
+  topRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, marginTop: 16, alignItems: 'stretch' },
+  gaugeCard: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 16,
+    alignItems: 'center',
+    ...cardShadow,
+  },
+  gaugeCardLabel: { fontFamily: F600, fontSize: 12.5, color: '#5C6E63' },
+  gaugeCenter: { position: 'absolute', top: 46, left: 0, right: 0, alignItems: 'center' },
+  gaugeUnitRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  gaugeUnit: { fontFamily: F600, fontSize: 11.5, color: '#9AA8A0' },
+  gaugeValue: { fontFamily: F800, fontSize: 44, color: INK, lineHeight: 46, marginTop: 2 },
+  gaugeDash: { fontFamily: F800, fontSize: 40, color: '#CBD5E1', marginTop: 2 },
+  gaugePill: { marginTop: 8, borderRadius: 99, paddingVertical: 3, paddingHorizontal: 11 },
+  gaugePillText: { fontFamily: F700, fontSize: 11.5 },
+  gaugeEmpty: { fontFamily: F500, fontSize: 11, color: '#9AA8A0', marginTop: 6 },
+  gaugeEnd: { position: 'absolute', top: 126, fontFamily: F700, fontSize: 12, color: '#9AA8A0' },
+  gaugePointer: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -6,
+    bottom: 0,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderBottomWidth: 9,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: GREEN,
+  },
+
+  statsCol: { flex: 1, minWidth: 0, gap: 10 },
+  miniDuo: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 13,
+    flexDirection: 'row',
+    ...cardShadow,
+  },
+  miniHalf: { flex: 1, minWidth: 0, paddingRight: 10 },
+  miniHalfBorder: { paddingRight: 0, paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: '#EDF1EE' },
+  miniHead: { alignItems: 'flex-start', gap: 5 },
+  miniIcon: { width: 22, height: 22, borderRadius: 7, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  miniLabel: { fontFamily: F600, fontSize: 10.5, lineHeight: 13, color: '#5C6E63', alignSelf: 'stretch' },
+  miniValue: { fontFamily: F800, fontSize: 21, color: INK, marginTop: 8 },
+  miniUnit: { fontFamily: F600, fontSize: 11, color: '#9AA8A0' },
+  trendCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 13,
+    ...cardShadow,
   },
-  pickerRowActive: { backgroundColor: '#E7F8F0' },
-  pickerDay: {
-    flex: 1,
-    fontFamily: F700,
-    fontSize: 14,
-    color: '#101828',
-    textTransform: 'capitalize',
+  trendValue: { fontFamily: F800, fontSize: 16, color: INK, marginTop: 1 },
+  trendSub: { fontFamily: F500, fontSize: 10.5, color: '#9AA8A0' },
+
+  card: { backgroundColor: '#fff', borderRadius: 24, padding: 16, ...cardShadow },
+  cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardTitle: { fontFamily: F800, fontSize: 15, color: INK },
+  unitPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F1F5F2',
+    borderRadius: 99,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
   },
-  pickerCount: { fontFamily: F500, fontSize: 12, color: '#98A2B3' },
-  pickerRadio: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.6,
-    borderColor: '#D0D5DD',
+  unitPillText: { fontFamily: F600, fontSize: 12, color: '#5C6E63' },
+  chartEmpty: { fontFamily: F500, fontSize: 13, color: '#9AA8A0', textAlign: 'center', paddingVertical: 30 },
+
+  coachCard: {
+    backgroundColor: '#E9F6EF',
+    borderRadius: 20,
+    padding: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
   },
+  coachRobot: {
+    width: 50,
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  coachPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#BFE6CE',
+    borderRadius: 20,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+  },
+  coachPillText: { fontFamily: F700, fontSize: 11.5, color: GREEN_D },
+  coachTitle: { fontFamily: F800, fontSize: 14.5, color: GREEN_D, marginTop: 6 },
+  coachSub: { fontFamily: F500, fontSize: 13, color: '#3A4A42', marginTop: 3, lineHeight: 18 },
+
+  duoRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, marginTop: 14, alignItems: 'stretch' },
+  duoCard: { flex: 1, minWidth: 0, padding: 14 },
+  duoTitle: { fontFamily: F800, fontSize: 14, color: INK, marginBottom: 8 },
+  emptyMini: { fontFamily: F500, fontSize: 12.5, color: '#9AA8A0', paddingVertical: 14, textAlign: 'center' },
+
+  measureRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 9 },
+  measureRowBorder: { borderBottomWidth: 1, borderBottomColor: '#F0F3F1' },
+  measureChip: { width: 26, height: 26, borderRadius: 8, backgroundColor: '#E4F6EC', alignItems: 'center', justifyContent: 'center' },
+  measureTime: { fontFamily: F600, fontSize: 11, color: '#9AA8A0' },
+  measureValue: { flex: 1, minWidth: 0, fontFamily: F800, fontSize: 13, color: INK },
+  measureUnit: { fontFamily: F600, fontSize: 10, color: '#9AA8A0' },
+  measureStatus: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  measureDot: { width: 5, height: 5, borderRadius: 3 },
+  measureStatusText: { fontFamily: F700, fontSize: 9.5, maxWidth: 52 },
+  measureDel: { marginLeft: 2, padding: 2 },
+  measureDelX: { fontFamily: F700, fontSize: 11, color: '#C2CCC5' },
+
+  rangeHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 4 },
+  rangeLabel: { fontFamily: F700, fontSize: 11.5, color: INK, flexShrink: 1 },
+  rangeHint: { fontFamily: F500, fontSize: 9.5, color: '#9AA8A0' },
+  rangePct: { fontFamily: F800, fontSize: 12, color: INK },
+  rangeTrack: { height: 6, borderRadius: 99, marginTop: 6, overflow: 'hidden' },
+
+  emptyCard: {
+    marginTop: 16,
+    marginHorizontal: 20,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    ...cardShadow,
+  },
+  emptyTitle: { fontFamily: F800, fontSize: 15, color: INK },
+  emptyMsg: { fontFamily: F500, fontSize: 13, color: '#63736A', lineHeight: 18 },
+
+  addRow: { paddingHorizontal: 20, marginTop: 16 },
+  addCard: { borderRadius: 20, overflow: 'hidden', shadowColor: '#149A57', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 6 },
+  addGrad: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  addChip: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' },
+  addTitle: { fontFamily: F800, fontSize: 15, color: '#fff' },
+  addSub: { fontFamily: F500, fontSize: 12.5, color: 'rgba(255,255,255,0.92)', marginTop: 2 },
+  addChevron: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+
+  fab: {
+    position: 'absolute',
+    right: 22,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    shadowColor: '#149A57',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  fabGrad: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
+
+  /* Day picker */
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(16,24,40,0.42)', justifyContent: 'flex-end' },
+  pickerSheet: { backgroundColor: '#fff', borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingBottom: 34 },
+  pickerHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#E3E8EE', marginBottom: 14 },
+  pickerTitle: { fontFamily: F800, fontSize: 17, color: INK, marginBottom: 10 },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13, paddingHorizontal: 12, borderRadius: 14 },
+  pickerRowActive: { backgroundColor: '#F2F8F4' },
+  pickerDay: { flex: 1, fontFamily: F700, fontSize: 14.5, color: INK, textTransform: 'capitalize' },
+  pickerCount: { fontFamily: F500, fontSize: 12.5, color: '#9AA8A0' },
+  pickerRadio: { width: 16, height: 16, borderRadius: 8, borderWidth: 1.6, borderColor: '#D5DBE2' },
 });

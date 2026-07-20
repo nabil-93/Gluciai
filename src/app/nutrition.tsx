@@ -7,38 +7,244 @@ import {
   Text,
   View,
 } from 'react-native';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  AppButton,
-  BevelCard,
-  ChevronLeft,
-  PremiumEmptyState,
-} from '@/components/ui';
-import { deleteMeal } from '@/services/data';
+import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
 import { getRecommendations } from '@/services/recommendations';
 import { useAppStore } from '@/store/useAppStore';
-import { colors, shadows } from '@/theme';
+import { shadows } from '@/theme';
+import type { MealType } from '@/types';
 
-// Daily goals (sensible defaults for a diabetic meal plan)
-const GOALS = { kcal: 2000, carbs: 250, protein: 90, fat: 65 };
+const F500 = 'PlusJakartaSans_500Medium';
+const F600 = 'PlusJakartaSans_600SemiBold';
+const F700 = 'PlusJakartaSans_700Bold';
+const F800 = 'PlusJakartaSans_800ExtraBold';
+
+const INK = '#14231C';
+const GREEN = '#1FB268';
+const GREEN_D = '#159A57';
+
+/** Daily targets for a diabetic meal plan. */
+const GOALS = { kcal: 2000, carbs: 250, protein: 90, fat: 65, fiber: 30 };
+/** Fixed diameter of the "objectif atteint" ring (device-width independent). */
+const RING = 168;
 
 function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
 }
 
+/* ─────────────────────────── Icons ─────────────────────────── */
+function CalendarIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Rect x={3.5} y={5} width={17} height={16} rx={3.5} stroke={GREEN} strokeWidth={2} />
+      <Path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" stroke={GREEN} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+function ChevronDown({ color = '#8A988F' }: { color?: string }) {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path d="M6 9l6 6 6-6" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+function ChevronRight({ color = '#4A5A51', size = 20 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 6l6 6-6 6" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+function LeafIcon() {
+  return (
+    <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+      <Path d="M5 19c0-8 6-14 15-15 1 9-5 15-15 15z" fill={GREEN} />
+      <Path d="M6 18c4-1 8-4 11-9" stroke="#fff" strokeWidth={1.6} strokeLinecap="round" />
+    </Svg>
+  );
+}
+function FlameIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24">
+      <Path
+        d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"
+        fill="#F97316"
+      />
+    </Svg>
+  );
+}
+function ProteinIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="#8B5CF6">
+      <Rect x={2} y={9} width={3.2} height={6} rx={1.2} />
+      <Rect x={5.2} y={7.5} width={2.4} height={9} rx={1.2} />
+      <Rect x={16.4} y={7.5} width={2.4} height={9} rx={1.2} />
+      <Rect x={18.8} y={9} width={3.2} height={6} rx={1.2} />
+      <Rect x={7} y={10.8} width={10} height={2.4} rx={1.2} />
+    </Svg>
+  );
+}
+function DropletIcon() {
+  return (
+    <Svg width={17} height={17} viewBox="0 0 24 24">
+      <Path d="M12 3.5c3.5 4 6 7 6 10a6 6 0 1 1-12 0c0-3 2.5-6 6-10z" fill="#F5A524" />
+    </Svg>
+  );
+}
+function FiberIcon() {
+  return (
+    <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={8.5} stroke={GREEN} strokeWidth={2} />
+      <Circle cx={12} cy={12} r={4.5} stroke={GREEN} strokeWidth={2} />
+      <Circle cx={12} cy={12} r={1.6} fill={GREEN} />
+    </Svg>
+  );
+}
+function SunriseIcon() {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 3v3M4.5 10l1.8 1.8M19.5 10l-1.8 1.8M2 18h20M8 18a4 4 0 0 1 8 0" />
+      <Path d="M8.5 6.5L12 3l3.5 3.5" />
+    </Svg>
+  );
+}
+function SunIcon() {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx={12} cy={12} r={4.2} />
+      <Path d="M12 2.5v2.5M12 19v2.5M2.5 12h2.5M19 12h2.5M5 5l1.8 1.8M17.2 17.2L19 19M19 5l-1.8 1.8M6.8 17.2L5 19" />
+    </Svg>
+  );
+}
+function SunsetIcon() {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 6V3M4.5 10l1.8 1.8M19.5 10l-1.8 1.8M2 18h20M8 18a4 4 0 0 1 8 0" />
+      <Path d="M8.5 5.5L12 9l3.5-3.5" />
+    </Svg>
+  );
+}
+function MoonIcon() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24">
+      <Path d="M20 14.5A8 8 0 1 1 9.5 4 6.4 6.4 0 0 0 20 14.5z" fill="#3B82F6" />
+    </Svg>
+  );
+}
+function ScanIcon() {
+  return (
+    <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15" />
+      <Path d="M4 12h16" />
+    </Svg>
+  );
+}
+function PlusThin({ color = GREEN, size = 20 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 5v14M5 12h14" stroke={color} strokeWidth={2.4} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/* ── Circular "objectif atteint" ring (carb-goal completion). SVG only —
+ *  the labelled centre is overlaid by the parent. ── */
+function ObjectiveRing({ size, pct }: { size: number; pct: number }) {
+  const r = size / 2 - 13;
+  const cx = size / 2;
+  const c = 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(1, pct));
+  const dash = p * c;
+  // Angle of the progress end (or the start dot at 0%), for the knob.
+  const ang = -90 + p * 360;
+  const knob = {
+    x: cx + r * Math.cos((ang * Math.PI) / 180),
+    y: cx + r * Math.sin((ang * Math.PI) / 180),
+  };
+  return (
+    <Svg width={size} height={size}>
+      <Circle cx={cx} cy={cx} r={r} fill="none" stroke="#E1F0E7" strokeWidth={12} />
+      {dash > 0 ? (
+        <Circle
+          cx={cx}
+          cy={cx}
+          r={r}
+          fill="none"
+          stroke={GREEN}
+          strokeWidth={12}
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${c}`}
+          transform={`rotate(-90 ${cx} ${cx})`}
+        />
+      ) : null}
+      <Circle cx={knob.x} cy={knob.y} r={6} fill={GREEN} />
+    </Svg>
+  );
+}
+
+function MacroCol({
+  icon,
+  chipBg,
+  name,
+  value,
+  goal,
+  unit,
+  color,
+  track,
+  first,
+}: {
+  icon: React.ReactNode;
+  chipBg: string;
+  name: string;
+  value: number;
+  goal: number;
+  unit: string;
+  color: string;
+  track: string;
+  first?: boolean;
+}) {
+  const pct = Math.min(100, Math.round((value / goal) * 100));
+  return (
+    <View style={[styles.macroCol, !first && styles.macroColBorder]}>
+      <View style={styles.macroHead}>
+        <View style={[styles.macroChip, { backgroundColor: chipBg }]}>{icon}</View>
+        <Text style={styles.macroName} numberOfLines={1}>
+          {name}
+        </Text>
+      </View>
+      <Text style={styles.macroValue}>
+        <Text style={styles.macroValueNum}>{Math.round(value)}</Text> / {goal} {unit}
+      </Text>
+      <View style={[styles.macroTrack, { backgroundColor: track }]}>
+        <View style={{ width: `${pct}%`, height: '100%', borderRadius: 99, backgroundColor: color }} />
+      </View>
+      <Text style={[styles.macroPct, { color }]}>{pct}%</Text>
+    </View>
+  );
+}
+
+const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+const MEAL_META: Record<MealType, { chip: string; icon: React.ReactNode }> = {
+  breakfast: { chip: '#FEECDF', icon: <SunriseIcon /> },
+  lunch: { chip: '#E4F6EC', icon: <SunIcon /> },
+  dinner: { chip: '#F0EBFD', icon: <SunsetIcon /> },
+  snack: { chip: '#E7F0FE', icon: <MoonIcon /> },
+};
+
 export default function NutritionScreen() {
   const router = useRouter();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { meals, profile, glucoseLogs } = useAppStore();
 
-  const todayMeals = useMemo(
-    () => meals.filter((m) => isToday(m.created_at)),
-    [meals]
-  );
+  const firstName = (profile?.name || '').trim().split(/\s+/)[0] || '';
+
+  const todayMeals = useMemo(() => meals.filter((m) => isToday(m.created_at)), [meals]);
 
   const recommendations = useMemo(
     () => getRecommendations(profile, glucoseLogs, meals),
@@ -51,377 +257,515 @@ export default function NutritionScreen() {
       acc.carbs += m.result.carbohydrates ?? 0;
       acc.protein += m.result.protein ?? 0;
       acc.fat += m.result.fat ?? 0;
-      acc.sugar += m.result.sugar ?? 0;
+      acc.fiber += m.result.fiber ?? 0;
       return acc;
     },
-    { kcal: 0, carbs: 0, protein: 0, fat: 0, sugar: 0 }
+    { kcal: 0, carbs: 0, protein: 0, fat: 0, fiber: 0 }
   );
+
+  /** Per-slot aggregates so each meal-type row shows what's logged. */
+  const bySlot = useMemo(() => {
+    const map: Record<MealType, { count: number; carbs: number }> = {
+      breakfast: { count: 0, carbs: 0 },
+      lunch: { count: 0, carbs: 0 },
+      dinner: { count: 0, carbs: 0 },
+      snack: { count: 0, carbs: 0 },
+    };
+    for (const m of todayMeals) {
+      const slot = (m.meal_type ?? 'snack') as MealType;
+      map[slot].count += 1;
+      map[slot].carbs += Math.round(m.result.carbohydrates ?? 0);
+    }
+    return map;
+  }, [todayMeals]);
+
+  const carbsPct = Math.min(1, totals.carbs / GOALS.carbs);
+  const remaining = Math.max(0, GOALS.carbs - Math.round(totals.carbs));
 
   const close = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
   };
 
+  const HERO_H = insets.top + 300;
+
   return (
     <View style={styles.root}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingTop: insets.top + 14,
-          paddingHorizontal: 16,
-          paddingBottom: 60,
-        }}
+        contentContainerStyle={{ paddingBottom: 120 }}
       >
-        <View style={styles.headRow}>
-          <Pressable onPress={close} style={styles.backBtn}>
-            <ChevronLeft size={16} />
-          </Pressable>
-          <Text style={styles.headTitle}>{t('nutritionPage.title')}</Text>
-          <View style={{ width: 36 }} />
+        {/* ── Hero ── */}
+        <View>
+          <Image
+            source={require('../assets/nutrition/hero-bg.jpg')}
+            style={[styles.heroImg, { height: HERO_H }]}
+            resizeMode="cover"
+          />
+          <LinearGradient
+            colors={['rgba(247,250,247,0)', 'rgba(247,250,247,0.7)', '#F7FAF7']}
+            locations={[0, 0.55, 0.95]}
+            style={[styles.heroFade, { top: HERO_H - 150, height: 150 }]}
+            pointerEvents="none"
+          />
+
+          {/* Header */}
+          <View style={[styles.headRow, { paddingTop: insets.top + 10 }]}>
+            <Pressable onPress={close} style={styles.backBtn}>
+              <ChevronLeft size={16} />
+            </Pressable>
+            <Text style={styles.headTitle}>{t('nutritionPage.title')}</Text>
+            <View style={styles.dateChip}>
+              <CalendarIcon />
+              <Text style={styles.dateChipText}>{t('nutritionPage.today')}</Text>
+              <ChevronDown />
+            </View>
+          </View>
+
+          {/* Greeting */}
+          <FadeInView delay={30} style={{ paddingHorizontal: 22, marginTop: 14 }}>
+            <Text style={styles.hello}>
+              {firstName ? t('nutritionPage.hello', { name: firstName }) : t('nutritionPage.helloNoName')}
+            </Text>
+            <Text style={styles.helloSub}>{t('nutritionPage.subtitle')}</Text>
+          </FadeInView>
+
+          {/* Carbs card + objectif ring */}
+          <FadeInView delay={80} style={styles.heroBlock}>
+            <LinearGradient
+              colors={['#2FC178', '#149A57']}
+              start={{ x: 0.1, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={styles.carbsCard}
+            >
+              <Text style={styles.carbsLabel}>{t('nutritionPage.carbsToday')}</Text>
+              <View style={styles.carbsRow}>
+                <Text style={styles.carbsValue}>{Math.round(totals.carbs)}</Text>
+                <Text style={styles.carbsUnit}>g</Text>
+              </View>
+              <Text style={styles.carbsGoal}>/ {GOALS.carbs} g</Text>
+              <View style={styles.carbsTrack}>
+                <View style={[styles.carbsFill, { width: `${Math.max(14, carbsPct * 100)}%` }]} />
+                <Text style={styles.carbsPctText}>{Math.round(carbsPct * 100)}%</Text>
+              </View>
+              <Text style={styles.carbsRemaining}>
+                {t('nutritionPage.remaining', { n: remaining })}
+              </Text>
+            </LinearGradient>
+
+            <View style={styles.ringWrap}>
+              <ObjectiveRing size={RING} pct={carbsPct} />
+              <View style={styles.ringCenter} pointerEvents="none">
+                <LeafIcon />
+                <Text style={styles.ringPct}>{Math.round(carbsPct * 100)}%</Text>
+                <Text style={styles.ringLabel}>{t('nutritionPage.goalReached')}</Text>
+              </View>
+            </View>
+          </FadeInView>
         </View>
 
-        {/* Big carbs card — the number that matters for insulin */}
-        <View style={styles.carbsCard}>
-          <Text style={styles.carbsLabel}>{t('nutritionPage.carbsToday')}</Text>
-          <View style={styles.carbsRow}>
-            <Text style={styles.carbsValue}>{Math.round(totals.carbs)}</Text>
-            <Text style={styles.carbsUnit}>g / {GOALS.carbs} g</Text>
-          </View>
-          <View style={styles.carbsTrack}>
-            <View
-              style={[
-                styles.carbsFill,
-                {
-                  width: `${Math.min(100, (totals.carbs / GOALS.carbs) * 100)}%`,
-                },
-              ]}
-            />
-          </View>
-          <Text style={styles.carbsHint}>
-            {profile?.carb_ratio
-              ? t('nutritionPage.ratioHint', { ratio: profile.carb_ratio })
-              : t('nutritionPage.ratioMissing')}
+        {/* ── Macro row ── */}
+        <FadeInView delay={120} style={styles.macroCard}>
+          <MacroCol
+            first
+            icon={<FlameIcon />}
+            chipBg="#FEECDF"
+            name={t('nutritionPage.calories')}
+            value={totals.kcal}
+            goal={GOALS.kcal}
+            unit="kcal"
+            color="#F97316"
+            track="#FCE9DC"
+          />
+          <MacroCol
+            icon={<ProteinIcon />}
+            chipBg="#F0EBFD"
+            name={t('nutritionPage.protein')}
+            value={totals.protein}
+            goal={GOALS.protein}
+            unit="g"
+            color="#8B5CF6"
+            track="#EDE7FC"
+          />
+          <MacroCol
+            icon={<DropletIcon />}
+            chipBg="#FEF3E0"
+            name={t('nutritionPage.fat')}
+            value={totals.fat}
+            goal={GOALS.fat}
+            unit="g"
+            color="#F5A524"
+            track="#FBEECF"
+          />
+          <MacroCol
+            icon={<FiberIcon />}
+            chipBg="#E4F6EC"
+            name={t('nutritionPage.fiber')}
+            value={totals.fiber}
+            goal={GOALS.fiber}
+            unit="g"
+            color={GREEN}
+            track="#DFF2E7"
+          />
+        </FadeInView>
+
+        {/* ── AI Coach ── */}
+        <FadeInView delay={160} style={{ paddingHorizontal: 20, marginTop: 18 }}>
+          <Pressable style={styles.coachCard} onPress={() => router.push('/ai-chat')}>
+            <View style={styles.coachRobot}>
+              <AnimatedRobot size={52} mood="happy" />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={styles.coachPill}>
+                <Text style={styles.coachPillText}>{t('nutritionPage.aiCoach')}</Text>
+              </View>
+              <Text style={styles.coachTitle}>{t('nutritionPage.recoTitle')}</Text>
+              {(recommendations.length
+                ? recommendations
+                : [{ icon: '💡', text: t('nutritionPage.remaining', { n: remaining }) }]
+              )
+                .slice(0, 2)
+                .map((r, i) => (
+                  <View key={i} style={styles.coachLine}>
+                    <Text style={styles.coachEmoji}>{r.icon}</Text>
+                    <Text style={styles.coachText}>{r.text}</Text>
+                  </View>
+                ))}
+            </View>
+            <ChevronRight />
+          </Pressable>
+        </FadeInView>
+
+        {/* ── Repas du jour ── */}
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>{t('nutritionPage.mealsTitle')}</Text>
+          <Text style={styles.sectionCount}>
+            {t('nutritionPage.mealsAdded', { count: todayMeals.length })}
           </Text>
         </View>
 
-        {/* Macro goals */}
-        <BevelCard style={{ marginTop: 12 }}>
-          <Text style={styles.cardTitle}>{t('nutritionPage.dailyGoals')}</Text>
-          <MacroBar
-            name={t('nutritionPage.calories')}
-            value={Math.round(totals.kcal)}
-            goal={GOALS.kcal}
-            unit="kcal"
-            color={colors.warning}
-          />
-          <MacroBar
-            name={t('nutritionPage.carbs')}
-            value={Math.round(totals.carbs)}
-            goal={GOALS.carbs}
-            unit="g"
-            color={colors.carbs}
-          />
-          <MacroBar
-            name={t('nutritionPage.protein')}
-            value={Math.round(totals.protein)}
-            goal={GOALS.protein}
-            unit="g"
-            color={colors.protein}
-          />
-          <MacroBar
-            name={t('nutritionPage.fat')}
-            value={Math.round(totals.fat)}
-            goal={GOALS.fat}
-            unit="g"
-            color={colors.lipids}
-          />
-        </BevelCard>
-
-        {/* Sugar warning */}
-        {totals.sugar > 50 ? (
-          <View style={styles.sugarWarn}>
-            <Text style={styles.sugarWarnText}>
-              {t('nutritionPage.sugarWarn', { sugar: Math.round(totals.sugar) })}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Personalized recommendations */}
-        <Text style={styles.section}>{t('nutritionPage.recommendations')}</Text>
-        <BevelCard>
-          {recommendations.map((r, i) => (
-            <View
-              key={i}
-              style={[
-                styles.recRow,
-                i < recommendations.length - 1 && styles.recBorder,
-              ]}
-            >
-              <Text style={{ fontSize: 20 }}>{r.icon}</Text>
-              <Text style={styles.recText}>{r.text}</Text>
-            </View>
-          ))}
-          <Text style={styles.recDisclaimer}>{t('nutritionPage.recDisclaimer')}</Text>
-        </BevelCard>
-
-        {/* Meals list */}
-        <Text style={styles.section}>
-          {t('nutritionPage.mealsOfDay', { count: todayMeals.length })}
-        </Text>
-        {todayMeals.length === 0 ? (
-          <PremiumEmptyState
-            emoji="🍽️"
-            title={t('nutritionPage.emptyTitle')}
-            message={t('nutritionPage.emptyMessage')}
-            actionLabel={t('nutritionPage.scanMeal')}
-            onAction={() => router.push('/scan')}
-          />
-        ) : (
-          <View style={{ gap: 12 }}>
-            {todayMeals.map((m) => (
-              <BevelCard key={m.id} noPadding style={styles.mealCard}>
-                <View style={styles.mealTop}>
-                  {m.image_url ? (
-                    <Image
-                      source={{ uri: m.image_url }}
-                      style={styles.mealImg}
-                    />
-                  ) : (
-                    <View style={[styles.mealImg, styles.mealImgPlaceholder]}>
-                      <Text style={{ fontSize: 24 }}>🍽️</Text>
-                    </View>
-                  )}
+        <FadeInView delay={200} style={{ paddingHorizontal: 20 }}>
+          <View style={styles.mealsCard}>
+            {MEAL_ORDER.map((slot, i) => {
+              const info = bySlot[slot];
+              const meta = MEAL_META[slot];
+              return (
+                <Pressable
+                  key={slot}
+                  onPress={() => router.push('/scan')}
+                  style={[styles.mealRow, i < MEAL_ORDER.length - 1 && styles.mealRowBorder]}
+                >
+                  <View style={[styles.mealChip, { backgroundColor: meta.chip }]}>{meta.icon}</View>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.mealName} numberOfLines={1}>
-                      {m.result.food_name}
-                    </Text>
-                    <Text style={styles.mealPortion} numberOfLines={1}>
-                      {m.result.estimated_portion} ·{' '}
-                      {new Date(m.created_at).toLocaleTimeString(i18n.language, {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                    <Text style={styles.mealName}>{t(`nutritionPage.mt.${slot}`)}</Text>
+                    <Text style={styles.mealSub} numberOfLines={1}>
+                      {info.count > 0
+                        ? t('nutritionPage.mealSummary', { count: info.count, carbs: info.carbs })
+                        : t(`nutritionPage.mtAdd.${slot}`)}
                     </Text>
                   </View>
-                  <Pressable
-                    onPress={() => deleteMeal(m.id)}
-                    hitSlop={8}
-                    style={styles.deleteBtn}
-                  >
-                    <Text style={styles.deleteText}>✕</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.mealMacros}>
-                  <MealStat value={`${Math.round(m.result.carbohydrates)} g`} name={t('nutritionPage.carbs')} color={colors.carbs} />
-                  <MealStat value={`${Math.round(m.result.sugar)} g`} name={t('nutritionPage.sugar')} color={colors.protein} />
-                  <MealStat value={`${Math.round(m.result.calories)}`} name="kcal" color={colors.warning} />
-                  <MealStat value={`${m.result.glycemic_index}`} name={t('nutritionPage.gi')} color={colors.ai} />
-                </View>
-                <Pressable
-                  style={styles.bolusLink}
-                  onPress={() => router.push('/bolus')}
-                >
-                  <Text style={styles.bolusLinkText}>{t('nutritionPage.bolusLink')}</Text>
+                  <View style={styles.mealPlus}>
+                    <PlusThin />
+                  </View>
                 </Pressable>
-              </BevelCard>
-            ))}
-            <AppButton
-              label={t('nutritionPage.scanAnother')}
-              onPress={() => router.push('/scan')}
-              variant="secondary"
-            />
+              );
+            })}
           </View>
-        )}
+        </FadeInView>
+
+        <View style={styles.divider} />
+
+        {/* ── Scanner un repas ── */}
+        <FadeInView delay={240} style={{ paddingHorizontal: 20, marginTop: 20 }}>
+          <Pressable style={styles.scanCard} onPress={() => router.push('/scan')}>
+            <View style={styles.scanChip}>
+              <ScanIcon />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.scanTitle}>{t('nutritionPage.scanMeal')}</Text>
+              <Text style={styles.scanSub}>{t('nutritionPage.scanSub')}</Text>
+            </View>
+            <View style={styles.scanChevron}>
+              <ChevronRight size={18} />
+            </View>
+          </Pressable>
+        </FadeInView>
       </ScrollView>
-    </View>
-  );
-}
 
-function MacroBar({
-  name,
-  value,
-  goal,
-  unit,
-  color,
-}: {
-  name: string;
-  value: number;
-  goal: number;
-  unit: string;
-  color: string;
-}) {
-  const pct = Math.min(100, (value / goal) * 100);
-  return (
-    <View style={styles.macroBar}>
-      <View style={styles.macroHead}>
-        <Text style={styles.macroName}>{name}</Text>
-        <Text style={styles.macroValues}>
-          <Text style={{ color: colors.text, fontWeight: '700' }}>{value}</Text>{' '}
-          / {goal} {unit}
-        </Text>
-      </View>
-      <View style={styles.macroTrack}>
-        <View
-          style={[styles.macroFill, { width: `${pct}%`, backgroundColor: color }]}
-        />
-      </View>
-    </View>
-  );
-}
-
-function MealStat({
-  value,
-  name,
-  color,
-}: {
-  value: string;
-  name: string;
-  color: string;
-}) {
-  return (
-    <View style={styles.mealStat}>
-      <Text style={[styles.mealStatValue, { color }]}>{value}</Text>
-      <Text style={styles.mealStatName}>{name}</Text>
+      {/* ── FAB ── */}
+      <Pressable
+        onPress={() => router.push('/add-menu')}
+        style={[styles.fab, { bottom: Math.max(insets.bottom, 12) + 16 }]}
+      >
+        <LinearGradient colors={['#2FC178', '#149A57']} style={styles.fabGrad}>
+          <PlusThin color="#fff" size={28} />
+        </LinearGradient>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: '#F7FAF7' },
+
+  heroImg: { position: 'absolute', top: 0, left: 0, right: 0, width: '100%' },
+  heroFade: { position: 'absolute', left: 0, right: 0 },
+
   headRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    paddingHorizontal: 16,
   },
   backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.card,
   },
-  headTitle: { fontSize: 19, fontWeight: '750' as any, color: colors.text },
-
-  carbsCard: {
-    backgroundColor: colors.ink,
-    borderRadius: 24,
-    padding: 20,
-    ...shadows.floating,
+  headTitle: { fontFamily: F800, fontSize: 20, color: INK },
+  dateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    ...shadows.card,
   },
-  carbsLabel: { fontSize: 15, fontWeight: '600', color: 'rgba(255,255,255,0.6)' },
-  carbsRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 4 },
-  carbsValue: { fontSize: 48, fontWeight: '800', color: '#fff', letterSpacing: -1 },
-  carbsUnit: { fontSize: 17, fontWeight: '600', color: 'rgba(255,255,255,0.6)' },
+  dateChipText: { fontFamily: F600, fontSize: 13, color: INK },
+
+  hello: { fontFamily: F800, fontSize: 26, color: INK, letterSpacing: -0.3 },
+  helloSub: { fontFamily: F500, fontSize: 15, color: '#63736A', marginTop: 4 },
+
+  heroBlock: {
+    marginTop: 18,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  carbsCard: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 28,
+    padding: 20,
+    paddingRight: 44,
+    shadowColor: '#149A57',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 6,
+  },
+  carbsLabel: { fontFamily: F600, fontSize: 15, color: 'rgba(255,255,255,0.95)' },
+  carbsRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginTop: 6 },
+  carbsValue: { fontFamily: F800, fontSize: 50, color: '#fff', lineHeight: 52 },
+  carbsUnit: { fontFamily: F700, fontSize: 22, color: '#fff' },
+  carbsGoal: { fontFamily: F600, fontSize: 16, color: 'rgba(255,255,255,0.92)', marginTop: 6 },
   carbsTrack: {
-    marginTop: 12,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    marginTop: 14,
+    height: 22,
+    borderRadius: 99,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    justifyContent: 'center',
     overflow: 'hidden',
   },
   carbsFill: {
-    height: '100%',
-    borderRadius: 4,
-    backgroundColor: colors.carbs,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 99,
+    backgroundColor: 'rgba(255,255,255,0.9)',
   },
-  carbsHint: { marginTop: 10, fontSize: 13, color: 'rgba(255,255,255,0.5)' },
-
-  cardTitle: { fontSize: 17, fontWeight: '650' as any, color: colors.text, marginBottom: 4 },
-  macroBar: { marginTop: 12 },
-  macroHead: { flexDirection: 'row', justifyContent: 'space-between' },
-  macroName: { fontSize: 14.5, fontWeight: '600', color: '#3E3E44' },
-  macroValues: { fontSize: 13.5, color: colors.textSecondary },
-  macroTrack: {
-    marginTop: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.surface2,
-    overflow: 'hidden',
+  carbsPctText: {
+    fontFamily: F800,
+    fontSize: 12,
+    color: GREEN_D,
+    marginLeft: 9,
   },
-  macroFill: { height: '100%', borderRadius: 3 },
+  carbsRemaining: { fontFamily: F600, fontSize: 14, color: 'rgba(255,255,255,0.92)', marginTop: 12 },
 
-  recRow: {
+  ringWrap: {
+    width: RING,
+    height: RING,
+    marginLeft: -40,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    shadowColor: 'rgba(20,80,50,1)',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.28,
+    shadowRadius: 30,
+    elevation: 8,
+  },
+  ringCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  ringPct: { fontFamily: F800, fontSize: 28, color: INK },
+  ringLabel: { fontFamily: F600, fontSize: 12.5, color: '#63736A' },
+
+  macroCard: {
+    marginTop: 16,
+    marginHorizontal: 20,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingVertical: 16,
+    paddingHorizontal: 6,
     flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 10,
-    alignItems: 'flex-start',
+    shadowColor: 'rgba(20,50,34,1)',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    elevation: 3,
   },
-  recBorder: { borderBottomWidth: 1, borderBottomColor: '#F0F0F3' },
-  recText: { flex: 1, fontSize: 13.5, lineHeight: 20, color: '#3E3E44' },
-  recDisclaimer: {
-    marginTop: 8,
-    fontSize: 11.5,
-    color: colors.textTertiary,
+  macroCol: { flex: 1, minWidth: 0, gap: 7, paddingHorizontal: 6 },
+  macroColBorder: { borderLeftWidth: 1, borderLeftColor: '#EDF1EE' },
+  macroHead: { alignItems: 'flex-start', gap: 6, minWidth: 0 },
+  macroChip: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
+  macroName: { fontFamily: F600, fontSize: 11.5, color: '#3A4A42', flexShrink: 1 },
+  macroValue: { fontFamily: F500, fontSize: 12, color: '#8A988F' },
+  macroValueNum: { fontFamily: F800, color: INK },
+  macroTrack: { height: 6, borderRadius: 99, overflow: 'hidden' },
+  macroPct: { fontFamily: F700, fontSize: 12 },
 
-  sugarWarn: {
+  coachCard: {
+    backgroundColor: '#E9F6EF',
+    borderRadius: 24,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  coachRobot: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  coachPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#BFE6CE',
+    borderRadius: 20,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+  },
+  coachPillText: { fontFamily: F700, fontSize: 11.5, color: GREEN_D },
+  coachTitle: { fontFamily: F800, fontSize: 15.5, color: INK, marginTop: 7 },
+  coachLine: { flexDirection: 'row', gap: 8, marginTop: 7, alignItems: 'flex-start' },
+  coachEmoji: { fontSize: 14 },
+  coachText: { flex: 1, fontFamily: F500, fontSize: 13.5, color: '#3A4A42', lineHeight: 18 },
+
+  sectionHead: {
+    marginTop: 24,
+    paddingHorizontal: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: { fontFamily: F800, fontSize: 19, color: INK },
+  sectionCount: { fontFamily: F700, fontSize: 14, color: GREEN },
+
+  mealsCard: {
     marginTop: 12,
-    backgroundColor: colors.warningDim,
-    borderRadius: 16,
-    padding: 14,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    ...shadows.card,
   },
-  sugarWarnText: { fontSize: 14, lineHeight: 20, color: '#B45D22', fontWeight: '500' },
-
-  section: {
-    fontSize: 20,
-    fontWeight: '750' as any,
-    color: colors.text,
-    marginTop: 26,
-    marginBottom: 12,
-    marginHorizontal: 2,
-  },
-  empty: { alignItems: 'center', gap: 8, paddingVertical: 20 },
-  emptyTitle: { fontSize: 17, fontWeight: '650' as any, color: '#9B9BA1' },
-  emptySub: {
-    fontSize: 14.5,
-    color: '#C7C7CC',
-    textAlign: 'center',
-    maxWidth: 280,
-    marginBottom: 6,
-  },
-
-  mealCard: { overflow: 'hidden' },
-  mealTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-  },
-  mealImg: { width: 52, height: 52, borderRadius: 14 },
-  mealImgPlaceholder: {
-    backgroundColor: colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mealName: { fontSize: 16, fontWeight: '700', color: colors.text },
-  mealPortion: { marginTop: 2, fontSize: 13, color: colors.textSecondary },
-  deleteBtn: {
-    width: 28,
-    height: 28,
+  mealRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
+  mealRowBorder: { borderBottomWidth: 1, borderBottomColor: '#F0F3F1' },
+  mealChip: {
+    width: 44,
+    height: 44,
     borderRadius: 14,
-    backgroundColor: colors.surface2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteText: { fontSize: 13, color: colors.textSecondary, fontWeight: '700' },
-  mealMacros: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F3',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-  },
-  mealStat: { flex: 1, alignItems: 'center' },
-  mealStatValue: { fontSize: 16, fontWeight: '800' },
-  mealStatName: { marginTop: 2, fontSize: 12, color: colors.textSecondary },
-  bolusLink: {
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F3',
-    paddingVertical: 12,
+  mealName: { fontFamily: F700, fontSize: 15, color: INK },
+  mealSub: { fontFamily: F500, fontSize: 13, color: '#8A988F', marginTop: 2 },
+  mealPlus: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#BFE6CE',
+    backgroundColor: '#fff',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  bolusLinkText: { fontSize: 14.5, fontWeight: '650' as any, color: colors.ai },
+
+  divider: { height: 1, backgroundColor: '#E3EAE5', marginHorizontal: 20, marginTop: 22 },
+
+  scanCard: {
+    backgroundColor: '#EAF6EF',
+    borderRadius: 24,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  scanChip: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: '#D8EFE1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scanTitle: { fontFamily: F800, fontSize: 16, color: INK },
+  scanSub: { fontFamily: F500, fontSize: 12.5, color: '#5C6E63', marginTop: 3, lineHeight: 17 },
+  scanChevron: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    borderColor: '#C4E6D2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  fab: {
+    position: 'absolute',
+    right: 22,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    shadowColor: '#149A57',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  fabGrad: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

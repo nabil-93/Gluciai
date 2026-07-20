@@ -508,7 +508,16 @@
     "savedAt": "Today, {{time}}",
     "viewJournal": "View my journal",
     "tapBoxHint": "Tap a food on the photo to see its details",
-    "mealMoment": "Which meal?"
+    "mealMoment": "Which meal?",
+    "scoreLabel": "Meal score",
+    "calcBolus": "Calculate bolus",
+    "warn": {
+      "high_gi": "High glycemic index — check your glucose 2 h after the meal.",
+      "sugar_high": "{{value}} g of sugar — significant glycemic impact.",
+      "unmatched": "No nutrition values (not found in databases): {{value}} — tap \"Edit food\" to fix.",
+      "ai_estimate": "Some values are AI-estimated (food not in official databases).",
+      "portions_adjusted": "Portions adjusted to your habits: {{value}}."
+    }
   },
   "chat": {
     "title": "AI Coach",
@@ -822,7 +831,26 @@
     "predRisk": "⚠️ {{type}} risk window: {{window}}",
     "predHypo": "Hypo",
     "predHyper": "Hyper",
-    "predDisclaimer": "Statistical estimate from your history — not a real reading nor medical advice."
+    "predDisclaimer": "Statistical estimate from your history — not a real reading nor medical advice.",
+    "current": "Current glucose",
+    "trend": "Trend",
+    "trend7days": "Over the last 7 days",
+    "trendStable": "Stable",
+    "trendRising": "Rising",
+    "trendFalling": "Falling",
+    "evolution7days": "Last 7 days trend",
+    "limitHigh": "Upper limit",
+    "limitLow": "Lower limit",
+    "aiTip": "AI Tip",
+    "tipGood": "Great balance!",
+    "tipGoodSub": "Your glucose is well controlled today. Keep it up and remember to drink enough water.",
+    "tipWatch": "Keep an eye out",
+    "tipWatchSub": "Your glucose often leaves the target range. Measure regularly and talk to your doctor.",
+    "recentMeasures": "Recent measures",
+    "ranges": "Glucose ranges",
+    "rangeHigh": "High",
+    "rangeLow": "Low",
+    "addMeasureSub": "Log your glucose manually"
   },
   "bolus": {
     "title": "Insulin dose",
@@ -1226,7 +1254,27 @@
     "calcBolus": "Calculate a bolus",
     "injections": "Injections",
     "emptyTitle": "No injection recorded",
-    "emptyMessage": "Add a dose with the + button, or let the bolus calculator suggest one."
+    "emptyMessage": "Add a dose with the + button, or let the bolus calculator suggest one.",
+    "today": "Today",
+    "hello": "Hi {{name}} 👋",
+    "helloNoName": "Hi 👋",
+    "subtitle": "Here's your insulin overview for today.",
+    "goal": "Goal: {{n}} U",
+    "goalShort": "Goal {{n}} U",
+    "ofGoal": "{{pct}}% of the daily goal",
+    "unitsShort": "Units (U)",
+    "aiTip": "AI Tip",
+    "tipBalanced": "Your insulin is well balanced today.",
+    "tipEmpty": "No insulin logged today.",
+    "tipContinue": "Keep it up!",
+    "tipAdd": "Add your first dose of the day.",
+    "recent": "Recent injections",
+    "noneYet": "No injection",
+    "seeAll": "See all",
+    "split": "Today's split",
+    "stable": "Stable injection",
+    "noRisk": "No risk detected today.",
+    "calcSub": "Calculate the recommended insulin dose"
   },
   "foodsPage": {
     "title": "Moroccan cuisine",
@@ -1281,7 +1329,33 @@
     "emptyMessage": "Scan your meal to estimate carbs, sugar and calories — then your bolus.",
     "scanMeal": "Scan a meal",
     "scanAnother": "Scan another meal",
-    "bolusLink": "Calculate the bolus for this meal →"
+    "bolusLink": "Calculate the bolus for this meal →",
+    "today": "Today",
+    "hello": "Hi {{name}} 👋",
+    "helloNoName": "Hi 👋",
+    "subtitle": "Here's your nutrition overview for today.",
+    "remaining": "{{n}} g left",
+    "goalReached": "Goal reached",
+    "fiber": "Fiber",
+    "aiCoach": "AI Coach",
+    "recoTitle": "Personalized recommendation ✨",
+    "mealsTitle": "Today's meals",
+    "mealsAdded": "{{count}} meal added",
+    "mealSummary": "{{count}} meals · {{carbs}} g",
+    "mt": {
+      "breakfast": "Breakfast",
+      "lunch": "Lunch",
+      "dinner": "Dinner",
+      "snack": "Snacks"
+    },
+    "mtAdd": {
+      "breakfast": "Add your breakfast",
+      "lunch": "Add your lunch",
+      "dinner": "Add your dinner",
+      "snack": "Add a snack"
+    },
+    "scanSub": "Scan your meal to estimate carbs, calories and more.",
+    "sodium": "Sodium"
   },
   "menuScanPage": {
     "title": "Restaurant menu",

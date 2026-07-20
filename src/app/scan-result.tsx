@@ -472,7 +472,7 @@ export default function ScanResultScreen() {
           <FadeInView>
             <View style={styles.kcalCard}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.kcalLabel}>Calories</Text>
+                <Text style={styles.kcalLabel}>{t('result.calories')}</Text>
                 <View style={styles.kcalRow}>
                   <AnimatedCounter
                     value={result.calories}
@@ -483,7 +483,7 @@ export default function ScanResultScreen() {
               </View>
               <View style={styles.kcalDivider} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.kcalLabel}>Glucides</Text>
+                <Text style={styles.kcalLabel}>{t('result.carbs')}</Text>
                 <View style={styles.kcalRow}>
                   <AnimatedCounter
                     value={result.carbohydrates}
@@ -500,7 +500,7 @@ export default function ScanResultScreen() {
           <View style={[styles.scoreCard, { borderColor: quality.color }]}>
             <View style={styles.scoreHead}>
               <View>
-                <Text style={styles.scoreLabel}>Score du repas</Text>
+                <Text style={styles.scoreLabel}>{t('result.scoreLabel')}</Text>
                 <Text style={[styles.scoreValue, { color: quality.color }]}>
                   {quality.score}
                   <Text style={styles.scoreMax}>/100</Text>
@@ -853,7 +853,7 @@ export default function ScanResultScreen() {
             <Metric label={t('nutritionPage.fat')} value={Math.round(result.fat)} unit="g" color={colors.lipids} />
             <Metric label={t('barcodePage.fiber')} value={Math.round(result.fiber)} unit="g" color={colors.primary} />
             {result.sodium ? (
-              <Metric label="Sodium" value={result.sodium} unit="mg" color={colors.textSecondary} />
+              <Metric label={t('nutritionPage.sodium')} value={result.sodium} unit="mg" color={colors.textSecondary} />
             ) : null}
           </View>
 
@@ -899,6 +899,15 @@ export default function ScanResultScreen() {
     </>
   );
 
+  /* Engine/AI warnings are stored as translation keys ("warn:high_gi",
+   * "warn:sugar_high|30", …) so they localize to the patient's language.
+   * Older meals stored a raw French sentence — show those verbatim. */
+  const localizeWarning = (w: string): string => {
+    if (!w.startsWith('warn:')) return w;
+    const [key, ...rest] = w.slice(5).split('|');
+    return t(`result.warn.${key}`, { value: rest.join('|') });
+  };
+
   // Insulin estimate + warnings (shown on the verify step).
   const verifyExtras = (
     <>
@@ -928,7 +937,7 @@ export default function ScanResultScreen() {
             <View style={styles.warnCard}>
               {result.warnings.map((w, i) => (
                 <Text key={i} style={styles.warnText}>
-                  ⚠️ {w}
+                  ⚠️ {localizeWarning(w)}
                 </Text>
               ))}
             </View>
@@ -961,7 +970,7 @@ export default function ScanResultScreen() {
           <BevelCard style={{ marginTop: 18 }}>
             <View style={styles.savedRecapRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.kcalLabel}>Calories</Text>
+                <Text style={styles.kcalLabel}>{t('result.calories')}</Text>
                 <View style={styles.kcalRow}>
                   <Text style={styles.kcalValue}>{result.calories}</Text>
                   <Text style={styles.kcalUnit}>kcal</Text>
@@ -981,7 +990,7 @@ export default function ScanResultScreen() {
           <View style={[styles.scoreCard, { borderColor: quality.color, marginTop: 12 }]}>
             <View style={styles.scoreHead}>
               <View>
-                <Text style={styles.scoreLabel}>Score du repas</Text>
+                <Text style={styles.scoreLabel}>{t('result.scoreLabel')}</Text>
                 <Text style={[styles.scoreValue, { color: quality.color }]}>
                   {quality.score}
                   <Text style={styles.scoreMax}>/100</Text>
@@ -996,7 +1005,7 @@ export default function ScanResultScreen() {
           <View style={{ gap: 10, marginTop: 18 }}>
             <AppButton label={t('result.viewJournal')} onPress={goJournal} />
             <AppButton
-              label="Calculer le bolus"
+              label={t('result.calcBolus')}
               onPress={goBolus}
               variant="secondary"
             />

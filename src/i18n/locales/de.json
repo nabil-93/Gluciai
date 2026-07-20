@@ -508,7 +508,16 @@
     "savedAt": "Heute, {{time}}",
     "viewJournal": "Mein Tagebuch ansehen",
     "tapBoxHint": "Tippe auf ein Lebensmittel im Foto für Details",
-    "mealMoment": "Welche Mahlzeit?"
+    "mealMoment": "Welche Mahlzeit?",
+    "scoreLabel": "Mahlzeit-Score",
+    "calcBolus": "Bolus berechnen",
+    "warn": {
+      "high_gi": "Hoher glykämischer Index — miss deinen Blutzucker 2 Std. nach der Mahlzeit.",
+      "sugar_high": "{{value}} g Zucker — starker Einfluss auf den Blutzucker.",
+      "unmatched": "Ohne Nährwerte (nicht in den Datenbanken): {{value}} — tippe auf „Lebensmittel bearbeiten“, um zu korrigieren.",
+      "ai_estimate": "Einige Werte sind KI-Schätzungen (Lebensmittel nicht in offiziellen Datenbanken).",
+      "portions_adjusted": "Portionen an deine Gewohnheiten angepasst: {{value}}."
+    }
   },
   "chat": {
     "title": "KI-Coach",
@@ -822,7 +831,26 @@
     "predRisk": "⚠️ Risikozeitraum {{type}}: {{window}}",
     "predHypo": "für Hypo",
     "predHyper": "für Hyper",
-    "predDisclaimer": "Statistische Schätzung aus deinem Verlauf — keine echte Messung und kein medizinischer Rat."
+    "predDisclaimer": "Statistische Schätzung aus deinem Verlauf — keine echte Messung und kein medizinischer Rat.",
+    "current": "Aktueller Blutzucker",
+    "trend": "Trend",
+    "trend7days": "In den letzten 7 Tagen",
+    "trendStable": "Stabil",
+    "trendRising": "Steigend",
+    "trendFalling": "Fallend",
+    "evolution7days": "Verlauf der letzten 7 Tage",
+    "limitHigh": "Obergrenze",
+    "limitLow": "Untergrenze",
+    "aiTip": "KI-Tipp",
+    "tipGood": "Sehr gutes Gleichgewicht!",
+    "tipGoodSub": "Dein Blutzucker ist heute gut eingestellt. Weiter so und denk daran, genug zu trinken.",
+    "tipWatch": "Im Auge behalten",
+    "tipWatchSub": "Dein Blutzucker verlässt oft den Zielbereich. Miss regelmäßig und sprich mit deinem Arzt.",
+    "recentMeasures": "Letzte Messungen",
+    "ranges": "Blutzucker-Bereiche",
+    "rangeHigh": "Hoch",
+    "rangeLow": "Niedrig",
+    "addMeasureSub": "Erfasse deinen Blutzucker manuell"
   },
   "bolus": {
     "title": "Insulindosis",
@@ -1226,7 +1254,27 @@
     "calcBolus": "Bolus berechnen",
     "injections": "Injektionen",
     "emptyTitle": "Keine Injektion erfasst",
-    "emptyMessage": "Füge eine Dosis mit dem +‑Button hinzu oder lass den Bolusrechner eine vorschlagen."
+    "emptyMessage": "Füge eine Dosis mit dem +‑Button hinzu oder lass den Bolusrechner eine vorschlagen.",
+    "today": "Heute",
+    "hello": "Hallo {{name}} 👋",
+    "helloNoName": "Hallo 👋",
+    "subtitle": "Hier ist deine Insulin-Übersicht für heute.",
+    "goal": "Ziel: {{n}} U",
+    "goalShort": "Ziel {{n}} U",
+    "ofGoal": "{{pct}}% des Tagesziels",
+    "unitsShort": "Einheiten (U)",
+    "aiTip": "KI-Tipp",
+    "tipBalanced": "Dein Insulin ist heute gut ausbalanciert.",
+    "tipEmpty": "Heute kein Insulin erfasst.",
+    "tipContinue": "Weiter so!",
+    "tipAdd": "Füge deine erste Dosis des Tages hinzu.",
+    "recent": "Letzte Injektionen",
+    "noneYet": "Keine Injektion",
+    "seeAll": "Alle ansehen",
+    "split": "Verteilung heute",
+    "stable": "Stabile Injektion",
+    "noRisk": "Heute kein Risiko erkannt.",
+    "calcSub": "Berechne die empfohlene Insulindosis"
   },
   "foodsPage": {
     "title": "Marokkanische Küche",
@@ -1281,7 +1329,33 @@
     "emptyMessage": "Scanne deine Mahlzeit, um Kohlenhydrate, Zucker und Kalorien zu schätzen — dann deinen Bolus.",
     "scanMeal": "Mahlzeit scannen",
     "scanAnother": "Weitere Mahlzeit scannen",
-    "bolusLink": "Bolus für diese Mahlzeit berechnen →"
+    "bolusLink": "Bolus für diese Mahlzeit berechnen →",
+    "today": "Heute",
+    "hello": "Hallo {{name}} 👋",
+    "helloNoName": "Hallo 👋",
+    "subtitle": "Hier ist deine Ernährungsübersicht für heute.",
+    "remaining": "{{n}} g übrig",
+    "goalReached": "Ziel erreicht",
+    "fiber": "Ballaststoffe",
+    "aiCoach": "KI-Coach",
+    "recoTitle": "Persönliche Empfehlung ✨",
+    "mealsTitle": "Mahlzeiten heute",
+    "mealsAdded": "{{count}} Mahlzeit hinzugefügt",
+    "mealSummary": "{{count}} Mahlzeiten · {{carbs}} g",
+    "mt": {
+      "breakfast": "Frühstück",
+      "lunch": "Mittagessen",
+      "dinner": "Abendessen",
+      "snack": "Snacks"
+    },
+    "mtAdd": {
+      "breakfast": "Frühstück hinzufügen",
+      "lunch": "Mittagessen hinzufügen",
+      "dinner": "Abendessen hinzufügen",
+      "snack": "Snack hinzufügen"
+    },
+    "scanSub": "Scanne deine Mahlzeit, um Kohlenhydrate, Kalorien und mehr zu schätzen.",
+    "sodium": "Natrium"
   },
   "menuScanPage": {
     "title": "Restaurantmenü",

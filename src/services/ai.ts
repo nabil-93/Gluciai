@@ -235,9 +235,8 @@ export async function analyzeMealImage(
   );
   onStage?.('finalizing');
   if (result && adjusted.length > 0) {
-    result.warnings.push(
-      `Portions ajustées selon vos habitudes : ${adjusted.join(', ')}.`
-    );
+    // Stored as a translation key (localized in scan-result localizeWarning).
+    result.warnings.push(`warn:portions_adjusted|${adjusted.join(', ')}`);
   }
   return result;
 }

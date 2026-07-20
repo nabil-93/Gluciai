@@ -345,33 +345,25 @@ export function aggregateItems(resolved: FoodItemResult[]): NutritionResult {
     resolved.reduce((s, it) => s + it.nutrition_confidence, 0) /
     resolved.length;
 
+  // Warnings are stored as translation KEYS ("warn:<key>|<value>") so the UI
+  // localizes them to the patient's language (see scan-result localizeWarning).
   const warnings: string[] = [];
   if (gi > 65) {
-    warnings.push(
-      'Index glycémique élevé — mesurez votre glycémie 2 h après le repas.'
-    );
+    warnings.push('warn:high_gi');
   }
   if (total.sugar > 30) {
-    warnings.push(
-      `${Math.round(total.sugar)} g de sucre — impact glycémique important.`
-    );
+    warnings.push(`warn:sugar_high|${Math.round(total.sugar)}`);
   }
   const unmatched = resolved.filter((it) => it.nutrition_confidence === 0);
   if (unmatched.length > 0) {
-    warnings.push(
-      `Sans valeurs nutritionnelles (introuvable dans les bases) : ${unmatched
-        .map((u) => u.name)
-        .join(', ')} — touchez « Modifier l'aliment » pour corriger.`
-    );
+    warnings.push(`warn:unmatched|${unmatched.map((u) => u.name).join(', ')}`);
   }
   if (
     resolved.some(
       (it) => it.source === 'ai_estimate' && it.nutrition_confidence > 0
     )
   ) {
-    warnings.push(
-      'Certaines valeurs sont estimées par IA (aliment absent des bases officielles).'
-    );
+    warnings.push('warn:ai_estimate');
   }
 
   const names = resolved.map((it) => it.name);
