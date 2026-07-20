@@ -1,11 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import Svg, {
@@ -24,8 +28,9 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, FadeInView, Spinner } from '@/components/ui';
 import { nowMs } from '@/lib/clock';
+import { sendChatMessage } from '@/services/ai';
 import { deleteGlucose } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
@@ -154,7 +159,7 @@ function Gauge({
   const valueDash = Math.max(0, Math.min(1, frac)) * ARC;
   const valueStroke = zone && zone.key === 'normal' ? 'url(#gaugeGrad)' : zone?.color ?? '#CBD5E1';
   return (
-    <View style={{ width: S, height: 134 }}>
+    <View style={{ width: S, height: 150 }}>
       <Svg width={S} height={S} style={{ position: 'absolute', top: 0, left: 0 }}>
         <Defs>
           <SvgLinearGradient id="gaugeGrad" x1="0" y1="1" x2="1" y2="0">
@@ -217,6 +222,195 @@ function Gauge({
   );
 }
 
+/** A card that springs slightly on press — tactile feedback before a sheet
+ *  scales open from it. */
+function PressableScale({
+  children,
+  onPress,
+  style,
+}: {
+  children: React.ReactNode;
+  onPress: () => void;
+  style?: any;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() =>
+        Animated.spring(scale, { toValue: 0.965, useNativeDriver: true, speed: 40, bounciness: 0 }).start()
+      }
+      onPressOut={() =>
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 28, bounciness: 8 }).start()
+      }
+    >
+      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
+    </Pressable>
+  );
+}
+
+/** In-page sheet that grows from small→full in the centre (and shrinks back
+ *  on close), per the requested "card zooms to the middle" feel. Returns null
+ *  while closed, so its children mount fresh each open (new chat every time). */
+function SheetShell({
+  visible,
+  onClose,
+  title,
+  children,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (visible) {
+      anim.setValue(0);
+      Animated.spring(anim, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 6 }).start();
+    }
+  }, [visible, anim]);
+  const close = () => {
+    Animated.timing(anim, { toValue: 0, duration: 150, useNativeDriver: true }).start(({ finished }) => {
+      if (finished) onClose();
+    });
+  };
+  if (!visible) return null;
+  const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] });
+  return (
+    <Modal transparent visible animationType="none" onRequestClose={close}>
+      <Animated.View style={[styles.sheetBackdrop, { opacity: anim }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={close} />
+      </Animated.View>
+      <View style={styles.sheetCenter} pointerEvents="box-none">
+        <Animated.View style={[styles.sheetCard, { opacity: anim, transform: [{ scale }] }]}>
+          <View style={styles.sheetHead}>
+            <Text style={styles.sheetTitle} numberOfLines={1}>
+              {title}
+            </Text>
+            <Pressable onPress={close} hitSlop={8} style={styles.sheetClose}>
+              <Text style={styles.sheetCloseX}>✕</Text>
+            </Pressable>
+          </View>
+          {children}
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
+/** Strip chat-only tokens the coach might emit so the bubble reads clean. */
+function cleanReply(s: string): string {
+  return (s ?? '')
+    .replace(/\[\[[^\]]+\]\]/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
+}
+
+/** Focused in-page AI chat for the glucose screen: a fresh conversation that
+ *  opens with a glucose-aware greeting. sendChatMessage already ships the full
+ *  patient context (profile, glucose, insulin, meals, notes, labs). */
+function CoachChat({
+  greeting,
+  profile,
+  lang,
+  errorText,
+  placeholder,
+}: {
+  greeting: string;
+  profile: any;
+  lang: string;
+  errorText: string;
+  placeholder: string;
+}) {
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
+    { role: 'assistant', content: greeting },
+  ]);
+  const [input, setInput] = useState('');
+  const [thinking, setThinking] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || thinking) return;
+    setInput('');
+    const next = [...messages, { role: 'user' as const, content: text }];
+    setMessages(next);
+    setThinking(true);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+    try {
+      const reply = await sendChatMessage(next, lang, profile);
+      setMessages((m) => [...m, { role: 'assistant', content: reply }]);
+    } catch {
+      setMessages((m) => [...m, { role: 'assistant', content: errorText }]);
+    } finally {
+      setThinking(false);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.chatScroll}
+        contentContainerStyle={{ paddingVertical: 8, gap: 10 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {messages.map((m, i) =>
+          m.role === 'user' ? (
+            <View key={i} style={styles.chatUserRow}>
+              <View style={styles.chatUserBubble}>
+                <Text style={styles.chatUserText}>{m.content}</Text>
+              </View>
+            </View>
+          ) : (
+            <View key={i} style={styles.chatAiRow}>
+              <View style={styles.chatAiAvatar}>
+                <AnimatedRobot size={22} mood="happy" />
+              </View>
+              <View style={styles.chatAiBubble}>
+                <Text style={styles.chatAiText}>{cleanReply(m.content)}</Text>
+              </View>
+            </View>
+          )
+        )}
+        {thinking ? (
+          <View style={styles.chatAiRow}>
+            <View style={styles.chatAiAvatar}>
+              <AnimatedRobot size={22} mood="happy" />
+            </View>
+            <View style={styles.chatAiBubble}>
+              <Spinner size={16} color={GREEN} />
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
+
+      <View style={styles.chatInputBar}>
+        <TextInput
+          value={input}
+          onChangeText={setInput}
+          placeholder={placeholder}
+          placeholderTextColor="#98a1af"
+          style={styles.chatInput}
+          multiline
+          onSubmitEditing={send}
+        />
+        <Pressable
+          onPress={send}
+          disabled={!input.trim() || thinking}
+          style={[styles.chatSend, (!input.trim() || thinking) && { opacity: 0.5 }]}
+        >
+          <Svg width={18} height={18} viewBox="0 0 24 24">
+            <Path d="M3 11l18-8-8 18-2.5-7.5L3 11z" fill="#fff" stroke="#fff" strokeWidth={1.4} strokeLinejoin="round" />
+          </Svg>
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
 export default function GlucoseScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -229,6 +423,8 @@ export default function GlucoseScreen() {
 
   const [dayOffset, setDayOffset] = useState(0);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** Which in-page sheet is open (grows from its card to the centre). */
+  const [sheet, setSheet] = useState<null | 'trend' | 'measures' | 'coach'>(null);
   const selectedDate = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - dayOffset);
@@ -252,6 +448,13 @@ export default function GlucoseScreen() {
   const latest = dayLogs.length ? dayLogs[dayLogs.length - 1] : null;
   const zone = latest ? zoneFor(latest.value, low, high) : null;
   const gaugeFrac = latest ? (latest.value - low) / (high - low) : 0;
+  // "Dans la cible" ONLY when the reading is actually in range; otherwise the
+  // zone's own label (Bas / Modéré / Élevé) — the pill used to lie "in target".
+  const zoneLabel = zone
+    ? zone.key === 'normal'
+      ? t('glucosePage.inRange')
+      : t(zone.labelKey)
+    : '';
 
   /* ── 7-day window (daily averages + trend + TIR bands) ── */
   const week = useMemo(() => {
@@ -279,35 +482,66 @@ export default function GlucoseScreen() {
     const hi = vals.filter((v) => v > high).length;
     const lo = vals.filter((v) => v < low).length;
     const pct = (n: number) => Math.round((n / vals.length) * 100);
-    return { avg, tir: pct(inR), high: pct(hi), low: pct(lo) };
+    return {
+      avg,
+      tir: pct(inR),
+      high: pct(hi),
+      low: pct(lo),
+      min: Math.min(...vals),
+      max: Math.max(...vals),
+      count: vals.length,
+    };
   }, [glucoseLogs, low, high]);
 
+  // Trend from the ACTUAL last readings (not just per-day averages) so it
+  // reacts to the real data — it used to sit on "Stable" whenever there was
+  // one day of data. Compares the older half of the recent readings to the
+  // newer half; ~12 mg/dL of drift flips it to rising/falling.
   const trend = useMemo(() => {
-    const pts = week.filter((d) => d.avg != null).map((d) => d.avg as number);
-    if (pts.length < 2) return 'stable' as const;
-    const half = Math.max(1, Math.floor(pts.length / 2));
-    const early = pts.slice(0, half);
-    const late = pts.slice(-half);
+    const recent = [...glucoseLogs]
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .slice(-8)
+      .map((g) => g.value);
+    if (recent.length < 3) return 'stable' as const;
+    const half = Math.max(1, Math.floor(recent.length / 2));
+    const early = recent.slice(0, half);
+    const late = recent.slice(-half);
     const a = early.reduce((s, v) => s + v, 0) / early.length;
     const b = late.reduce((s, v) => s + v, 0) / late.length;
     if (b - a > 12) return 'rising' as const;
     if (a - b > 12) return 'falling' as const;
     return 'stable' as const;
-  }, [week]);
+  }, [glucoseLogs]);
   const trendLabel =
     trend === 'rising'
       ? t('glucosePage.trendRising')
       : trend === 'falling'
         ? t('glucosePage.trendFalling')
         : t('glucosePage.trendStable');
+  const trendTone =
+    trend === 'rising'
+      ? { bg: '#FEF3E0', color: '#F59E0B' }
+      : trend === 'falling'
+        ? { bg: '#E7F0FE', color: '#3B82F6' }
+        : { bg: '#E4F6EC', color: GREEN_D };
+  const trendDesc =
+    trend === 'rising'
+      ? t('glucosePage.trendRisingDesc')
+      : trend === 'falling'
+        ? t('glucosePage.trendFallingDesc')
+        : t('glucosePage.trendStableDesc');
+  const coachGreeting = weekStats
+    ? t('glucosePage.coachGreeting', { avg: weekStats.avg, tir: weekStats.tir })
+    : t('glucosePage.coachGreetingNoData');
 
-  const recentMeasures = useMemo(
+  const allMeasures = useMemo(
     () =>
-      [...glucoseLogs]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 3),
+      [...glucoseLogs].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ),
     [glucoseLogs]
   );
+  const recentMeasures = allMeasures.slice(0, 3);
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -387,7 +621,7 @@ export default function GlucoseScreen() {
               zone={zone}
               low={low}
               high={high}
-              zoneLabel={zone ? t('glucosePage.inRange') : ''}
+              zoneLabel={zoneLabel}
               emptyText={t('glucosePage.noMeasure')}
             />
           </View>
@@ -416,7 +650,7 @@ export default function GlucoseScreen() {
               </View>
             </View>
 
-            <View style={styles.trendCard}>
+            <PressableScale style={styles.trendCard} onPress={() => setSheet('trend')}>
               <View style={[styles.miniIcon, { width: 34, height: 34, borderRadius: 11, backgroundColor: '#E7F0FE' }]}>
                 <TrendIcon color="#3B82F6" size={17} />
               </View>
@@ -426,7 +660,7 @@ export default function GlucoseScreen() {
                 <Text style={styles.trendSub}>{t('glucosePage.trend7days')}</Text>
               </View>
               <ChevronRight />
-            </View>
+            </PressableScale>
           </View>
         </FadeInView>
 
@@ -489,7 +723,7 @@ export default function GlucoseScreen() {
 
         {/* ── Conseil IA ── */}
         <FadeInView delay={170} style={{ paddingHorizontal: 20, marginTop: 14 }}>
-          <Pressable style={styles.coachCard} onPress={() => router.push('/ai-chat')}>
+          <PressableScale style={styles.coachCard} onPress={() => setSheet('coach')}>
             <View style={styles.coachRobot}>
               <AnimatedRobot size={44} mood="happy" />
             </View>
@@ -505,14 +739,17 @@ export default function GlucoseScreen() {
               </Text>
             </View>
             <ChevronRight color="#4A5A51" size={20} />
-          </Pressable>
+          </PressableScale>
         </FadeInView>
 
         {/* ── Dernières mesures + Plages ── */}
         <FadeInView delay={210} style={styles.duoRow}>
-          {/* Dernières mesures */}
-          <View style={[styles.card, styles.duoCard]}>
-            <Text style={styles.duoTitle}>{t('glucosePage.recentMeasures')}</Text>
+          {/* Dernières mesures → opens the full list sheet */}
+          <PressableScale style={[styles.card, styles.duoCard]} onPress={() => setSheet('measures')}>
+            <View style={styles.duoTitleRow}>
+              <Text style={styles.duoTitle}>{t('glucosePage.recentMeasures')}</Text>
+              <ChevronRight size={15} />
+            </View>
             {recentMeasures.length === 0 ? (
               <Text style={styles.emptyMini}>{t('glucosePage.noMeasure')}</Text>
             ) : (
@@ -533,20 +770,12 @@ export default function GlucoseScreen() {
                       {g.value}
                       <Text style={styles.measureUnit}> mg/dL</Text>
                     </Text>
-                    <View style={styles.measureStatus}>
-                      <View style={[styles.measureDot, { backgroundColor: z.color }]} />
-                      <Text style={[styles.measureStatusText, { color: z.color }]} numberOfLines={1}>
-                        {t(z.labelKey)}
-                      </Text>
-                      <Pressable onPress={() => deleteGlucose(g.id)} hitSlop={6} style={styles.measureDel}>
-                        <Text style={styles.measureDelX}>✕</Text>
-                      </Pressable>
-                    </View>
+                    <View style={[styles.measureDot, { backgroundColor: z.color }]} />
                   </View>
                 );
               })
             )}
-          </View>
+          </PressableScale>
 
           {/* Plages de glycémie */}
           <View style={[styles.card, styles.duoCard]}>
@@ -615,6 +844,69 @@ export default function GlucoseScreen() {
           <PlusThin />
         </LinearGradient>
       </Pressable>
+
+      {/* ── Tendance sheet ── */}
+      <SheetShell visible={sheet === 'trend'} onClose={() => setSheet(null)} title={t('glucosePage.trendTitle')}>
+        <View style={[styles.trendBadge, { backgroundColor: trendTone.bg }]}>
+          <TrendIcon color={trendTone.color} size={17} />
+          <Text style={[styles.trendBadgeText, { color: trendTone.color }]}>{trendLabel}</Text>
+        </View>
+        <Text style={styles.sheetPara}>{trendDesc}</Text>
+        <View style={styles.statGrid}>
+          <StatBox label={t('glucosePage.avg')} value={weekStats ? String(weekStats.avg) : '—'} unit="mg/dL" />
+          <StatBox label={t('glucosePage.inTarget')} value={weekStats ? `${weekStats.tir}%` : '—'} unit={t('glucosePage.ofTime')} />
+          <StatBox label={t('glucosePage.statMin')} value={weekStats ? String(weekStats.min) : '—'} unit="mg/dL" />
+          <StatBox label={t('glucosePage.statMax')} value={weekStats ? String(weekStats.max) : '—'} unit="mg/dL" />
+        </View>
+        <View style={styles.whatBox}>
+          <Text style={styles.whatTitle}>{t('glucosePage.trendWhatTitle')}</Text>
+          <Text style={styles.whatBody}>{t('glucosePage.trendWhatBody')}</Text>
+        </View>
+      </SheetShell>
+
+      {/* ── Dernières mesures sheet ── */}
+      <SheetShell visible={sheet === 'measures'} onClose={() => setSheet(null)} title={t('glucosePage.measuresTitle')}>
+        {allMeasures.length === 0 ? (
+          <Text style={styles.emptyMini}>{t('glucosePage.noMeasure')}</Text>
+        ) : (
+          <ScrollView style={styles.sheetList} showsVerticalScrollIndicator={false}>
+            {allMeasures.map((g) => {
+              const z = zoneFor(g.value, low, high);
+              return (
+                <View key={g.id} style={styles.measureFullRow}>
+                  <View style={[styles.measureDotBig, { backgroundColor: z.color }]} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.measureFullValue}>
+                      {g.value} <Text style={styles.measureUnit}>mg/dL</Text>
+                    </Text>
+                    <Text style={styles.measureFullMeta} numberOfLines={1}>
+                      {new Date(g.created_at).toLocaleDateString(i18n.language, { day: '2-digit', month: 'short' })}
+                      {' · '}
+                      {new Date(g.created_at).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })}
+                      {' · '}
+                      <Text style={{ color: z.color }}>{t(z.labelKey)}</Text>
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => deleteGlucose(g.id)} hitSlop={6} style={styles.measureDelBtn}>
+                    <Text style={styles.measureDelX}>✕</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+      </SheetShell>
+
+      {/* ── Conseil IA in-page chat ── */}
+      <SheetShell visible={sheet === 'coach'} onClose={() => setSheet(null)} title={t('glucosePage.coachSheetTitle')}>
+        <CoachChat
+          greeting={coachGreeting}
+          profile={profile}
+          lang={i18n.language}
+          errorText={t('common.error')}
+          placeholder={t('glucosePage.coachPlaceholder')}
+        />
+      </SheetShell>
 
       {/* ── Day picker ── */}
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
@@ -686,6 +978,18 @@ function RangeBar({
       <View style={[styles.rangeTrack, { backgroundColor: track }]}>
         <View style={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: '100%', borderRadius: 99, backgroundColor: fill }} />
       </View>
+    </View>
+  );
+}
+
+function StatBox({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <View style={styles.statBox}>
+      <Text style={styles.statBoxLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={styles.statBoxValue}>{value}</Text>
+      <Text style={styles.statBoxUnit}>{unit}</Text>
     </View>
   );
 }
@@ -765,12 +1069,12 @@ const styles = StyleSheet.create({
   gaugePill: { marginTop: 8, borderRadius: 99, paddingVertical: 3, paddingHorizontal: 11 },
   gaugePillText: { fontFamily: F700, fontSize: 11.5 },
   gaugeEmpty: { fontFamily: F500, fontSize: 11, color: '#9AA8A0', marginTop: 6 },
-  gaugeEnd: { position: 'absolute', top: 126, fontFamily: F700, fontSize: 12, color: '#9AA8A0' },
+  gaugeEnd: { position: 'absolute', top: 120, fontFamily: F700, fontSize: 12, color: '#9AA8A0' },
   gaugePointer: {
     position: 'absolute',
     left: '50%',
     marginLeft: -6,
-    bottom: 0,
+    bottom: 6,
     width: 0,
     height: 0,
     borderLeftWidth: 6,
@@ -855,7 +1159,8 @@ const styles = StyleSheet.create({
 
   duoRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, marginTop: 14, alignItems: 'stretch' },
   duoCard: { flex: 1, minWidth: 0, padding: 14 },
-  duoTitle: { fontFamily: F800, fontSize: 14, color: INK, marginBottom: 8 },
+  duoTitle: { fontFamily: F800, fontSize: 14, color: INK },
+  duoTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   emptyMini: { fontFamily: F500, fontSize: 12.5, color: '#9AA8A0', paddingVertical: 14, textAlign: 'center' },
 
   measureRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 9 },
@@ -922,4 +1227,136 @@ const styles = StyleSheet.create({
   pickerDay: { flex: 1, fontFamily: F700, fontSize: 14.5, color: INK, textTransform: 'capitalize' },
   pickerCount: { fontFamily: F500, fontSize: 12.5, color: '#9AA8A0' },
   pickerRadio: { width: 16, height: 16, borderRadius: 8, borderWidth: 1.6, borderColor: '#D5DBE2' },
+
+  /* ── In-page sheets (grow from centre) ── */
+  sheetBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(16,24,40,0.45)' },
+  sheetCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
+  sheetCard: {
+    width: '100%',
+    maxWidth: 440,
+    maxHeight: '82%',
+    backgroundColor: '#fff',
+    borderRadius: 26,
+    padding: 18,
+    shadowColor: 'rgba(16,24,40,1)',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.28,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  sheetTitle: { flex: 1, minWidth: 0, fontFamily: F800, fontSize: 17, color: INK },
+  sheetClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetCloseX: { fontFamily: F700, fontSize: 13, color: '#667085' },
+  sheetPara: { fontFamily: F500, fontSize: 13.5, lineHeight: 20, color: '#3A4A42', marginTop: 4 },
+
+  trendBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 99,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  trendBadgeText: { fontFamily: F800, fontSize: 14 },
+
+  statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
+  statBox: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    backgroundColor: '#F6F9F5',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  statBoxLabel: { fontFamily: F600, fontSize: 11.5, color: '#5C6E63' },
+  statBoxValue: { fontFamily: F800, fontSize: 22, color: INK, marginTop: 6 },
+  statBoxUnit: { fontFamily: F500, fontSize: 11, color: '#9AA8A0', marginTop: 1 },
+
+  whatBox: { backgroundColor: '#E9F6EF', borderRadius: 16, padding: 14, marginTop: 16 },
+  whatTitle: { fontFamily: F800, fontSize: 13.5, color: GREEN_D },
+  whatBody: { fontFamily: F500, fontSize: 12.5, lineHeight: 18, color: '#3A4A42', marginTop: 4 },
+
+  sheetList: { maxHeight: 420 },
+  measureFullRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F3F1',
+  },
+  measureDotBig: { width: 10, height: 10, borderRadius: 5 },
+  measureFullValue: { fontFamily: F800, fontSize: 15, color: INK },
+  measureFullMeta: { fontFamily: F500, fontSize: 11.5, color: '#9AA8A0', marginTop: 2 },
+  measureDelBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  /* ── In-page coach chat ── */
+  chatScroll: { maxHeight: 400 },
+  chatUserRow: { alignItems: 'flex-end' },
+  chatUserBubble: {
+    maxWidth: '86%',
+    backgroundColor: '#d8f5e5',
+    borderRadius: 16,
+    borderBottomRightRadius: 5,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+  },
+  chatUserText: { fontFamily: F600, fontSize: 13.5, lineHeight: 19, color: '#14532d' },
+  chatAiRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 7, paddingRight: 30 },
+  chatAiAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  chatAiBubble: {
+    flexShrink: 1,
+    backgroundColor: '#F2F5F3',
+    borderRadius: 16,
+    borderBottomLeftRadius: 5,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+  },
+  chatAiText: { fontFamily: F500, fontSize: 13.5, lineHeight: 19.5, color: '#26313f' },
+  chatInputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 12 },
+  chatInput: {
+    flex: 1,
+    minHeight: 42,
+    maxHeight: 100,
+    backgroundColor: '#f4f6fa',
+    borderRadius: 21,
+    paddingHorizontal: 15,
+    paddingTop: 11,
+    paddingBottom: 11,
+    fontFamily: F500,
+    fontSize: 14,
+    color: '#111827',
+  },
+  chatSend: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: GREEN,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

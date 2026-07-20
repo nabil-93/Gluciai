@@ -850,7 +850,20 @@
     "ranges": "Blutzucker-Bereiche",
     "rangeHigh": "Hoch",
     "rangeLow": "Niedrig",
-    "addMeasureSub": "Erfasse deinen Blutzucker manuell"
+    "addMeasureSub": "Erfasse deinen Blutzucker manuell",
+    "trendTitle": "Blutzucker-Trend",
+    "trendStableDesc": "Dein Blutzucker war in den letzten Tagen stabil — ein gutes Zeichen. Behalte deine Gewohnheiten bei und miss wie gewohnt.",
+    "trendRisingDesc": "Dein Blutzucker steigt in den letzten Tagen tendenziell. Achte auf zuckerreiche Mahlzeiten und sprich mit deinem Arzt, wenn es anhält.",
+    "trendFallingDesc": "Dein Blutzucker sinkt in den letzten Tagen tendenziell. Achte auf Unterzuckerungen, besonders nachts.",
+    "trendWhatTitle": "Wozu dient dieser Bereich?",
+    "trendWhatBody": "Er vergleicht deine täglichen Blutzucker-Durchschnitte über die Zeit, um zu sehen, ob sie steigen, fallen oder stabil bleiben — damit du dein Management rechtzeitig anpassen kannst.",
+    "statMin": "Minimum",
+    "statMax": "Maximum",
+    "measuresTitle": "Alle deine Messungen",
+    "coachSheetTitle": "KI-Assistent",
+    "coachGreeting": "Ich habe deinen Blutzucker angeschaut: Durchschnitt {{avg}} mg/dL, {{tir}} % im Zielbereich über 7 Tage. Was möchtest du wissen oder tun?",
+    "coachGreetingNoData": "Ich bin hier, um dir bei Blutzucker und Diabetes zu helfen. Was möchtest du wissen oder tun?",
+    "coachPlaceholder": "Stell deine Frage…"
   },
   "bolus": {
     "title": "Insulindosis",

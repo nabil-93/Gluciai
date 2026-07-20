@@ -850,7 +850,20 @@
     "ranges": "Plages de glycémie",
     "rangeHigh": "Élevée",
     "rangeLow": "Basse",
-    "addMeasureSub": "Enregistre ta glycémie manuellement"
+    "addMeasureSub": "Enregistre ta glycémie manuellement",
+    "trendTitle": "Tendance de la glycémie",
+    "trendStableDesc": "Ta glycémie reste régulière ces derniers jours — bon signe. Garde tes habitudes et continue à mesurer comme d'habitude.",
+    "trendRisingDesc": "Ta glycémie a tendance à monter ces derniers jours. Surveille les repas riches en sucre et parles-en à ton médecin si ça continue.",
+    "trendFallingDesc": "Ta glycémie a tendance à baisser ces derniers jours. Attention aux hypoglycémies, surtout la nuit.",
+    "trendWhatTitle": "À quoi sert cette rubrique ?",
+    "trendWhatBody": "Elle compare la moyenne de tes glycémies au fil des jours pour voir si elles montent, baissent ou restent stables — et ajuster ton suivi à temps.",
+    "statMin": "Minimum",
+    "statMax": "Maximum",
+    "measuresTitle": "Toutes tes mesures",
+    "coachSheetTitle": "Assistant IA",
+    "coachGreeting": "J'ai regardé ta glycémie : moyenne {{avg}} mg/dL, {{tir}} % dans la cible sur 7 jours. Qu'est-ce que tu veux savoir ou faire ?",
+    "coachGreetingNoData": "Je suis là pour t'aider avec ta glycémie et ton diabète. Qu'est-ce que tu veux savoir ou faire ?",
+    "coachPlaceholder": "Pose ta question…"
   },
   "bolus": {
     "title": "Dose d'insuline",

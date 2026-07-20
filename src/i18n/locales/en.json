@@ -850,7 +850,20 @@
     "ranges": "Glucose ranges",
     "rangeHigh": "High",
     "rangeLow": "Low",
-    "addMeasureSub": "Log your glucose manually"
+    "addMeasureSub": "Log your glucose manually",
+    "trendTitle": "Glucose trend",
+    "trendStableDesc": "Your glucose has been steady these last days — a good sign. Keep your habits and keep measuring as usual.",
+    "trendRisingDesc": "Your glucose has been trending up these last days. Watch sugary meals and talk to your doctor if it continues.",
+    "trendFallingDesc": "Your glucose has been trending down these last days. Watch out for lows, especially at night.",
+    "trendWhatTitle": "What is this section for?",
+    "trendWhatBody": "It compares your daily glucose averages over time to see whether they're rising, falling or staying stable — so you can adjust your care in time.",
+    "statMin": "Minimum",
+    "statMax": "Maximum",
+    "measuresTitle": "All your measures",
+    "coachSheetTitle": "AI Assistant",
+    "coachGreeting": "I've looked at your glucose: average {{avg}} mg/dL, {{tir}}% in range over 7 days. What do you want to know or do?",
+    "coachGreetingNoData": "I'm here to help with your glucose and diabetes. What do you want to know or do?",
+    "coachPlaceholder": "Ask your question…"
   },
   "bolus": {
     "title": "Insulin dose",
