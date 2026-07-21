@@ -927,7 +927,9 @@
     "hba1cFasting": "Fasting / before meals",
     "hba1cPost": "After meals (2 h)",
     "hba1cMean": "Average glucose",
-    "hba1cNote": "Indicative values (general guidance). Your doctor sets your personal targets."
+    "hba1cNote": "Indicative values (general guidance). Your doctor sets your personal targets.",
+    "range7d": "7D",
+    "rangeDay": "Day"
   },
   "bolus": {
     "title": "Insulin dose",

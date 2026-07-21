@@ -521,6 +521,15 @@ export default function GlucoseScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   /** Which in-page sheet is open (grows from its card to the centre). */
   const [sheet, setSheet] = useState<null | 'trend' | 'measures' | 'coach'>(null);
+  /** Evolution chart: 7-day daily averages, or the selected day's readings
+   *  by hour; and the displayed unit (mg/dL, or g/L — the gram-per-litre
+   *  reading Moroccan/French patients commonly use). Values are always
+   *  computed and stored in mg/dL — only the DISPLAY text is converted. */
+  const [chartRange, setChartRange] = useState<'week' | 'day'>('week');
+  const [chartUnit, setChartUnit] = useState<'mg' | 'g'>('mg');
+  const toUnit = (v: number) => (chartUnit === 'g' ? v / 100 : v);
+  const fmtVal = (v: number) => (chartUnit === 'g' ? toUnit(v).toFixed(2) : String(Math.round(v)));
+  const unitLabel = chartUnit === 'g' ? 'g/L' : 'mg/dL';
   const selectedDate = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - dayOffset);
@@ -660,17 +669,34 @@ export default function GlucoseScreen() {
     else router.replace('/(tabs)');
   };
 
-  /* ── 7-day chart geometry (viewBox 340×175) ── */
+  /* ── Evolution chart geometry (viewBox 340×175) ── */
   const yOf = (v: number) => Math.max(14, Math.min(140, 134 - v * 0.59));
-  const xOf = (i: number) => 34 + i * 39;
-  const pointsWithData = week
-    .map((d, i) => (d.avg != null ? { x: xOf(i), y: yOf(d.avg), v: d.avg } : null))
-    .filter((p): p is { x: number; y: number; v: number } => p !== null);
-  const polyPoints = pointsWithData.map((p) => `${p.x},${p.y}`).join(' ');
-  const areaPath = pointsWithData.length
-    ? `M${pointsWithData[0].x},${pointsWithData[0].y} ` +
-      pointsWithData.slice(1).map((p) => `L${p.x},${p.y}`).join(' ') +
-      ` L${pointsWithData[pointsWithData.length - 1].x},134 L${pointsWithData[0].x},134 Z`
+  const CHART_X0 = 34;
+  const CHART_X1 = 268;
+  const xOf = (i: number) => CHART_X0 + i * 39; // week: one slot per day
+  const xOfFrac = (frac: number) => CHART_X0 + frac * (CHART_X1 - CHART_X0); // day: 0h→24h
+
+  type ChartPoint = { x: number; y: number; v: number; color: string };
+  const weekPoints: ChartPoint[] = week
+    .map((d, i) =>
+      d.avg != null
+        ? { x: xOf(i), y: yOf(d.avg), v: d.avg, color: zoneFor(d.avg, low, high).color }
+        : null
+    )
+    .filter((p): p is ChartPoint => p !== null);
+
+  const dayPoints: ChartPoint[] = dayLogs.map((g) => {
+    const d = new Date(g.created_at);
+    const frac = (d.getHours() + d.getMinutes() / 60) / 24;
+    return { x: xOfFrac(frac), y: yOf(g.value), v: g.value, color: zoneFor(g.value, low, high).color };
+  });
+
+  const chartPoints = chartRange === 'week' ? weekPoints : dayPoints;
+  const polyPoints = chartPoints.map((p) => `${p.x},${p.y}`).join(' ');
+  const areaPath = chartPoints.length
+    ? `M${chartPoints[0].x},${chartPoints[0].y} ` +
+      chartPoints.slice(1).map((p) => `L${p.x},${p.y}`).join(' ') +
+      ` L${chartPoints[chartPoints.length - 1].x},134 L${chartPoints[0].x},134 Z`
     : '';
 
   const HERO_H = insets.top + 300;
@@ -863,18 +889,38 @@ export default function GlucoseScreen() {
           </View>
         </FadeInView>
 
-        {/* ── 7-day evolution chart ── */}
+        {/* ── Evolution chart (7 days / selected day · mg/dL / g/L) ── */}
         <FadeInView delay={130} style={{ paddingHorizontal: 20, marginTop: 14 }}>
           <View style={styles.card}>
             <View style={styles.cardHead}>
-              <Text style={styles.cardTitle}>{t('glucosePage.evolution7days')}</Text>
-              <View style={styles.unitPill}>
-                <Text style={styles.unitPillText}>mg/dL</Text>
-                <ChevronDown size={13} />
+              <Text style={styles.cardTitle}>
+                {chartRange === 'week' ? t('glucosePage.evolution7days') : dayLabel(dayOffset)}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={styles.segToggle}>
+                  {(['week', 'day'] as const).map((r) => (
+                    <Pressable
+                      key={r}
+                      onPress={() => setChartRange(r)}
+                      style={[styles.segBtn, chartRange === r && styles.segBtnOn]}
+                    >
+                      <Text style={[styles.segText, chartRange === r && styles.segTextOn]}>
+                        {r === 'week' ? t('glucosePage.range7d') : t('glucosePage.rangeDay')}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Pressable
+                  onPress={() => setChartUnit((u) => (u === 'mg' ? 'g' : 'mg'))}
+                  style={styles.unitPill}
+                >
+                  <Text style={styles.unitPillText}>{unitLabel}</Text>
+                  <ChevronDown size={13} />
+                </Pressable>
               </View>
             </View>
 
-            {pointsWithData.length >= 1 ? (
+            {chartPoints.length >= 1 ? (
               <Svg width="100%" viewBox="0 0 340 175" style={{ marginTop: 12 }}>
                 <Defs>
                   <SvgLinearGradient id="lineArea" x1="0" y1="0" x2="0" y2="1">
@@ -886,33 +932,51 @@ export default function GlucoseScreen() {
                 <Line x1={34} y1={16} x2={268} y2={16} stroke="#EEF2EF" strokeWidth={1} />
                 <Line x1={34} y1={51.4} x2={268} y2={51.4} stroke="#EEF2EF" strokeWidth={1} />
                 <Line x1={34} y1={134} x2={268} y2={134} stroke="#EEF2EF" strokeWidth={1} />
-                <SvgText x={26} y={20} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">200</SvgText>
-                <SvgText x={26} y={55} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">140</SvgText>
-                <SvgText x={26} y={96} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">70</SvgText>
-                <SvgText x={26} y={138} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">0</SvgText>
+                <SvgText x={26} y={20} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">{fmtVal(200)}</SvgText>
+                <SvgText x={26} y={55} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">{fmtVal(140)}</SvgText>
+                <SvgText x={26} y={96} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">{fmtVal(70)}</SvgText>
+                <SvgText x={26} y={138} textAnchor="end" fontFamily={F600} fontSize={11} fill="#9AA8A0">{fmtVal(0)}</SvgText>
                 {/* limits */}
                 <Line x1={34} y1={yOf(high)} x2={268} y2={yOf(high)} stroke="#8FD3AC" strokeWidth={1.5} strokeDasharray="5 4" />
                 <Line x1={34} y1={yOf(low)} x2={268} y2={yOf(low)} stroke="#F0A9A9" strokeWidth={1.5} strokeDasharray="5 4" />
-                <SvgText x={273} y={yOf(high) - 4} fontFamily={F700} fontSize={11} fill={GREEN_D}>{high}</SvgText>
+                <SvgText x={273} y={yOf(high) - 4} fontFamily={F700} fontSize={11} fill={GREEN_D}>{fmtVal(high)}</SvgText>
                 <SvgText x={273} y={yOf(high) + 7} fontFamily={F600} fontSize={9} fill="#4FAE7B">{t('glucosePage.limitHigh')}</SvgText>
-                <SvgText x={273} y={yOf(low) - 2} fontFamily={F700} fontSize={11} fill={GREEN_D}>{low}</SvgText>
+                <SvgText x={273} y={yOf(low) - 2} fontFamily={F700} fontSize={11} fill={GREEN_D}>{fmtVal(low)}</SvgText>
                 <SvgText x={273} y={yOf(low) + 9} fontFamily={F600} fontSize={9} fill="#4FAE7B">{t('glucosePage.limitLow')}</SvgText>
                 {/* area + line */}
                 {areaPath ? <Path d={areaPath} fill="url(#lineArea)" /> : null}
-                {pointsWithData.length >= 2 ? (
+                {chartPoints.length >= 2 ? (
                   <Polyline points={polyPoints} fill="none" stroke={GREEN} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
                 ) : null}
-                {pointsWithData.map((p, i) => (
+                {chartPoints.map((p, i) => (
                   <React.Fragment key={i}>
-                    <Circle cx={p.x} cy={p.y} r={4} fill={GREEN} stroke="#fff" strokeWidth={2} />
-                    <SvgText x={p.x} y={p.y - 10} textAnchor="middle" fontFamily={F700} fontSize={10} fill="#5C6E63">{p.v}</SvgText>
+                    <Circle cx={p.x} cy={p.y} r={4} fill={p.color} stroke="#fff" strokeWidth={2} />
+                    <SvgText x={p.x} y={p.y - 10} textAnchor="middle" fontFamily={F700} fontSize={10} fill="#5C6E63">
+                      {fmtVal(p.v)}
+                    </SvgText>
                   </React.Fragment>
                 ))}
-                {week.map((d, i) => (
-                  <SvgText key={`l${i}`} x={xOf(i)} y={166} textAnchor="middle" fontFamily={F600} fontSize={11} fill="#9AA8A0">
-                    {d.label}
-                  </SvgText>
-                ))}
+                {chartRange === 'week' ? (
+                  week.map((d, i) => (
+                    <SvgText key={`l${i}`} x={xOf(i)} y={166} textAnchor="middle" fontFamily={F600} fontSize={11} fill="#9AA8A0">
+                      {d.label}
+                    </SvgText>
+                  ))
+                ) : (
+                  [0, 6, 12, 18, 24].map((hr) => (
+                    <SvgText
+                      key={`h${hr}`}
+                      x={xOfFrac(hr / 24)}
+                      y={166}
+                      textAnchor={hr === 0 ? 'start' : hr === 24 ? 'end' : 'middle'}
+                      fontFamily={F600}
+                      fontSize={11}
+                      fill="#9AA8A0"
+                    >
+                      {hr}h
+                    </SvgText>
+                  ))
+                )}
               </Svg>
             ) : (
               <Text style={styles.chartEmpty}>{t('glucosePage.emptyMsg')}</Text>
@@ -1399,6 +1463,13 @@ const styles = StyleSheet.create({
   },
   unitPillText: { fontFamily: F600, fontSize: 12, color: '#5C6E63' },
   chartEmpty: { fontFamily: F500, fontSize: 13, color: '#9AA8A0', textAlign: 'center', paddingVertical: 30 },
+
+  /* Chart range toggle (7 days / day) */
+  segToggle: { flexDirection: 'row', backgroundColor: '#F1F5F2', borderRadius: 99, padding: 2 },
+  segBtn: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 99 },
+  segBtnOn: { backgroundColor: '#fff', ...shadows.card },
+  segText: { fontFamily: F600, fontSize: 11.5, color: '#8A988F' },
+  segTextOn: { color: GREEN_D },
 
   coachCard: {
     backgroundColor: '#E9F6EF',

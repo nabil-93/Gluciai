@@ -927,7 +927,9 @@
     "hba1cFasting": "Nüchtern / vor den Mahlzeiten",
     "hba1cPost": "Nach den Mahlzeiten (2 Std.)",
     "hba1cMean": "Durchschnittlicher Blutzucker",
-    "hba1cNote": "Richtwerte (allgemeine Empfehlungen). Deine persönlichen Ziele legt dein Arzt fest."
+    "hba1cNote": "Richtwerte (allgemeine Empfehlungen). Deine persönlichen Ziele legt dein Arzt fest.",
+    "range7d": "7T",
+    "rangeDay": "Tag"
   },
   "bolus": {
     "title": "Insulindosis",

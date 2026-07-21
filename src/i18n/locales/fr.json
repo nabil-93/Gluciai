@@ -927,7 +927,9 @@
     "hba1cFasting": "À jeun / avant repas",
     "hba1cPost": "Après repas (2 h)",
     "hba1cMean": "Glycémie moyenne",
-    "hba1cNote": "Valeurs indicatives (recommandations générales). Votre médecin fixe vos objectifs personnels."
+    "hba1cNote": "Valeurs indicatives (recommandations générales). Votre médecin fixe vos objectifs personnels.",
+    "range7d": "7J",
+    "rangeDay": "Jour"
   },
   "bolus": {
     "title": "Dose d'insuline",
