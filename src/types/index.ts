@@ -16,9 +16,10 @@ export interface Profile {
   target_low: number;
   target_high: number;
   /** Daily "time in range" goal the patient sets for themselves (percentage
-   *  of the day's readings that should sit inside target_low..target_high).
-   *  Drives the objective ring on the glycémie page. Default 70. */
-  daily_tir_goal?: number;
+   *  Absolute glucose objective in mg/dL the patient sets for themselves
+   *  (e.g. 180). Drives the objective ring on the glycémie page — the ring
+   *  fills a full circle when the day's glucose reaches this value. */
+  daily_glucose_goal?: number;
   carb_ratio?: number;
   correction_factor?: number;
   /** Units of MEAL (rapid) insulin per 10 g of carbs — one per meal, as
@@ -205,6 +206,8 @@ export interface InsulinLog {
   user_id: string;
   insulin_type: InsulinType;
   dose: number;
+  /** Which meal this injection was for (optional, chosen when logging). */
+  meal_type?: MealType;
   notes?: string;
   created_at: string;
 }

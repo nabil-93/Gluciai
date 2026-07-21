@@ -16,7 +16,8 @@
     "today": "Aujourd'hui",
     "offline": "Vous êtes hors ligne. Les données se synchroniseront à la reconnexion.",
     "error": "Une erreur est survenue",
-    "demoBadge": "Mode démo — connectez Supabase pour enregistrer vos données"
+    "demoBadge": "Mode démo — connectez Supabase pour enregistrer vos données",
+    "close": "Fermer"
   },
   "language": {
     "title": "Choisissez votre langue",
@@ -184,7 +185,9 @@
     "ratioLunch": "Déjeuner",
     "ratioDinner": "Dîner",
     "ratioPlaceholder": "ex. 1.5",
-    "per10g": "U / 10 g"
+    "per10g": "U / 10 g",
+    "glucoseGoal": "Objectif de glycémie (mg/dL)",
+    "glucoseGoalInfo": "Fixez la glycémie que vous visez pour la journée. 180 mg/dL est un bon repère — vous la suivrez chaque jour sur la page Glycémie."
   },
   "home": {
     "goodMorning": "Bonjour",
@@ -713,7 +716,14 @@
     "basalTime": "Moment de l'insuline lente",
     "basal_morning": "Matin",
     "basal_evening": "Soir",
-    "basal_both": "Matin et soir"
+    "basal_both": "Matin et soir",
+    "glucoseGoal": "Objectif de glycémie (mg/dL)",
+    "glucoseGoalHint": "La glycémie que vous visez pour la journée. L'anneau sur la page Glycémie se remplit à mesure que vous l'atteignez. Par défaut : 180 mg/dL.",
+    "errTargetOrder": "La cible haute doit être supérieure à la cible basse.",
+    "errRatio": "Le ratio d'insuline par repas doit être entre 0,1 et 20 U / 10 g.",
+    "errBasalDose": "La dose d'insuline lente doit être entre 1 et 200 U.",
+    "errGlucoseGoal": "L'objectif de glycémie doit être entre 40 et 600 mg/dL.",
+    "saveError": "Échec de l'enregistrement — vos modifications n'ont pas été sauvegardées. Vérifiez vos valeurs et réessayez."
   },
   "log": {
     "glucoseTitle": "Enregistrer la glycémie",
@@ -852,16 +862,16 @@
     "avg": "Moyenne",
     "inTarget": "Dans la cible",
     "objTitle": "Objectif du jour",
-    "objSubToday": "Temps dans la cible · aujourd'hui",
+    "objSubToday": "Glycémie du jour vs objectif",
     "objEdit": "Modifier",
     "objGoal": "Votre objectif",
     "objReached": "Atteint",
     "objLeft": "Reste",
     "objDone": "Objectif",
     "objMsgEmpty": "Ajoutez vos mesures du jour pour suivre votre objectif.",
-    "objMsgReached": "🎉 Bravo ! Objectif atteint aujourd'hui.",
-    "objMsgClose": "Presque ! Encore {{n}} % pour atteindre votre objectif.",
-    "objMsgGo": "Continuez — visez {{goal}} % de temps dans la cible aujourd'hui.",
+    "objMsgReached": "🎯 Votre glycémie a atteint votre objectif de {{goal}} mg/dL.",
+    "objMsgClose": "Presque ! Encore {{n}} mg avant votre objectif.",
+    "objMsgGo": "Votre objectif du jour : {{goal}} mg/dL.",
     "ofTime": "du temps",
     "max": "Maximum",
     "dayCurve": "Courbe du jour",
@@ -911,7 +921,13 @@
     "coachSheetTitle": "Assistant IA",
     "coachGreeting": "J'ai regardé ta glycémie : moyenne {{avg}} mg/dL, {{tir}} % dans la cible sur 7 jours. Qu'est-ce que tu veux savoir ou faire ?",
     "coachGreetingNoData": "Je suis là pour t'aider avec ta glycémie et ton diabète. Qu'est-ce que tu veux savoir ou faire ?",
-    "coachPlaceholder": "Pose ta question…"
+    "coachPlaceholder": "Pose ta question…",
+    "hba1cTitle": "Repères pour un HbA1c à 7 %",
+    "hba1cSub": "Les glycémies à viser pour atteindre un HbA1c d'environ 7 %",
+    "hba1cFasting": "À jeun / avant repas",
+    "hba1cPost": "Après repas (2 h)",
+    "hba1cMean": "Glycémie moyenne",
+    "hba1cNote": "Valeurs indicatives (recommandations générales). Votre médecin fixe vos objectifs personnels."
   },
   "bolus": {
     "title": "Dose d'insuline",
@@ -1436,7 +1452,19 @@
     "split": "Répartition aujourd'hui",
     "stable": "Injection stable",
     "noRisk": "Aucun risque détecté aujourd'hui.",
-    "calcSub": "Calcule la dose d'insuline recommandée"
+    "calcSub": "Calcule la dose d'insuline recommandée",
+    "yesterday": "Hier",
+    "range7d": "7J",
+    "rangeDay": "Jour",
+    "pickDay": "Choisir un jour",
+    "injCount": "{{count}} inj.",
+    "typeTotal": "Total : {{n}} U",
+    "cmtEmpty": "Aucune insuline enregistrée. Ajoute tes injections pour un suivi précis.",
+    "cmtSummary": "Tu as pris {{total}} U : {{breakdown}}.",
+    "aiAsk": "Touche pour poser une question",
+    "aiTitle": "Assistant insuline",
+    "aiPlaceholder": "Pose ta question…",
+    "aiError": "Je n'ai pas pu répondre, réessaie."
   },
   "foodsPage": {
     "title": "Cuisine marocaine",
@@ -1517,7 +1545,10 @@
       "snack": "Ajoute une collation"
     },
     "scanSub": "Scanne ton repas pour estimer les glucides, calories et plus encore.",
-    "sodium": "Sodium"
+    "sodium": "Sodium",
+    "yesterday": "Hier",
+    "pickDay": "Choisir un jour",
+    "mealCount": "{{count}} repas"
   },
   "menuScanPage": {
     "title": "Menu restaurant",

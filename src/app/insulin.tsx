@@ -1,10 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
@@ -13,11 +15,12 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, FadeInView, Spinner } from '@/components/ui';
 import { nowMs } from '@/lib/clock';
+import { sendChatMessage } from '@/services/ai';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
-import type { InsulinType } from '@/types';
+import type { InsulinType, Profile } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -39,8 +42,8 @@ const TYPE_COLOR: Record<InsulinType, string> = {
   mixed: ORANGE,
 };
 
-function isToday(iso: string) {
-  return new Date(iso).toDateString() === new Date().toDateString();
+function sameDay(iso: string, ref: Date) {
+  return new Date(iso).toDateString() === ref.toDateString();
 }
 
 /* ─────────────────────────── Icons ─────────────────────────── */
@@ -204,9 +207,31 @@ export default function InsulinScreen() {
     mixed: t('insulinPage.mixed'),
   };
 
+  /* Selected day (0 = today), the picker, and the chart toggles/modals. */
+  const [dayOffset, setDayOffset] = useState(0);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [typeModal, setTypeModal] = useState<InsulinType | null>(null);
+  const [recentModal, setRecentModal] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [chartRange, setChartRange] = useState<'week' | 'day'>('week');
+  const [chartUnit, setChartUnit] = useState<'U' | '%'>('U');
+
+  const selectedDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - dayOffset);
+    return d;
+  }, [dayOffset]);
+  const dayLabel = (offset: number) => {
+    if (offset === 0) return t('insulinPage.today');
+    if (offset === 1) return t('insulinPage.yesterday');
+    const d = new Date();
+    d.setDate(d.getDate() - offset);
+    return d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'short' });
+  };
+
   const today = useMemo(
-    () => insulinLogs.filter((l) => isToday(l.created_at)),
-    [insulinLogs]
+    () => insulinLogs.filter((l) => sameDay(l.created_at, selectedDate)),
+    [insulinLogs, selectedDate]
   );
   const sumBy = (type: InsulinType) =>
     today.filter((l) => l.insulin_type === type).reduce((s, l) => s + l.dose, 0);
@@ -218,9 +243,11 @@ export default function InsulinScreen() {
 
   const share = (v: number) => (totalToday > 0 ? Math.round((v / totalToday) * 100) : 0);
 
-  // 7-day totals for the bar chart.
+  const CHART_H = 150;
+
+  // 7-day totals for the "week" chart.
   const week = useMemo(() => {
-    const days: { label: string; total: number }[] = [];
+    const days: { label: string; total: number; color?: string }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
@@ -228,24 +255,70 @@ export default function InsulinScreen() {
       const total = insulinLogs
         .filter((l) => new Date(l.created_at).toDateString() === key)
         .reduce((s, l) => s + l.dose, 0);
-      days.push({
-        label: d.toLocaleDateString(locale, { weekday: 'short' }),
-        total,
-      });
+      days.push({ label: d.toLocaleDateString(locale, { weekday: 'short' }), total });
     }
     return days;
   }, [insulinLogs, locale]);
-  const weekMax = Math.max(...week.map((d) => d.total), 0);
-  const scaleMax = Math.max(DAILY_GOAL, weekMax);
-  const CHART_H = 150;
 
-  const recent = useMemo(() => {
+  // "Day" chart: the selected day's injections, one bar per shot (by time),
+  // coloured by insulin type.
+  const dayBars = useMemo(
+    () =>
+      [...today]
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .map((l) => {
+          const d = new Date(l.created_at);
+          return {
+            label: d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
+            total: l.dose,
+            color: TYPE_COLOR[l.insulin_type],
+            // Position along a 0h→24h axis (fraction of the day).
+            frac: (d.getHours() + d.getMinutes() / 60) / 24,
+          };
+        }),
+    [today, locale]
+  );
+
+  // Chart data resolved for the current range (week/day) + unit (U/%).
+  const chart = useMemo(() => {
+    const src = chartRange === 'week' ? week : dayBars;
+    const isPct = chartUnit === '%';
+    const ref = chartRange === 'week' ? DAILY_GOAL : Math.max(1, totalToday);
+    const bars = src.map((b) => ({
+      label: b.label,
+      val: isPct ? (b.total / ref) * 100 : b.total,
+      color: b.color,
+      frac: (b as { frac?: number }).frac,
+    }));
+    const maxVal = Math.max(...bars.map((b) => b.val), isPct ? 100 : DAILY_GOAL);
+    return { bars, maxVal, isPct };
+  }, [chartRange, chartUnit, week, dayBars, totalToday]);
+
+  // Injections list (last 7 days) for the "recent" card + its modal.
+  const recentAll = useMemo(() => {
     const cutoff = nowMs() - 7 * 24 * 3600 * 1000;
     return insulinLogs
       .filter((l) => new Date(l.created_at).getTime() >= cutoff)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, 3);
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [insulinLogs]);
+  const recent = recentAll.slice(0, 3);
+
+  // Injections of one type on the selected day (for the type-card modal).
+  const dayByType = (type: InsulinType) =>
+    today
+      .filter((l) => l.insulin_type === type)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // A short, live comment on the day's insulin — shown on the AI card and
+  // used to seed the in-page chat.
+  const aiComment = useMemo(() => {
+    if (totalToday <= 0) return t('insulinPage.cmtEmpty');
+    const parts: string[] = [];
+    if (rapidToday > 0) parts.push(`${rapidToday} U ${t('insulinPage.rapid')}`);
+    if (longToday > 0) parts.push(`${longToday} U ${t('insulinPage.long')}`);
+    if (mixedToday > 0) parts.push(`${mixedToday} U ${t('insulinPage.mixed')}`);
+    return t('insulinPage.cmtSummary', { total: totalToday, breakdown: parts.join(' · ') });
+  }, [totalToday, rapidToday, longToday, mixedToday, t]);
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -286,11 +359,11 @@ export default function InsulinScreen() {
               <ChevronLeft size={16} />
             </Pressable>
             <Text style={styles.headTitle}>{t('insulinPage.title')}</Text>
-            <View style={styles.dateChip}>
+            <Pressable style={styles.dateChip} onPress={() => setPickerOpen(true)}>
               <CalendarIcon />
-              <Text style={styles.dateChipText}>{t('insulinPage.today')}</Text>
+              <Text style={styles.dateChipText}>{dayLabel(dayOffset)}</Text>
               <ChevronDown />
-            </View>
+            </Pressable>
           </View>
 
           {/* Greeting */}
@@ -298,7 +371,9 @@ export default function InsulinScreen() {
             <Text style={styles.hello}>
               {firstName ? t('insulinPage.hello', { name: firstName }) : t('insulinPage.helloNoName')}
             </Text>
-            <Text style={styles.helloSub}>{t('insulinPage.subtitle')}</Text>
+            <Text style={styles.helloSub}>
+              {dayOffset === 0 ? t('insulinPage.subtitle') : dayLabel(dayOffset)}
+            </Text>
           </FadeInView>
         </View>
 
@@ -346,97 +421,177 @@ export default function InsulinScreen() {
 
           <View style={styles.typeCol}>
             {typeCards.map((c) => (
-              <View key={c.type} style={styles.typeCard}>
+              <Pressable
+                key={c.type}
+                style={({ pressed }) => [styles.typeCard, pressed && { opacity: 0.7 }]}
+                onPress={() => setTypeModal(c.type)}
+              >
                 <View style={[styles.typeChip, { backgroundColor: c.chip }]}>{c.icon}</View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.typeLabel}>{c.label}</Text>
                   <Text style={[styles.typeValue, { color: c.color }]}>{c.value} U</Text>
                 </View>
                 <ChevronRight color="#B7C2BB" size={16} />
-              </View>
+              </Pressable>
             ))}
           </View>
         </FadeInView>
 
-        {/* ── 7-day bar chart ── */}
+        {/* ── Bar chart (week / day · U / %) ── */}
         <FadeInView delay={130} style={{ paddingHorizontal: 20, marginTop: 14 }}>
           <View style={styles.card}>
             <View style={styles.cardHead}>
-              <Text style={styles.cardTitle}>{t('insulinPage.last7days')}</Text>
-              <View style={styles.unitPill}>
-                <Text style={styles.unitPillText}>{t('insulinPage.unitsShort')}</Text>
-                <ChevronDown size={13} />
+              <Text style={styles.cardTitle}>
+                {chartRange === 'week' ? t('insulinPage.last7days') : dayLabel(dayOffset)}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {/* week / day toggle */}
+                <View style={styles.segToggle}>
+                  {(['week', 'day'] as const).map((r) => (
+                    <Pressable
+                      key={r}
+                      onPress={() => setChartRange(r)}
+                      style={[styles.segBtn, chartRange === r && styles.segBtnOn]}
+                    >
+                      <Text style={[styles.segText, chartRange === r && styles.segTextOn]}>
+                        {r === 'week' ? t('insulinPage.range7d') : t('insulinPage.rangeDay')}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {/* U / % toggle */}
+                <Pressable
+                  onPress={() => setChartUnit((u) => (u === 'U' ? '%' : 'U'))}
+                  style={styles.unitPill}
+                >
+                  <Text style={styles.unitPillText}>
+                    {chartUnit === 'U' ? t('insulinPage.unitsShort') : '%'}
+                  </Text>
+                  <ChevronDown size={13} />
+                </Pressable>
               </View>
             </View>
 
-            <View style={styles.chartWrap}>
-              <View style={styles.chartYAxis}>
-                {[scaleMax, Math.round(scaleMax * 0.66), Math.round(scaleMax * 0.33), 0].map((v, i) => (
-                  <Text key={i} style={styles.axisText}>{v}</Text>
-                ))}
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ height: CHART_H, position: 'relative' }}>
-                  <View
-                    style={[
-                      styles.objLine,
-                      { top: CHART_H * (1 - DAILY_GOAL / scaleMax) },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.objPill,
-                      { top: CHART_H * (1 - DAILY_GOAL / scaleMax) - 9 },
-                    ]}
-                  >
-                    <Text style={styles.objPillText}>
-                      {t('insulinPage.goalShort', { n: DAILY_GOAL })}
+            {chart.bars.length === 0 ? (
+              <Text style={styles.chartEmpty}>{t('insulinPage.noneYet')}</Text>
+            ) : (
+              <View style={styles.chartWrap}>
+                <View style={styles.chartYAxis}>
+                  {[chart.maxVal, chart.maxVal * 0.66, chart.maxVal * 0.33, 0].map((v, i) => (
+                    <Text key={i} style={styles.axisText}>
+                      {chart.isPct ? `${Math.round(v)}` : Math.round(v)}
                     </Text>
-                  </View>
-                  <View style={styles.barsRow}>
-                    {week.map((d, i) => {
-                      const isLast = i === week.length - 1;
-                      const h = Math.max(d.total > 0 ? 6 : 0, (d.total / scaleMax) * CHART_H);
-                      return (
-                        <View key={i} style={styles.barCol}>
-                          <Text style={[styles.barValue, isLast && { color: GREEN_D }]}>
-                            {d.total > 0 ? d.total : ''}
-                          </Text>
-                          <View
-                            style={[
-                              styles.bar,
-                              { height: h, backgroundColor: isLast ? GREEN : '#CDEBD9' },
-                            ]}
-                          />
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-                <View style={styles.barLabels}>
-                  {week.map((d, i) => (
-                    <Text key={i} style={styles.barLabel}>{d.label}</Text>
                   ))}
                 </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ height: CHART_H, position: 'relative' }}>
+                    {/* Daily objective line — only meaningful in week · U mode */}
+                    {chartRange === 'week' && !chart.isPct ? (
+                      <>
+                        <View style={[styles.objLine, { top: CHART_H * (1 - DAILY_GOAL / chart.maxVal) }]} />
+                        <View style={[styles.objPill, { top: CHART_H * (1 - DAILY_GOAL / chart.maxVal) - 9 }]}>
+                          <Text style={styles.objPillText}>
+                            {t('insulinPage.goalShort', { n: DAILY_GOAL })}
+                          </Text>
+                        </View>
+                      </>
+                    ) : null}
+
+                    {chartRange === 'week' ? (
+                      /* Week: one evenly-spaced bar per day. */
+                      <View style={styles.barsRow}>
+                        {chart.bars.map((b, i) => {
+                          const isLast = i === chart.bars.length - 1;
+                          const h = Math.max(b.val > 0 ? 6 : 0, (b.val / chart.maxVal) * CHART_H);
+                          const color = b.color ?? (isLast ? GREEN : '#CDEBD9');
+                          return (
+                            <View key={i} style={styles.barCol}>
+                              <Text style={[styles.barValue, isLast && { color: GREEN_D }]}>
+                                {b.val > 0 ? (chart.isPct ? `${Math.round(b.val)}%` : Math.round(b.val * 10) / 10) : ''}
+                              </Text>
+                              <View style={[styles.bar, { height: h, backgroundColor: color }]} />
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ) : (
+                      /* Day: each injection placed at its real time on a 0h→24h axis. */
+                      <>
+                        {[0.25, 0.5, 0.75].map((g) => (
+                          <View key={g} style={[styles.hourGrid, { top: CHART_H * (1 - g) }]} />
+                        ))}
+                        {chart.bars.map((b, i) => {
+                          const h = Math.max(b.val > 0 ? 6 : 0, (b.val / chart.maxVal) * CHART_H);
+                          return (
+                            <View
+                              key={i}
+                              style={[styles.timeBarWrap, { left: `${(b.frac ?? 0) * 100}%`, height: CHART_H }]}
+                            >
+                              <Text style={styles.barValue}>
+                                {chart.isPct ? `${Math.round(b.val)}%` : Math.round(b.val * 10) / 10}
+                              </Text>
+                              <View style={[styles.timeBar, { height: h, backgroundColor: b.color ?? GREEN }]} />
+                            </View>
+                          );
+                        })}
+                      </>
+                    )}
+                  </View>
+
+                  {chartRange === 'week' ? (
+                    <View style={styles.barLabels}>
+                      {chart.bars.map((b, i) => (
+                        <Text key={i} style={styles.barLabel} numberOfLines={1}>{b.label}</Text>
+                      ))}
+                    </View>
+                  ) : (
+                    <>
+                      {/* Exact injection time under each bar */}
+                      <View style={styles.timeMarks}>
+                        {chart.bars.map((b, i) => (
+                          <Text
+                            key={i}
+                            style={[styles.timeMark, { left: `${(b.frac ?? 0) * 100}%`, color: b.color }]}
+                            numberOfLines={1}
+                          >
+                            {b.label}
+                          </Text>
+                        ))}
+                      </View>
+                      {/* Hour axis: 0h · 6h · 12h · 18h · 24h */}
+                      <View style={styles.hourAxis}>
+                        {[0, 6, 12, 18, 24].map((hr) => (
+                          <Text
+                            key={hr}
+                            style={[
+                              styles.hourLabel,
+                              { left: `${(hr / 24) * 100}%` },
+                              hr === 0 && { marginLeft: 0 },
+                              hr === 24 && { marginLeft: -22 },
+                            ]}
+                          >
+                            {hr}h
+                          </Text>
+                        ))}
+                      </View>
+                    </>
+                  )}
+                </View>
               </View>
-            </View>
+            )}
           </View>
         </FadeInView>
 
-        {/* ── Conseil IA ── */}
+        {/* ── Conseil IA (live comment + opens an in-page chat) ── */}
         <FadeInView delay={170} style={{ paddingHorizontal: 20, marginTop: 14 }}>
-          <Pressable style={styles.coachCard} onPress={() => router.push('/ai-chat')}>
+          <Pressable style={styles.coachCard} onPress={() => setAiOpen(true)}>
             <View style={styles.coachRobot}>
               <AnimatedRobot size={44} mood="happy" />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.coachKicker}>{t('insulinPage.aiTip')}</Text>
-              <Text style={styles.coachTitle}>
-                {totalToday > 0 ? t('insulinPage.tipBalanced') : t('insulinPage.tipEmpty')}
-              </Text>
-              <Text style={styles.coachSub}>
-                {totalToday > 0 ? t('insulinPage.tipContinue') : t('insulinPage.tipAdd')}
-              </Text>
+              <Text style={styles.coachTitle}>{aiComment}</Text>
+              <Text style={styles.coachSub}>{t('insulinPage.aiAsk')}</Text>
             </View>
             <ChevronRight />
           </Pressable>
@@ -482,7 +637,7 @@ export default function InsulinScreen() {
                 </View>
               ))
             )}
-            <Pressable onPress={() => router.push('/log-insulin')}>
+            <Pressable onPress={() => setRecentModal(true)}>
               <Text style={styles.seeAll}>{t('insulinPage.seeAll')} →</Text>
             </Pressable>
           </View>
@@ -541,7 +696,239 @@ export default function InsulinScreen() {
           <PlusThin color="#fff" size={28} />
         </LinearGradient>
       </Pressable>
+
+      {/* ── Day picker ── */}
+      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
+        <Pressable style={styles.pickerOverlay} onPress={() => setPickerOpen(false)}>
+          <View style={styles.pickerSheet}>
+            <View style={styles.pickerHandle} />
+            <Text style={styles.pickerTitle}>{t('insulinPage.pickDay')}</Text>
+            {Array.from({ length: 7 }, (_, i) => i).map((off) => {
+              const d = new Date();
+              d.setDate(d.getDate() - off);
+              const n = insulinLogs.filter((l) => sameDay(l.created_at, d)).length;
+              const active = off === dayOffset;
+              return (
+                <Pressable
+                  key={off}
+                  onPress={() => {
+                    setDayOffset(off);
+                    setPickerOpen(false);
+                  }}
+                  style={[styles.pickerRow, active && styles.pickerRowActive]}
+                >
+                  <Text style={[styles.pickerDay, active && { color: GREEN_D }]}>{dayLabel(off)}</Text>
+                  <Text style={styles.pickerCount}>
+                    {n > 0 ? t('insulinPage.injCount', { count: n }) : '—'}
+                  </Text>
+                  {active ? (
+                    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
+                      <Circle cx={8} cy={8} r={7} fill={GREEN_D} />
+                      <Path d="M5 8.2L7 10.2L11 6.2" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
+                  ) : (
+                    <View style={styles.pickerRadio} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Injections of one type (from a type card) ── */}
+      <Modal visible={!!typeModal} transparent animationType="fade" onRequestClose={() => setTypeModal(null)}>
+        <Pressable style={styles.centerOverlay} onPress={() => setTypeModal(null)}>
+          <Pressable style={styles.centerSheet} onPress={() => {}}>
+            {typeModal ? (
+              <>
+                <Text style={styles.centerTitle}>
+                  {TYPE_LABEL[typeModal]} · {dayLabel(dayOffset)}
+                </Text>
+                <Text style={styles.centerSub}>
+                  {t('insulinPage.typeTotal', { n: sumBy(typeModal) })}
+                </Text>
+                <ScrollView style={{ maxHeight: 280, marginTop: 8 }}>
+                  {dayByType(typeModal).length === 0 ? (
+                    <Text style={styles.emptyMini}>{t('insulinPage.noneYet')}</Text>
+                  ) : (
+                    dayByType(typeModal).map((l) => (
+                      <View key={l.id} style={styles.modalInjRow}>
+                        <Text style={styles.modalInjTime}>
+                          {new Date(l.created_at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                        <Text style={styles.modalInjNote} numberOfLines={1}>
+                          {l.notes || TYPE_LABEL[l.insulin_type]}
+                        </Text>
+                        <Text style={[styles.modalInjDose, { color: TYPE_COLOR[l.insulin_type] }]}>
+                          {l.dose} U
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+                <Pressable style={styles.centerClose} onPress={() => setTypeModal(null)}>
+                  <Text style={styles.centerCloseText}>{t('common.close')}</Text>
+                </Pressable>
+              </>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── All recent injections ── */}
+      <Modal visible={recentModal} transparent animationType="fade" onRequestClose={() => setRecentModal(false)}>
+        <Pressable style={styles.centerOverlay} onPress={() => setRecentModal(false)}>
+          <Pressable style={styles.centerSheet} onPress={() => {}}>
+            <Text style={styles.centerTitle}>{t('insulinPage.recent')}</Text>
+            <Text style={styles.centerSub}>{t('insulinPage.last7days')}</Text>
+            <ScrollView style={{ maxHeight: 340, marginTop: 8 }}>
+              {recentAll.length === 0 ? (
+                <Text style={styles.emptyMini}>{t('insulinPage.noneYet')}</Text>
+              ) : (
+                recentAll.map((l) => (
+                  <View key={l.id} style={styles.modalInjRow}>
+                    <View
+                      style={[
+                        styles.injChip,
+                        { backgroundColor: l.insulin_type === 'long' ? '#F0EBFD' : l.insulin_type === 'mixed' ? '#FEECDF' : '#E4F6EC' },
+                      ]}
+                    >
+                      {l.insulin_type === 'long' ? <ClockIcon size={13} /> : l.insulin_type === 'mixed' ? <MixDropIcon size={13} /> : <BoltIcon size={13} />}
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.modalInjNote} numberOfLines={1}>{TYPE_LABEL[l.insulin_type]}</Text>
+                      <Text style={styles.modalInjTime}>
+                        {new Date(l.created_at).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' })}
+                        {' · '}
+                        {new Date(l.created_at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                    <Text style={[styles.modalInjDose, { color: TYPE_COLOR[l.insulin_type] }]}>{l.dose} U</Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <Pressable style={styles.centerClose} onPress={() => setRecentModal(false)}>
+              <Text style={styles.centerCloseText}>{t('common.close')}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── In-page AI chat ── */}
+      <InsulinAiSheet
+        visible={aiOpen}
+        onClose={() => setAiOpen(false)}
+        seed={aiComment}
+        language={i18n.language}
+        profile={profile}
+      />
     </View>
+  );
+}
+
+/* In-page AI chat: opens over the insulin page, seeded with a live comment
+ * on the day's insulin, and answers questions with the full health context
+ * (sendChatMessage builds it from the store, so the AI already sees the
+ * injections). Never navigates away — it's a sheet, not the chat screen. */
+function InsulinAiSheet({
+  visible,
+  onClose,
+  seed,
+  language,
+  profile,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  seed: string;
+  language: string;
+  profile: Profile | null;
+}) {
+  const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (visible) setMessages([{ role: 'assistant', content: seed }]);
+  }, [visible, seed]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+    const next = [...messages, { role: 'user' as const, content: text }];
+    setMessages(next);
+    setInput('');
+    setLoading(true);
+    try {
+      const reply = await sendChatMessage(next, language, profile, 'chat');
+      setMessages((m) => [...m, { role: 'assistant', content: reply }]);
+    } catch {
+      setMessages((m) => [...m, { role: 'assistant', content: t('insulinPage.aiError') }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.centerOverlay} onPress={onClose}>
+        <Pressable style={[styles.aiSheet, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]} onPress={() => {}}>
+          <View style={styles.aiHead}>
+            <View style={styles.coachRobot}>
+              <AnimatedRobot size={30} mood="happy" />
+            </View>
+            <Text style={styles.aiTitle}>{t('insulinPage.aiTitle')}</Text>
+            <Pressable onPress={onClose} hitSlop={10}>
+              <Text style={styles.aiCloseX}>✕</Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            ref={scrollRef}
+            style={styles.aiThread}
+            contentContainerStyle={{ paddingVertical: 8, gap: 8 }}
+            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          >
+            {messages.map((m, i) => (
+              <View
+                key={i}
+                style={[styles.aiBubble, m.role === 'user' ? styles.aiBubbleUser : styles.aiBubbleAI]}
+              >
+                <Text style={[styles.aiBubbleText, m.role === 'user' && { color: '#fff' }]}>
+                  {m.content}
+                </Text>
+              </View>
+            ))}
+            {loading ? (
+              <View style={{ alignSelf: 'flex-start', padding: 8 }}>
+                <Spinner size={20} color={GREEN_D} />
+              </View>
+            ) : null}
+          </ScrollView>
+          <View style={styles.aiInputRow}>
+            <TextInput
+              value={input}
+              onChangeText={setInput}
+              placeholder={t('insulinPage.aiPlaceholder')}
+              placeholderTextColor="#9AA8A0"
+              style={styles.aiInput}
+              onSubmitEditing={send}
+              returnKeyType="send"
+            />
+            <Pressable
+              onPress={send}
+              disabled={!input.trim() || loading}
+              style={[styles.aiSend, (!input.trim() || loading) && { opacity: 0.5 }]}
+            >
+              <Text style={styles.aiSendText}>➤</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -711,6 +1098,15 @@ const styles = StyleSheet.create({
   barLabels: { flexDirection: 'row', marginTop: 8 },
   barLabel: { flex: 1, textAlign: 'center', fontFamily: F600, fontSize: 11.5, color: '#9AA8A0', textTransform: 'capitalize' },
 
+  /* Day mode: time-positioned bars + hour axis */
+  hourGrid: { position: 'absolute', left: 0, right: 0, borderTopWidth: 1, borderTopColor: '#F3F6F4' },
+  timeBarWrap: { position: 'absolute', bottom: 0, width: 0, alignItems: 'center', justifyContent: 'flex-end', gap: 5 },
+  timeBar: { width: 12, borderRadius: 6 },
+  hourAxis: { height: 16, marginTop: 6, position: 'relative' },
+  hourLabel: { position: 'absolute', marginLeft: -8, fontFamily: F600, fontSize: 11, color: '#9AA8A0' },
+  timeMarks: { height: 15, marginTop: 8, position: 'relative' },
+  timeMark: { position: 'absolute', marginLeft: -21, width: 42, textAlign: 'center', fontFamily: F700, fontSize: 10.5 },
+
   coachCard: {
     backgroundColor: '#E9F6EF',
     borderRadius: 20,
@@ -815,4 +1211,73 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  /* Chart range toggle (week / day) */
+  segToggle: { flexDirection: 'row', backgroundColor: '#F1F5F2', borderRadius: 99, padding: 2 },
+  segBtn: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 99 },
+  segBtnOn: { backgroundColor: '#fff', ...shadows.card },
+  segText: { fontFamily: F600, fontSize: 11.5, color: '#8A988F' },
+  segTextOn: { color: GREEN_D },
+  chartEmpty: { fontFamily: F500, fontSize: 13, color: '#9AA8A0', textAlign: 'center', paddingVertical: 34 },
+
+  /* Day picker (bottom sheet) */
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(16,24,40,0.42)', justifyContent: 'flex-end' },
+  pickerSheet: { backgroundColor: '#fff', borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingBottom: 34 },
+  pickerHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#E3E8EE', marginBottom: 14 },
+  pickerTitle: { fontFamily: F800, fontSize: 17, color: INK, marginBottom: 10 },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13, paddingHorizontal: 12, borderRadius: 14 },
+  pickerRowActive: { backgroundColor: '#F2F8F4' },
+  pickerDay: { flex: 1, fontFamily: F700, fontSize: 14.5, color: INK, textTransform: 'capitalize' },
+  pickerCount: { fontFamily: F500, fontSize: 12.5, color: '#9AA8A0' },
+  pickerRadio: { width: 16, height: 16, borderRadius: 8, borderWidth: 1.6, borderColor: '#D5DBE2' },
+
+  /* Centered modal (type list / recent list) */
+  centerOverlay: { flex: 1, backgroundColor: 'rgba(16,24,40,0.5)', alignItems: 'center', justifyContent: 'center', padding: 22 },
+  centerSheet: { width: '100%', maxWidth: 400, backgroundColor: '#fff', borderRadius: 24, padding: 20 },
+  centerTitle: { fontFamily: F800, fontSize: 17, color: INK, textTransform: 'capitalize' },
+  centerSub: { fontFamily: F600, fontSize: 12.5, color: '#8A988F', marginTop: 2 },
+  centerClose: { marginTop: 14, height: 46, borderRadius: 14, backgroundColor: '#F1F5F2', alignItems: 'center', justifyContent: 'center' },
+  centerCloseText: { fontFamily: F700, fontSize: 14, color: INK },
+  modalInjRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F3F1' },
+  modalInjTime: { fontFamily: F600, fontSize: 12, color: '#9AA8A0' },
+  modalInjNote: { flex: 1, minWidth: 0, fontFamily: F700, fontSize: 13, color: INK },
+  modalInjDose: { fontFamily: F800, fontSize: 14 },
+
+  /* In-page AI chat sheet */
+  aiSheet: {
+    width: '100%',
+    maxWidth: 440,
+    height: '74%',
+    backgroundColor: '#fff',
+    borderRadius: 26,
+    padding: 16,
+  },
+  aiHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#EEF2EF' },
+  aiTitle: { flex: 1, fontFamily: F800, fontSize: 16, color: INK },
+  aiCloseX: { fontFamily: F700, fontSize: 18, color: '#9AA8A0' },
+  aiThread: { flex: 1, marginTop: 8 },
+  aiBubble: { maxWidth: '86%', borderRadius: 16, paddingVertical: 9, paddingHorizontal: 13 },
+  aiBubbleAI: { alignSelf: 'flex-start', backgroundColor: '#EEF5F0' },
+  aiBubbleUser: { alignSelf: 'flex-end', backgroundColor: GREEN_D },
+  aiBubbleText: { fontFamily: F500, fontSize: 13.5, lineHeight: 19, color: INK },
+  aiInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  aiInput: {
+    flex: 1,
+    height: 46,
+    backgroundColor: '#F3F7F4',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    fontFamily: F500,
+    fontSize: 14,
+    color: INK,
+  },
+  aiSend: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: GREEN_D,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiSendText: { fontSize: 16, color: '#fff' },
 });

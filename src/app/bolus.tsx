@@ -799,7 +799,7 @@ export default function BolusScreen() {
                 <Text style={styles.editTitle}>{t('bolus.editTitle')}</Text>
                 <View style={styles.stepperRow}>
                   <Pressable
-                    onPress={() => setEditDose((d) => Math.max(0, Math.round((d - 0.5) * 2) / 2))}
+                    onPress={() => setEditDose((d) => Math.max(0, Math.round((d - 0.5) * 10) / 10))}
                     style={styles.stepBtn}
                   >
                     <Text style={styles.stepBtnText}>−</Text>
@@ -809,7 +809,7 @@ export default function BolusScreen() {
                     <Text style={styles.editUnit}>U</Text>
                   </View>
                   <Pressable
-                    onPress={() => setEditDose((d) => Math.round((d + 0.5) * 2) / 2)}
+                    onPress={() => setEditDose((d) => Math.round((d + 0.5) * 10) / 10)}
                     style={styles.stepBtn}
                   >
                     <Text style={styles.stepBtnText}>+</Text>

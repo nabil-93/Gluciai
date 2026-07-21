@@ -432,11 +432,14 @@ const CircleSansCollapsable = React.forwardRef<any, any>(function CircleSansColl
 });
 const AnimatedCircle = Animated.createAnimatedComponent(CircleSansCollapsable);
 function ObjectiveRing({
-  tir,
+  value,
   goal,
   size = 172,
 }: {
-  tir: number | null;
+  /** The day's glucose (mg/dL) — the value that fills the ring, null when
+   *  no measure yet. */
+  value: number | null;
+  /** The objective in mg/dL — the ring completes a full circle here. */
   goal: number;
   size?: number;
 }) {
@@ -445,25 +448,26 @@ function ObjectiveRing({
   const cx = size / 2;
   const cy = size / 2;
   const circ = 2 * Math.PI * r;
-  const pct = Math.max(0, Math.min(100, tir ?? 0));
-  const reached = tir != null && tir >= goal;
-  const arcColor = reached ? GREEN : pct >= goal * 0.6 ? '#F5B60A' : '#F08A3C';
+  // Fraction of the objective reached (0..1) → a full circle at the goal.
+  const frac = value != null && goal > 0 ? Math.max(0, Math.min(1, value / goal)) : 0;
+  const pct = Math.round(frac * 100);
+  const reached = value != null && value >= goal;
 
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(anim, {
-      toValue: pct / 100,
+      toValue: frac,
       duration: 1100,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [pct, anim]);
+  }, [frac, anim]);
   const dashoffset = anim.interpolate({ inputRange: [0, 1], outputRange: [circ, 0] });
 
-  // Goal notch, placed on the ring (0 % at 12 o'clock, clockwise).
-  const gAng = ((goal / 100) * 360 - 90) * (Math.PI / 180);
-  const gx = cx + r * Math.cos(gAng);
-  const gy = cy + r * Math.sin(gAng);
+  // Start point at top-centre (12 o'clock) — the green grows clockwise from
+  // here and wraps a full turn when the glucose reaches the objective.
+  const mx = cx;
+  const my = cy - r;
 
   return (
     <View style={{ width: size, height: size }}>
@@ -476,12 +480,12 @@ function ObjectiveRing({
         </Defs>
         {/* Track */}
         <Circle cx={cx} cy={cy} r={r} stroke="#E6EFE8" strokeWidth={stroke} fill="none" />
-        {/* Progress (animated), starting at 12 o'clock */}
+        {/* Progress (animated) — green, growing clockwise from 12 o'clock */}
         <AnimatedCircle
           cx={cx}
           cy={cy}
           r={r}
-          stroke={reached ? 'url(#objGrad)' : arcColor}
+          stroke="url(#objGrad)"
           strokeWidth={stroke}
           fill="none"
           strokeLinecap="round"
@@ -489,12 +493,12 @@ function ObjectiveRing({
           strokeDashoffset={dashoffset}
           transform={`rotate(-90 ${cx} ${cy})`}
         />
-        {/* Goal notch */}
-        <Circle cx={gx} cy={gy} r={6} fill="#FFFFFF" stroke={INK} strokeWidth={2.5} />
+        {/* Start marker at top-centre */}
+        <Circle cx={mx} cy={my} r={6} fill="#FFFFFF" stroke={INK} strokeWidth={2.5} />
       </Svg>
       <View style={styles.objRingCenter} pointerEvents="none">
         <Text style={[styles.objRingPct, reached && { color: GREEN_D }]}>
-          {tir != null ? `${tir}` : '—'}
+          {value != null ? `${pct}` : '—'}
           <Text style={styles.objRingPctSign}>%</Text>
         </Text>
         {reached ? <Text style={styles.objRingCheck}>✓</Text> : null}
@@ -548,20 +552,21 @@ export default function GlucoseScreen() {
       : t(zone.labelKey)
     : '';
 
-  /* ── Daily objective (patient-set "time in range" goal) ── */
-  const goalTir = Math.round(profile?.daily_tir_goal ?? 70);
-  const dayInRange = dayLogs.filter((g) => g.value >= low && g.value <= high).length;
-  const dayTir = dayLogs.length ? Math.round((dayInRange / dayLogs.length) * 100) : null;
-  const objReached = dayTir != null && dayTir >= goalTir;
-  const objRemaining = Math.max(0, goalTir - (dayTir ?? 0));
+  /* ── Daily glucose objective (patient-set target in mg/dL) ── */
+  const glucoseGoal = Math.round(profile?.daily_glucose_goal ?? profile?.target_high ?? 180);
+  // "Reached" is the day's glucose measured against the objective — the
+  // latest reading of the selected day (null when there's no measure yet).
+  const objValue = latest ? latest.value : null;
+  const objReached = objValue != null && objValue >= glucoseGoal;
+  const objRemaining = Math.max(0, glucoseGoal - (objValue ?? 0));
   const objMsg =
-    dayTir == null
+    objValue == null
       ? t('glucosePage.objMsgEmpty')
       : objReached
-        ? t('glucosePage.objMsgReached')
-        : dayTir >= goalTir * 0.8
+        ? t('glucosePage.objMsgReached', { goal: glucoseGoal })
+        : objValue >= glucoseGoal * 0.8
           ? t('glucosePage.objMsgClose', { n: objRemaining })
-          : t('glucosePage.objMsgGo', { goal: goalTir });
+          : t('glucosePage.objMsgGo', { goal: glucoseGoal });
 
   /* ── 7-day window (daily averages + trend + TIR bands) ── */
   const week = useMemo(() => {
@@ -783,25 +788,29 @@ export default function GlucoseScreen() {
                   {dayOffset === 0 ? t('glucosePage.objSubToday') : dayLabel(dayOffset)}
                 </Text>
               </View>
-              <Pressable onPress={() => router.push('/profile-edit')} style={styles.objEdit} hitSlop={8}>
+              <Pressable
+                onPress={() => router.push('/profile-edit?section=medical')}
+                style={styles.objEdit}
+                hitSlop={8}
+              >
                 <TargetIcon />
                 <Text style={styles.objEditText}>{t('glucosePage.objEdit')}</Text>
               </Pressable>
             </View>
 
             <View style={styles.objBody}>
-              <ObjectiveRing tir={dayTir} goal={goalTir} />
+              <ObjectiveRing value={objValue} goal={glucoseGoal} />
               <View style={styles.objStats}>
                 <View style={styles.objStatRow}>
                   <View style={[styles.objDot, { backgroundColor: INK }]} />
                   <Text style={styles.objStatLabel}>{t('glucosePage.objGoal')}</Text>
-                  <Text style={styles.objStatVal}>{goalTir}%</Text>
+                  <Text style={styles.objStatVal}>{glucoseGoal} mg/dL</Text>
                 </View>
                 <View style={styles.objStatRow}>
                   <View style={[styles.objDot, { backgroundColor: GREEN }]} />
                   <Text style={styles.objStatLabel}>{t('glucosePage.objReached')}</Text>
                   <Text style={[styles.objStatVal, { color: GREEN_D }]}>
-                    {dayTir != null ? `${dayTir}%` : '—'}
+                    {objValue != null ? `${objValue} mg/dL` : '—'}
                   </Text>
                 </View>
                 <View style={styles.objStatRow}>
@@ -809,7 +818,9 @@ export default function GlucoseScreen() {
                   <Text style={styles.objStatLabel}>
                     {objReached ? t('glucosePage.objDone') : t('glucosePage.objLeft')}
                   </Text>
-                  <Text style={styles.objStatVal}>{objReached ? '🎉' : `${objRemaining}%`}</Text>
+                  <Text style={styles.objStatVal}>
+                    {objReached ? '🎉' : `${objRemaining} mg/dL`}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -817,6 +828,38 @@ export default function GlucoseScreen() {
             <View style={[styles.objMsgWrap, objReached && styles.objMsgWrapDone]}>
               <Text style={[styles.objMsgText, objReached && { color: GREEN_D }]}>{objMsg}</Text>
             </View>
+          </View>
+        </FadeInView>
+
+        {/* ── HbA1c 7% reference targets (educational) ── */}
+        <FadeInView delay={120} style={{ paddingHorizontal: 20, marginTop: 14 }}>
+          <View style={[styles.card, styles.hba1cCard]}>
+            <Text style={styles.hba1cTitle}>🎯 {t('glucosePage.hba1cTitle')}</Text>
+            <Text style={styles.hba1cSub}>{t('glucosePage.hba1cSub')}</Text>
+            <View style={styles.hba1cRows}>
+              <View style={styles.hba1cRow}>
+                <View style={styles.hba1cIconWrap}>
+                  <Text style={styles.hba1cIcon}>🌙</Text>
+                </View>
+                <Text style={styles.hba1cLabel}>{t('glucosePage.hba1cFasting')}</Text>
+                <Text style={styles.hba1cVal}>80–130 mg/dL</Text>
+              </View>
+              <View style={styles.hba1cRow}>
+                <View style={styles.hba1cIconWrap}>
+                  <Text style={styles.hba1cIcon}>🍽️</Text>
+                </View>
+                <Text style={styles.hba1cLabel}>{t('glucosePage.hba1cPost')}</Text>
+                <Text style={styles.hba1cVal}>{'<'} 180 mg/dL</Text>
+              </View>
+              <View style={styles.hba1cRow}>
+                <View style={styles.hba1cIconWrap}>
+                  <Text style={styles.hba1cIcon}>📊</Text>
+                </View>
+                <Text style={styles.hba1cLabel}>{t('glucosePage.hba1cMean')}</Text>
+                <Text style={styles.hba1cVal}>~154 mg/dL</Text>
+              </View>
+            </View>
+            <Text style={styles.hba1cNote}>{t('glucosePage.hba1cNote')}</Text>
           </View>
         </FadeInView>
 
@@ -1320,6 +1363,31 @@ const styles = StyleSheet.create({
   },
   objMsgWrapDone: { backgroundColor: '#E6F7ED' },
   objMsgText: { fontFamily: F600, fontSize: 12.5, lineHeight: 18, color: '#4A5A50', textAlign: 'center' },
+
+  /* HbA1c 7% reference targets */
+  hba1cCard: { paddingBottom: 14 },
+  hba1cTitle: { fontFamily: F800, fontSize: 15, color: INK },
+  hba1cSub: { fontFamily: F500, fontSize: 11.5, color: '#7C8B82', marginTop: 2 },
+  hba1cRows: { marginTop: 12, gap: 8 },
+  hba1cRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  hba1cIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hba1cIcon: { fontSize: 15 },
+  hba1cLabel: { flex: 1, fontFamily: F600, fontSize: 13, color: '#41505f' },
+  hba1cVal: { fontFamily: F800, fontSize: 13.5, color: GREEN_D },
+  hba1cNote: {
+    fontFamily: F500,
+    fontSize: 11,
+    lineHeight: 15.5,
+    color: '#8b93a7',
+    marginTop: 12,
+  },
   unitPill: {
     flexDirection: 'row',
     alignItems: 'center',

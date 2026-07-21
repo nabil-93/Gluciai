@@ -91,11 +91,10 @@ function mapProfile(row: any): Profile {
     language: row.language ?? 'en',
     target_low: row.target_low ?? 70,
     target_high: row.target_high ?? 180,
-    // Kept client-side until the DB column exists (migration 0023): the
-    // server row won't carry it yet, so fall back to the local value so a
-    // hydrate never wipes the goal the patient set.
-    daily_tir_goal:
-      row.daily_tir_goal ?? useAppStore.getState().profile?.daily_tir_goal ?? undefined,
+    // Fall back to the local value if a legacy server row predates the
+    // column (migration 0024), so a hydrate never wipes the patient's goal.
+    daily_glucose_goal:
+      row.daily_glucose_goal ?? useAppStore.getState().profile?.daily_glucose_goal ?? undefined,
     carb_ratio: row.carb_ratio ?? undefined,
     correction_factor: row.correction_factor ?? undefined,
     insulin_per_10g_breakfast: row.insulin_per_10g_breakfast ?? undefined,
@@ -114,7 +113,7 @@ function mapProfile(row: any): Profile {
 }
 
 const GLUCOSE_COLS = 'id,user_id,value,unit,source,notes,created_at';
-const INSULIN_COLS = 'id,user_id,insulin_type,dose,notes,created_at';
+const INSULIN_COLS = 'id,user_id,insulin_type,dose,meal_type,notes,created_at';
 const MEAL_COLS = 'id,user_id,image_url,result,meal_type,created_at';
 const ACTIVITY_COLS = 'id,user_id,kind,duration_min,intensity,notes,created_at';
 const MEASURE_COLS = 'id,user_id,kind,value,unit,created_at';
@@ -138,6 +137,7 @@ const mapInsulin = (r: any): InsulinLog => ({
   user_id: r.user_id,
   insulin_type: r.insulin_type,
   dose: Number(r.dose),
+  meal_type: r.meal_type ?? undefined,
   notes: r.notes ?? undefined,
   created_at: r.created_at,
 });

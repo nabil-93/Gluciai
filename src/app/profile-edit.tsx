@@ -72,6 +72,7 @@ export default function ProfileEditScreen() {
   const [draft, setDraft] = useState<Profile | null>(() => profile);
   const [savedFlash, setSavedFlash] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -79,8 +80,10 @@ export default function ProfileEditScreen() {
   if (!profile || !draft)
     return <Redirect href={wizardDone ? '/(tabs)' : '/auth'} />;
 
-  const set = <K extends keyof Profile>(key: K, value: Profile[K]) =>
+  const set = <K extends keyof Profile>(key: K, value: Profile[K]) => {
+    if (saveError) setSaveError(null); // clear the error once they edit again
     setDraft((d) => (d ? { ...d, [key]: value } : d));
+  };
 
   const setNum = (key: keyof Profile, text: string) => {
     const n = parseFloat(text.replace(',', '.'));
@@ -95,10 +98,38 @@ export default function ProfileEditScreen() {
     );
   };
 
+  /** Range-check the medical fields against the DB's accepted values so an
+   *  out-of-range entry is caught here with a clear message, instead of the
+   *  whole profile save being rejected by the server (and every other edit
+   *  in it lost). Mirrors the CHECK constraints on the profiles table. */
+  const medicalError = (p: Profile): string | null => {
+    const inRange = (v: number | undefined, min: number, max: number) =>
+      v == null || (v >= min && v <= max);
+    if (Number(p.target_low) > 0 && Number(p.target_high) > 0 && Number(p.target_high) <= Number(p.target_low))
+      return t('profile.errTargetOrder');
+    for (const r of [p.insulin_per_10g_breakfast, p.insulin_per_10g_lunch, p.insulin_per_10g_dinner])
+      if (!inRange(r, 0.1, 20)) return t('profile.errRatio');
+    if (!inRange(p.basal_dose, 1, 200)) return t('profile.errBasalDose');
+    if (!inRange(p.daily_glucose_goal, 40, 600)) return t('profile.errGlucoseGoal');
+    return null;
+  };
+
   const onSave = async () => {
+    setSaveError(null);
+    const err = medicalError(draft);
+    if (err) {
+      setSaveError(err);
+      return;
+    }
     setBusy(true);
     try {
-      await saveProfile(draft);
+      const res = await saveProfile(draft);
+      if (!res.ok) {
+        // Server rejected the change — tell the patient it did NOT save so
+        // they never trust a value that isn't really persisted.
+        setSaveError(t('profile.saveError'));
+        return;
+      }
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1800);
     } finally {
@@ -279,15 +310,16 @@ export default function ProfileEditScreen() {
                   keyboardType="numeric"
                 />
               </View>
-              {/* Daily "time in range" goal (%) — drives the objective ring on
+              {/* Daily glucose objective (mg/dL) — drives the objective ring on
                   the glycémie page. The patient chooses it themselves. */}
               <Field
-                label={t('profile.tirGoal')}
-                value={draft.daily_tir_goal != null ? String(draft.daily_tir_goal) : ''}
-                onChangeText={(v) => setNum('daily_tir_goal', v)}
+                label={t('profile.glucoseGoal')}
+                value={draft.daily_glucose_goal != null ? String(draft.daily_glucose_goal) : ''}
+                onChangeText={(v) => setNum('daily_glucose_goal', v)}
                 keyboardType="numeric"
+                placeholder="180"
               />
-              <Text style={styles.tirHint}>{t('profile.tirGoalHint')}</Text>
+              <Text style={styles.tirHint}>{t('profile.glucoseGoalHint')}</Text>
               <View style={styles.row2}>
                 <Field
                   flex
@@ -501,22 +533,29 @@ export default function ProfileEditScreen() {
         </View>
 
         {showSave ? (
-          <Pressable
-            onPress={onSave}
-            disabled={busy || savedFlash}
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              (pressed || savedFlash) && { opacity: 0.8 },
-            ]}
-          >
-            {busy ? (
-              <Spinner size={22} color="#ffffff" />
-            ) : (
-              <Text style={styles.primaryBtnText}>
-                {savedFlash ? `✓  ${t('profile.saved')}` : t('profile.save')}
-              </Text>
-            )}
-          </Pressable>
+          <>
+            {saveError ? (
+              <View style={styles.saveErrorBox}>
+                <Text style={styles.saveErrorText}>⚠️ {saveError}</Text>
+              </View>
+            ) : null}
+            <Pressable
+              onPress={onSave}
+              disabled={busy || savedFlash}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                (pressed || savedFlash) && { opacity: 0.8 },
+              ]}
+            >
+              {busy ? (
+                <Spinner size={22} color="#ffffff" />
+              ) : (
+                <Text style={styles.primaryBtnText}>
+                  {savedFlash ? `✓  ${t('profile.saved')}` : t('profile.save')}
+                </Text>
+              )}
+            </Pressable>
+          </>
         ) : null}
 
         {section === 'security' ? (
@@ -696,6 +735,20 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   primaryBtnText: { fontFamily: F800, fontSize: 15.5, color: '#FFFFFF' },
+
+  saveErrorBox: {
+    marginTop: 16,
+    backgroundColor: '#FDECEC',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  saveErrorText: {
+    fontFamily: F700,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: '#B3261E',
+  },
 
   secondaryBtn: {
     height: 48,

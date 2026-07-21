@@ -16,7 +16,8 @@
     "today": "Today",
     "offline": "You are offline. Data will sync when you reconnect.",
     "error": "Something went wrong",
-    "demoBadge": "Demo mode — connect Supabase to save data"
+    "demoBadge": "Demo mode — connect Supabase to save data",
+    "close": "Close"
   },
   "language": {
     "title": "Choose your language",
@@ -184,7 +185,9 @@
     "ratioLunch": "Lunch",
     "ratioDinner": "Dinner",
     "ratioPlaceholder": "e.g. 1.5",
-    "per10g": "U / 10 g"
+    "per10g": "U / 10 g",
+    "glucoseGoal": "Glucose objective (mg/dL)",
+    "glucoseGoalInfo": "Set the glucose you aim for during the day. 180 mg/dL is a good reference — you'll track it each day on the Glucose page."
   },
   "home": {
     "goodMorning": "Good morning",
@@ -713,7 +716,14 @@
     "basalTime": "Basal injection time",
     "basal_morning": "Morning",
     "basal_evening": "Evening",
-    "basal_both": "Morning and evening"
+    "basal_both": "Morning and evening",
+    "glucoseGoal": "Glucose objective (mg/dL)",
+    "glucoseGoalHint": "The glucose value you aim for during the day. The ring on the Glucose page fills as you reach it. Default: 180 mg/dL.",
+    "errTargetOrder": "The high target must be greater than the low target.",
+    "errRatio": "The per-meal insulin ratio must be between 0.1 and 20 U / 10 g.",
+    "errBasalDose": "The basal insulin dose must be between 1 and 200 U.",
+    "errGlucoseGoal": "The glucose objective must be between 40 and 600 mg/dL.",
+    "saveError": "Save failed — your changes were not saved. Check your values and try again."
   },
   "log": {
     "glucoseTitle": "Log glucose",
@@ -852,16 +862,16 @@
     "avg": "Average",
     "inTarget": "In target",
     "objTitle": "Today's goal",
-    "objSubToday": "Time in range · today",
+    "objSubToday": "Today's glucose vs objective",
     "objEdit": "Edit",
     "objGoal": "Your goal",
     "objReached": "Reached",
     "objLeft": "Left",
     "objDone": "Goal",
     "objMsgEmpty": "Add today's readings to track your goal.",
-    "objMsgReached": "🎉 Well done! Goal reached today.",
-    "objMsgClose": "Almost! {{n}}% more to reach your goal.",
-    "objMsgGo": "Keep going — aim for {{goal}}% time in range today.",
+    "objMsgReached": "🎯 Your glucose reached your {{goal}} mg/dL objective.",
+    "objMsgClose": "Almost! {{n}} mg to go to your objective.",
+    "objMsgGo": "Your objective today: {{goal}} mg/dL.",
     "ofTime": "of the time",
     "max": "Maximum",
     "dayCurve": "Today's curve",
@@ -911,7 +921,13 @@
     "coachSheetTitle": "AI Assistant",
     "coachGreeting": "I've looked at your glucose: average {{avg}} mg/dL, {{tir}}% in range over 7 days. What do you want to know or do?",
     "coachGreetingNoData": "I'm here to help with your glucose and diabetes. What do you want to know or do?",
-    "coachPlaceholder": "Ask your question…"
+    "coachPlaceholder": "Ask your question…",
+    "hba1cTitle": "Targets for an HbA1c of 7%",
+    "hba1cSub": "The glucose values to aim for to reach an HbA1c around 7%",
+    "hba1cFasting": "Fasting / before meals",
+    "hba1cPost": "After meals (2 h)",
+    "hba1cMean": "Average glucose",
+    "hba1cNote": "Indicative values (general guidance). Your doctor sets your personal targets."
   },
   "bolus": {
     "title": "Insulin dose",
@@ -1436,7 +1452,19 @@
     "split": "Today's split",
     "stable": "Stable injection",
     "noRisk": "No risk detected today.",
-    "calcSub": "Calculate the recommended insulin dose"
+    "calcSub": "Calculate the recommended insulin dose",
+    "yesterday": "Yesterday",
+    "range7d": "7D",
+    "rangeDay": "Day",
+    "pickDay": "Pick a day",
+    "injCount": "{{count}} inj.",
+    "typeTotal": "Total: {{n}} U",
+    "cmtEmpty": "No insulin logged. Add your injections for accurate tracking.",
+    "cmtSummary": "You took {{total}} U: {{breakdown}}.",
+    "aiAsk": "Tap to ask a question",
+    "aiTitle": "Insulin assistant",
+    "aiPlaceholder": "Ask your question…",
+    "aiError": "I couldn't reply, please try again."
   },
   "foodsPage": {
     "title": "Moroccan cuisine",
@@ -1517,7 +1545,10 @@
       "snack": "Add a snack"
     },
     "scanSub": "Scan your meal to estimate carbs, calories and more.",
-    "sodium": "Sodium"
+    "sodium": "Sodium",
+    "yesterday": "Yesterday",
+    "pickDay": "Pick a day",
+    "mealCount": "{{count}} meals"
   },
   "menuScanPage": {
     "title": "Restaurant menu",

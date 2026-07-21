@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -33,8 +34,8 @@ const GOALS = { kcal: 2000, carbs: 250, protein: 90, fat: 65, fiber: 30 };
 /** Fixed diameter of the "objectif atteint" ring (device-width independent). */
 const RING = 168;
 
-function isToday(iso: string) {
-  return new Date(iso).toDateString() === new Date().toDateString();
+function sameDay(iso: string, ref: Date) {
+  return new Date(iso).toDateString() === ref.toDateString();
 }
 
 /* ─────────────────────────── Icons ─────────────────────────── */
@@ -238,13 +239,31 @@ const MEAL_META: Record<MealType, { chip: string; icon: React.ReactNode }> = {
 
 export default function NutritionScreen() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const { meals, profile, glucoseLogs } = useAppStore();
 
   const firstName = (profile?.name || '').trim().split(/\s+/)[0] || '';
 
-  const todayMeals = useMemo(() => meals.filter((m) => isToday(m.created_at)), [meals]);
+  const [dayOffset, setDayOffset] = useState(0);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const selectedDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - dayOffset);
+    return d;
+  }, [dayOffset]);
+  const dayLabel = (offset: number) => {
+    if (offset === 0) return t('nutritionPage.today');
+    if (offset === 1) return t('nutritionPage.yesterday');
+    const d = new Date();
+    d.setDate(d.getDate() - offset);
+    return d.toLocaleDateString(i18n.language, { weekday: 'long', day: 'numeric', month: 'short' });
+  };
+
+  const todayMeals = useMemo(
+    () => meals.filter((m) => sameDay(m.created_at, selectedDate)),
+    [meals, selectedDate]
+  );
 
   const recommendations = useMemo(
     () => getRecommendations(profile, glucoseLogs, meals),
@@ -315,11 +334,11 @@ export default function NutritionScreen() {
               <ChevronLeft size={16} />
             </Pressable>
             <Text style={styles.headTitle}>{t('nutritionPage.title')}</Text>
-            <View style={styles.dateChip}>
+            <Pressable style={styles.dateChip} onPress={() => setPickerOpen(true)}>
               <CalendarIcon />
-              <Text style={styles.dateChipText}>{t('nutritionPage.today')}</Text>
+              <Text style={styles.dateChipText}>{dayLabel(dayOffset)}</Text>
               <ChevronDown />
-            </View>
+            </Pressable>
           </View>
 
           {/* Greeting */}
@@ -492,15 +511,54 @@ export default function NutritionScreen() {
         </FadeInView>
       </ScrollView>
 
-      {/* ── FAB ── */}
+      {/* ── FAB → scan a meal ── */}
       <Pressable
-        onPress={() => router.push('/add-menu')}
+        onPress={() => router.push('/scan')}
         style={[styles.fab, { bottom: Math.max(insets.bottom, 12) + 16 }]}
       >
         <LinearGradient colors={['#2FC178', '#149A57']} style={styles.fabGrad}>
           <PlusThin color="#fff" size={28} />
         </LinearGradient>
       </Pressable>
+
+      {/* ── Day picker ── */}
+      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
+        <Pressable style={styles.pickerOverlay} onPress={() => setPickerOpen(false)}>
+          <View style={styles.pickerSheet}>
+            <View style={styles.pickerHandle} />
+            <Text style={styles.pickerTitle}>{t('nutritionPage.pickDay')}</Text>
+            {Array.from({ length: 7 }, (_, i) => i).map((off) => {
+              const d = new Date();
+              d.setDate(d.getDate() - off);
+              const n = meals.filter((m) => sameDay(m.created_at, d)).length;
+              const active = off === dayOffset;
+              return (
+                <Pressable
+                  key={off}
+                  onPress={() => {
+                    setDayOffset(off);
+                    setPickerOpen(false);
+                  }}
+                  style={[styles.pickerRow, active && styles.pickerRowActive]}
+                >
+                  <Text style={[styles.pickerDay, active && { color: GREEN_D }]}>{dayLabel(off)}</Text>
+                  <Text style={styles.pickerCount}>
+                    {n > 0 ? t('nutritionPage.mealCount', { count: n }) : '—'}
+                  </Text>
+                  {active ? (
+                    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
+                      <Circle cx={8} cy={8} r={7} fill={GREEN_D} />
+                      <Path d="M5 8.2L7 10.2L11 6.2" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
+                  ) : (
+                    <View style={styles.pickerRadio} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -768,4 +826,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  /* Day picker (bottom sheet) */
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(16,24,40,0.42)', justifyContent: 'flex-end' },
+  pickerSheet: { backgroundColor: '#fff', borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingBottom: 34 },
+  pickerHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#E3E8EE', marginBottom: 14 },
+  pickerTitle: { fontFamily: F800, fontSize: 17, color: INK, marginBottom: 10 },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13, paddingHorizontal: 12, borderRadius: 14 },
+  pickerRowActive: { backgroundColor: '#F2F8F4' },
+  pickerDay: { flex: 1, fontFamily: F700, fontSize: 14.5, color: INK, textTransform: 'capitalize' },
+  pickerCount: { fontFamily: F500, fontSize: 12.5, color: '#9AA8A0' },
+  pickerRadio: { width: 16, height: 16, borderRadius: 8, borderWidth: 1.6, borderColor: '#D5DBE2' },
 });

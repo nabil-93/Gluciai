@@ -15,15 +15,18 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Spinner } from '@/components/ui';
+import { guessMealTime } from '@/services/bolusEngine';
 import { saveInsulin } from '@/services/data';
 import { colors, shadows } from '@/theme';
-import type { InsulinType } from '@/types';
+import type { InsulinType, MealType } from '@/types';
 
 const TYPES: { key: InsulinType; color: string }[] = [
   { key: 'rapid', color: '#3B82F6' },
   { key: 'long', color: '#6D5EF9' },
   { key: 'mixed', color: '#FF7A1A' },
 ];
+
+const MEALS: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 function SyringeIcon({ color }: { color: string }) {
   return (
@@ -45,10 +48,18 @@ export default function LogInsulinScreen() {
   const insets = useSafeAreaInsets();
   const [dose, setDose] = useState('');
   const [type, setType] = useState<InsulinType>('rapid');
+  const [meal, setMeal] = useState<MealType>(() => guessMealTime(new Date()));
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const num = Number(dose);
+  // Accept a decimal dose typed with a comma OR a dot (e.g. "4,5" / "4.5"),
+  // keeping at most one digit after the separator (0.1 U precision).
+  const onDoseChange = (v: string) => {
+    const cleaned = v.replace(',', '.').replace(/[^0-9.]/g, '');
+    const [intPart, ...rest] = cleaned.split('.');
+    setDose(rest.length ? `${intPart}.${rest.join('').slice(0, 1)}` : cleaned);
+  };
+  const num = parseFloat(dose);
   const active = TYPES.find((x) => x.key === type)!;
 
   const close = () => {
@@ -60,7 +71,7 @@ export default function LogInsulinScreen() {
     if (!num || num <= 0) return;
     setSaving(true);
     try {
-      await saveInsulin(num, type, notes || undefined);
+      await saveInsulin(num, type, notes || undefined, undefined, meal);
       close();
     } finally {
       setSaving(false);
@@ -84,8 +95,8 @@ export default function LogInsulinScreen() {
           <View style={styles.valueRow}>
             <TextInput
               value={dose}
-              onChangeText={setDose}
-              keyboardType="numeric"
+              onChangeText={onDoseChange}
+              keyboardType="decimal-pad"
               placeholder="—"
               placeholderTextColor="#D1D5DB"
               autoFocus
@@ -120,6 +131,25 @@ export default function LogInsulinScreen() {
                   numberOfLines={1}
                 >
                   {t(`wizard.${it.key}`)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* Meal (which meal this injection is for) */}
+        <Text style={styles.notesLabel}>{t('bolus.mealMoment')}</Text>
+        <View style={styles.mealRow}>
+          {MEALS.map((m) => {
+            const on = meal === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => setMeal(m)}
+                style={[styles.mealChip, on && styles.mealChipOn]}
+              >
+                <Text style={[styles.mealChipText, on && styles.mealChipTextOn]}>
+                  {t(`bolus.meal_${m}`)}
                 </Text>
               </Pressable>
             );
@@ -223,6 +253,20 @@ const styles = StyleSheet.create({
   },
   typeDot: { width: 8, height: 8, borderRadius: 4 },
   typeText: { fontSize: 13.5, fontWeight: '750' as any, color: colors.textSecondary },
+
+  mealRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  mealChip: {
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    ...shadows.soft,
+  },
+  mealChipOn: { backgroundColor: '#E6F7EF', borderColor: '#19C37D' },
+  mealChipText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
+  mealChipTextOn: { color: '#0E7A4D' },
 
   notesInput: {
     backgroundColor: colors.surface,

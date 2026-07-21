@@ -177,7 +177,9 @@ export async function saveInsulin(
   dose: number,
   insulinType: InsulinType,
   notes?: string,
-  createdAt?: string
+  createdAt?: string,
+  /** Which meal this injection was for (optional). */
+  mealType?: MealType
 ) {
   const user_id = await currentUserId();
   let row: { id: string; created_at: string } | null = null;
@@ -187,6 +189,7 @@ export async function saveInsulin(
       insulin_type: insulinType,
       dose,
       notes: notes ?? null,
+      ...(mealType ? { meal_type: mealType } : {}),
       ...(createdAt ? { created_at: createdAt } : {}),
     });
   }
@@ -195,6 +198,7 @@ export async function saveInsulin(
     user_id,
     insulin_type: insulinType,
     dose,
+    meal_type: mealType,
     notes,
     created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
@@ -261,14 +265,24 @@ const TRACKED_PROFILE_FIELDS: (keyof Profile)[] = [
   'height',
 ];
 
-export async function saveProfile(profile: Profile) {
+/**
+ * Persist the profile. Updates the local store immediately (so the app and
+ * the dose engine reflect the change at once), then upserts to Supabase.
+ * Returns `{ ok:false }` when the server REJECTS the write (bad value vs a
+ * CHECK constraint, RLS, network) so the settings screen can tell the patient
+ * it did NOT save — instead of the old behaviour where the error was swallowed
+ * and the change silently reverted on the next hydrate. Callers that don't
+ * care (avatar, language…) can ignore the result.
+ */
+export async function saveProfile(profile: Profile): Promise<{ ok: boolean }> {
   const before = useAppStore.getState().profile;
   useAppStore.getState().setProfile(profile);
   if (!isDemoMode && supabase && profile.user_id !== 'demo-user') {
-    await supabase.from('profiles').upsert({
+    const { error } = await supabase.from('profiles').upsert({
       ...profile,
       updated_at: new Date().toISOString(),
     });
+    if (error) return { ok: false };
   }
 
   // Record what actually changed (skip the wizard's very first save).
@@ -283,6 +297,7 @@ export async function saveProfile(profile: Profile) {
       await logEvent('profile', { changes });
     }
   }
+  return { ok: true };
 }
 
 export async function saveActivity(

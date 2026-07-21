@@ -16,7 +16,8 @@
     "today": "Heute",
     "offline": "Du bist offline. Daten werden bei Verbindung synchronisiert.",
     "error": "Etwas ist schiefgelaufen",
-    "demoBadge": "Demo-Modus — verbinde Supabase, um Daten zu speichern"
+    "demoBadge": "Demo-Modus — verbinde Supabase, um Daten zu speichern",
+    "close": "Schließen"
   },
   "language": {
     "title": "Wähle deine Sprache",
@@ -184,7 +185,9 @@
     "ratioLunch": "Mittagessen",
     "ratioDinner": "Abendessen",
     "ratioPlaceholder": "z. B. 1.5",
-    "per10g": "E / 10 g"
+    "per10g": "E / 10 g",
+    "glucoseGoal": "Blutzuckerziel (mg/dL)",
+    "glucoseGoalInfo": "Lege den Blutzucker fest, den du für den Tag anstrebst. 180 mg/dL ist ein guter Richtwert — du verfolgst ihn täglich auf der Blutzucker-Seite."
   },
   "home": {
     "goodMorning": "Guten Morgen",
@@ -713,7 +716,14 @@
     "basalTime": "Zeitpunkt des Basalinsulins",
     "basal_morning": "Morgens",
     "basal_evening": "Abends",
-    "basal_both": "Morgens und abends"
+    "basal_both": "Morgens und abends",
+    "glucoseGoal": "Blutzuckerziel (mg/dL)",
+    "glucoseGoalHint": "Der Blutzuckerwert, den du für den Tag anstrebst. Der Ring auf der Blutzucker-Seite füllt sich, wenn du ihn erreichst. Standard: 180 mg/dL.",
+    "errTargetOrder": "Der obere Zielwert muss größer als der untere sein.",
+    "errRatio": "Das Insulinverhältnis pro Mahlzeit muss zwischen 0,1 und 20 E / 10 g liegen.",
+    "errBasalDose": "Die Basalinsulindosis muss zwischen 1 und 200 E liegen.",
+    "errGlucoseGoal": "Das Blutzuckerziel muss zwischen 40 und 600 mg/dL liegen.",
+    "saveError": "Speichern fehlgeschlagen — deine Änderungen wurden nicht gespeichert. Prüfe die Werte und versuche es erneut."
   },
   "log": {
     "glucoseTitle": "Blutzucker erfassen",
@@ -852,16 +862,16 @@
     "avg": "Durchschnitt",
     "inTarget": "Im Zielbereich",
     "objTitle": "Tagesziel",
-    "objSubToday": "Zeit im Zielbereich · heute",
+    "objSubToday": "Blutzucker heute vs Ziel",
     "objEdit": "Ändern",
     "objGoal": "Dein Ziel",
     "objReached": "Erreicht",
     "objLeft": "Übrig",
     "objDone": "Ziel",
     "objMsgEmpty": "Füge deine heutigen Messungen hinzu, um dein Ziel zu verfolgen.",
-    "objMsgReached": "🎉 Super! Ziel heute erreicht.",
-    "objMsgClose": "Fast! Noch {{n}} % bis zu deinem Ziel.",
-    "objMsgGo": "Weiter so — ziele heute auf {{goal}} % Zeit im Zielbereich.",
+    "objMsgReached": "🎯 Dein Blutzucker hat dein Ziel von {{goal}} mg/dL erreicht.",
+    "objMsgClose": "Fast! Noch {{n}} mg bis zu deinem Ziel.",
+    "objMsgGo": "Dein Ziel heute: {{goal}} mg/dL.",
     "ofTime": "der Zeit",
     "max": "Maximum",
     "dayCurve": "Tageskurve",
@@ -911,7 +921,13 @@
     "coachSheetTitle": "KI-Assistent",
     "coachGreeting": "Ich habe deinen Blutzucker angeschaut: Durchschnitt {{avg}} mg/dL, {{tir}} % im Zielbereich über 7 Tage. Was möchtest du wissen oder tun?",
     "coachGreetingNoData": "Ich bin hier, um dir bei Blutzucker und Diabetes zu helfen. Was möchtest du wissen oder tun?",
-    "coachPlaceholder": "Stell deine Frage…"
+    "coachPlaceholder": "Stell deine Frage…",
+    "hba1cTitle": "Richtwerte für einen HbA1c von 7 %",
+    "hba1cSub": "Die Blutzuckerwerte, die du für einen HbA1c um 7 % anstreben solltest",
+    "hba1cFasting": "Nüchtern / vor den Mahlzeiten",
+    "hba1cPost": "Nach den Mahlzeiten (2 Std.)",
+    "hba1cMean": "Durchschnittlicher Blutzucker",
+    "hba1cNote": "Richtwerte (allgemeine Empfehlungen). Deine persönlichen Ziele legt dein Arzt fest."
   },
   "bolus": {
     "title": "Insulindosis",
@@ -1436,7 +1452,19 @@
     "split": "Verteilung heute",
     "stable": "Stabile Injektion",
     "noRisk": "Heute kein Risiko erkannt.",
-    "calcSub": "Berechne die empfohlene Insulindosis"
+    "calcSub": "Berechne die empfohlene Insulindosis",
+    "yesterday": "Gestern",
+    "range7d": "7T",
+    "rangeDay": "Tag",
+    "pickDay": "Tag wählen",
+    "injCount": "{{count}} Inj.",
+    "typeTotal": "Gesamt: {{n}} E",
+    "cmtEmpty": "Heute kein Insulin erfasst. Füge deine Injektionen für ein genaues Tracking hinzu.",
+    "cmtSummary": "Du hast {{total}} E genommen: {{breakdown}}.",
+    "aiAsk": "Tippen, um zu fragen",
+    "aiTitle": "Insulin-Assistent",
+    "aiPlaceholder": "Stell deine Frage…",
+    "aiError": "Ich konnte nicht antworten, versuch es erneut."
   },
   "foodsPage": {
     "title": "Marokkanische Küche",
@@ -1517,7 +1545,10 @@
       "snack": "Snack hinzufügen"
     },
     "scanSub": "Scanne deine Mahlzeit, um Kohlenhydrate, Kalorien und mehr zu schätzen.",
-    "sodium": "Natrium"
+    "sodium": "Natrium",
+    "yesterday": "Gestern",
+    "pickDay": "Tag wählen",
+    "mealCount": "{{count}} Mahlzeiten"
   },
   "menuScanPage": {
     "title": "Restaurantmenü",

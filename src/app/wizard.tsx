@@ -391,7 +391,7 @@ export default function WizardScreen() {
   const [correction, setCorrection] = useState('50');
   const [targetLow, setTargetLow] = useState('70');
   const [targetHigh, setTargetHigh] = useState('180');
-  const [tirGoal, setTirGoal] = useState('70');
+  const [glucoseGoal, setGlucoseGoal] = useState('180');
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [homeAddress, setHomeAddress] = useState('');
@@ -520,7 +520,7 @@ export default function WizardScreen() {
       language: i18n.language,
       target_low: Number(targetLow) || 70,
       target_high: Number(targetHigh) || 180,
-      daily_tir_goal: Math.min(100, Math.max(1, Number(tirGoal) || 70)),
+      daily_glucose_goal: Math.min(600, Math.max(40, Number(glucoseGoal) || 180)),
       // Legacy global ratio (g of carbs per 1 U) derived from the per-meal
       // plan so every older code path keeps working: 10 / (U per 10 g).
       carb_ratio: (() => {
@@ -543,6 +543,9 @@ export default function WizardScreen() {
       doctor_phone: doctorPhone || undefined,
     };
     try {
+      // saveProfile already updates the local store; a failed server upsert
+      // returns { ok:false } (never throws), so onboarding always completes
+      // and the next successful save/sync pushes the profile to the server.
       await saveProfile(profile);
     } finally {
       setSaving(false);
@@ -966,20 +969,20 @@ export default function WizardScreen() {
                 keyboardType="numeric"
                 unit="mg/dl"
               />
-              {/* Daily "time in range" goal the patient sets for themselves —
-                  shown as the objective ring on the glycémie page. */}
+              {/* Daily glucose objective (mg/dL) the patient sets for
+                  themselves — shown as the objective ring on the glycémie page. */}
               <Field
-                label={t('wizard.tirGoal')}
+                label={t('wizard.glucoseGoal')}
                 icon={<TargetWizIcon />}
-                value={tirGoal}
-                onChangeText={setTirGoal}
-                placeholder="70"
+                value={glucoseGoal}
+                onChangeText={setGlucoseGoal}
+                placeholder="180"
                 keyboardType="numeric"
-                unit="%"
+                unit="mg/dl"
               />
               <InfoBox
                 title={t('wizard.whyImportant')}
-                text={t('wizard.tirGoalInfo')}
+                text={t('wizard.glucoseGoalInfo')}
               />
             </>
           ) : null}

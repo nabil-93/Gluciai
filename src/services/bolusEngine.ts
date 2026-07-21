@@ -27,7 +27,7 @@ import type {
  *                      → adjust ±10 % and warn.
  *  - Hypo guard      = BG under the patient's low target → NO bolus at all,
  *                      treat the hypo first.
- *  - Rounded to 0.5 U (pen precision), capped for safety.
+ *  - Rounded to 0.1 U (fine pen / pump precision), capped for safety.
  */
 
 export const DIA_HOURS = 4; // duration of insulin action (rapid analogs 3-5 h)
@@ -162,7 +162,9 @@ export interface BolusResult {
   flags: BolusFlag[];
 }
 
-const round05 = (v: number) => Math.round(v * 2) / 2;
+// Round the final dose to 0.1 U — meal boluses land on exact tenths (a
+// breakfast ratio of 1.5 for 43 g → 6.5 U, not a coarse 0.5-step guess).
+const roundDose = (v: number) => Math.round(v * 10) / 10;
 
 /** Rapid insulin still active (linear decay over DIA_HOURS). */
 export function computeIOB(logs: InsulinLog[], now: Date): BolusResult['iobDoses'] {
@@ -319,7 +321,7 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
   }
 
   /* 8 — round + safety cap */
-  let total = round05(raw);
+  let total = roundDose(raw);
   if (total > MAX_SAFE_BOLUS) {
     total = MAX_SAFE_BOLUS;
     flags.push('capped');
