@@ -23,6 +23,7 @@ import {
   healthyFoodWhy,
 } from '@/data/healthyFoods';
 import { HEALTHY_FOOD_IMAGES } from '@/data/healthyFoodImages';
+import { getCustomDish } from '@/services/healthyCoach';
 import { useAppStore } from '@/store/useAppStore';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -37,7 +38,9 @@ const F800 = 'PlusJakartaSans_800ExtraBold';
  */
 export default function HealthyFoodDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  // `id` → a curated catalog dish; `custom` → an AI-generated dish kept in
+  // the in-session registry (from the Makla saine coach). Both render here.
+  const { id, custom } = useLocalSearchParams<{ id?: string; custom?: string }>();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const rtl = isRTL(i18n.language);
@@ -48,7 +51,8 @@ export default function HealthyFoodDetailScreen() {
     s.lockedFeatures.includes('healthy_selection')
   );
 
-  const food = getHealthyFood(String(id ?? ''));
+  const food =
+    getHealthyFood(String(id ?? '')) ?? getCustomDish(String(custom ?? ''));
   if (selectionHidden) return <Redirect href="/(tabs)" />;
   if (!food) return <Redirect href="/healthy-foods" />;
   const photo = HEALTHY_FOOD_IMAGES[food.id];

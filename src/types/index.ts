@@ -15,8 +15,26 @@ export interface Profile {
   language: string;
   target_low: number;
   target_high: number;
+  /** Daily "time in range" goal the patient sets for themselves (percentage
+   *  of the day's readings that should sit inside target_low..target_high).
+   *  Drives the objective ring on the glycémie page. Default 70. */
+  daily_tir_goal?: number;
   carb_ratio?: number;
   correction_factor?: number;
+  /** Units of MEAL (rapid) insulin per 10 g of carbs — one per meal, as
+   *  prescribed by the doctor. The bolus engine and the AI use these
+   *  exact numbers; carb_ratio stays as the legacy/global fallback. */
+  insulin_per_10g_breakfast?: number;
+  insulin_per_10g_lunch?: number;
+  insulin_per_10g_dinner?: number;
+  /** Name of the meal (rapid/bolus) insulin, e.g. "NovoRapid". */
+  bolus_insulin_name?: string;
+  /** Name of the basal (slow/lente) insulin, e.g. "Lantus". */
+  basal_insulin_name?: string;
+  /** Daily basal dose in units. */
+  basal_dose?: number;
+  /** When the basal insulin is injected. */
+  basal_time?: 'morning' | 'evening' | 'both';
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   doctor_name?: string;

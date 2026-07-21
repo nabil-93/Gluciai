@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import type { FoodItemResult, NutritionResult, Profile } from '@/types';
 
 import { buildAIDayJournal } from './dayLog';
+import { guessMealTime, ratioForMeal } from './bolusEngine';
 import { asQuotaError } from './usage';
 import { analyzePlate, resolveFood } from './nutrition/engine';
 import { applyPortionLearning } from './nutrition/learning';
@@ -332,6 +333,36 @@ export function buildHealthContext(): string {
         `target ${p.target_low}-${p.target_high} mg/dL; ` +
         `carb ratio ${p.carb_ratio ?? '?'} g/U; correction ${p.correction_factor ?? '?'} mg/dL per U; ` +
         `height ${p.height ?? '?'} cm; weight ${p.weight ?? '?'} kg; gender ${p.gender ?? '?'}.`
+    );
+    // Per-meal insulin plan — the numbers the patient entered from their
+    // doctor's prescription. Any dose talk MUST use these, never generics.
+    const ratios: string[] = [];
+    if (p.insulin_per_10g_breakfast) {
+      ratios.push(`breakfast ${p.insulin_per_10g_breakfast} U per 10 g carbs`);
+    }
+    if (p.insulin_per_10g_lunch) {
+      ratios.push(`lunch ${p.insulin_per_10g_lunch} U per 10 g carbs`);
+    }
+    if (p.insulin_per_10g_dinner) {
+      ratios.push(`dinner ${p.insulin_per_10g_dinner} U per 10 g carbs`);
+    }
+    const hasPlan =
+      ratios.length > 0 || p.bolus_insulin_name || p.basal_insulin_name || p.basal_dose;
+    lines.push(
+      hasPlan
+        ? `INSULIN PLAN (entered by the patient from their doctor's prescription — ` +
+            `for ANY dose question use the ratio of the RIGHT meal, these exact numbers): ` +
+            (ratios.length
+              ? `meal ratios: ${ratios.join('; ')}. `
+              : 'meal ratios: NOT SET — ask the patient for them (or Profile → Medical). ') +
+            `Meal (rapid) insulin: ${p.bolus_insulin_name || 'not set'}. ` +
+            `Basal (slow) insulin: ${p.basal_insulin_name || 'not set'}` +
+            (p.basal_dose ? ` ${p.basal_dose} U/day` : '') +
+            (p.basal_time ? `, injected ${p.basal_time === 'both' ? 'morning and evening' : `in the ${p.basal_time}`}` : '') +
+            `. The per-meal ratios apply ONLY to the meal (rapid) insulin, never to the basal.`
+        : `INSULIN PLAN: not configured yet — when doses come up, ask the patient to fill ` +
+            `Profile → Medical settings (units per 10 g of carbs for breakfast/lunch/dinner, ` +
+            `insulin names, basal dose) so calculations are exact.`
     );
   } else {
     lines.push('Profile: not filled in yet.');
@@ -724,7 +755,9 @@ export function estimateInsulin(
   carbs: number,
   profile: Profile | null
 ): number | null {
-  const ratio = profile?.carb_ratio;
-  if (!ratio || ratio <= 0) return null;
-  return Math.round((carbs / ratio) * 10) / 10;
+  // Per-meal plan first (U per 10 g at the current meal moment), then the
+  // legacy global carb_ratio. No plan at all → null (never a made-up dose).
+  const r = ratioForMeal(profile, guessMealTime(new Date()));
+  if (r.source === 'default') return null;
+  return Math.round((carbs / r.gPerU) * 10) / 10;
 }

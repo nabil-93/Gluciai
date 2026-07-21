@@ -16,7 +16,7 @@ import { Redirect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChevronLeft, FadeInView, PressableScale } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, FadeInView, PressableScale } from '@/components/ui';
 import { HealthyAssistant } from '@/components/HealthyAssistant';
 import { isRTL } from '@/i18n';
 import { useAppStore } from '@/store/useAppStore';
@@ -85,6 +85,8 @@ function HealthyFoodsScreen({
   const [mode, setMode] = useState<'curated' | 'world'>(
     allowSelection ? 'curated' : 'world'
   );
+  /** The AI meal-coach chat (opened from the header robot). */
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [query, setQuery] = useState('');
   /* Sliding pill of the segmented control (iOS-style). */
   const [segW, setSegW] = useState(0);
@@ -178,7 +180,19 @@ function HealthyFoodsScreen({
           <Text style={styles.headerTitle}>{t('hf.title')}</Text>
           <Text style={styles.headerSub}>{t('hf.subtitle')}</Text>
         </View>
-        <View style={{ width: 36 }} />
+        {/* AI meal coach lives in the header, next to the title. */}
+        {allowSelection ? (
+          <Pressable
+            onPress={() => setAssistantOpen(true)}
+            style={styles.headerRobot}
+            hitSlop={8}
+            accessibilityLabel={t('healthyAI.title')}
+          >
+            <AnimatedRobot size={30} mood="happy" />
+          </Pressable>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       {/* ── Mode toggle (iOS segmented control with sliding pill) ──
@@ -514,9 +528,11 @@ function HealthyFoodsScreen({
         </View>
       </Modal>
 
-      {/* Floating AI advisor — recommends curated healthy dishes as tappable
-          cards (like the Plats du monde robot). */}
-      {allowSelection ? <HealthyAssistant /> : null}
+      {/* AI meal coach — opened from the header robot; guides the patient and
+          proposes curated + custom dishes as tappable cards. */}
+      {allowSelection ? (
+        <HealthyAssistant open={assistantOpen} onOpenChange={setAssistantOpen} />
+      ) : null}
     </View>
   );
 }
@@ -545,6 +561,21 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontFamily: F800, fontSize: 16.5, color: '#111827' },
   headerSub: { fontFamily: F500, fontSize: 11.5, color: '#8b93a7', marginTop: 1 },
+  headerRobot: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e9fbf2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+    shadowColor: '#19c37d',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
 
   modeRow: {
     flexDirection: 'row',

@@ -250,6 +250,13 @@ const TRACKED_PROFILE_FIELDS: (keyof Profile)[] = [
   'target_high',
   'carb_ratio',
   'correction_factor',
+  'insulin_per_10g_breakfast',
+  'insulin_per_10g_lunch',
+  'insulin_per_10g_dinner',
+  'bolus_insulin_name',
+  'basal_insulin_name',
+  'basal_dose',
+  'basal_time',
   'weight',
   'height',
 ];

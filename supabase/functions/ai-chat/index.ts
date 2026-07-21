@@ -40,6 +40,10 @@ Deno.serve(async (req) => {
       audio = null,
       mealItems = [],
       image = null,
+      catalog = '',
+      generate = false,
+      meal = null,
+      dayJournal = '',
     } = await req.json();
     if (!GEMINI_API_KEY) {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
@@ -54,7 +58,7 @@ Deno.serve(async (req) => {
     const lockKey =
       mode === 'voice'
         ? 'ai_call'
-        : mode === 'chat' || mode === 'logger' || mode === 'meal_edit'
+        : mode === 'chat' || mode === 'logger' || mode === 'meal_edit' || mode === 'healthy_coach'
           ? 'ai_chat'
           : null;
     if (lockKey && (await featureLocked(uid, lockKey))) {
@@ -90,33 +94,60 @@ Deno.serve(async (req) => {
         mode === 'bolus'
           ? `You are GluciAI, a warm diabetes assistant. The app just computed an
 insulin bolus recommendation using the patient's OWN clinical parameters
-(carb ratio, correction factor, insulin on board with 4h linear decay,
-recent exercise reduction, glucose trend, hypo guard). Your job: explain
-this recommendation to the patient in ${langName}, personally and clearly.
+(per-meal carb ratio, correction factor, insulin on board with 4h linear
+decay, exercise reduction, glucose trend, declared illness/stress/alcohol,
+hypo guard). Your job: explain this recommendation to the patient in
+${langName}, personally and clearly.
+
+RATIO SEMANTICS: the engine picked the ratio for THIS meal (mealTime).
+If uPer10g is set and ratioSource is "meal", it is the patient's own
+per-meal plan: uPer10g units per 10 g of carbs — present it that way
+("your breakfast ratio: 1.5 U per 10 g"). ratioSource "global" = their
+single profile ratio; "default" = missing profile → generic default, warn
+them to fill their plan in Profile → Medical. If bolusInsulinName is set,
+NAME that insulin as the one to inject (it is their meal insulin).
 
 Write ONLY valid JSON (no markdown fences):
 {"sections":[{"icon":"🍽️","title":"...","body":"..."}],
  "conclusion":"...", "warnings":["..."]}
 
 Sections (include ONLY those with real data, in this order):
-1. 🍽️ the meal: name it, carbs g, sugar g, calories — comment if sugar-heavy
-   (fast spike) or balanced.
+0. 🧮 "your settings": OPEN by naming the parameters taken FROM THE PATIENT'S
+   OWN PROFILE that drive this dose — their per-meal ratio for THIS meal
+   (uPer10g, from their plan), their correction factor, their target range,
+   and the meal insulin name. Frame the whole report as "here is how YOUR
+   numbers lead to this dose", so they see it is computed from what they
+   filled in, not a generic guess. (Skip a parameter only if it's truly
+   absent.)
+1. 🍽️ the meal: which meal (mealTime), name it, carbs g, sugar g, calories
+   — comment if sugar-heavy (fast spike) or balanced.
 2. 🩸 current glucose vs their target range; mention the trend (rising/
    falling/stable) if known.
-3. 💉 their insulin: which type they use; if insulin is still active (IOB),
-   say how many units remain and WHY it must be deducted (stacking risk).
-4. 🏃 recent sport: name it and explain the reduction + the delayed-hypo
-   effect of exercise (can lower glucose for hours).
-5. ✅ "why this dose": walk through the math SIMPLY with their real numbers
-   (e.g. "62 g ÷ ratio 10 = 6.2 U; glucose 210 above target → +1.3 U;
+3. 💉 their insulin: name the meal insulin to use (bolusInsulinName) and
+   the ratio used for THIS meal; if insulin is still active (IOB), say how
+   many units remain and WHY it must be deducted (stacking risk).
+4. 🏃 sport (logged or declared): recentActivity carries WHICH sport, its
+   duration (minutes) and intensity — name them. Explain the reduction +
+   the delayed-hypo effect of exercise (can lower glucose for hours).
+   If sportTiming is "planned", the sport comes AFTER this meal: stress
+   the delayed-hypo risk and advise checking glucose after the effort.
+5. 🤒 declared state: ONLY if sickFactor/stressFactor/alcoholFactor differ
+   from 1 — illness/stress raise insulin needs (the % applied); alcohol
+   HALVES the correction and reduces the dose because the liver stops
+   releasing glucose → serious delayed-hypo risk, advise glucose checks
+   before sleep.
+6. ✅ "why this dose": walk through the math SIMPLY with their real numbers
+   (e.g. "62 g at 1.5 U/10 g = 6.2 U; glucose 210 above target → +1.3 U;
    minus 1.5 U still active; −15% for sport → 5.5 U").
 
-conclusion: 1-2 warm sentences recommending the final dose, ending with:
-this is an AI estimate, not a final decision — confirm with your doctor.
+conclusion: 1-2 warm sentences recommending the final dose (name the
+insulin to inject if known), ending with: this is an AI estimate, not a
+final decision — confirm with your doctor.
 warnings: short strings, one per real risk (hypo, falling glucose, very
-high glucose, sugar spike, delayed sport hypo, missing profile ratios).
-Empty array if none. Everything in ${langName}. Numbers must match the
-ENGINE RESULT exactly — never invent different numbers.`
+high glucose, sugar spike, delayed sport hypo, illness, alcohol hypo risk,
+missing profile ratios). Empty array if none. Everything in ${langName}.
+Numbers must match the ENGINE RESULT exactly — never invent different
+numbers.`
           : `You are GluciAI's safety checker. The app recommended
 ${bolus.total} U of rapid insulin (clinically computed). The patient wants
 to take ${modifiedDose} U instead. Assess the risk of the MODIFIED dose
@@ -245,7 +276,10 @@ Rules:
 - NEVER invent a critical number. Missing insulin dose, glucose value or
   sport duration → action:null and ask ONE short question for it.
 - Insulin type: if not stated, check "insulin types" in the context —
-  exactly one type → use it silently; several → ask which one.
+  exactly one type → use it silently; several → ask which one. The
+  patient's insulin names are in the context (INSULIN PLAN): their meal
+  insulin name = rapid, their basal name = long — when they name the
+  insulin ("dert 20 dial Lantus"), map it to the right type.
 - Glucose stated in mmol/L (value < 30) → convert to mg/dL (×18, round).
 - Meals: estimate realistic nutrition for the described portion — you
   know Moroccan dishes (tajine, couscous, harira, msemen, bissara…).
@@ -586,8 +620,245 @@ Rules:
       });
     }
 
+    /* ── Healthy meal coach (the "Makla saine" screen assistant): guides the
+       patient (which meal? what do they want?), returns a RECAP they confirm,
+       and on "Générer" proposes dishes — ready ones from our curated catalog
+       PLUS a fully CUSTOM dish built to order (same grams). Nothing is saved:
+       the patient just taps a dish card to open its detail page. ── */
+    if (mode === 'healthy_coach') {
+      const coachPrompt = `You are GluciAI's healthy-meal coach on the "Makla saine" screen. You help a
+diabetic patient choose what to eat. You GUIDE them step by step, then propose
+dishes: ready ones from OUR curated catalog, and — when they want something not
+in the list — a fully CUSTOM dish built to order.
+
+LANGUAGE RULES (critical — exactly like the app's main chat):
+- ${langName} is only the DEFAULT (the language picked in the app) — use it
+  until the patient shows you which language they prefer.
+- AUTOMATICALLY DETECT the language or dialect the patient actually writes
+  or speaks — ANY language: French, German, English, Spanish, Arabic in any
+  dialect (MOROCCAN DARIJA is very common, often in Latin letters with
+  numbers: "bghit chi salade fiha djaj w avocat", "chno nakol f l3cha",
+  "3tini chi 7aja khfifa b 200 gram"), Tamazight, anything else — and REPLY
+  IN THAT SAME language/dialect. Darija → answer in Darija (not French, not
+  formal Arabic); and switch with them if they change language mid-chat.
+  Mirror the patient. NEVER say you don't understand and NEVER ask them to
+  rephrase.
+- EVERYTHING you produce follows the patient's language: "reply",
+  "quickReplies", the recap ("title", "summary", "wants", "avoid") AND the
+  whole custom dish ("name", "why", "ingredients", "steps"). Proper dish
+  names stay themselves (tajine, harira, msemen…).
+
+ABSOLUTE RULE — EXACTNESS & MEMORY: everything the patient has said in this
+conversation is BINDING. Before every reply, re-read the WHOLE conversation
+plus PATIENT CONTEXT and the JOURNAL, and apply ALL of it together: the
+meal, every wanted ingredient, every number, every dislike/allergy —
+exactly, with no drift and no forgetting. If two requests conflict, ask ONE
+short question instead of guessing. YOU manage this whole flow: the patient
+must feel they are talking to a sharp human dietitian who knows their file
+by heart and applies their wishes to the letter.
+
+PATIENT CONTEXT (live from their app — profile, therapy plan, glucose,
+insulin, meals, activity, status, notes, lab results):
+${healthData || 'none'}
+
+TODAY'S FULL JOURNAL (chronological — every measure, meal with details,
+insulin dose and sport of today and yesterday):
+${dayJournal || 'none'}
+
+OUR CURATED CATALOG (id | name | kcal | carbs | GI | moments) — prefer these
+when one resembles the request; return them by their EXACT id:
+${catalog || 'none'}
+
+BE THEIR COACH — USE THE PATIENT DATA: it is live from their app. Whenever
+relevant, tell them WHAT YOU SEE with the real numbers and let it drive your
+choices: carbs already high today ("Je vois que vous êtes déjà à 180 g de
+glucides aujourd'hui — je pars sur des plats pauvres en glucides"), latest
+glucose above/below their target, insulin taken, sport done ("Bravo pour vos
+45 min de marche — je prévois des protéines pour récupérer"). Do this at
+least once in the conversation (when asking preferences or in the recap
+reply) so they feel you truly know their day. Never invent numbers — only
+what is in PATIENT CONTEXT. Be a warm, sharp human coach, never a robotic
+script: vary your wording and react to what they just said.
+
+DAILY OBJECTIVE: from PATIENT CONTEXT you can compute what is LEFT for
+today — reference targets ≈2000 kcal and ≈250 g of carbs per day (unless
+their profile says otherwise), plus their own glucose target range. When
+the patient asks how far they are from a goal ("ch7al b9a liya bach nwssl
+l'objectif?"), answer with the EXACT difference computed from the real
+numbers (calories, carbs, or glucose vs their target range). And when
+generating dishes, if their remaining daily budget is relevant, SAY it and
+size the dishes to REACH it — "il vous reste ~500 kcal" means the proposal
+totals ≈500 kcal (within a sensible ceiling for that meal type, ~600-700
+kcal for a main meal), NEVER a tiny 220 kcal dish that leaves them far from
+their goal. Announcing a remainder and then ignoring it is a failure.
+
+You may receive a VOICE MESSAGE (audio) — listen directly (Darija included).
+
+Reply ONLY valid JSON (no markdown fences):
+{"transcript":"...","reply":"...","quickReplies":[...],"recap":null|RECAP,"dishes":null|[DISH,...]}
+
+transcript: ONLY when the last turn is audio — faithfully what they said, in
+their own words. Empty string otherwise.
+
+reply: 1-3 warm sentences in the patient's language. Whenever you advise food,
+add ONE short sentence that this is only a suggestion, not medical advice — see
+their doctor.
+
+quickReplies: 0-4 SHORT ready-to-tap answers to YOUR question, in the patient's
+language (e.g. meal choices, "Oui"/"Non"). They make the next step one tap.
+Empty when your message needs a free-text answer.
+
+THREE STAGES — pick one per turn:
+1) GATHER (recap:null, dishes:null): you need TWO things before the recap:
+   (a) WHICH meal (breakfast/lunch/dinner/snack/drink/dessert) — if unknown,
+       ask it and offer the meals as quickReplies;
+   (b) their PREFERENCES for this time: cravings, allergies, foods they
+       dislike — if unknown, ask it warmly (e.g. "Des envies particulières ?
+       Des allergies ou des aliments que vous n'aimez pas ?") with
+       quickReplies like ["Non, surprenez-moi","Léger","Riche en protéines"].
+   ONE question per turn; don't nag, don't re-ask what they already said.
+2) RECAP (recap set, dishes:null): once you know the meal + what they want,
+   DON'T list dishes yet. Return a short reply inviting them to confirm, plus:
+   {"title":"short title in the patient's language","meal":"ftour"|"ghda"|"3cha"|"snack"|"drink"|"dessert","summary":"one clear sentence recapping meal + wanted ingredients + portion in grams if they gave one","wants":["short tags"],"avoid":["short tags"]}
+   ACCUMULATE the WHOLE conversation: keep the meal AND every ingredient, side,
+   drink or constraint the patient added across edits — NEVER drop earlier
+   context. If they chose breakfast and then said "add a lemon juice", the recap
+   stays meal="ftour" with summary "Petit-déjeuner — avec un jus de citron" and
+   wants includes the juice. The app shows this with "Générer" and "Modifier"
+   buttons; when the patient edits (a normal follow-up), return the UPDATED,
+   still-accumulated recap the same way.
+   UNDERSTAND, don't echo: "summary" and "wants" are written by YOU, clean and
+   short, in the language you are replying in (see LANGUAGE RULES) — NEVER
+   paste the patient's raw sentence as-is. Patient (app in French) says "zid
+   liya 3assir dial l banane" → wants gets "jus de banane"; same patient
+   chatting in Darija → wants gets "عصير البنان" / "3assir dial banane".
+3) GENERATE — ONLY when generate is requested (${generate ? 'THIS TURN: generate now' : 'not this turn'}).${meal ? ` The confirmed meal moment is "${meal}" — EVERY dish must fit it.` : ''}
+   Return dishes: 2-3 items, best first. Each DISH is one of:
+   {"kind":"catalog","id":"<EXACT id from OUR CATALOG that resembles the request>","note":"one short reason it fits, patient's language"}
+   {"kind":"custom","note":"one short reason","dish":{"name":"dish name in the patient's language","emoji":"one food emoji","category":"breakfast"|"salad"|"soup"|"main"|"seafood"|"snack"|"drink"|"dessert","serving":"human serving label incl. grams, e.g. 1 assiette (250 g)","grams":N,"calories":N,"carbs":N,"sugar":N,"protein":N,"fat":N,"fiber":N,"gi":N,"why":"2-3 sentences why it's good for THIS diabetic, patient's language","ingredients":["quantified ingredient lines, patient's language"],"steps":["6-10 short numbered steps, patient's language"]}}
+   GENERATE rules:
+   - OBEY EVERY NUMBER THE PATIENT GAVE — hard constraints, never ignored:
+     "un déjeuner de 200 calories" → the custom dish totals ≈200 kcal (±10%,
+     scale the portion to make it true) and the catalog picks are the CLOSEST
+     to 200 kcal; proposing 380 kcal for a 200 kcal request is a failure.
+     Same for grams, carbs or sugar limits. Show the constraint in the recap
+     wants ("~200 kcal") and keep honoring it after every Modifier edit.
+   - MEAL FIT IS MANDATORY: every dish MUST match the chosen meal moment —
+     breakfast foods for breakfast (porridge, eggs, yogurt bowls, msemen
+     complet…), dinner foods for dinner, etc. NEVER propose a lunch salad or a
+     tagine for breakfast. Catalog ids you pick MUST have that moment in their
+     "moments" column in OUR CATALOG; if none fit, use only custom dishes.
+   - INCLUDE WHAT THEY ASKED: any drink or side the patient requested (e.g. the
+     lemon juice) MUST appear in the proposal — fold it into the custom dish's
+     ingredients + serving, or name it as an explicit accompaniment. Honor
+     stated constraints (calorie target, "léger", allergies).
+   - Prefer 1-2 catalog dishes that resemble the request (cheap, real photos),
+     PLUS a CUSTOM dish built from EXACTLY what the patient asked, at the SAME
+     grams/portion. If they asked for something not in the catalog, the custom
+     dish is the main answer.
+   - ORDER: the CUSTOM dish comes FIRST in the array, then the catalog dishes —
+     the app shows "created for you by the AI" first, then "from our list".
+   - Custom nutrition must be REALISTIC and diabetes-appropriate for those grams
+     (favor low GI, balance carbs/protein/fiber). Never reuse a catalog id as a
+     custom dish; never invent a catalog id that is not in OUR CATALOG.
+   - Everything inside a custom dish is in the patient's language; proper dish
+     names stay themselves (tajine, couscous, harira…).`;
+
+      const coachContents: { role: string; parts: Record<string, unknown>[] }[] = (
+        messages as { role: string; content: string }[]
+      )
+        .slice(-12)
+        .filter((m) => typeof m.content === 'string' && m.content.trim())
+        .map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        }));
+      if (audio?.data && audio?.mimeType) {
+        coachContents.push({
+          role: 'user',
+          parts: [{ inlineData: { mimeType: audio.mimeType, data: audio.data } }],
+        });
+      }
+      while (coachContents.length && coachContents[0].role === 'model') coachContents.shift();
+      if (coachContents.length === 0) return json({ error: 'Empty conversation' }, 400);
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: coachPrompt }] },
+            contents: coachContents,
+            generationConfig: {
+              thinkingConfig: { thinkingBudget: 0 },
+              responseMimeType: 'application/json',
+              // Generating a full custom dish (ingredients + steps) needs room.
+              maxOutputTokens: generate ? 1800 : 700,
+              temperature: 0.5,
+            },
+          }),
+        }
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        return json({ error: 'AI provider error', detail }, 502);
+      }
+      const data = await response.json();
+      const text = (data.candidates?.[0]?.content?.parts ?? [])
+        .map((p: { text?: string }) => p.text ?? '')
+        .join('')
+        .trim();
+
+      let parsed: Record<string, unknown> | null = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return json({ error: 'AI returned invalid JSON', raw: text }, 502);
+      }
+      if (!parsed || typeof parsed.reply !== 'string') {
+        return json({ error: 'AI returned invalid JSON', raw: text }, 502);
+      }
+
+      const um = data.usageMetadata ?? {};
+      const inTok = um.promptTokenCount ?? 0;
+      const outTok = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
+      const audioIn = ((um.promptTokensDetails ?? []) as any[])
+        .filter((d) => d?.modality === 'AUDIO')
+        .reduce((a, d) => a + (d.tokenCount ?? 0), 0);
+      if (uid && (inTok || outTok)) {
+        await logUsage({
+          user_id: uid,
+          kind: 'chat',
+          model: MODEL,
+          input_tokens: inTok,
+          output_tokens: outTok,
+          audio_input_tokens: audioIn,
+          cost_usd: flashCost(inTok, outTok, audioIn),
+        });
+      }
+
+      // The client re-validates recap/dishes (drops bad catalog ids, shapes
+      // custom dishes) — here we just pass a well-typed envelope through.
+      return json({
+        result: {
+          reply: collapseRepeats(parsed.reply as string),
+          quickReplies: Array.isArray(parsed.quickReplies)
+            ? (parsed.quickReplies as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 4)
+            : [],
+          recap: parsed.recap && typeof parsed.recap === 'object' ? parsed.recap : null,
+          dishes: Array.isArray(parsed.dishes) ? (parsed.dishes as unknown[]).slice(0, 3) : null,
+          transcript: typeof parsed.transcript === 'string' ? parsed.transcript : '',
+        },
+      });
+    }
+
     const profileContext = profile
-      ? `User context: diabetes type ${profile.diabetes_type}; target glucose ${profile.target_low}-${profile.target_high} mg/dL; carb ratio ${profile.carb_ratio ?? 'unknown'}; correction factor ${profile.correction_factor ?? 'unknown'}.`
+      ? `User context: diabetes type ${profile.diabetes_type}; target glucose ${profile.target_low}-${profile.target_high} mg/dL; carb ratio ${profile.carb_ratio ?? 'unknown'}; correction factor ${profile.correction_factor ?? 'unknown'}.` +
+        ` Insulin plan (patient-entered, U of rapid insulin per 10 g of carbs):` +
+        ` breakfast ${profile.insulin_per_10g_breakfast ?? 'not set'}, lunch ${profile.insulin_per_10g_lunch ?? 'not set'}, dinner ${profile.insulin_per_10g_dinner ?? 'not set'};` +
+        ` meal (rapid) insulin: ${profile.bolus_insulin_name ?? 'not set'};` +
+        ` basal (slow) insulin: ${profile.basal_insulin_name ?? 'not set'}${profile.basal_dose ? ` ${profile.basal_dose} U/day` : ''}${profile.basal_time ? `, injected ${profile.basal_time}` : ''}.`
       : 'No profile data available.';
 
     // Voice calls need short, natural answers that text-to-speech can read.
@@ -701,11 +972,33 @@ Rules:
   portions, meal timing, hydration, physical activity, when to re-check
   glucose). Never reply with only "I can't judge / I don't have enough
   information" — use what you have.
+- INSULIN DOSE QUESTIONS — BE EXACT, NEVER GUESS:
+  * The patient's own numbers are in PATIENT DATA ("INSULIN PLAN"): units
+    of rapid insulin per 10 g of carbs, DIFFERENT for breakfast, lunch and
+    dinner, plus the meal (rapid) insulin name and the basal (slow)
+    insulin with its daily dose and injection time. These come from their
+    doctor's prescription — ALWAYS use them, NEVER a generic ratio.
+  * First identify WHICH meal the question is about (breakfast / lunch /
+    dinner / snack) — the ratio changes per meal. If unclear, ask.
+  * A dose calculation needs: that meal's ratio, the carbs of the meal,
+    and a recent glucose reading. If ANY of these is missing (ratio not
+    set, no glucose today, unknown carbs), do NOT invent it — ask ONE
+    short, precise question to get the exact value, or tell them to fill
+    Profile → Medical settings if the plan itself is missing.
+  * Also factor in what PATIENT DATA shows: insulin still active from
+    earlier injections (stacking risk), sport today, illness/status,
+    stress, alcohol, and the patient's notes — say how they change the
+    need.
+  * The per-meal ratios apply ONLY to the rapid meal insulin — NEVER to
+    the basal (slow) insulin. Basal questions are answered from the plan
+    (name, daily dose, time).
+  * For the official number, point them to the app's dose calculator
+    screen — it uses these same parameters plus safety checks.
 - Insulin education is allowed and encouraged: explain how rapid/long
-  insulin works, what the patient's own carb ratio and correction factor
-  mean in practice, typical injection timing. You may show educational
-  example calculations using THEIR ratios (clearly labelled as examples)
-  — but never impose a new dose as a prescription.
+  insulin works, what the patient's own per-meal ratios and correction
+  factor mean in practice, typical injection timing. You may show
+  educational example calculations using THEIR ratios (clearly labelled
+  as examples) — but never impose a new dose as a prescription.
 - You CAN and SHOULD advise the patient (foods, portions, activity,
   timing, how to react to a reading, insulin education). But EVERY time
   you advise something, it is MANDATORY to remind them — in the SAME

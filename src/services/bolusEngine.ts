@@ -1,4 +1,13 @@
-import type { ActivityLog, GlucoseLog, InsulinLog, MealScan, Profile } from '@/types';
+import type {
+  ActivityIntensity,
+  ActivityKind,
+  ActivityLog,
+  GlucoseLog,
+  InsulinLog,
+  MealScan,
+  MealType,
+  Profile,
+} from '@/types';
 
 /**
  * Deterministic bolus engine — mirrors what clinicians and insulin pumps
@@ -34,7 +43,55 @@ export type BolusFlag =
   | 'sugarHeavy' // meal sugar > 40% of carbs → fast spike
   | 'highBG' // BG very high (> 250)
   | 'capped' // dose hit the safety cap
-  | 'noRatio'; // profile ratios missing → defaults used
+  | 'noRatio' // profile ratios missing → defaults used
+  | 'sick' // patient declared illness → needs raised
+  | 'stress' // patient declared stress → needs raised
+  | 'alcohol'; // alcohol → correction halved + dose reduced (hypo risk)
+
+/**
+ * Which meal-of-day ratio applies. Patients enter U per 10 g of carbs per
+ * meal (insulin_per_10g_*); snacks reuse the lunch ratio when set.
+ */
+export function guessMealTime(now: Date): MealType {
+  const h = now.getHours();
+  if (h >= 4 && h < 11) return 'breakfast';
+  if (h >= 11 && h < 16) return 'lunch';
+  if (h >= 18) return 'dinner';
+  return 'snack';
+}
+
+export type RatioSource = 'meal' | 'global' | 'default';
+
+/**
+ * The insulin-to-carb ratio for a given meal moment.
+ * 1) the patient's own per-meal value (U per 10 g, doctor-prescribed),
+ * 2) the legacy single carb_ratio (g per U),
+ * 3) the 10 g/U default (flagged as 'noRatio' by the engine).
+ */
+export function ratioForMeal(
+  profile: Profile | null,
+  mealTime: MealType
+): { gPerU: number; uPer10g: number | null; source: RatioSource } {
+  const per10g = profile
+    ? {
+        breakfast: profile.insulin_per_10g_breakfast,
+        lunch: profile.insulin_per_10g_lunch,
+        dinner: profile.insulin_per_10g_dinner,
+        snack: profile.insulin_per_10g_lunch,
+      }[mealTime]
+    : undefined;
+  if (per10g && per10g > 0) {
+    return { gPerU: 10 / per10g, uPer10g: per10g, source: 'meal' };
+  }
+  if (profile?.carb_ratio && profile.carb_ratio > 0) {
+    return {
+      gPerU: profile.carb_ratio,
+      uPer10g: Math.round((10 / profile.carb_ratio) * 100) / 100,
+      source: 'global',
+    };
+  }
+  return { gPerU: 10, uPer10g: 1, source: 'default' };
+}
 
 export interface BolusInputs {
   carbs: number;
@@ -45,6 +102,24 @@ export interface BolusInputs {
   glucoseLogs: GlucoseLog[];
   lastMeal?: MealScan | null;
   now?: Date;
+  /** Which meal this bolus is for — selects the per-meal ratio. */
+  mealTime?: MealType;
+  /** Sport declared on the calculator screen (on top of logged activity):
+   *  which sport, how long, whether it's already done or planned after
+   *  the meal. Duration scales the reduction (<30 min softer, >1 h
+   *  stronger, capped at −35 %). */
+  declaredSport?: {
+    intensity: ActivityIntensity;
+    kind?: ActivityKind;
+    durationMin?: number | null;
+    timing?: 'done' | 'planned';
+  } | null;
+  /** Patient declared they are sick right now (+15 % needs, flagged). */
+  isSick?: boolean;
+  /** Patient declared strong stress (+10 % needs, flagged). */
+  isStressed?: boolean;
+  /** Alcohol with this meal → correction halved, −10 %, hypo warning. */
+  alcohol?: boolean;
 }
 
 export interface BolusResult {
@@ -57,7 +132,17 @@ export interface BolusResult {
   activityFactor: number; // 1 = none, 0.85 = −15 %, 0.75 = −25 %
   trendFactor: number; // 1 = flat, 0.9 falling, 1.1 rising fast
   rawTotal: number;
+  sickFactor: number; // 1 = fine, 1.15 = sick
+  stressFactor: number; // 1 = fine, 1.1 = stressed
+  alcoholFactor: number; // 1 = none, 0.9 = alcohol declared
   /* context the engine used (for the AI report + UI) */
+  mealTime: MealType;
+  /** Patient's per-meal ratio actually used (U per 10 g), if any. */
+  uPer10g: number | null;
+  /** Where the ratio came from: per-meal plan, global profile, default. */
+  ratioSource: RatioSource;
+  /** Name of the meal insulin to inject (from the profile), if set. */
+  bolusInsulinName: string | null;
   ratio: number;
   correctionFactor: number;
   targetLow: number;
@@ -67,6 +152,9 @@ export interface BolusResult {
   carbs: number;
   trendPerMin: number | null; // mg/dL per minute (negative = falling)
   recentActivity: { kind: string; minutes: number; intensity: string } | null;
+  /** Declared sport: already done, or planned after the meal (delayed-hypo
+   *  risk the AI must warn about). Null when nothing was declared. */
+  sportTiming: 'done' | 'planned' | null;
   iobDoses: { dose: number; minutesAgo: number; remaining: number }[];
   mealSugar: number | null;
   mealCalories: number | null;
@@ -109,9 +197,11 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
   const p = inputs.profile;
   const flags: BolusFlag[] = [];
 
-  const ratio = p?.carb_ratio || 10;
+  const mealTime = inputs.mealTime ?? guessMealTime(now);
+  const r = ratioForMeal(p, mealTime);
+  const ratio = Math.round(r.gPerU * 100) / 100;
   const isf = p?.correction_factor || 50;
-  if (!p?.carb_ratio || !p?.correction_factor) flags.push('noRatio');
+  if (r.source === 'default' || !p?.correction_factor) flags.push('noRatio');
   const targetLow = p?.target_low ?? 70;
   const targetHigh = p?.target_high ?? 180;
   const targetMid = Math.round((targetLow + targetHigh) / 2);
@@ -138,6 +228,20 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
     if (glucose > 250) flags.push('highBG');
   }
 
+  /* 2b — declared conditions (illness raises needs; alcohol blocks the
+     liver's glucose release for hours → halve the correction and reduce
+     the dose, the delayed-hypo risk outweighs the meal spike) */
+  const sickFactor = inputs.isSick ? 1.15 : 1;
+  if (inputs.isSick) flags.push('sick');
+  const stressFactor = inputs.isStressed ? 1.1 : 1;
+  if (inputs.isStressed) flags.push('stress');
+  let alcoholFactor = 1;
+  if (inputs.alcohol) {
+    alcoholFactor = 0.9;
+    correction = correction / 2;
+    flags.push('alcohol');
+  }
+
   /* 3 — insulin on board */
   const iobDoses = computeIOB(inputs.insulinLogs, now);
   const iob = iobDoses.reduce((s, d) => s + d.remaining, 0);
@@ -162,6 +266,26 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
       }
     }
   }
+  /* sport declared on the calculator screen (not yet logged) — the
+     strongest reduction wins, exactly like a logged session. The declared
+     DURATION scales the effect: a short effort (<30 min) burns less, a
+     long one (>1 h) keeps lowering glucose for hours. */
+  let sportTiming: 'done' | 'planned' | null = null;
+  if (inputs.declaredSport) {
+    const s = inputs.declaredSport;
+    const base = s.intensity === 'high' ? 0.25 : s.intensity === 'medium' ? 0.15 : 0.08;
+    const dur = s.durationMin && s.durationMin > 0 ? s.durationMin : 0;
+    let reduction = base;
+    if (dur > 0 && dur < 30) reduction = base * 0.6;
+    else if (dur > 60) reduction = base * 1.3;
+    reduction = Math.min(0.35, reduction);
+    const declared = 1 - reduction;
+    sportTiming = s.timing ?? 'done';
+    if (declared < activityFactor) {
+      activityFactor = Math.round(declared * 100) / 100;
+      recentActivity = { kind: s.kind ?? 'other', minutes: dur, intensity: s.intensity };
+    }
+  }
   if (activityFactor < 1) flags.push('activity');
 
   /* 5 — trend */
@@ -178,8 +302,14 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
     }
   }
 
-  /* 6 — assemble: (meal + correction − IOB) × activity × trend */
-  let raw = (mealBolus + correction - iob) * activityFactor * trendFactor;
+  /* 6 — assemble: (meal + correction − IOB) × activity × trend × state */
+  let raw =
+    (mealBolus + correction - iob) *
+    activityFactor *
+    trendFactor *
+    sickFactor *
+    stressFactor *
+    alcoholFactor;
   raw = Math.max(0, raw);
 
   /* 7 — hypo guard: below the low target → no bolus, treat the hypo */
@@ -203,7 +333,14 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
     iob: r1(iob),
     activityFactor,
     trendFactor,
+    sickFactor,
+    stressFactor,
+    alcoholFactor,
     rawTotal: r1(raw),
+    mealTime,
+    uPer10g: r.uPer10g,
+    ratioSource: r.source,
+    bolusInsulinName: p?.bolus_insulin_name?.trim() || null,
     ratio,
     correctionFactor: isf,
     targetLow,
@@ -213,6 +350,7 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
     carbs,
     trendPerMin: trendPerMin === null ? null : Math.round(trendPerMin * 10) / 10,
     recentActivity,
+    sportTiming,
     iobDoses,
     mealSugar,
     mealCalories,

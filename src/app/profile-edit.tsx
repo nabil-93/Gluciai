@@ -279,6 +279,15 @@ export default function ProfileEditScreen() {
                   keyboardType="numeric"
                 />
               </View>
+              {/* Daily "time in range" goal (%) — drives the objective ring on
+                  the glycémie page. The patient chooses it themselves. */}
+              <Field
+                label={t('profile.tirGoal')}
+                value={draft.daily_tir_goal != null ? String(draft.daily_tir_goal) : ''}
+                onChangeText={(v) => setNum('daily_tir_goal', v)}
+                keyboardType="numeric"
+              />
+              <Text style={styles.tirHint}>{t('profile.tirGoalHint')}</Text>
               <View style={styles.row2}>
                 <Field
                   flex
@@ -298,6 +307,86 @@ export default function ProfileEditScreen() {
                   onChangeText={(v) => setNum('correction_factor', v)}
                   keyboardType="numeric"
                 />
+              </View>
+
+              {/* Per-meal plan: U of rapid insulin per 10 g of carbs — the
+                  numbers the bolus calculator and the AI actually use. */}
+              <FieldLabel>{t('profile.mealRatios')}</FieldLabel>
+              <View style={styles.row2}>
+                <Field
+                  flex
+                  label={`🥐 ${t('profile.ratioBreakfast')}`}
+                  value={
+                    draft.insulin_per_10g_breakfast != null
+                      ? String(draft.insulin_per_10g_breakfast)
+                      : ''
+                  }
+                  onChangeText={(v) => setNum('insulin_per_10g_breakfast', v)}
+                  keyboardType="numeric"
+                  placeholder="1.5"
+                />
+                <Field
+                  flex
+                  label={`☀️ ${t('profile.ratioLunch')}`}
+                  value={
+                    draft.insulin_per_10g_lunch != null
+                      ? String(draft.insulin_per_10g_lunch)
+                      : ''
+                  }
+                  onChangeText={(v) => setNum('insulin_per_10g_lunch', v)}
+                  keyboardType="numeric"
+                  placeholder="1"
+                />
+                <Field
+                  flex
+                  label={`🌙 ${t('profile.ratioDinner')}`}
+                  value={
+                    draft.insulin_per_10g_dinner != null
+                      ? String(draft.insulin_per_10g_dinner)
+                      : ''
+                  }
+                  onChangeText={(v) => setNum('insulin_per_10g_dinner', v)}
+                  keyboardType="numeric"
+                  placeholder="1.2"
+                />
+              </View>
+              <Field
+                label={t('profile.bolusInsulinName')}
+                value={draft.bolus_insulin_name ?? ''}
+                onChangeText={(v) => set('bolus_insulin_name', v || undefined)}
+                placeholder="NovoRapid, Humalog…"
+                autoCapitalize="words"
+              />
+              <View style={styles.row2}>
+                <Field
+                  flex
+                  label={t('profile.basalInsulinName')}
+                  value={draft.basal_insulin_name ?? ''}
+                  onChangeText={(v) => set('basal_insulin_name', v || undefined)}
+                  placeholder="Lantus, Levemir…"
+                  autoCapitalize="words"
+                />
+                <Field
+                  flex
+                  label={t('profile.basalDose')}
+                  value={draft.basal_dose != null ? String(draft.basal_dose) : ''}
+                  onChangeText={(v) => setNum('basal_dose', v)}
+                  keyboardType="numeric"
+                  placeholder="20"
+                />
+              </View>
+              <FieldLabel>{t('profile.basalTime')}</FieldLabel>
+              <View style={styles.chipRow}>
+                {(['morning', 'evening', 'both'] as const).map((v) => (
+                  <Chip
+                    key={v}
+                    label={t(`profile.basal_${v}`)}
+                    active={draft.basal_time === v}
+                    onPress={() =>
+                      set('basal_time', draft.basal_time === v ? undefined : v)
+                    }
+                  />
+                ))}
               </View>
             </>
           ) : null}
@@ -551,6 +640,7 @@ const styles = StyleSheet.create({
     borderColor: GREEN,
   },
   row2: { flexDirection: 'row', gap: 12 },
+  tirHint: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 11.5, lineHeight: 16, color: '#8b93a7', marginTop: 6 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {

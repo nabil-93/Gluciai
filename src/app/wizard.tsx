@@ -36,6 +36,7 @@ const STEPS = [
   'personal',
   'diabetes',
   'insulin',
+  'insulinPlan',
   'carbRatio',
   'correction',
   'target',
@@ -45,11 +46,16 @@ const STEPS = [
   'finish',
 ] as const;
 
+/* Common insulin names — one tap instead of typing (free text still works). */
+const RAPID_NAMES = ['NovoRapid', 'Humalog', 'Apidra', 'Fiasp'];
+const BASAL_NAMES = ['Lantus', 'Levemir', 'Toujeo', 'Tresiba', 'Insulatard'];
+
 /* Step hero illustrations from the design bundle */
 const HEROES: Record<(typeof STEPS)[number], any> = {
   personal: require('../assets/nfss/il_s1.png'),
   diabetes: require('../assets/nfss/il_s2.png'),
   insulin: require('../assets/nfss/il_s3.png'),
+  insulinPlan: require('../assets/nfss/il_s3.png'),
   carbRatio: require('../assets/nfss/il_s3.png'),
   correction: require('../assets/nfss/il_s6.png'),
   target: require('../assets/nfss/il_s6.png'),
@@ -91,6 +97,15 @@ function UpIcon() {
   return (
     <Svg width={22} height={22} viewBox="0 0 24 24">
       <Path d="M12 19V6M6 11l6-6 6 6" stroke={GREEN} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </Svg>
+  );
+}
+function TargetWizIcon() {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={8.5} stroke={GREEN} strokeWidth={2.2} />
+      <Circle cx={12} cy={12} r={4} stroke={GREEN} strokeWidth={2.2} />
+      <Circle cx={12} cy={12} r={1.4} fill={GREEN} />
     </Svg>
   );
 }
@@ -364,10 +379,19 @@ export default function WizardScreen() {
   const [weight, setWeight] = useState('');
   const [diabetesType, setDiabetesType] = useState<DiabetesType>();
   const [insulinTypes, setInsulinTypes] = useState<InsulinType[]>([]);
-  const [carbRatio, setCarbRatio] = useState('10');
+  /* Per-meal ratios: units of rapid insulin per 10 g of carbs (doctor-set) */
+  const [ratioBreakfast, setRatioBreakfast] = useState('1');
+  const [ratioLunch, setRatioLunch] = useState('1');
+  const [ratioDinner, setRatioDinner] = useState('1');
+  /* Which insulins the patient actually uses */
+  const [bolusName, setBolusName] = useState('');
+  const [basalName, setBasalName] = useState('');
+  const [basalDose, setBasalDose] = useState('');
+  const [basalTime, setBasalTime] = useState<'morning' | 'evening' | 'both'>();
   const [correction, setCorrection] = useState('50');
   const [targetLow, setTargetLow] = useState('70');
   const [targetHigh, setTargetHigh] = useState('180');
+  const [tirGoal, setTirGoal] = useState('70');
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [homeAddress, setHomeAddress] = useState('');
@@ -414,12 +438,25 @@ export default function WizardScreen() {
 
   const key = STEPS[step];
   const usesInsulin = insulinTypes.length > 0;
+  /* Rapid or mixed insulin covers meals → per-meal ratios + correction apply */
+  const usesMealInsulin =
+    insulinTypes.includes('rapid') || insulinTypes.includes('mixed');
+  const usesBasal = insulinTypes.includes('long');
   const allConsented = CONSENT_IDS.every((id) => consents[id]);
+
+  /* "1,5" and "1.5" both work; anything else → undefined (never saved). */
+  const num = (v: string) => {
+    const n = parseFloat(v.replace(',', '.'));
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
 
   const canContinue = useMemo(() => {
     switch (key) {
       case 'diabetes':
         return !!diabetesType;
+      case 'carbRatio':
+        // The AI's dose math depends on these three numbers — require them.
+        return !!num(ratioBreakfast) && !!num(ratioLunch) && !!num(ratioDinner);
       case 'target':
         return Number(targetLow) > 0 && Number(targetHigh) > Number(targetLow);
       case 'consent':
@@ -427,7 +464,7 @@ export default function WizardScreen() {
       default:
         return true;
     }
-  }, [key, diabetesType, targetLow, targetHigh, allConsented]);
+  }, [key, diabetesType, ratioBreakfast, ratioLunch, ratioDinner, targetLow, targetHigh, allConsented]);
 
   const toggleInsulin = (type: InsulinType) => {
     setInsulinTypes((prev) =>
@@ -438,6 +475,11 @@ export default function WizardScreen() {
   const next = async () => {
     // Skip insulin-dose steps for users without insulin
     if (key === 'insulin' && !usesInsulin) {
+      setStep(STEPS.indexOf('target'));
+      return;
+    }
+    // Basal-only patients: no meal ratios / correction factor to configure
+    if (key === 'insulinPlan' && !usesMealInsulin) {
       setStep(STEPS.indexOf('target'));
       return;
     }
@@ -478,8 +520,22 @@ export default function WizardScreen() {
       language: i18n.language,
       target_low: Number(targetLow) || 70,
       target_high: Number(targetHigh) || 180,
-      carb_ratio: usesInsulin ? Number(carbRatio) || undefined : undefined,
-      correction_factor: usesInsulin ? Number(correction) || undefined : undefined,
+      daily_tir_goal: Math.min(100, Math.max(1, Number(tirGoal) || 70)),
+      // Legacy global ratio (g of carbs per 1 U) derived from the per-meal
+      // plan so every older code path keeps working: 10 / (U per 10 g).
+      carb_ratio: (() => {
+        if (!usesMealInsulin) return undefined;
+        const u = num(ratioLunch) ?? num(ratioBreakfast) ?? num(ratioDinner);
+        return u ? Math.round((10 / u) * 10) / 10 : undefined;
+      })(),
+      correction_factor: usesMealInsulin ? Number(correction) || undefined : undefined,
+      insulin_per_10g_breakfast: usesMealInsulin ? num(ratioBreakfast) : undefined,
+      insulin_per_10g_lunch: usesMealInsulin ? num(ratioLunch) : undefined,
+      insulin_per_10g_dinner: usesMealInsulin ? num(ratioDinner) : undefined,
+      bolus_insulin_name: usesMealInsulin ? bolusName.trim() || undefined : undefined,
+      basal_insulin_name: usesBasal ? basalName.trim() || undefined : undefined,
+      basal_dose: usesBasal ? num(basalDose) : undefined,
+      basal_time: usesBasal ? basalTime : undefined,
       emergency_contact_name: contactName || undefined,
       emergency_contact_phone: contactPhone || undefined,
       home_address: homeAddress.trim() || undefined,
@@ -501,9 +557,13 @@ export default function WizardScreen() {
       router.replace('/auth');
       return;
     }
-    // Mirror the skip logic when going back from target without insulin
+    // Mirror the skip logic when going back from target
     if (key === 'target' && !usesInsulin) {
       setStep(STEPS.indexOf('insulin'));
+      return;
+    }
+    if (key === 'target' && !usesMealInsulin) {
+      setStep(STEPS.indexOf('insulinPlan'));
       return;
     }
     setStep(step - 1);
@@ -514,7 +574,8 @@ export default function WizardScreen() {
     personal: { title: t('wizard.personalTitle'), sub: t('wizard.personalSub') },
     diabetes: { title: t('wizard.diabetesTitle') },
     insulin: { title: t('wizard.insulinTitle'), sub: t('wizard.insulinSub') },
-    carbRatio: { title: t('wizard.carbRatioTitle'), sub: t('wizard.carbRatioSub') },
+    insulinPlan: { title: t('wizard.insulinPlanTitle'), sub: t('wizard.insulinPlanSub') },
+    carbRatio: { title: t('wizard.mealRatiosTitle'), sub: t('wizard.mealRatiosSub') },
     correction: { title: t('wizard.correctionTitle'), sub: t('wizard.correctionSub') },
     target: { title: t('wizard.targetTitle'), sub: t('wizard.targetSub') },
     emergency: { title: t('wizard.emergencyTitle'), sub: t('wizard.emergencySub') },
@@ -728,21 +789,139 @@ export default function WizardScreen() {
             </View>
           ) : null}
 
-          {/* ── CARB RATIO ── */}
+          {/* ── INSULIN PLAN: which insulins the patient uses ── */}
+          {key === 'insulinPlan' ? (
+            <>
+              {usesMealInsulin ? (
+                <>
+                  <Field
+                    label={t('wizard.bolusInsulinName')}
+                    icon={<Text style={{ fontSize: 16 }}>💉</Text>}
+                    value={bolusName}
+                    onChangeText={setBolusName}
+                    placeholder={t('wizard.bolusInsulinPlaceholder')}
+                    autoCapitalize="words"
+                  />
+                  <View style={styles.nameChipRow}>
+                    {RAPID_NAMES.map((n) => (
+                      <Pressable
+                        key={n}
+                        onPress={() => setBolusName(n)}
+                        style={[styles.nameChip, bolusName === n && styles.nameChipOn]}
+                      >
+                        <Text
+                          style={[
+                            styles.nameChipText,
+                            bolusName === n && styles.nameChipTextOn,
+                          ]}
+                        >
+                          {n}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+              {usesBasal ? (
+                <>
+                  <Field
+                    label={t('wizard.basalInsulinName')}
+                    icon={<Text style={{ fontSize: 16 }}>⏱️</Text>}
+                    value={basalName}
+                    onChangeText={setBasalName}
+                    placeholder={t('wizard.basalInsulinPlaceholder')}
+                    autoCapitalize="words"
+                  />
+                  <View style={styles.nameChipRow}>
+                    {BASAL_NAMES.map((n) => (
+                      <Pressable
+                        key={n}
+                        onPress={() => setBasalName(n)}
+                        style={[styles.nameChip, basalName === n && styles.nameChipOn]}
+                      >
+                        <Text
+                          style={[
+                            styles.nameChipText,
+                            basalName === n && styles.nameChipTextOn,
+                          ]}
+                        >
+                          {n}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Field
+                    label={t('wizard.basalDose')}
+                    icon={<ScaleIcon />}
+                    value={basalDose}
+                    onChangeText={setBasalDose}
+                    placeholder={t('wizard.basalDosePlaceholder')}
+                    keyboardType="numeric"
+                    unit="U"
+                  />
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={styles.fieldLabel}>{t('wizard.basalTime')}</Text>
+                    <View style={styles.nameChipRow}>
+                      {(['morning', 'evening', 'both'] as const).map((v) => (
+                        <Pressable
+                          key={v}
+                          onPress={() => setBasalTime(v)}
+                          style={[styles.nameChip, basalTime === v && styles.nameChipOn]}
+                        >
+                          <Text
+                            style={[
+                              styles.nameChipText,
+                              basalTime === v && styles.nameChipTextOn,
+                            ]}
+                          >
+                            {t(`wizard.basal_${v}`)}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                </>
+              ) : null}
+              <InfoBox
+                title={t('wizard.whyImportant')}
+                text={t('wizard.insulinPlanHint')}
+              />
+            </>
+          ) : null}
+
+          {/* ── PER-MEAL RATIOS: U of rapid insulin per 10 g of carbs ── */}
           {key === 'carbRatio' ? (
             <>
               <Field
-                label={t('wizard.carbRatioTitle')}
-                icon={<ScaleIcon />}
-                value={carbRatio}
-                onChangeText={setCarbRatio}
-                placeholder={t('wizard.carbRatioPlaceholder')}
+                label={t('wizard.ratioBreakfast')}
+                icon={<Text style={{ fontSize: 16 }}>🥐</Text>}
+                value={ratioBreakfast}
+                onChangeText={setRatioBreakfast}
+                placeholder={t('wizard.ratioPlaceholder')}
                 keyboardType="numeric"
-                unit="g/U"
+                unit={t('wizard.per10g')}
+              />
+              <Field
+                label={t('wizard.ratioLunch')}
+                icon={<Text style={{ fontSize: 16 }}>☀️</Text>}
+                value={ratioLunch}
+                onChangeText={setRatioLunch}
+                placeholder={t('wizard.ratioPlaceholder')}
+                keyboardType="numeric"
+                unit={t('wizard.per10g')}
+              />
+              <Field
+                label={t('wizard.ratioDinner')}
+                icon={<Text style={{ fontSize: 16 }}>🌙</Text>}
+                value={ratioDinner}
+                onChangeText={setRatioDinner}
+                placeholder={t('wizard.ratioPlaceholder')}
+                keyboardType="numeric"
+                unit={t('wizard.per10g')}
               />
               <InfoBox
                 title={t('wizard.whyImportant')}
-                text={t('wizard.carbRatioHint')}
+                text={t('wizard.mealRatiosHint')}
               />
             </>
           ) : null}
@@ -787,9 +966,20 @@ export default function WizardScreen() {
                 keyboardType="numeric"
                 unit="mg/dl"
               />
+              {/* Daily "time in range" goal the patient sets for themselves —
+                  shown as the objective ring on the glycémie page. */}
+              <Field
+                label={t('wizard.tirGoal')}
+                icon={<TargetWizIcon />}
+                value={tirGoal}
+                onChangeText={setTirGoal}
+                placeholder="70"
+                keyboardType="numeric"
+                unit="%"
+              />
               <InfoBox
                 title={t('wizard.whyImportant')}
-                text={t('wizard.targetInfoNote')}
+                text={t('wizard.tirGoalInfo')}
               />
             </>
           ) : null}
@@ -1212,6 +1402,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 0,
   },
+
+  /* Insulin-name quick chips */
+  nameChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  nameChip: {
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#e2e6ec',
+  },
+  nameChipOn: { backgroundColor: '#e6f7ef', borderColor: GREEN },
+  nameChipText: { fontFamily: N700, fontSize: 12.5, color: '#5f6b7a' },
+  nameChipTextOn: { color: '#0e7a4d' },
 
   /* Doctor promo code */
   promoCard: {

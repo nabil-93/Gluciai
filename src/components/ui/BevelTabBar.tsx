@@ -42,8 +42,11 @@ import { useTabBarScroll } from './TabBarVisibility';
 // window, not a painted white box. Too much tint here is what made 7b41643
 // look opaque/foggy instead of glassy.
 const GLASS_TINT = 'rgba(245,246,250,0.14)'; // thin neutral wash
-const PILL_BG = 'rgba(255,255,255,0.3)'; // glass-in-glass capsule
-const PILL_BORDER = 'rgba(255,255,255,0.45)';
+// The active-tab capsule must clearly stand out from the glass (the old
+// 0.3 white was nearly invisible). A near-solid white pill + bright rim
+// makes the current tab unmistakable — the dark active icon reads on it.
+const PILL_BG = 'rgba(255,255,255,0.92)'; // glass-in-glass capsule
+const PILL_BORDER = 'rgba(255,255,255,0.95)';
 const BAR_BORDER = 'rgba(255,255,255,0.35)';
 const ICON_ACTIVE = '#1B1C1F';
 const ICON_IDLE = 'rgba(27,28,31,0.80)';
@@ -378,12 +381,22 @@ const styles = StyleSheet.create({
     top: 6,
     bottom: 6,
     left: 0,
-    // Glass-in-glass: a second translucent white capsule with its own faint
-    // white rim, not a flat grey fill (point 6).
+    // Glass-in-glass: a bright white capsule with its own rim + a soft lift
+    // shadow so the ACTIVE tab clearly pops out of the translucent bar.
     borderRadius: 21,
     backgroundColor: PILL_BG,
     borderWidth: 1,
     borderColor: PILL_BORDER,
+    ...Platform.select({
+      web: { boxShadow: '0 2px 8px rgba(20,22,30,0.16)' },
+      default: {
+        shadowColor: '#0b1220',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.16,
+        shadowRadius: 6,
+        elevation: 3,
+      },
+    }),
   },
   tab: {
     flex: 1,

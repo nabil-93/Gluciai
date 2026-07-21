@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Easing,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -136,18 +137,22 @@ function PlusThin({ color = '#fff', size = 22 }: { color?: string; size?: number
 /* ── Half-gauge (270° arc) showing the latest reading vs the target range ── */
 function Gauge({
   value,
+  valueText,
+  unitLabel,
+  lowLabel,
+  highLabel,
   frac,
   zone,
-  low,
-  high,
   zoneLabel,
   emptyText,
 }: {
   value: number | null;
+  valueText: string;
+  unitLabel: string;
+  lowLabel: string;
+  highLabel: string;
   frac: number;
   zone: GlyZone | null;
-  low: number;
-  high: number;
   zoneLabel: string;
   emptyText: string;
 }) {
@@ -193,30 +198,30 @@ function Gauge({
         ) : null}
       </Svg>
 
-      <View style={styles.gaugeCenter}>
+      {/* Upper block: unit + value */}
+      <View style={styles.gaugeTop}>
         <View style={styles.gaugeUnitRow}>
           <Text style={{ fontSize: 11 }}>🩸</Text>
-          <Text style={styles.gaugeUnit}>mg/dL</Text>
+          <Text style={styles.gaugeUnit}>{unitLabel}</Text>
         </View>
-        {value != null ? (
-          <>
-            <Text style={styles.gaugeValue}>{value}</Text>
-            {zone ? (
-              <View style={[styles.gaugePill, { backgroundColor: zone.pale }]}>
-                <Text style={[styles.gaugePillText, { color: zone.color }]}>{zoneLabel}</Text>
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Text style={styles.gaugeDash}>—</Text>
-            <Text style={styles.gaugeEmpty}>{emptyText}</Text>
-          </>
-        )}
+        <Text style={value != null ? styles.gaugeValue : styles.gaugeDash}>
+          {value != null ? valueText : '—'}
+        </Text>
       </View>
 
-      <Text style={[styles.gaugeEnd, { left: 8 }]}>{low}</Text>
-      <Text style={[styles.gaugeEnd, { right: 8 }]}>{high}</Text>
+      {/* Lower block: status pill / empty text, dropped into the bottom gap */}
+      <View style={styles.gaugeStatus} pointerEvents="none">
+        {value != null && zone ? (
+          <View style={[styles.gaugePill, { backgroundColor: zone.pale }]}>
+            <Text style={[styles.gaugePillText, { color: zone.color }]}>{zoneLabel}</Text>
+          </View>
+        ) : value == null ? (
+          <Text style={styles.gaugeEmpty}>{emptyText}</Text>
+        ) : null}
+      </View>
+
+      <Text style={[styles.gaugeEnd, { left: 8 }]}>{lowLabel}</Text>
+      <Text style={[styles.gaugeEnd, { right: 8 }]}>{highLabel}</Text>
       <View style={styles.gaugePointer} />
     </View>
   );
@@ -411,6 +416,93 @@ function CoachChat({
   );
 }
 
+/**
+ * Daily objective ring — the patient's own "time in range" goal for the day.
+ * A 0→100 % donut: the arc fills to the day's achieved TIR, a notch marks the
+ * goal, and the colour turns green the moment the fill reaches (or passes) it.
+ * Animated sweep on mount / when the day changes.
+ */
+/** Animated adds `collapsable={false}`, which react-native-svg forwards to
+ *  the DOM <circle> on web (React warns) — strip it, like ui/motion.tsx. */
+const CircleSansCollapsable = React.forwardRef<any, any>(function CircleSansCollapsable(
+  { collapsable: _collapsable, ...rest },
+  ref
+) {
+  return <Circle ref={ref} {...rest} />;
+});
+const AnimatedCircle = Animated.createAnimatedComponent(CircleSansCollapsable);
+function ObjectiveRing({
+  tir,
+  goal,
+  size = 172,
+}: {
+  tir: number | null;
+  goal: number;
+  size?: number;
+}) {
+  const stroke = 15;
+  const r = (size - stroke - 8) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circ = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, tir ?? 0));
+  const reached = tir != null && tir >= goal;
+  const arcColor = reached ? GREEN : pct >= goal * 0.6 ? '#F5B60A' : '#F08A3C';
+
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: pct / 100,
+      duration: 1100,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [pct, anim]);
+  const dashoffset = anim.interpolate({ inputRange: [0, 1], outputRange: [circ, 0] });
+
+  // Goal notch, placed on the ring (0 % at 12 o'clock, clockwise).
+  const gAng = ((goal / 100) * 360 - 90) * (Math.PI / 180);
+  const gx = cx + r * Math.cos(gAng);
+  const gy = cy + r * Math.sin(gAng);
+
+  return (
+    <View style={{ width: size, height: size }}>
+      <Svg width={size} height={size}>
+        <Defs>
+          <SvgLinearGradient id="objGrad" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#2FD583" />
+            <Stop offset="1" stopColor={GREEN_D} />
+          </SvgLinearGradient>
+        </Defs>
+        {/* Track */}
+        <Circle cx={cx} cy={cy} r={r} stroke="#E6EFE8" strokeWidth={stroke} fill="none" />
+        {/* Progress (animated), starting at 12 o'clock */}
+        <AnimatedCircle
+          cx={cx}
+          cy={cy}
+          r={r}
+          stroke={reached ? 'url(#objGrad)' : arcColor}
+          strokeWidth={stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={dashoffset}
+          transform={`rotate(-90 ${cx} ${cy})`}
+        />
+        {/* Goal notch */}
+        <Circle cx={gx} cy={gy} r={6} fill="#FFFFFF" stroke={INK} strokeWidth={2.5} />
+      </Svg>
+      <View style={styles.objRingCenter} pointerEvents="none">
+        <Text style={[styles.objRingPct, reached && { color: GREEN_D }]}>
+          {tir != null ? `${tir}` : '—'}
+          <Text style={styles.objRingPctSign}>%</Text>
+        </Text>
+        {reached ? <Text style={styles.objRingCheck}>✓</Text> : null}
+      </View>
+    </View>
+  );
+}
+
 export default function GlucoseScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -455,6 +547,21 @@ export default function GlucoseScreen() {
       ? t('glucosePage.inRange')
       : t(zone.labelKey)
     : '';
+
+  /* ── Daily objective (patient-set "time in range" goal) ── */
+  const goalTir = Math.round(profile?.daily_tir_goal ?? 70);
+  const dayInRange = dayLogs.filter((g) => g.value >= low && g.value <= high).length;
+  const dayTir = dayLogs.length ? Math.round((dayInRange / dayLogs.length) * 100) : null;
+  const objReached = dayTir != null && dayTir >= goalTir;
+  const objRemaining = Math.max(0, goalTir - (dayTir ?? 0));
+  const objMsg =
+    dayTir == null
+      ? t('glucosePage.objMsgEmpty')
+      : objReached
+        ? t('glucosePage.objMsgReached')
+        : dayTir >= goalTir * 0.8
+          ? t('glucosePage.objMsgClose', { n: objRemaining })
+          : t('glucosePage.objMsgGo', { goal: goalTir });
 
   /* ── 7-day window (daily averages + trend + TIR bands) ── */
   const week = useMemo(() => {
@@ -617,10 +724,12 @@ export default function GlucoseScreen() {
             <Text style={styles.gaugeCardLabel}>{t('glucosePage.current')}</Text>
             <Gauge
               value={latest ? latest.value : null}
+              valueText={latest ? String(latest.value) : '—'}
+              unitLabel="mg/dL"
+              lowLabel={String(low)}
+              highLabel={String(high)}
               frac={gaugeFrac}
               zone={zone}
-              low={low}
-              high={high}
               zoneLabel={zoneLabel}
               emptyText={t('glucosePage.noMeasure')}
             />
@@ -661,6 +770,53 @@ export default function GlucoseScreen() {
               </View>
               <ChevronRight />
             </PressableScale>
+          </View>
+        </FadeInView>
+
+        {/* ── Daily objective ring (patient's own TIR goal) ── */}
+        <FadeInView delay={110} style={{ paddingHorizontal: 20, marginTop: 14 }}>
+          <View style={[styles.card, styles.objCard]}>
+            <View style={styles.objHead}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.objTitle}>🎯 {t('glucosePage.objTitle')}</Text>
+                <Text style={styles.objSub} numberOfLines={1}>
+                  {dayOffset === 0 ? t('glucosePage.objSubToday') : dayLabel(dayOffset)}
+                </Text>
+              </View>
+              <Pressable onPress={() => router.push('/profile-edit')} style={styles.objEdit} hitSlop={8}>
+                <TargetIcon />
+                <Text style={styles.objEditText}>{t('glucosePage.objEdit')}</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.objBody}>
+              <ObjectiveRing tir={dayTir} goal={goalTir} />
+              <View style={styles.objStats}>
+                <View style={styles.objStatRow}>
+                  <View style={[styles.objDot, { backgroundColor: INK }]} />
+                  <Text style={styles.objStatLabel}>{t('glucosePage.objGoal')}</Text>
+                  <Text style={styles.objStatVal}>{goalTir}%</Text>
+                </View>
+                <View style={styles.objStatRow}>
+                  <View style={[styles.objDot, { backgroundColor: GREEN }]} />
+                  <Text style={styles.objStatLabel}>{t('glucosePage.objReached')}</Text>
+                  <Text style={[styles.objStatVal, { color: GREEN_D }]}>
+                    {dayTir != null ? `${dayTir}%` : '—'}
+                  </Text>
+                </View>
+                <View style={styles.objStatRow}>
+                  <View style={[styles.objDot, { backgroundColor: objReached ? GREEN : '#F5B60A' }]} />
+                  <Text style={styles.objStatLabel}>
+                    {objReached ? t('glucosePage.objDone') : t('glucosePage.objLeft')}
+                  </Text>
+                  <Text style={styles.objStatVal}>{objReached ? '🎉' : `${objRemaining}%`}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={[styles.objMsgWrap, objReached && styles.objMsgWrapDone]}>
+              <Text style={[styles.objMsgText, objReached && { color: GREEN_D }]}>{objMsg}</Text>
+            </View>
           </View>
         </FadeInView>
 
@@ -1061,15 +1217,16 @@ const styles = StyleSheet.create({
     ...cardShadow,
   },
   gaugeCardLabel: { fontFamily: F600, fontSize: 12.5, color: '#5C6E63' },
-  gaugeCenter: { position: 'absolute', top: 46, left: 0, right: 0, alignItems: 'center' },
+  gaugeTop: { position: 'absolute', top: 30, left: 0, right: 0, alignItems: 'center' },
+  gaugeStatus: { position: 'absolute', top: 92, left: 0, right: 0, alignItems: 'center' },
   gaugeUnitRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   gaugeUnit: { fontFamily: F600, fontSize: 11.5, color: '#9AA8A0' },
-  gaugeValue: { fontFamily: F800, fontSize: 44, color: INK, lineHeight: 46, marginTop: 2 },
-  gaugeDash: { fontFamily: F800, fontSize: 40, color: '#CBD5E1', marginTop: 2 },
-  gaugePill: { marginTop: 8, borderRadius: 99, paddingVertical: 3, paddingHorizontal: 11 },
+  gaugeValue: { fontFamily: F800, fontSize: 40, color: INK, lineHeight: 42, marginTop: 2 },
+  gaugeDash: { fontFamily: F800, fontSize: 38, color: '#CBD5E1', marginTop: 2 },
+  gaugePill: { borderRadius: 99, paddingVertical: 3, paddingHorizontal: 11 },
   gaugePillText: { fontFamily: F700, fontSize: 11.5 },
-  gaugeEmpty: { fontFamily: F500, fontSize: 11, color: '#9AA8A0', marginTop: 6 },
-  gaugeEnd: { position: 'absolute', top: 120, fontFamily: F700, fontSize: 12, color: '#9AA8A0' },
+  gaugeEmpty: { fontFamily: F500, fontSize: 11, color: '#9AA8A0' },
+  gaugeEnd: { position: 'absolute', top: 122, fontFamily: F700, fontSize: 12, color: '#9AA8A0' },
   gaugePointer: {
     position: 'absolute',
     left: '50%',
@@ -1115,6 +1272,54 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 24, padding: 16, ...cardShadow },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardTitle: { fontFamily: F800, fontSize: 15, color: INK },
+
+  /* ── Daily objective card ── */
+  objCard: { paddingBottom: 14 },
+  objHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  objTitle: { fontFamily: F800, fontSize: 15, color: INK },
+  objSub: { fontFamily: F500, fontSize: 11.5, color: '#7C8B82', marginTop: 2 },
+  objEdit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F1ECFE',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 11,
+  },
+  objEditText: { fontFamily: F700, fontSize: 11.5, color: '#7C5CF6' },
+  objBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 12,
+  },
+  objRingCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  objRingPct: { fontFamily: F800, fontSize: 40, color: INK, letterSpacing: -1 },
+  objRingPctSign: { fontFamily: F800, fontSize: 19, color: '#9BB0A4' },
+  objRingCheck: { fontFamily: F800, fontSize: 15, color: GREEN_D, marginTop: -2 },
+  objStats: { flex: 1, minWidth: 0, gap: 12 },
+  objStatRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  objDot: { width: 9, height: 9, borderRadius: 5 },
+  objStatLabel: { flex: 1, fontFamily: F600, fontSize: 12.5, color: '#5C6B62' },
+  objStatVal: { fontFamily: F800, fontSize: 14, color: INK },
+  objMsgWrap: {
+    marginTop: 14,
+    backgroundColor: '#F3F7F1',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 13,
+  },
+  objMsgWrapDone: { backgroundColor: '#E6F7ED' },
+  objMsgText: { fontFamily: F600, fontSize: 12.5, lineHeight: 18, color: '#4A5A50', textAlign: 'center' },
   unitPill: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1173,6 +1173,7 @@ function MetricPage({
   leftLabel,
   rightLabel,
   addLabel,
+  detailHint,
   onOpen,
   onAdd,
 }: {
@@ -1195,6 +1196,8 @@ function MetricPage({
   leftLabel: string;
   rightLabel: string;
   addLabel: string;
+  /** Muted caption under the ring hinting the card opens its detail page. */
+  detailHint: string;
   onOpen: () => void;
   onAdd: () => void;
 }) {
@@ -1211,6 +1214,11 @@ function MetricPage({
           width={ringWidth}
           emptyText={emptyText}
         />
+        {/* Signals the whole card is tappable → opens the metric's detail page */}
+        <View style={styles.gringTapHint} pointerEvents="none">
+          <Text style={styles.gringTapHintText}>{detailHint}</Text>
+          <ChevRight size={11} color="#17a56d" />
+        </View>
       </View>
 
       <GlyDayChart
@@ -1922,6 +1930,7 @@ export default function HomeScreen() {
                   leftLabel={t('home.glyLow')}
                   rightLabel={t('home.glyHigh')}
                   addLabel={t('home.addMeasure')}
+                  detailHint={t('home.tapForDetail')}
                   onOpen={() => router.push('/glucose')}
                   onAdd={() => router.push('/log-glucose')}
                 />
@@ -1953,6 +1962,7 @@ export default function HomeScreen() {
                   leftLabel={t('home.glyLow')}
                   rightLabel={t('home.glyHigh')}
                   addLabel={t('home.addMeal')}
+                  detailHint={t('home.tapForDetail')}
                   onOpen={() => router.push('/nutrition')}
                   onAdd={() => router.push('/scan')}
                 />
@@ -1984,6 +1994,7 @@ export default function HomeScreen() {
                   leftLabel={t('home.glyLow')}
                   rightLabel={t('home.glyHigh')}
                   addLabel={t('home.addInjection')}
+                  detailHint={t('home.tapForDetail')}
                   onOpen={() => router.push('/insulin')}
                   onAdd={() => router.push('/log-insulin')}
                 />
@@ -2529,6 +2540,19 @@ const styles = StyleSheet.create({
 
   /* Degradé ring gauge */
   gringWrap: { alignItems: 'center', marginTop: 12 },
+  gringTapHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    alignSelf: 'center',
+    marginTop: 6,
+    backgroundColor: 'rgba(23,165,109,0.10)',
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  gringTapHintText: { fontFamily: F600, fontSize: 11, color: '#17a56d' },
   gringValue: { fontFamily: F800, color: '#152a1c', letterSpacing: -1 },
   gringUnit: { fontFamily: F600, color: '#7c9585', marginTop: 2 },
   gringPill: {

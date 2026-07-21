@@ -21,6 +21,7 @@ import {
 } from '@/services/ai';
 import {
   computeSmartBolus,
+  guessMealTime,
   localDoseCheck,
   type BolusResult,
   type DoseRisk,
@@ -28,6 +29,22 @@ import {
 import { saveInsulin } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
+import type { ActivityIntensity, ActivityKind, MealType } from '@/types';
+
+const SPORT_KINDS: { v: ActivityKind; icon: string }[] = [
+  { v: 'walk', icon: '🚶' },
+  { v: 'run', icon: '🏃' },
+  { v: 'bike', icon: '🚴' },
+  { v: 'gym', icon: '🏋️' },
+  { v: 'other', icon: '⚽' },
+];
+
+const SPORT_DURATIONS = [15, 30, 45, 60, 90];
+
+/** Translated label for an activity kind (falls back to the raw value for
+ *  anything unexpected coming from old logs). */
+const kindLabel = (t: (k: string) => string, kind: string) =>
+  SPORT_KINDS.some((s) => s.v === kind) ? t(`bolus.kind_${kind}`) : kind;
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -47,7 +64,8 @@ export default function BolusScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { profile, glucoseLogs, insulinLogs, activityLogs, meals } = useAppStore();
+  const { profile, glucoseLogs, insulinLogs, activityLogs, meals, activityStatus } =
+    useAppStore();
 
   const lastGlucose = glucoseLogs.find((g) => isToday(g.created_at));
   const lastMeal = meals.find((m) => isToday(m.created_at));
@@ -56,6 +74,18 @@ export default function BolusScreen() {
     lastMeal ? String(Math.round(lastMeal.result.carbohydrates)) : ''
   );
   const [glucose, setGlucose] = useState(lastGlucose ? String(lastGlucose.value) : '');
+  /* The context the patient declares for THIS dose — meal moment (picks the
+     per-meal ratio), sport, and current state. Sick is pre-checked from the
+     account status so the patient never has to remember to re-declare it. */
+  const [mealTime, setMealTime] = useState<MealType>(() => guessMealTime(new Date()));
+  const [sport, setSport] = useState<ActivityIntensity | 'none'>('none');
+  /* Details revealed once a sport intensity is picked */
+  const [sportKind, setSportKind] = useState<ActivityKind>('walk');
+  const [sportMin, setSportMin] = useState('30');
+  const [sportTiming, setSportTiming] = useState<'done' | 'planned'>('done');
+  const [isSick, setIsSick] = useState(activityStatus === 'sick');
+  const [isStressed, setIsStressed] = useState(false);
+  const [alcohol, setAlcohol] = useState(false);
   const [phase, setPhase] = useState<Phase>('input');
   const [engine, setEngine] = useState<BolusResult | null>(null);
   const [report, setReport] = useState<BolusAIReport | null>(null);
@@ -77,8 +107,37 @@ export default function BolusScreen() {
         activityLogs,
         glucoseLogs,
         lastMeal,
+        mealTime,
+        declaredSport:
+          sport === 'none'
+            ? null
+            : {
+                intensity: sport,
+                kind: sportKind,
+                durationMin: Number(sportMin) || null,
+                timing: sportTiming,
+              },
+        isSick,
+        isStressed,
+        alcohol,
       }),
-    [carbs, glucose, profile, insulinLogs, activityLogs, glucoseLogs, lastMeal]
+    [
+      carbs,
+      glucose,
+      profile,
+      insulinLogs,
+      activityLogs,
+      glucoseLogs,
+      lastMeal,
+      mealTime,
+      sport,
+      sportKind,
+      sportMin,
+      sportTiming,
+      isSick,
+      isStressed,
+      alcohol,
+    ]
   );
 
   const close = () => {
@@ -95,6 +154,19 @@ export default function BolusScreen() {
       activityLogs,
       glucoseLogs,
       lastMeal,
+      mealTime,
+      declaredSport:
+        sport === 'none'
+          ? null
+          : {
+              intensity: sport,
+              kind: sportKind,
+              durationMin: Number(sportMin) || null,
+              timing: sportTiming,
+            },
+      isSick,
+      isStressed,
+      alcohol,
     });
     setEngine(result);
     setEditDose(result.total);
@@ -150,6 +222,33 @@ export default function BolusScreen() {
 
   const fmtU = (v: number) => v.toLocaleString(i18n.language, { maximumFractionDigits: 1 });
   const isHypo = engine?.flags.includes('hypo');
+
+  // Deterministic "why this dose + what to do" — built from the engine, so
+  // the page ALWAYS explains and advises, even when the online AI report
+  // isn't reachable (demo / offline / error). The AI report, when available,
+  // replaces this with richer personalized prose.
+  const explainDose = (e: BolusResult): { summary: string; advice: string[] } => {
+    if (e.flags.includes('hypo')) {
+      return { summary: t('bolus.whyHypo', { low: e.targetLow }), advice: [t('bolus.adviceDoctor')] };
+    }
+    const bits: string[] = [];
+    if (e.mealBolus > 0) bits.push(t('bolus.whyMealBit', { u: fmtU(e.mealBolus) }));
+    if (e.correction > 0) bits.push(t('bolus.whyCorrBit', { u: fmtU(e.correction) }));
+    if (e.iob > 0.1) bits.push(t('bolus.whyIobBit', { u: fmtU(e.iob) }));
+    const summary = t('bolus.whySummary', { parts: bits.join(' '), total: fmtU(e.total) });
+    const advice: string[] = [
+      e.bolusInsulinName
+        ? t('bolus.adviceInject', { u: fmtU(e.total), name: e.bolusInsulinName, meal: t(`bolus.meal_${e.mealTime}`) })
+        : t('bolus.adviceInjectNoName', { u: fmtU(e.total), meal: t(`bolus.meal_${e.mealTime}`) }),
+    ];
+    if (e.flags.includes('sugarHeavy')) advice.push(t('bolus.adviceSugar'));
+    if (e.sportTiming) advice.push(t('bolus.adviceSport'));
+    if (e.flags.includes('alcohol')) advice.push(t('bolus.adviceAlcohol'));
+    if (e.flags.includes('falling') || e.flags.includes('nearLow')) advice.push(t('bolus.adviceFalling'));
+    if (e.flags.includes('highBG')) advice.push(t('bolus.adviceHigh'));
+    advice.push(t('bolus.adviceDoctor'));
+    return { summary, advice };
+  };
 
   /* ───────────────────────── UI ───────────────────────── */
   return (
@@ -212,6 +311,163 @@ export default function BolusScreen() {
               </View>
             </View>
 
+            {/* Which meal → picks the patient's per-meal ratio */}
+            <View style={styles.inputCard}>
+              <Text style={styles.inputLabel}>{t('bolus.mealMoment')}</Text>
+              <View style={styles.qRow}>
+                {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((m) => {
+                  const on = mealTime === m;
+                  return (
+                    <Pressable
+                      key={m}
+                      onPress={() => setMealTime(m)}
+                      style={[styles.qChip, on && styles.qChipOn]}
+                    >
+                      <Text style={[styles.qChipText, on && styles.qChipTextOn]}>
+                        {t(`bolus.meal_${m}`)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {preview.ratioSource === 'meal' ? (
+                <Text style={styles.ratioNote}>
+                  ✓ {t('bolus.ratioMealNote', { u: preview.uPer10g })}
+                </Text>
+              ) : (
+                <Text style={[styles.ratioNote, { color: '#b45309' }]}>
+                  ⚠️ {t('bolus.ratioMissing')}
+                </Text>
+              )}
+            </View>
+
+            {/* Sport today / planned — reduces the dose. Picking an
+                intensity opens the details: which sport, duration, timing. */}
+            <View style={styles.inputCard}>
+              <Text style={styles.inputLabel}>{t('bolus.sportQ')}</Text>
+              <View style={styles.qRow}>
+                {(['none', 'low', 'medium', 'high'] as const).map((v) => {
+                  const on = sport === v;
+                  return (
+                    <Pressable
+                      key={v}
+                      onPress={() => setSport(v)}
+                      style={[styles.qChip, on && styles.qChipOn]}
+                    >
+                      <Text style={[styles.qChipText, on && styles.qChipTextOn]}>
+                        {t(`bolus.sport_${v}`)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {sport !== 'none' ? (
+                <FadeInView distance={6} duration={250}>
+                  <View style={styles.sportDetails}>
+                    <Text style={styles.subQ}>{t('bolus.sportKindQ')}</Text>
+                    <View style={styles.qRow}>
+                      {SPORT_KINDS.map((k) => {
+                        const on = sportKind === k.v;
+                        return (
+                          <Pressable
+                            key={k.v}
+                            onPress={() => setSportKind(k.v)}
+                            style={[styles.qChip, on && styles.qChipOn]}
+                          >
+                            <Text style={[styles.qChipText, on && styles.qChipTextOn]}>
+                              {k.icon} {t(`bolus.kind_${k.v}`)}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={styles.subQ}>{t('bolus.sportDurQ')}</Text>
+                    <View style={styles.qRow}>
+                      {SPORT_DURATIONS.map((m) => {
+                        const on = Number(sportMin) === m;
+                        return (
+                          <Pressable
+                            key={m}
+                            onPress={() => setSportMin(String(m))}
+                            style={[styles.qChip, on && styles.qChipOn]}
+                          >
+                            <Text style={[styles.qChipText, on && styles.qChipTextOn]}>
+                              {m} min
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                      <View style={styles.durBox}>
+                        <TextInput
+                          value={sportMin}
+                          onChangeText={(v) => setSportMin(v.replace(/\D/g, '').slice(0, 3))}
+                          keyboardType="number-pad"
+                          placeholder="30"
+                          placeholderTextColor="#98a1af"
+                          style={styles.durInput}
+                        />
+                        <Text style={styles.durUnit}>min</Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.subQ}>{t('bolus.sportTimingQ')}</Text>
+                    <View style={styles.qRow}>
+                      {(['done', 'planned'] as const).map((v) => {
+                        const on = sportTiming === v;
+                        return (
+                          <Pressable
+                            key={v}
+                            onPress={() => setSportTiming(v)}
+                            style={[styles.qChip, on && styles.qChipOn]}
+                          >
+                            <Text style={[styles.qChipText, on && styles.qChipTextOn]}>
+                              {v === 'done' ? '✅' : '⏳'} {t(`bolus.timing_${v}`)}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </FadeInView>
+              ) : null}
+            </View>
+
+            {/* Current state — sick / stress / alcohol (multi-select) */}
+            <View style={styles.inputCard}>
+              <Text style={styles.inputLabel}>{t('bolus.stateQ')}</Text>
+              <View style={styles.qRow}>
+                {(
+                  [
+                    { key: 'sick', on: isSick, toggle: () => setIsSick(!isSick), icon: '🤒' },
+                    {
+                      key: 'stress',
+                      on: isStressed,
+                      toggle: () => setIsStressed(!isStressed),
+                      icon: '😰',
+                    },
+                    {
+                      key: 'alcohol',
+                      on: alcohol,
+                      toggle: () => setAlcohol(!alcohol),
+                      icon: '🍷',
+                    },
+                  ] as const
+                ).map((o) => (
+                  <Pressable
+                    key={o.key}
+                    onPress={o.toggle}
+                    style={[styles.qChip, o.on && styles.qChipOn]}
+                  >
+                    <Text style={[styles.qChipText, o.on && styles.qChipTextOn]}>
+                      {o.icon} {t(`bolus.state_${o.key}`)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
             {/* What the AI will take into account */}
             <View style={styles.ctxCard}>
               <Text style={styles.ctxTitle}>🤖 {t('bolus.ctxTitle')}</Text>
@@ -234,7 +490,10 @@ export default function BolusScreen() {
                 {preview.recentActivity ? (
                   <View style={styles.chip}>
                     <Text style={styles.chipText}>
-                      🏃 {preview.recentActivity.kind} · {preview.recentActivity.minutes} min
+                      🏃 {kindLabel(t, preview.recentActivity.kind)}
+                      {preview.recentActivity.minutes > 0
+                        ? ` · ${preview.recentActivity.minutes} min`
+                        : ''}
                     </Text>
                   </View>
                 ) : null}
@@ -248,9 +507,17 @@ export default function BolusScreen() {
                 ) : null}
                 <View style={styles.chip}>
                   <Text style={styles.chipText}>
-                    ⚙️ 1U/{preview.ratio}g · ISF {preview.correctionFactor}
+                    ⚙️{' '}
+                    {preview.uPer10g
+                      ? `${preview.uPer10g} U/10g · ISF ${preview.correctionFactor}`
+                      : `1U/${preview.ratio}g · ISF ${preview.correctionFactor}`}
                   </Text>
                 </View>
+                {preview.bolusInsulinName ? (
+                  <View style={styles.chip}>
+                    <Text style={styles.chipText}>💉 {preview.bolusInsulinName}</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
 
@@ -291,6 +558,12 @@ export default function BolusScreen() {
                 <Text style={styles.doseValue}>{fmtU(engine.total)}</Text>
                 <Text style={styles.doseUnit}>U</Text>
               </View>
+              {!isHypo && engine.total > 0 && engine.bolusInsulinName ? (
+                <Text style={styles.injectWith}>
+                  💉 {t('bolus.injectWith', { name: engine.bolusInsulinName })} ·{' '}
+                  {t(`bolus.meal_${engine.mealTime}`)}
+                </Text>
+              ) : null}
               <View style={styles.breakdown}>
                 {engine.mealBolus > 0 ? (
                   <View style={styles.breakRow}>
@@ -316,7 +589,16 @@ export default function BolusScreen() {
                 ) : null}
                 {engine.activityFactor < 1 ? (
                   <View style={styles.breakRow}>
-                    <Text style={styles.breakLabel}>🏃 {t('bolus.brActivity')}</Text>
+                    <Text style={styles.breakLabel}>
+                      🏃 {t('bolus.brActivity')}
+                      {engine.recentActivity
+                        ? ` — ${kindLabel(t, engine.recentActivity.kind)}${
+                            engine.recentActivity.minutes > 0
+                              ? ` ${engine.recentActivity.minutes} min`
+                              : ''
+                          }`
+                        : ''}
+                    </Text>
                     <Text style={styles.breakValue}>
                       −{Math.round((1 - engine.activityFactor) * 100)}%
                     </Text>
@@ -333,8 +615,80 @@ export default function BolusScreen() {
                     </Text>
                   </View>
                 ) : null}
+                {engine.sickFactor > 1 ? (
+                  <View style={styles.breakRow}>
+                    <Text style={styles.breakLabel}>🤒 {t('bolus.brSick')}</Text>
+                    <Text style={styles.breakValue}>
+                      +{Math.round((engine.sickFactor - 1) * 100)}%
+                    </Text>
+                  </View>
+                ) : null}
+                {engine.stressFactor > 1 ? (
+                  <View style={styles.breakRow}>
+                    <Text style={styles.breakLabel}>😰 {t('bolus.brStress')}</Text>
+                    <Text style={styles.breakValue}>
+                      +{Math.round((engine.stressFactor - 1) * 100)}%
+                    </Text>
+                  </View>
+                ) : null}
+                {engine.alcoholFactor < 1 ? (
+                  <View style={styles.breakRow}>
+                    <Text style={styles.breakLabel}>🍷 {t('bolus.brAlcohol')}</Text>
+                    <Text style={styles.breakValue}>
+                      −{Math.round((1 - engine.alcoholFactor) * 100)}%
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
+
+            {/* What the engine used FROM THE PATIENT'S PROFILE — full
+                transparency: every value that fed the dose, before the AI's
+                explanation. Answers "why this number, from my own settings". */}
+            {!isHypo
+              ? (() => {
+                  const rows: { icon: string; label: string; value: string; note?: string }[] = [
+                    { icon: '🕐', label: t('bolus.paramMeal'), value: t(`bolus.meal_${engine.mealTime}`) },
+                  ];
+                  if (engine.uPer10g != null)
+                    rows.push({
+                      icon: '🍽️',
+                      label: t('bolus.paramRatio'),
+                      value: `${engine.uPer10g} U · 10 g`,
+                      note: t(`bolus.paramRatio_${engine.ratioSource}`),
+                    });
+                  if (engine.correctionFactor)
+                    rows.push({ icon: '🩸', label: t('bolus.paramCorr'), value: `${engine.correctionFactor} mg/dL · 1 U` });
+                  rows.push({ icon: '🎯', label: t('bolus.paramTarget'), value: `${engine.targetLow}–${engine.targetHigh} mg/dL` });
+                  if (engine.glucose != null)
+                    rows.push({ icon: '📊', label: t('bolus.paramGlucose'), value: `${engine.glucose} mg/dL` });
+                  if (engine.carbs > 0)
+                    rows.push({ icon: '🍞', label: t('bolus.paramCarbs'), value: `${engine.carbs} g` });
+                  if (engine.bolusInsulinName)
+                    rows.push({ icon: '💉', label: t('bolus.paramInsulin'), value: engine.bolusInsulinName });
+                  if (engine.iob > 0.1)
+                    rows.push({ icon: '⏳', label: t('bolus.paramIob'), value: `${fmtU(engine.iob)} U` });
+                  return (
+                    <View style={styles.paramCard}>
+                      <Text style={styles.paramHead}>🧮 {t('bolus.paramsTitle')}</Text>
+                      <Text style={styles.paramIntro}>{t('bolus.paramsIntro')}</Text>
+                      {rows.map((r, i) => (
+                        <View key={i} style={styles.paramRow}>
+                          <Text style={styles.paramIcon}>{r.icon}</Text>
+                          <Text style={styles.paramLabel} numberOfLines={1}>{r.label}</Text>
+                          <View style={styles.paramValWrap}>
+                            <Text style={styles.paramVal}>{r.value}</Text>
+                            {r.note ? <Text style={styles.paramNote}>{r.note}</Text> : null}
+                          </View>
+                        </View>
+                      ))}
+                      {engine.ratioSource === 'default' ? (
+                        <Text style={styles.paramWarn}>⚠️ {t('bolus.paramDefaultWarn')}</Text>
+                      ) : null}
+                    </View>
+                  );
+                })()
+              : null}
 
             {/* Hypo instructions */}
             {isHypo ? (
@@ -376,9 +730,26 @@ export default function BolusScreen() {
                 ) : null}
               </>
             ) : (
-              <View style={styles.reportCard}>
-                <Text style={styles.reportBody}>{t('bolus.aiUnavailable')}</Text>
-              </View>
+              (() => {
+                const ex = explainDose(engine);
+                return (
+                  <>
+                    <Text style={styles.sectionHead}>💡 {t('bolus.whyTitle')}</Text>
+                    <View style={styles.reportCard}>
+                      <Text style={styles.whySummary}>{ex.summary}</Text>
+                      <View style={styles.whyAdviceList}>
+                        {ex.advice.map((a, i) => (
+                          <View key={i} style={styles.whyAdviceRow}>
+                            <View style={styles.whyBullet} />
+                            <Text style={styles.whyAdviceText}>{a}</Text>
+                          </View>
+                        ))}
+                      </View>
+                      <Text style={styles.whyNote}>{t('bolus.aiUnavailable')}</Text>
+                    </View>
+                  </>
+                );
+              })()
             )}
 
             {/* Fixed disclaimer */}
@@ -557,6 +928,55 @@ const styles = StyleSheet.create({
   unit: { fontFamily: F600, fontSize: 16, color: '#98A2B3' },
   prefillHint: { marginTop: 8, fontFamily: F600, fontSize: 12.5, color: GREEN },
 
+  /* Question chips (meal moment / sport / state) */
+  qRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  qChip: {
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    backgroundColor: '#f1f4f9',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  qChipOn: { backgroundColor: '#e6f7ef', borderColor: GREEN },
+  qChipText: { fontFamily: F600, fontSize: 12.5, color: '#5d6b7c' },
+  qChipTextOn: { color: '#0e7a4d' },
+  /* Sport details revealed when an intensity is picked */
+  sportDetails: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#eef1f6',
+  },
+  subQ: { fontFamily: F600, fontSize: 12.5, color: '#667085', marginTop: 8 },
+  durBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#d6dbe4',
+  },
+  durInput: {
+    fontFamily: F700,
+    fontSize: 13,
+    color: INK,
+    minWidth: 30,
+    textAlign: 'center',
+    padding: 0,
+  },
+  durUnit: { fontFamily: F600, fontSize: 11.5, color: '#98A2B3' },
+  ratioNote: { marginTop: 10, fontFamily: F600, fontSize: 12, color: GREEN },
+  injectWith: {
+    marginTop: 6,
+    fontFamily: F600,
+    fontSize: 12.5,
+    color: 'rgba(255,255,255,0.85)',
+  },
+
   ctxCard: {
     backgroundColor: '#f3f0ff',
     borderRadius: 18,
@@ -638,6 +1058,41 @@ const styles = StyleSheet.create({
   warnText: { flex: 1, fontFamily: F600, fontSize: 12.5, lineHeight: 18, color: '#8a5a10' },
 
   sectionHead: { fontFamily: F800, fontSize: 15.5, color: INK, marginTop: 8, marginBottom: 10 },
+
+  /* ── "What I used from your profile" transparency card ── */
+  paramCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#EAF3EE',
+    padding: 15,
+    marginTop: 14,
+  },
+  paramHead: { fontFamily: F800, fontSize: 14.5, color: INK },
+  paramIntro: { fontFamily: F500, fontSize: 12, lineHeight: 17, color: '#6B7A72', marginTop: 3, marginBottom: 10 },
+  paramRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    paddingVertical: 7,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F2',
+  },
+  paramIcon: { fontSize: 14, width: 20, textAlign: 'center' },
+  paramLabel: { flex: 1, fontFamily: F600, fontSize: 12.5, color: '#4A5A50' },
+  paramValWrap: { alignItems: 'flex-end', maxWidth: '52%' },
+  paramVal: { fontFamily: F800, fontSize: 13, color: INK },
+  paramNote: { fontFamily: F500, fontSize: 9.5, color: '#9AA7A0', marginTop: 1 },
+  paramWarn: { fontFamily: F600, fontSize: 11, lineHeight: 15, color: '#B45309', marginTop: 10 },
+
+  /* ── Deterministic "why this dose" explanation (AI-report fallback) ── */
+  whySummary: { fontFamily: F700, fontSize: 13.5, lineHeight: 20, color: INK },
+  whyAdviceList: { gap: 8, marginTop: 12 },
+  whyAdviceRow: { flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
+  whyBullet: { width: 6, height: 6, borderRadius: 3, backgroundColor: GREEN, marginTop: 7 },
+  whyAdviceText: { flex: 1, fontFamily: F500, fontSize: 12.5, lineHeight: 18, color: '#3F4B44' },
+  whyNote: { fontFamily: F500, fontSize: 10.5, lineHeight: 15, color: '#9AA7A0', marginTop: 12 },
+
   reportCard: {
     backgroundColor: '#ffffff',
     borderRadius: 16,

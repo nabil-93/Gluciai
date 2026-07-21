@@ -91,8 +91,20 @@ function mapProfile(row: any): Profile {
     language: row.language ?? 'en',
     target_low: row.target_low ?? 70,
     target_high: row.target_high ?? 180,
+    // Kept client-side until the DB column exists (migration 0023): the
+    // server row won't carry it yet, so fall back to the local value so a
+    // hydrate never wipes the goal the patient set.
+    daily_tir_goal:
+      row.daily_tir_goal ?? useAppStore.getState().profile?.daily_tir_goal ?? undefined,
     carb_ratio: row.carb_ratio ?? undefined,
     correction_factor: row.correction_factor ?? undefined,
+    insulin_per_10g_breakfast: row.insulin_per_10g_breakfast ?? undefined,
+    insulin_per_10g_lunch: row.insulin_per_10g_lunch ?? undefined,
+    insulin_per_10g_dinner: row.insulin_per_10g_dinner ?? undefined,
+    bolus_insulin_name: row.bolus_insulin_name ?? undefined,
+    basal_insulin_name: row.basal_insulin_name ?? undefined,
+    basal_dose: row.basal_dose ?? undefined,
+    basal_time: row.basal_time ?? undefined,
     emergency_contact_name: row.emergency_contact_name ?? undefined,
     emergency_contact_phone: row.emergency_contact_phone ?? undefined,
     doctor_name: row.doctor_name ?? undefined,
