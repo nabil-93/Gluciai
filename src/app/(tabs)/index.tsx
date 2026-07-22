@@ -1863,13 +1863,23 @@ export default function HomeScreen() {
           style={styles.metricCarousel}
           onLayout={(e) => {
             const w = e.nativeEvent.layout.width;
+            // THE FIX for the "cards flash on return from a detail page":
+            // expo-router keeps this screen mounted but display:none while a
+            // detail route (glucose/insulin/…) is on top. On the web a hidden
+            // node reports a 0-width layout, which used to set glyW→0 →
+            // `{glyW > 0 ? <ScrollView/> : null}` rendered null → the whole
+            // ~380px carousel collapsed and everything below jumped up, then
+            // snapped back when the real width was re-measured on show. Keep
+            // the last real width (ignore 0 and no-op re-measures) so the
+            // ScrollView stays mounted across hide/show → no collapse, no flash.
+            if (w <= 0 || Math.abs(w - glyWRef.current) < 0.5) return;
             glyWRef.current = w;
             setGlyW(w);
             // Prime the interpolation to the active card's offset so the cards
             // scale correctly on the very first paint (before any scroll).
             scrollX.setValue(metricPageRef.current * strideFor(w));
-            // Re-measured (e.g. shown again after being hidden): re-apply
-            // the active card's offset once the new width is committed.
+            // Re-measured (e.g. rotated / resized): re-apply the active card's
+            // offset once the new width is committed.
             requestAnimationFrame(() => snapMetric(false));
           }}
         >
