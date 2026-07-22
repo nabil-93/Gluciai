@@ -23,7 +23,6 @@ import Svg, {
   RadialGradient,
   Rect,
   Stop,
-  Text as SvgText,
 } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -1071,134 +1070,13 @@ function GlucoseRing({
 }
 
 /**
- * Day curve — 1:1 port of the mockup chart: 900×250 canvas, dashed
- * gridlines, right-hand scale, smooth Catmull-Rom segments and dots
- * colored by zone. Metric-agnostic: `yMax` sets the vertical scale,
- * `colorFor` colors each segment/dot, and `yLabels` are the 4 right-hand
- * scale ticks (top→bottom). Used identically by all three carousel pages.
- */
-function GlyDayChart({
-  readings,
-  yMax,
-  colorFor,
-  yLabels,
-}: {
-  readings: { minutes: number; value: number }[];
-  yMax: number;
-  colorFor: (value: number) => string;
-  /** 4 scale labels, top → bottom (e.g. ['300','200','100','0']) */
-  yLabels: [string, string, string, string];
-}) {
-  const x0 = 20;
-  const x1 = 830;
-  const yTop = 30;
-  const yBot = 200;
-  const yFor = (v: number) => yBot - (Math.min(v, yMax) / yMax) * (yBot - yTop);
-  const pts = readings
-    .slice()
-    .sort((a, b) => a.minutes - b.minutes)
-    .map((r) => ({
-      x: x0 + (r.minutes / 1440) * (x1 - x0),
-      y: yFor(r.value),
-      val: r.value,
-    }));
-  const segs: { d: string; color: string }[] = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] || pts[i];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2] || pts[i + 1];
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    segs.push({
-      d: `M${p1.x.toFixed(1)} ${p1.y.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`,
-      color: colorFor(Math.max(p1.val, p2.val)),
-    });
-  }
-  const Y_ROWS: [number, string][] = [
-    [35, yLabels[0]],
-    [98, yLabels[1]],
-    [161, yLabels[2]],
-    [205, yLabels[3]],
-  ];
-  const X_LABELS: [number, string][] = [
-    [60, '00:00'],
-    [260, '06:00'],
-    [450, '12:00'],
-    [645, '18:00'],
-    [820, '24:00'],
-  ];
-  return (
-    <View style={{ marginTop: 2, marginBottom: 4 }}>
-      <Svg width="100%" viewBox="0 0 900 250" style={{ aspectRatio: 900 / 250 }}>
-        {[30, 93, 156].map((y) => (
-          <Line
-            key={y}
-            x1={20}
-            y1={y}
-            x2={830}
-            y2={y}
-            stroke="#c7dccb"
-            strokeWidth={1.5}
-            strokeDasharray="2 8"
-            strokeLinecap="round"
-          />
-        ))}
-        <Line x1={20} y1={200} x2={830} y2={200} stroke="#b8d2bd" strokeWidth={1.5} />
-        {segs.map((g, i) => (
-          <Path
-            key={i}
-            d={g.d}
-            fill="none"
-            stroke={g.color}
-            strokeWidth={4.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
-        {pts.map((p, i) => (
-          <Circle
-            key={i}
-            cx={p.x.toFixed(1)}
-            cy={p.y.toFixed(1)}
-            r={7.5}
-            fill={colorFor(p.val)}
-            stroke="#ffffff"
-            strokeWidth={3.5}
-          />
-        ))}
-        {Y_ROWS.map(([y, l]) => (
-          <SvgText key={y} x={852} y={y} fill="#8aa693" fontSize={20} fontFamily={F600}>
-            {l}
-          </SvgText>
-        ))}
-        {X_LABELS.map(([x, l]) => (
-          <SvgText
-            key={l}
-            x={x}
-            y={235}
-            fill="#8aa693"
-            fontSize={20}
-            fontFamily={F600}
-            textAnchor="middle"
-          >
-            {l}
-          </SvgText>
-        ))}
-      </Svg>
-    </View>
-  );
-}
-
-/**
  * A carousel page — the SINGLE renderer shared by Glycémie, Glucides and
  * Insuline. Every page uses the exact glucose architecture: the degradé
- * GlucoseRing (zone-coloured), the GlyDayChart 24 h curve (zone-coloured
- * dots/segments), a zone-tinted alert row, and the Bas→Haut gradient
- * slider with the % bubble. The three pages differ only by their config
- * (unit, goal, zone table, day readings, routes), never by structure.
+ * GlucoseRing (zone-coloured), a status row (a zone-tinted alert when there
+ * is data, a muted empty state otherwise), and the Bas→Haut gradient slider
+ * with the % bubble. The status row is ALWAYS present so every card keeps
+ * the same height. The three pages differ only by their config
+ * (unit, goal, zone table, routes), never by structure.
  */
 function MetricPage({
   title,
@@ -1211,10 +1089,6 @@ function MetricPage({
   sliderFrac,
   ringWidth,
   emptyText,
-  readings,
-  chartYMax,
-  chartYLabels,
-  colorFor,
   sliderColors,
   leftLabel,
   rightLabel,
@@ -1235,10 +1109,6 @@ function MetricPage({
   sliderFrac: number;
   ringWidth: number;
   emptyText: string;
-  readings: { minutes: number; value: number }[];
-  chartYMax: number;
-  chartYLabels: [string, string, string, string];
-  colorFor: (v: number) => string;
   /** 6-stop Bas→Haut gradient for this metric's slider */
   sliderColors: string[];
   leftLabel: string;
@@ -1275,13 +1145,9 @@ function MetricPage({
         </View>
       </View>
 
-      <GlyDayChart
-        readings={readings}
-        yMax={chartYMax}
-        colorFor={colorFor}
-        yLabels={chartYLabels}
-      />
-
+      {/* Status row — ALWAYS rendered so all three cards stay the same
+          height. With data: the zone-tinted alert. Without: a muted grey
+          "no data → add" prompt occupying the exact same space. */}
       {zone ? (
         <View style={[styles.glyAlert, { backgroundColor: zone.alertBg }]}>
           <View style={[styles.glyAlertIcon, { backgroundColor: zone.color }]}>
@@ -1295,9 +1161,34 @@ function MetricPage({
           </View>
           <Text style={[styles.glyAlertChev, { color: zone.color }]}>›</Text>
         </View>
-      ) : null}
+      ) : (
+        <View style={[styles.glyAlert, styles.glyAlertEmpty]}>
+          <View style={[styles.glyAlertIcon, styles.glyAlertIconEmpty]}>
+            <Svg width={16} height={16} viewBox="0 0 24 24">
+              <Path
+                d="M12 5v14M5 12h14"
+                stroke="#9db2a4"
+                strokeWidth={2.6}
+                strokeLinecap="round"
+                fill="none"
+              />
+            </Svg>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.glyAlertTitleEmpty} numberOfLines={1}>
+              {emptyText}
+            </Text>
+            <Text style={styles.glyAlertDesc} numberOfLines={1}>
+              {addLabel}
+            </Text>
+          </View>
+          <Text style={[styles.glyAlertChev, { color: '#c2cfc7' }]}>›</Text>
+        </View>
+      )}
 
-      <View style={[styles.glySliderCard, { paddingTop: hasData ? 46 : 18 }]}>
+      {/* Constant top padding (reserves the % bubble's headroom on data
+          cards) so an empty card is exactly as tall as a filled one. */}
+      <View style={[styles.glySliderCard, { paddingTop: 46 }]}>
         <View style={styles.glySliderRow}>
           <Text style={[styles.glySliderEnd, { color: '#3b82f6' }]}>
             {leftLabel}
@@ -1512,6 +1403,41 @@ export default function HomeScreen() {
     metricPageRef.current = clamped;
     if (clamped !== metricPage) setMetricPage(clamped);
   };
+
+  // ── Crisp one-card-per-swipe snapping (web) ──────────────────────────
+  // react-native-web does NOT translate `snapToInterval` into CSS
+  // scroll-snap, so on the web the carousel free-scrolls and can rest
+  // parked between two cards (two halves showing). Give the real scroll
+  // node CSS snap points: every wheel / trackpad / touch scroll then
+  // settles exactly centred on ONE card, and `scroll-snap-stop: always`
+  // stops it advancing more than a single card per swipe. Native keeps its
+  // own snapToInterval behaviour untouched. Re-applied whenever the width
+  // (re)mounts the scroller. */
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined' || glyW <= 0)
+      return;
+    const node = (
+      metricScrollRef.current as unknown as {
+        getScrollableNode?: () => HTMLElement | null;
+      } | null
+    )?.getScrollableNode?.();
+    if (!node) return;
+    // Tag the (stable) scroll node with a class and drive snapping from an
+    // injected CSS rule rather than per-card inline styles — the cards carry
+    // data-derived keys, so they remount when a reading is logged and would
+    // otherwise lose an inline snap-align. A rule keeps snapping the new
+    // nodes too. `scroll-snap-stop: always` = one card per swipe.
+    node.classList.add('metricSnapScroller');
+    const styleId = 'metric-snap-css';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent =
+        '.metricSnapScroller{scroll-snap-type:x mandatory}' +
+        '.metricSnapScroller>div>div{scroll-snap-align:center;scroll-snap-stop:always}';
+      document.head.appendChild(style);
+    }
+  }, [glyW]);
 
   // Carbs / Insuline: same architecture as glucose — a zone (from the
   // running total vs the daily goal), a Bas→Haut slider position, and the
@@ -1959,15 +1885,6 @@ export default function HomeScreen() {
                   sliderFrac={carbSliderFrac}
                   ringWidth={glyRingW}
                   emptyText={t('home.noCarbsToday')}
-                  readings={carbReadings}
-                  chartYMax={CARB_GOAL * 1.6}
-                  chartYLabels={[
-                    `${Math.round(CARB_GOAL * 1.2)}`,
-                    `${Math.round(CARB_GOAL * 0.8)}`,
-                    `${Math.round(CARB_GOAL * 0.4)}`,
-                    '0',
-                  ]}
-                  colorFor={(v) => zoneForGoal(v, CARB_GOAL, CARB_ZONES).color}
                   sliderColors={['#3b82f6', '#2fb463', '#8fce5a', '#f4c534', '#f59e2b', '#ef4444']}
                   leftLabel={t('home.glyLow')}
                   rightLabel={t('home.glyHigh')}
@@ -1988,10 +1905,6 @@ export default function HomeScreen() {
                   sliderFrac={glySliderFrac}
                   ringWidth={glyRingW}
                   emptyText={t('home.noMeasureToday')}
-                  readings={dayReadings}
-                  chartYMax={320}
-                  chartYLabels={['300', '200', '100', '0']}
-                  colorFor={(v) => zoneFor(v, low, high).color}
                   sliderColors={['#3b82f6', '#2fb463', '#8fce5a', '#f4c534', '#f59e2b', '#ef4444']}
                   leftLabel={t('home.glyLow')}
                   rightLabel={t('home.glyHigh')}
@@ -2012,15 +1925,6 @@ export default function HomeScreen() {
                   sliderFrac={insulinSliderFrac}
                   ringWidth={glyRingW}
                   emptyText={t('home.noInjectionToday')}
-                  readings={insulinReadings}
-                  chartYMax={INSULIN_GOAL * 1.6}
-                  chartYLabels={[
-                    `${Math.round(INSULIN_GOAL * 1.2)}`,
-                    `${Math.round(INSULIN_GOAL * 0.8)}`,
-                    `${Math.round(INSULIN_GOAL * 0.4)}`,
-                    '0',
-                  ]}
-                  colorFor={(v) => zoneForGoal(v, INSULIN_GOAL, INSULIN_ZONES).color}
                   sliderColors={['#3b82f6', '#2fb463', '#8fce5a', '#f4c534', '#f59e2b', '#ef4444']}
                   leftLabel={t('home.glyLow')}
                   rightLabel={t('home.glyHigh')}
@@ -2679,6 +2583,10 @@ const styles = StyleSheet.create({
     lineHeight: 17.5,
   },
   glyAlertChev: { fontFamily: F700, fontSize: 22, marginTop: -2 },
+  // Muted empty state for the status row (no data yet) — same box, grey.
+  glyAlertEmpty: { backgroundColor: '#f2f5f2' },
+  glyAlertIconEmpty: { backgroundColor: '#e6ece7' },
+  glyAlertTitleEmpty: { fontFamily: F700, fontSize: 15.5, color: '#8fa598' },
 
   /* Bas ↔ Haut gradient slider */
   glySliderCard: {
