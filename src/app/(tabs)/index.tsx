@@ -79,7 +79,7 @@ const INSULIN_GOAL = 40;
  * screen width) and every card is CARD_RATIO of that width, so the
  * previous/next cards always peek in at both sides. CARD_GAP is the space
  * between two cards; the snap step ("stride") is a card plus one gap. */
-const CARD_RATIO = 0.66;
+const CARD_RATIO = 0.72;
 const CARD_GAP = 14;
 /* 3D "cube cards" tuning: the active card is the front face (0°); the two
  * neighbours are the left/right faces of a horizontal cube, steeply rotated
@@ -2061,14 +2061,15 @@ export default function HomeScreen() {
                   outputRange: [NEIGHBOR_SCALE, 1, NEIGHBOR_SCALE],
                   extrapolate: 'clamp',
                 });
-                // Right face tilts one way, left face the other, so both angle
-                // their inner edge back toward the front face — a cube corner.
+                // Convex cube: each side face turns its OUTER edge away from
+                // the viewer (inner edge stays forward at the front-face edge),
+                // so a swipe reads as the cube rotating like a turntable.
                 const rotateY = scrollX.interpolate({
                   inputRange,
                   outputRange: [
-                    `-${CUBE_ANGLE}deg`,
-                    '0deg',
                     `${CUBE_ANGLE}deg`,
+                    '0deg',
+                    `-${CUBE_ANGLE}deg`,
                   ],
                   extrapolate: 'clamp',
                 });
