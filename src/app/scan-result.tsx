@@ -14,12 +14,19 @@ import { useTranslation } from 'react-i18next';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { MealAssistant } from '@/components/MealAssistant';
+import { MealEditModal } from '@/components/MealEditModal';
 import { saveMeal } from '@/services/data';
 import { aggregateItems } from '@/services/nutrition/engine';
 import { scoreMeal } from '@/services/nutrition/mealScore';
+import {
+  estimateMealWaterMl,
+  estimateMicros,
+  microAverage,
+  waterGoalMl,
+} from '@/services/nutrition/micros';
 import { clearPendingScan, getPendingScan } from '@/services/scanSession';
 import { useAppStore } from '@/store/useAppStore';
-import type { FoodCategory, FoodItemResult, MealType } from '@/types';
+import type { FoodCategory, FoodItemResult, MealType, NutritionResult } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -96,23 +103,29 @@ function burnMinutes(cal: number) {
   };
 }
 
-/** Best-effort micronutrient coverage (% of daily needs) derived from the
- *  detected food categories + fibre/protein. An estimate for the summary
- *  card, not lab-grade values. */
-function estimateMicros(items: FoodItemResult[], fiber: number, protein: number) {
-  const has = (c: FoodCategory) => items.some((i) => i.category === c);
-  const veg = has('Vegetable') || has('Legumes');
-  const fruit = has('Fruit');
-  const meat = has('Protein') || has('Seafood') || has('Egg');
-  const dairy = has('Dairy');
-  const clamp = (n: number) => Math.max(4, Math.min(96, Math.round(n)));
-  return {
-    a: clamp((veg ? 34 : 0) + (fruit ? 20 : 0) + fiber * 1.4),
-    c: clamp((veg ? 30 : 0) + (fruit ? 42 : 0) + fiber * 1.2),
-    fe: clamp((meat ? 28 : 0) + (veg ? 10 : 0) + protein * 0.3),
-    ca: clamp((dairy ? 46 : 0) + (veg ? 12 : 0) + protein * 0.16),
-    k: clamp((veg ? 30 : 0) + (fruit ? 24 : 0) + (meat ? 12 : 0) + fiber),
-  };
+/** Foods to hand to the edit modal. Normally the detected per-item list; when
+ *  a scan has no breakdown, synthesize a single editable row from the plate
+ *  totals so the user can still correct the name / grams and add items. */
+function itemsForEdit(result: NutritionResult, items: FoodItemResult[]): FoodItemResult[] {
+  if (items.length > 0) return items;
+  const grams = parseInt(result.estimated_portion, 10) || 300;
+  return [
+    {
+      name: result.food_name,
+      portion_grams: grams,
+      calories: result.calories,
+      carbohydrates: result.carbohydrates,
+      sugar: result.sugar,
+      protein: result.protein,
+      fat: result.fat,
+      fiber: result.fiber,
+      sodium: result.sodium,
+      glycemic_index: result.glycemic_index,
+      source: result.source ?? 'ai_estimate',
+      detection_confidence: result.confidence ?? 0.8,
+      nutrition_confidence: result.nutrition_confidence ?? 0.6,
+    },
+  ];
 }
 
 /** A single-value progress ring (score / goals / hydration). */
@@ -193,11 +206,13 @@ export default function ScanResultScreen() {
   const meals = useAppStore((s) => s.meals);
 
   const [pending] = useState(() => getPendingScan());
-  const [items] = useState<FoodItemResult[]>(() => pending?.result.items ?? []);
+  const [items, setItems] = useState<FoodItemResult[]>(() => pending?.result.items ?? []);
   const [mealType] = useState<MealType>(() => defaultMealType());
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editStartNew, setEditStartNew] = useState(false);
 
   if (!pending) return <Redirect href="/(tabs)" />;
 
@@ -228,8 +243,8 @@ export default function ScanResultScreen() {
     glycemic_index: result.glycemic_index,
   });
 
-  const micros = estimateMicros(items, result.fiber, result.protein);
-  const microAvg = (micros.a + micros.c + micros.fe + micros.ca + micros.k) / 5;
+  const micros = estimateMicros(items);
+  const microAvg = microAverage(micros);
   const burn = burnMinutes(cals);
 
   // ── Goal comparison: this meal vs the day's remaining allowance ──
@@ -251,10 +266,14 @@ export default function ScanResultScreen() {
   const remainC = Math.max(0, Math.round((goal * 0.5) / 4 - eatenC - (saved ? 0 : C)));
   const remainF = Math.max(0, Math.round((goal * 0.25) / 9 - eatenF - (saved ? 0 : F)));
 
-  // Water: no live tracking yet — show the recommended daily goal + a nudge.
-  const waterGoal = profile?.weight
-    ? Math.round(profile.weight * 0.033 * 10) / 10
-    : 2.5;
+  // Hydration: a weight-based daily goal, plus how much water THIS meal itself
+  // brings (from its foods) — so the ring shows a real, portion-driven value
+  // instead of a fixed full circle, and updates when the plate is edited.
+  const waterTargetMl = waterGoalMl(profile?.weight);
+  const waterGoalL = Math.round(waterTargetMl / 100) / 10;
+  const waterGlasses = Math.round(waterTargetMl / 250);
+  const mealWaterMl = estimateMealWaterMl(items);
+  const waterPct = Math.min(100, Math.round((mealWaterMl / waterTargetMl) * 100));
 
   const advice =
     quality.reasons.length > 0
@@ -265,6 +284,22 @@ export default function ScanResultScreen() {
     if (saved) return;
     await saveMeal(result, imageUri, imageBase64, undefined, mealType);
     setSaved(true);
+  };
+
+  // Applied from the edit modal AND the AI meal assistant: swap in the new
+  // item list (totals/score/micros/hydration all recompute from it) and
+  // invalidate a previous save so the corrected plate can be re-saved.
+  const onItemsEdited = (next: FoodItemResult[]) => {
+    setItems(next);
+    setSaved(false);
+  };
+  const openEditFoods = () => {
+    setEditStartNew(false);
+    setEditOpen(true);
+  };
+  const openAddFood = () => {
+    setEditStartNew(true);
+    setEditOpen(true);
   };
 
   const onSave = async () => {
@@ -378,9 +413,17 @@ export default function ScanResultScreen() {
             </View>
           </View>
 
-          {/* ── Detected foods ── */}
+          {/* ── Detected foods (editable) ── */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>{t('analysis.detectedFoods')}</Text>
+            <View style={styles.foodsHead}>
+              <Text style={styles.cardTitle}>{t('analysis.detectedFoods')}</Text>
+              <Pressable style={styles.editBtn} onPress={openEditFoods} hitSlop={6}>
+                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#158a52" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </Svg>
+                <Text style={styles.editBtnText}>{t('common.edit')}</Text>
+              </Pressable>
+            </View>
             <View style={{ marginTop: 11, gap: 11 }}>
               {items.map((it, i) => (
                 <View key={i} style={styles.foodRow}>
@@ -405,6 +448,13 @@ export default function ScanResultScreen() {
                 <Text style={styles.foodPortion}>{result.food_name}</Text>
               ) : null}
             </View>
+            {/* Add a food the AI didn't see in the photo */}
+            <Pressable style={styles.addFoodBtn} onPress={openAddFood}>
+              <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#158a52" strokeWidth={2.4} strokeLinecap="round">
+                <Path d="M12 5v14M5 12h14" />
+              </Svg>
+              <Text style={styles.addFoodText}>{t('analysis.addFood')}</Text>
+            </Pressable>
           </View>
 
           {/* ── Nutritional split (donut) ── */}
@@ -511,10 +561,14 @@ export default function ScanResultScreen() {
                 <Text style={styles.miniTitle}>{t('analysis.hydration')}</Text>
               </View>
               <View style={{ alignSelf: 'center', marginVertical: 2 }}>
-                <Ring size={78} pct={100} color={BLUE} track="#e3eefb">
-                  <Text style={styles.waterValue}>{waterGoal} L</Text>
-                  <Text style={styles.waterDenom}>{t('analysis.perDay')}</Text>
+                <Ring size={74} pct={waterPct} color={BLUE} track="#e3eefb">
+                  <Text style={styles.goalPct}>{waterPct}%</Text>
                 </Ring>
+              </View>
+              <Text style={styles.goalCaption}>{t('analysis.ofWaterNeeds')}</Text>
+              <View style={styles.waterStat}>
+                <Text style={styles.waterStatVal}>{waterGoalL} L</Text>
+                <Text style={styles.waterStatUnit}>· {t('analysis.glasses', { n: waterGlasses })}</Text>
               </View>
               <Text style={styles.waterHint}>{t('analysis.drinkReminder')}</Text>
             </View>
@@ -559,10 +613,18 @@ export default function ScanResultScreen() {
 
       <MealAssistant
         items={items}
-        onApply={() => {}}
+        onApply={onItemsEdited}
         carbs={result.carbohydrates}
         open={assistantOpen}
         onOpenChange={setAssistantOpen}
+      />
+
+      <MealEditModal
+        open={editOpen}
+        items={itemsForEdit(result, items)}
+        startWithNewRow={editStartNew}
+        onClose={() => setEditOpen(false)}
+        onSaved={onItemsEdited}
       />
     </View>
   );
@@ -733,12 +795,37 @@ const styles = StyleSheet.create({
   scoreTag: { fontSize: 9.5, fontFamily: F700 },
 
   // Detected foods
+  foodsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#e8f7ef',
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  editBtnText: { fontSize: 11, fontFamily: F700, color: '#158a52' },
   foodRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   foodEmoji: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   foodName: { fontSize: 11.5, fontFamily: F700, color: INK },
   foodPortion: { fontSize: 10.5, color: MUTED, fontFamily: F500 },
   foodKcal: { fontSize: 12, fontFamily: F800, color: GREEN },
   foodConf: { fontSize: 9.5, color: '#aab2ab', fontFamily: F500 },
+  addFoodBtn: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 11,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: '#bfe6d0',
+    borderStyle: 'dashed',
+    backgroundColor: '#f4fbf7',
+  },
+  addFoodText: { fontSize: 12, fontFamily: F700, color: '#158a52' },
 
   // Donut
   donutRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 13 },
@@ -768,49 +855,51 @@ const styles = StyleSheet.create({
   adviceTitle: { fontSize: 13, fontFamily: F800, color: '#158a52', marginBottom: 2 },
   adviceBody: { fontSize: 11.5, lineHeight: 16.5, color: '#5a7a67', fontFamily: F500 },
 
-  // Four mini cards
-  miniRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
+  // Four mini cards — 2×2 grid (was a cramped single row of four)
+  miniRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 11 },
   miniCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '46%',
     minWidth: 0,
     backgroundColor: '#fff',
-    borderRadius: 16,
-    paddingVertical: 11,
-    paddingHorizontal: 10,
-    gap: 6,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 13,
+    gap: 8,
     shadowColor: 'rgba(28,39,33,1)',
     shadowOpacity: 0.05,
     shadowRadius: 13,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  miniHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  miniTitle: { fontSize: 9.5, fontFamily: F700, color: INK, flex: 1 },
-  miniGood: { fontSize: 9.5, fontFamily: F700, color: GREEN },
-  miniFoot: { fontSize: 8, color: '#aab2ab', fontFamily: F500, marginTop: 'auto', paddingTop: 2 },
+  miniHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  miniTitle: { fontSize: 11.5, fontFamily: F700, color: INK, flex: 1 },
+  miniGood: { fontSize: 11, fontFamily: F700, color: GREEN },
+  miniFoot: { fontSize: 9.5, color: '#aab2ab', fontFamily: F500, marginTop: 'auto', paddingTop: 3 },
 
-  microRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  microLabel: { fontSize: 8, color: '#6b746e', fontFamily: F600, width: 48 },
-  microTrack: { flex: 1, height: 4, backgroundColor: '#eef0ec', borderRadius: 3, overflow: 'hidden' },
+  microRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  microLabel: { fontSize: 10, color: '#6b746e', fontFamily: F600, width: 62 },
+  microTrack: { flex: 1, height: 6, backgroundColor: '#eef0ec', borderRadius: 3, overflow: 'hidden' },
   microFill: { height: '100%', backgroundColor: GREEN, borderRadius: 3 },
-  microPct: { fontSize: 8, color: '#4a544d', fontFamily: F700, width: 20, textAlign: 'right' },
+  microPct: { fontSize: 10, color: '#4a544d', fontFamily: F700, width: 30, textAlign: 'right' },
 
-  goalPct: { fontSize: 16, fontFamily: F800, color: INK },
-  goalCaption: { textAlign: 'center', fontSize: 8.5, color: MUTED, fontFamily: F500, lineHeight: 11 },
-  remainTitle: { fontSize: 9, fontFamily: F700, color: '#4a544d', marginTop: 3 },
-  remainRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  remainDot: { width: 6, height: 6, borderRadius: 2 },
-  remainText: { fontSize: 9 },
+  goalPct: { fontSize: 20, fontFamily: F800, color: INK },
+  goalCaption: { textAlign: 'center', fontSize: 10, color: MUTED, fontFamily: F500, lineHeight: 13 },
+  remainTitle: { fontSize: 10.5, fontFamily: F700, color: '#4a544d', marginTop: 4 },
+  remainRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  remainDot: { width: 7, height: 7, borderRadius: 2 },
+  remainText: { fontSize: 10.5 },
   remainVal: { fontFamily: F800, color: INK },
   remainUnit: { color: MUTED, fontFamily: F600 },
 
-  burnRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  burnLabel: { fontSize: 9, color: '#4a544d', fontFamily: F600, flex: 1 },
-  burnMin: { fontSize: 9, color: INK, fontFamily: F800 },
+  burnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  burnLabel: { fontSize: 10.5, color: '#4a544d', fontFamily: F600, flex: 1 },
+  burnMin: { fontSize: 10.5, color: INK, fontFamily: F800 },
 
-  waterValue: { fontSize: 14, fontFamily: F800, color: INK, lineHeight: 16 },
-  waterDenom: { fontSize: 8, color: MUTED, fontFamily: F600, marginTop: 1 },
-  waterHint: { textAlign: 'center', fontSize: 8.5, color: MUTED, fontFamily: F500, lineHeight: 11, marginTop: 'auto', paddingTop: 2 },
+  waterStat: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 3, flexWrap: 'wrap' },
+  waterStatVal: { fontSize: 12, fontFamily: F800, color: INK },
+  waterStatUnit: { fontSize: 9.5, fontFamily: F600, color: MUTED },
+  waterHint: { textAlign: 'center', fontSize: 9.5, color: MUTED, fontFamily: F500, lineHeight: 13, marginTop: 'auto', paddingTop: 3 },
 
   // Footer
   footer: {
