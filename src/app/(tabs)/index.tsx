@@ -79,7 +79,7 @@ const INSULIN_GOAL = 40;
  * screen width) and every card is CARD_RATIO of that width, so the
  * previous/next cards always peek in at both sides. CARD_GAP is the space
  * between two cards; the snap step ("stride") is a card plus one gap. */
-const CARD_RATIO = 0.72;
+const CARD_RATIO = 0.76;
 const CARD_GAP = 14;
 /* 3D "cube cards" tuning: the active card is the front face (0°); the two
  * neighbours are the left/right faces of a horizontal cube, steeply rotated
