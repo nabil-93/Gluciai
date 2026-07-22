@@ -79,7 +79,7 @@ const INSULIN_GOAL = 40;
  * screen width) and every card is CARD_RATIO of that width, so the
  * previous/next cards always peek in at both sides. CARD_GAP is the space
  * between two cards; the snap step ("stride") is a card plus one gap. */
-const CARD_RATIO = 0.8;
+const CARD_RATIO = 0.78;
 const CARD_GAP = 14;
 /** Snap step for a given carousel viewport width. */
 const strideFor = (viewW: number) => Math.round(viewW * CARD_RATIO) + CARD_GAP;
@@ -1445,13 +1445,15 @@ export default function HomeScreen() {
   // ── Metric peek-carousel (Glycémie · Glucides · Insuline) ──
   // Each metric is its own card: the active one sits centred and full-size
   // while its neighbours peek in, scaled/faded. Swipe or tap a dot to move.
-  const [metricPage, setMetricPage] = React.useState(0);
+  // Glycémie is the middle card, so the carousel opens centred on it (index
+  // 1) with Glucides peeking left and Insuline right.
+  const [metricPage, setMetricPage] = React.useState(1);
   const metricScrollRef = useRef<ScrollView>(null);
   // Drives the live scale + opacity interpolation of every card on scroll.
   const scrollX = useRef(new Animated.Value(0)).current;
   // Live mirrors for the restore callbacks below — state values would go
   // stale inside useFocusEffect closures.
-  const metricPageRef = useRef(0);
+  const metricPageRef = useRef(1);
   const glyWRef = useRef(0);
   // Accept scroll events only while the screen is focused AND the offset
   // has been restored. A screen hidden behind a pushed route (display:none
@@ -1913,6 +1915,9 @@ export default function HomeScreen() {
             const w = e.nativeEvent.layout.width;
             glyWRef.current = w;
             setGlyW(w);
+            // Prime the interpolation to the active card's offset so the cards
+            // scale correctly on the very first paint (before any scroll).
+            scrollX.setValue(metricPageRef.current * strideFor(w));
             // Re-measured (e.g. shown again after being hidden): re-apply
             // the active card's offset once the new width is committed.
             requestAnimationFrame(() => snapMetric(false));
@@ -1928,6 +1933,8 @@ export default function HomeScreen() {
               disableIntervalMomentum
               decelerationRate="fast"
               scrollEventThrottle={16}
+              // Open already centred on the middle card (Glycémie).
+              contentOffset={{ x: metricPage * STRIDE, y: 0 }}
               contentContainerStyle={{ paddingHorizontal: SIDE }}
               onScroll={Animated.event(
                 [{ nativeEvent: { contentOffset: { x: scrollX } } }],
@@ -1937,30 +1944,9 @@ export default function HomeScreen() {
               onContentSizeChange={() => snapMetric(false)}
             >
               {[
-                <MetricPage
-                  key={`gly-${lastGlucose?.value ?? 'x'}-${dayReadings.length}`}
-                  title={t('home.glycemia')}
-                  value={lastGlucose ? lastGlucose.value : null}
-                  unit="mg/dL"
-                  zone={glyZone}
-                  zoneLabel={glyZone ? t(glyZone.labelKey) : ''}
-                  alertTitle={glyZone ? t(glyZone.alertTitleKey) : ''}
-                  alertDesc={glyZone ? t(glyZone.alertDescKey) : ''}
-                  sliderFrac={glySliderFrac}
-                  ringWidth={glyRingW}
-                  emptyText={t('home.noMeasureToday')}
-                  readings={dayReadings}
-                  chartYMax={320}
-                  chartYLabels={['300', '200', '100', '0']}
-                  colorFor={(v) => zoneFor(v, low, high).color}
-                  sliderColors={['#3b82f6', '#2fb463', '#8fce5a', '#f4c534', '#f59e2b', '#ef4444']}
-                  leftLabel={t('home.glyLow')}
-                  rightLabel={t('home.glyHigh')}
-                  addLabel={t('home.addMeasure')}
-                  detailHint={t('home.tapForDetail')}
-                  onOpen={() => router.push('/glucose')}
-                  onAdd={() => router.push('/log-glucose')}
-                />,
+                // Order = left → right. Glycémie sits in the MIDDLE so it is
+                // the card centred by default (metricPage starts at 1), with
+                // Glucides peeking on the left and Insuline on the right.
                 <MetricPage
                   key={`carb-${Math.round(totalCarbs)}-${carbReadings.length}`}
                   title={t('home.ringCarbs')}
@@ -1989,6 +1975,30 @@ export default function HomeScreen() {
                   detailHint={t('home.tapForDetail')}
                   onOpen={() => router.push('/nutrition')}
                   onAdd={() => router.push('/scan')}
+                />,
+                <MetricPage
+                  key={`gly-${lastGlucose?.value ?? 'x'}-${dayReadings.length}`}
+                  title={t('home.glycemia')}
+                  value={lastGlucose ? lastGlucose.value : null}
+                  unit="mg/dL"
+                  zone={glyZone}
+                  zoneLabel={glyZone ? t(glyZone.labelKey) : ''}
+                  alertTitle={glyZone ? t(glyZone.alertTitleKey) : ''}
+                  alertDesc={glyZone ? t(glyZone.alertDescKey) : ''}
+                  sliderFrac={glySliderFrac}
+                  ringWidth={glyRingW}
+                  emptyText={t('home.noMeasureToday')}
+                  readings={dayReadings}
+                  chartYMax={320}
+                  chartYLabels={['300', '200', '100', '0']}
+                  colorFor={(v) => zoneFor(v, low, high).color}
+                  sliderColors={['#3b82f6', '#2fb463', '#8fce5a', '#f4c534', '#f59e2b', '#ef4444']}
+                  leftLabel={t('home.glyLow')}
+                  rightLabel={t('home.glyHigh')}
+                  addLabel={t('home.addMeasure')}
+                  detailHint={t('home.tapForDetail')}
+                  onOpen={() => router.push('/glucose')}
+                  onAdd={() => router.push('/log-glucose')}
                 />,
                 <MetricPage
                   key={`ins-${totalInsulin}-${insulinReadings.length}`}
