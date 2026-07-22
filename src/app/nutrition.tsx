@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
+import { CoachChatModal } from '@/components/CoachChatModal';
 import { getRecommendations } from '@/services/recommendations';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
@@ -247,6 +248,7 @@ export default function NutritionScreen() {
 
   const [dayOffset, setDayOffset] = useState(0);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const selectedDate = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - dayOffset);
@@ -430,7 +432,7 @@ export default function NutritionScreen() {
 
         {/* ── AI Coach ── */}
         <FadeInView delay={160} style={{ paddingHorizontal: 20, marginTop: 18 }}>
-          <Pressable style={styles.coachCard} onPress={() => router.push('/ai-chat')}>
+          <Pressable style={styles.coachCard} onPress={() => setAiOpen(true)}>
             <View style={styles.coachRobot}>
               <AnimatedRobot size={52} mood="happy" />
             </View>
@@ -559,6 +561,18 @@ export default function NutritionScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      {/* ── AI Coach — full-screen chat (text + voice) ── */}
+      <CoachChatModal
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        title={t('nutritionPage.aiTitle')}
+        subtitle={t('coachChat.subtitle')}
+        greeting={t('nutritionPage.aiGreeting')}
+        placeholder={t('nutritionPage.aiPlaceholder')}
+        errorText={t('common.error')}
+        starters={t('coachChat.startersNutrition', { returnObjects: true }) as string[]}
+      />
     </View>
   );
 }

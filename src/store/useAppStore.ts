@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import type { HealthyFood } from '@/data/healthyFoods';
 import type {
   ActivityLog,
   ActivityStatus,
@@ -101,6 +102,11 @@ interface AppState {
   eventLogs: AppEvent[];
   /** Lab (blood test) reports photographed & analyzed by the AI */
   labReports: LabReport[];
+  /** Ids of "Sélection Santé" dishes the patient favorited (catalog + custom). */
+  favoriteFoodIds: string[];
+  /** Full data of favorited CUSTOM (AI-generated) dishes — the coach registry
+   *  is in-session only, so we keep the whole object here to survive reloads. */
+  favoriteCustomDishes: HealthyFood[];
 
   setLanguageChosen: () => void;
   setLockedFeatures: (features: string[]) => void;
@@ -137,6 +143,10 @@ interface AppState {
   addLabReport: (report: LabReport) => void;
   updateLabReport: (id: string, patch: Partial<LabReport>) => void;
   removeLabReport: (id: string) => void;
+
+  /** Toggle a dish's favorite state. Pass the full dish for CUSTOM (AI)
+   *  dishes so it can be shown later; catalog dishes only need their id. */
+  toggleFavoriteFood: (id: string, customDish?: HealthyFood | null) => void;
 
   addChatMessage: (message: ChatMessage) => void;
   updateLastChatMessage: (content: string) => void;
@@ -178,6 +188,8 @@ const initialData = {
   aiReminders: [] as AiReminder[],
   eventLogs: [] as AppEvent[],
   labReports: [] as LabReport[],
+  favoriteFoodIds: [] as string[],
+  favoriteCustomDishes: [] as HealthyFood[],
 };
 
 export const useAppStore = create<AppState>()(
@@ -251,6 +263,29 @@ export const useAppStore = create<AppState>()(
         })),
       removeLabReport: (id) =>
         set((s) => ({ labReports: s.labReports.filter((r) => r.id !== id) })),
+
+      toggleFavoriteFood: (id, customDish) =>
+        set((s) => {
+          if (s.favoriteFoodIds.includes(id)) {
+            return {
+              favoriteFoodIds: s.favoriteFoodIds.filter((x) => x !== id),
+              favoriteCustomDishes: s.favoriteCustomDishes.filter(
+                (d) => d.id !== id
+              ),
+            };
+          }
+          return {
+            favoriteFoodIds: [id, ...s.favoriteFoodIds],
+            // Keep the full data only for custom dishes (catalog dishes are
+            // resolved from the bundled data by id).
+            favoriteCustomDishes: customDish
+              ? [
+                  customDish,
+                  ...s.favoriteCustomDishes.filter((d) => d.id !== id),
+                ]
+              : s.favoriteCustomDishes,
+          };
+        }),
 
       addAiReminder: (reminder) =>
         set((s) => ({ aiReminders: [reminder, ...s.aiReminders] })),

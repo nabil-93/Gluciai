@@ -1293,6 +1293,28 @@
     "subtitle": "Plats adaptés à votre diabète",
     "search": "Rechercher un plat…",
     "all": "Tout",
+    "favorites": "Favoris",
+    "favEmpty": "Aucun favori pour l'instant. Touchez le ❤ sur un plat pour l'enregistrer ici.",
+    "favAdd": "Ajouter aux favoris",
+    "favRemove": "Retirer des favoris",
+    "modifiedByAi": "Modifié par l'IA",
+    "askAiHint": "Pose une question ou demande une modification (ex. « ajoute un œuf », « réduis les calories »).",
+    "aiTitle": "Assistant du plat",
+    "aiGreeting": "Je connais « {{dish}} » en détail. Pose-moi une question, ou demande-moi de l'adapter (ajouter/retirer un ingrédient, réduire les calories…).",
+    "aiPlaceholder": "Écris ou parle…",
+    "aiStarter1": "Est-ce bon pour mon diabète ?",
+    "aiStarter2": "Ajoute une source de protéines",
+    "aiStarter3": "Réduis les glucides",
+    "insulinTitle": "Calculer l'insuline",
+    "insulinSub": "Estime la dose pour ce plat selon ton profil",
+    "insulinForMeal": "Pour quel repas ?",
+    "insulinForCarbs": "pour {{carbs}} g de glucides",
+    "insulinRatioMeal": "D'après ton plan : {{u}} U / 10 g",
+    "insulinRatioGlobal": "D'après ton ratio : 1 U / {{g}} g",
+    "insulinRatioDefault": "Ratio non configuré — estimation avec 1 U / 10 g",
+    "insulinNoRatio": "⚠️ Configure ton ratio insuline/glucides dans Profil → Réglages médicaux pour une estimation personnalisée.",
+    "insulinAskAi": "Proposition personnalisée par l'IA",
+    "insulinDisclaimer": "Estimation du bolus repas seulement (sans correction de glycémie). Vérifie toujours avec le calculateur de bolus et ton médecin.",
     "count": "{{count}} plats adaptés au diabète",
     "empty": "Aucun plat trouvé. Essayez un autre mot.",
     "cat": {
@@ -1501,6 +1523,24 @@
     "activate": "Activer les notifications",
     "footNote": "Les horaires se réajustent automatiquement au fil de vos enregistrements."
   },
+  "coachChat": {
+    "subtitle": "Il connaît toutes vos données de santé",
+    "startersGlucose": [
+      "Analyse ma glycémie du jour",
+      "Pourquoi ma glycémie monte ?",
+      "Un conseil pour rester dans la cible"
+    ],
+    "startersNutrition": [
+      "Combien de glucides aujourd'hui ?",
+      "Propose-moi un repas adapté",
+      "Est-ce que mon repas était sain ?"
+    ],
+    "startersInsulin": [
+      "Ma dose d'aujourd'hui est-elle correcte ?",
+      "Comment ajuster mon bolus ?",
+      "Explique ma répartition d'insuline"
+    ]
+  },
   "nutritionPage": {
     "title": "Nutrition",
     "carbsToday": "Glucides aujourd'hui",
@@ -1530,6 +1570,9 @@
     "goalReached": "Objectif atteint",
     "fiber": "Fibres",
     "aiCoach": "AI Coach",
+    "aiTitle": "Assistant nutrition",
+    "aiGreeting": "Je regarde ton assiette du jour. Qu'est-ce que tu veux savoir sur tes glucides, un repas ou une envie ?",
+    "aiPlaceholder": "Écris ou parle…",
     "recoTitle": "Recommandation personnalisée ✨",
     "mealsTitle": "Repas du jour",
     "mealsAdded": "{{count}} repas ajouté",

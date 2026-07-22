@@ -3,14 +3,11 @@ import {
   Animated,
   Easing,
   Image,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import Svg, {
@@ -29,9 +26,9 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, FadeInView, Spinner } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
+import { CoachChatModal } from '@/components/CoachChatModal';
 import { nowMs } from '@/lib/clock';
-import { sendChatMessage } from '@/services/ai';
 import { deleteGlucose } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
@@ -89,15 +86,6 @@ function ChevronRight({ color = '#B7C2BB', size = 18 }: { color?: string; size?:
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M9 6l6 6-6 6" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
-function DotsIcon() {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill={INK}>
-      <Circle cx={12} cy={5} r={1.8} />
-      <Circle cx={12} cy={12} r={1.8} />
-      <Circle cx={12} cy={19} r={1.8} />
     </Svg>
   );
 }
@@ -301,118 +289,6 @@ function SheetShell({
         </Animated.View>
       </View>
     </Modal>
-  );
-}
-
-/** Strip chat-only tokens the coach might emit so the bubble reads clean. */
-function cleanReply(s: string): string {
-  return (s ?? '')
-    .replace(/\[\[[^\]]+\]\]/g, '')
-    .replace(/[ \t]+\n/g, '\n')
-    .trim();
-}
-
-/** Focused in-page AI chat for the glucose screen: a fresh conversation that
- *  opens with a glucose-aware greeting. sendChatMessage already ships the full
- *  patient context (profile, glucose, insulin, meals, notes, labs). */
-function CoachChat({
-  greeting,
-  profile,
-  lang,
-  errorText,
-  placeholder,
-}: {
-  greeting: string;
-  profile: any;
-  lang: string;
-  errorText: string;
-  placeholder: string;
-}) {
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
-    { role: 'assistant', content: greeting },
-  ]);
-  const [input, setInput] = useState('');
-  const [thinking, setThinking] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
-
-  const send = async () => {
-    const text = input.trim();
-    if (!text || thinking) return;
-    setInput('');
-    const next = [...messages, { role: 'user' as const, content: text }];
-    setMessages(next);
-    setThinking(true);
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
-    try {
-      const reply = await sendChatMessage(next, lang, profile);
-      setMessages((m) => [...m, { role: 'assistant', content: reply }]);
-    } catch {
-      setMessages((m) => [...m, { role: 'assistant', content: errorText }]);
-    } finally {
-      setThinking(false);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
-    }
-  };
-
-  return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        ref={scrollRef}
-        style={styles.chatScroll}
-        contentContainerStyle={{ paddingVertical: 8, gap: 10 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {messages.map((m, i) =>
-          m.role === 'user' ? (
-            <View key={i} style={styles.chatUserRow}>
-              <View style={styles.chatUserBubble}>
-                <Text style={styles.chatUserText}>{m.content}</Text>
-              </View>
-            </View>
-          ) : (
-            <View key={i} style={styles.chatAiRow}>
-              <View style={styles.chatAiAvatar}>
-                <AnimatedRobot size={22} mood="happy" />
-              </View>
-              <View style={styles.chatAiBubble}>
-                <Text style={styles.chatAiText}>{cleanReply(m.content)}</Text>
-              </View>
-            </View>
-          )
-        )}
-        {thinking ? (
-          <View style={styles.chatAiRow}>
-            <View style={styles.chatAiAvatar}>
-              <AnimatedRobot size={22} mood="happy" />
-            </View>
-            <View style={styles.chatAiBubble}>
-              <Spinner size={16} color={GREEN} />
-            </View>
-          </View>
-        ) : null}
-      </ScrollView>
-
-      <View style={styles.chatInputBar}>
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder={placeholder}
-          placeholderTextColor="#98a1af"
-          style={styles.chatInput}
-          multiline
-          onSubmitEditing={send}
-        />
-        <Pressable
-          onPress={send}
-          disabled={!input.trim() || thinking}
-          style={[styles.chatSend, (!input.trim() || thinking) && { opacity: 0.5 }]}
-        >
-          <Svg width={18} height={18} viewBox="0 0 24 24">
-            <Path d="M3 11l18-8-8 18-2.5-7.5L3 11z" fill="#fff" stroke="#fff" strokeWidth={1.4} strokeLinejoin="round" />
-          </Svg>
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
   );
 }
 
@@ -731,9 +607,6 @@ export default function GlucoseScreen() {
                   {dayLabel(dayOffset)}
                 </Text>
                 <ChevronDown />
-              </Pressable>
-              <Pressable onPress={() => setPickerOpen(true)} style={styles.dotsBtn}>
-                <DotsIcon />
               </Pressable>
             </View>
           </View>
@@ -1160,16 +1033,17 @@ export default function GlucoseScreen() {
         )}
       </SheetShell>
 
-      {/* ── Conseil IA in-page chat ── */}
-      <SheetShell visible={sheet === 'coach'} onClose={() => setSheet(null)} title={t('glucosePage.coachSheetTitle')}>
-        <CoachChat
-          greeting={coachGreeting}
-          profile={profile}
-          lang={i18n.language}
-          errorText={t('common.error')}
-          placeholder={t('glucosePage.coachPlaceholder')}
-        />
-      </SheetShell>
+      {/* ── Conseil IA — full-screen chat (text + voice) ── */}
+      <CoachChatModal
+        open={sheet === 'coach'}
+        onOpenChange={(v) => setSheet(v ? 'coach' : null)}
+        title={t('glucosePage.coachSheetTitle')}
+        subtitle={t('coachChat.subtitle')}
+        greeting={coachGreeting}
+        placeholder={t('glucosePage.coachPlaceholder')}
+        errorText={t('common.error')}
+        starters={t('coachChat.startersGlucose', { returnObjects: true }) as string[]}
+      />
 
       {/* ── Day picker ── */}
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
@@ -1300,15 +1174,6 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   dateChipText: { fontFamily: F600, fontSize: 13, color: INK, flexShrink: 1 },
-  dotsBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.card,
-  },
 
   hello: { fontFamily: F800, fontSize: 26, color: INK, letterSpacing: -0.3 },
   helloSub: { fontFamily: F500, fontSize: 15, color: '#63736A', marginTop: 4 },

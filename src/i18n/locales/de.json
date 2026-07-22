@@ -1293,6 +1293,28 @@
     "subtitle": "Gerichte, die zu deinem Diabetes passen",
     "search": "Gericht suchen…",
     "all": "Alle",
+    "favorites": "Favoriten",
+    "favEmpty": "Noch keine Favoriten. Tippe auf das ❤ eines Gerichts, um es hier zu speichern.",
+    "favAdd": "Zu Favoriten hinzufügen",
+    "favRemove": "Aus Favoriten entfernen",
+    "modifiedByAi": "Von der KI angepasst",
+    "askAiHint": "Stell eine Frage oder bitte um eine Änderung (z. B. „ein Ei hinzufügen“, „Kalorien reduzieren“).",
+    "aiTitle": "Gericht-Assistent",
+    "aiGreeting": "Ich kenne „{{dish}}“ im Detail. Frag mich alles oder bitte mich, es anzupassen (Zutat hinzufügen/entfernen, Kalorien senken…).",
+    "aiPlaceholder": "Schreiben oder sprechen…",
+    "aiStarter1": "Ist das gut für meinen Diabetes?",
+    "aiStarter2": "Eine Proteinquelle hinzufügen",
+    "aiStarter3": "Kohlenhydrate senken",
+    "insulinTitle": "Insulin berechnen",
+    "insulinSub": "Schätze die Dosis für dieses Gericht aus deinem Profil",
+    "insulinForMeal": "Für welche Mahlzeit?",
+    "insulinForCarbs": "für {{carbs}} g Kohlenhydrate",
+    "insulinRatioMeal": "Aus deinem Plan: {{u}} E / 10 g",
+    "insulinRatioGlobal": "Aus deinem Verhältnis: 1 E / {{g}} g",
+    "insulinRatioDefault": "Verhältnis nicht gesetzt — Schätzung mit 1 E / 10 g",
+    "insulinNoRatio": "⚠️ Lege dein Insulin-Kohlenhydrat-Verhältnis in Profil → Medizinische Einstellungen fest für eine personalisierte Schätzung.",
+    "insulinAskAi": "Personalisierter Vorschlag durch die KI",
+    "insulinDisclaimer": "Nur Schätzung des Mahlzeiten-Bolus (ohne Glukosekorrektur). Prüfe immer mit dem Bolusrechner und deinem Arzt.",
     "count": "{{count}} diabetesfreundliche Gerichte",
     "empty": "Kein Gericht gefunden. Versuche ein anderes Wort.",
     "cat": {
@@ -1501,6 +1523,24 @@
     "activate": "Benachrichtigungen aktivieren",
     "footNote": "Die Zeiten passen sich automatisch an, je mehr du erfasst."
   },
+  "coachChat": {
+    "subtitle": "Kennt all deine Gesundheitsdaten",
+    "startersGlucose": [
+      "Analysiere meinen heutigen Blutzucker",
+      "Warum steigt mein Blutzucker?",
+      "Wie bleibe ich im Zielbereich?"
+    ],
+    "startersNutrition": [
+      "Wie viele Kohlenhydrate heute?",
+      "Schlage eine passende Mahlzeit vor",
+      "War meine Mahlzeit gesund?"
+    ],
+    "startersInsulin": [
+      "Ist die heutige Dosis richtig?",
+      "Wie passe ich meinen Bolus an?",
+      "Erkläre meine Insulinverteilung"
+    ]
+  },
   "nutritionPage": {
     "title": "Ernährung",
     "carbsToday": "Kohlenhydrate heute",
@@ -1530,6 +1570,9 @@
     "goalReached": "Ziel erreicht",
     "fiber": "Ballaststoffe",
     "aiCoach": "KI-Coach",
+    "aiTitle": "Ernährungs-Assistent",
+    "aiGreeting": "Ich schaue mir deine heutigen Mahlzeiten an. Was möchtest du über deine Kohlenhydrate, eine Mahlzeit oder einen Gelüst wissen?",
+    "aiPlaceholder": "Schreiben oder sprechen…",
     "recoTitle": "Persönliche Empfehlung ✨",
     "mealsTitle": "Mahlzeiten heute",
     "mealsAdded": "{{count}} Mahlzeit hinzugefügt",

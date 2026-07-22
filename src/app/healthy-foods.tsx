@@ -13,19 +13,22 @@ import {
 import { Spinner } from '@/components/ui/Spinner';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useRouter } from 'expo-router';
+import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView, PressableScale } from '@/components/ui';
-import { HealthyAssistant } from '@/components/HealthyAssistant';
+import { CoachChatModal } from '@/components/CoachChatModal';
 import { isRTL } from '@/i18n';
 import { useAppStore } from '@/store/useAppStore';
 import {
   MOMENTS,
   filterHealthyFoods,
+  getHealthyFood,
   healthyCategoryColors,
   healthyFoodName,
   momentCounts,
+  type HealthyFood,
   type Moment,
 } from '@/data/healthyFoods';
 import { HEALTHY_FOOD_IMAGES } from '@/data/healthyFoodImages';
@@ -46,6 +49,21 @@ const RATING: Record<DiabetesRating, { color: string; bg: string }> = {
   warn: { color: '#a16207', bg: '#fdf4e3' },
   danger: { color: '#b91c1c', bg: '#fdeaea' },
 };
+
+/** Heart glyph for the per-card favorite toggle — filled red when saved. */
+function HeartGlyph({ filled }: { filled: boolean }) {
+  return (
+    <Svg width={17} height={17} viewBox="0 0 24 24">
+      <Path
+        d="M12 21s-7.5-4.6-10-9.1C.4 8.9 1.8 5.5 5 5.1c2-.3 3.4.8 4.2 2 .3.5.8.5 1.1 0 .8-1.2 2.2-2.3 4.2-2 3.2.4 4.6 3.8 3 6.8C19.5 16.4 12 21 12 21z"
+        fill={filled ? '#ef4444' : 'none'}
+        stroke={filled ? '#ef4444' : '#7b8595'}
+        strokeWidth={2.1}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 /**
  * "Makla si7iya" — two worlds in one screen:
@@ -102,6 +120,11 @@ function HealthyFoodsScreen({
   }, [mode]);
   /** Meal-time "folder" filter (ftour / ghda / 3cha / snack / drink / dessert). */
   const [moment, setMoment] = useState<Moment | null>(null);
+  /** "Favoris" folder — shows only the dishes the patient saved (catalog + AI). */
+  const [favMode, setFavMode] = useState(false);
+  const favoriteFoodIds = useAppStore((s) => s.favoriteFoodIds);
+  const favoriteCustomDishes = useAppStore((s) => s.favoriteCustomDishes);
+  const toggleFavoriteFood = useAppStore((s) => s.toggleFavoriteFood);
   const counts = useMemo(() => momentCounts(), []);
   /** Curated photos that failed to load fall back to the emoji hero. */
   const [brokenImgs, setBrokenImgs] = useState<Set<string>>(new Set());
@@ -123,6 +146,25 @@ function HealthyFoodsScreen({
     () => filterHealthyFoods(query, moment),
     [query, moment]
   );
+
+  // Favorites list: resolve each saved id from the bundled catalog, falling
+  // back to the persisted custom (AI) dish. Most-recently-saved first, then
+  // filtered by the search box like the main list.
+  const favFoods = useMemo(() => {
+    const byId = new Map(favoriteCustomDishes.map((d) => [d.id, d]));
+    const list = favoriteFoodIds
+      .map((fid) => getHealthyFood(fid) ?? byId.get(fid) ?? null)
+      .filter((f): f is HealthyFood => !!f);
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (f) =>
+        healthyFoodName(f, i18n.language).toLowerCase().includes(q) ||
+        f.name_fr.toLowerCase().includes(q)
+    );
+  }, [favoriteFoodIds, favoriteCustomDishes, query, i18n.language]);
+
+  const curatedFoods = favMode ? favFoods : foods;
 
   // World tab: with an EMPTY query the list is pre-loaded with the most
   // popular products in Morocco; from 2 typed characters, live
@@ -260,12 +302,40 @@ function HealthyFoodsScreen({
             contentContainerStyle={{ paddingHorizontal: 18, gap: 8 }}
           >
             <Pressable
-              onPress={() => setMoment(null)}
-              style={[styles.catChip, moment === null && styles.catChipOn]}
+              onPress={() => {
+                setMoment(null);
+                setFavMode(false);
+              }}
+              style={[styles.catChip, moment === null && !favMode && styles.catChipOn]}
             >
-              <Text style={[styles.catChipText, moment === null && styles.catChipTextOn]}>
+              <Text
+                style={[
+                  styles.catChipText,
+                  moment === null && !favMode && styles.catChipTextOn,
+                ]}
+              >
                 {t('hf.all')}
               </Text>
+            </Pressable>
+            {/* Favoris folder — the dishes the patient saved (catalog + AI). */}
+            <Pressable
+              onPress={() => {
+                setFavMode((v) => !v);
+                setMoment(null);
+              }}
+              style={[styles.catChip, favMode && styles.catChipOn]}
+            >
+              <HeartGlyph filled={favMode} />
+              <Text style={[styles.catChipText, favMode && styles.catChipTextOn]}>
+                {t('hf.favorites')}
+              </Text>
+              {favoriteFoodIds.length ? (
+                <View style={[styles.favCountPill, favMode && styles.favCountPillOn]}>
+                  <Text style={[styles.favCountText, favMode && styles.favCountTextOn]}>
+                    {favoriteFoodIds.length}
+                  </Text>
+                </View>
+              ) : null}
             </Pressable>
             {MOMENTS.map((m) => {
               const on = moment === m.key;
@@ -274,7 +344,10 @@ function HealthyFoodsScreen({
               return (
                 <Pressable
                   key={m.key}
-                  onPress={() => setMoment(on ? null : m.key)}
+                  onPress={() => {
+                    setMoment(on ? null : m.key);
+                    setFavMode(false);
+                  }}
                   style={[styles.catChip, on && styles.catChipOn]}
                 >
                   <Text style={{ fontSize: 13 }}>{m.emoji}</Text>
@@ -296,19 +369,26 @@ function HealthyFoodsScreen({
             }}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.countText}>{t('hf.count', { count: foods.length })}</Text>
+            <Text style={styles.countText}>{t('hf.count', { count: curatedFoods.length })}</Text>
             <View style={styles.grid}>
-              {foods.map((f, i) => {
+              {curatedFoods.map((f, i) => {
                 const [c1, c2] = healthyCategoryColors(f.category);
                 const photo = HEALTHY_FOOD_IMAGES[f.id];
                 const showPhoto = photo && !brokenImgs.has(f.id);
+                // A dish not in the bundled catalog is a custom (AI) dish —
+                // route it as ?custom and persist its data when favorited.
+                const isCustom = !getHealthyFood(f.id);
+                const isFav = favoriteFoodIds.includes(f.id);
                 return (
                   <FadeInView key={f.id} delay={Math.min(i, 10) * 50} style={styles.gridItem}>
                     <PressableScale
                       style={styles.card}
                       haptic={false}
                       onPress={() =>
-                        router.push({ pathname: '/healthy-food', params: { id: f.id } })
+                        router.push({
+                          pathname: '/healthy-food',
+                          params: isCustom ? { custom: f.id } : { id: f.id },
+                        })
                       }
                     >
                       {showPhoto ? (
@@ -338,6 +418,16 @@ function HealthyFoodsScreen({
                           </View>
                         </LinearGradient>
                       )}
+                      {/* Favorite toggle — sits over the hero, top-left. */}
+                      <Pressable
+                        onPress={() => toggleFavoriteFood(f.id, isCustom ? f : null)}
+                        style={styles.cardFav}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={t(isFav ? 'hf.favRemove' : 'hf.favAdd')}
+                      >
+                        <HeartGlyph filled={isFav} />
+                      </Pressable>
                       <View style={styles.cardBody}>
                         <Text style={styles.cardName} numberOfLines={2}>
                           {healthyFoodName(f, i18n.language)}
@@ -352,10 +442,12 @@ function HealthyFoodsScreen({
                 );
               })}
             </View>
-            {!foods.length ? (
+            {!curatedFoods.length ? (
               <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                <Text style={{ fontSize: 36 }}>🔍</Text>
-                <Text style={styles.emptyText}>{t('hf.empty')}</Text>
+                <Text style={{ fontSize: 36 }}>{favMode ? '🤍' : '🔍'}</Text>
+                <Text style={styles.emptyText}>
+                  {favMode ? t('hf.favEmpty') : t('hf.empty')}
+                </Text>
               </View>
             ) : null}
           </ScrollView>
@@ -528,10 +620,25 @@ function HealthyFoodsScreen({
         </View>
       </Modal>
 
-      {/* AI meal coach — opened from the header robot; guides the patient and
-          proposes curated + custom dishes as tappable cards. */}
+      {/* AI meal coach — opened from the header robot. Free-form smart chat
+          (no rigid script): understands any request in any language/dialect
+          and proposes curated dishes as tappable cards. */}
       {allowSelection ? (
-        <HealthyAssistant open={assistantOpen} onOpenChange={setAssistantOpen} />
+        <CoachChatModal
+          open={assistantOpen}
+          onOpenChange={setAssistantOpen}
+          title={t('healthyAI.title')}
+          subtitle={t('healthyAI.sub')}
+          greeting={t('healthyAI.greeting')}
+          placeholder={t('healthyAI.placeholder')}
+          errorText={t('common.error')}
+          starters={[
+            t('healthyAI.starters.today'),
+            t('healthyAI.starters.salad'),
+            t('healthyAI.starters.dinner'),
+            t('healthyAI.starters.dessert'),
+          ]}
+        />
       ) : null}
     </View>
   );
@@ -645,6 +752,18 @@ const styles = StyleSheet.create({
   catChipOn: { backgroundColor: '#19c37d', borderColor: '#19c37d' },
   catChipText: { fontFamily: F600, fontSize: 12, color: '#3b4657' },
   catChipTextOn: { color: '#ffffff' },
+  favCountPill: {
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: '#e9fbf2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  favCountPillOn: { backgroundColor: 'rgba(255,255,255,0.28)' },
+  favCountText: { fontFamily: F800, fontSize: 10, color: '#0f7a45' },
+  favCountTextOn: { color: '#ffffff' },
 
   countText: { fontFamily: F500, fontSize: 11, color: '#a6aebc', marginBottom: 8 },
 
@@ -683,6 +802,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   giBadgeText: { fontFamily: F800, fontSize: 9.5, color: '#0f7a45' },
+  cardFav: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: 'rgba(30,50,70,1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 2,
+  },
   ratingDot: {
     position: 'absolute',
     top: 8,

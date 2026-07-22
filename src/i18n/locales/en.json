@@ -1293,6 +1293,28 @@
     "subtitle": "Meals that fit your diabetes",
     "search": "Search a dish…",
     "all": "All",
+    "favorites": "Favorites",
+    "favEmpty": "No favorites yet. Tap the ❤ on a dish to save it here.",
+    "favAdd": "Add to favorites",
+    "favRemove": "Remove from favorites",
+    "modifiedByAi": "Modified by AI",
+    "askAiHint": "Ask a question or request a change (e.g. \"add an egg\", \"cut the calories\").",
+    "aiTitle": "Dish assistant",
+    "aiGreeting": "I know \"{{dish}}\" in detail. Ask me anything, or ask me to adapt it (add/remove an ingredient, cut calories…).",
+    "aiPlaceholder": "Type or speak…",
+    "aiStarter1": "Is this good for my diabetes?",
+    "aiStarter2": "Add a protein source",
+    "aiStarter3": "Lower the carbs",
+    "insulinTitle": "Calculate insulin",
+    "insulinSub": "Estimate the dose for this dish from your profile",
+    "insulinForMeal": "For which meal?",
+    "insulinForCarbs": "for {{carbs}} g of carbs",
+    "insulinRatioMeal": "From your plan: {{u}} U / 10 g",
+    "insulinRatioGlobal": "From your ratio: 1 U / {{g}} g",
+    "insulinRatioDefault": "Ratio not set — estimate with 1 U / 10 g",
+    "insulinNoRatio": "⚠️ Set your insulin-to-carb ratio in Profile → Medical settings for a personalized estimate.",
+    "insulinAskAi": "Personalized proposal by the AI",
+    "insulinDisclaimer": "Meal-bolus estimate only (no glucose correction). Always check with the bolus calculator and your doctor.",
     "count": "{{count}} diabetes-friendly dishes",
     "empty": "No dish found. Try another word.",
     "cat": {
@@ -1501,6 +1523,24 @@
     "activate": "Enable notifications",
     "footNote": "The times readjust automatically as you keep logging."
   },
+  "coachChat": {
+    "subtitle": "It knows all your health data",
+    "startersGlucose": [
+      "Analyze today's glucose",
+      "Why is my glucose rising?",
+      "How do I stay in range?"
+    ],
+    "startersNutrition": [
+      "How many carbs today?",
+      "Suggest a suitable meal",
+      "Was my meal healthy?"
+    ],
+    "startersInsulin": [
+      "Is today's dose right?",
+      "How do I adjust my bolus?",
+      "Explain my insulin split"
+    ]
+  },
   "nutritionPage": {
     "title": "Nutrition",
     "carbsToday": "Carbs today",
@@ -1530,6 +1570,9 @@
     "goalReached": "Goal reached",
     "fiber": "Fiber",
     "aiCoach": "AI Coach",
+    "aiTitle": "Nutrition assistant",
+    "aiGreeting": "I'm looking at today's meals. What would you like to know about your carbs, a meal or a craving?",
+    "aiPlaceholder": "Type or speak…",
     "recoTitle": "Personalized recommendation ✨",
     "mealsTitle": "Today's meals",
     "mealsAdded": "{{count}} meal added",

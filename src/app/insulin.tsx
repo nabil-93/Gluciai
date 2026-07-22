@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Image,
   Modal,
@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
@@ -15,12 +14,12 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, FadeInView, Spinner } from '@/components/ui';
+import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
+import { CoachChatModal } from '@/components/CoachChatModal';
 import { nowMs } from '@/lib/clock';
-import { sendChatMessage } from '@/services/ai';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
-import type { InsulinType, Profile } from '@/types';
+import type { InsulinType } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -816,119 +815,18 @@ export default function InsulinScreen() {
         </Pressable>
       </Modal>
 
-      {/* ── In-page AI chat ── */}
-      <InsulinAiSheet
-        visible={aiOpen}
-        onClose={() => setAiOpen(false)}
-        seed={aiComment}
-        language={i18n.language}
-        profile={profile}
+      {/* ── Conseil IA — full-screen chat (text + voice) ── */}
+      <CoachChatModal
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        title={t('insulinPage.aiTitle')}
+        subtitle={t('coachChat.subtitle')}
+        greeting={aiComment}
+        placeholder={t('insulinPage.aiPlaceholder')}
+        errorText={t('insulinPage.aiError')}
+        starters={t('coachChat.startersInsulin', { returnObjects: true }) as string[]}
       />
     </View>
-  );
-}
-
-/* In-page AI chat: opens over the insulin page, seeded with a live comment
- * on the day's insulin, and answers questions with the full health context
- * (sendChatMessage builds it from the store, so the AI already sees the
- * injections). Never navigates away — it's a sheet, not the chat screen. */
-function InsulinAiSheet({
-  visible,
-  onClose,
-  seed,
-  language,
-  profile,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  seed: string;
-  language: string;
-  profile: Profile | null;
-}) {
-  const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
-
-  useEffect(() => {
-    if (visible) setMessages([{ role: 'assistant', content: seed }]);
-  }, [visible, seed]);
-
-  const send = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-    const next = [...messages, { role: 'user' as const, content: text }];
-    setMessages(next);
-    setInput('');
-    setLoading(true);
-    try {
-      const reply = await sendChatMessage(next, language, profile, 'chat');
-      setMessages((m) => [...m, { role: 'assistant', content: reply }]);
-    } catch {
-      setMessages((m) => [...m, { role: 'assistant', content: t('insulinPage.aiError') }]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.centerOverlay} onPress={onClose}>
-        <Pressable style={[styles.aiSheet, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]} onPress={() => {}}>
-          <View style={styles.aiHead}>
-            <View style={styles.coachRobot}>
-              <AnimatedRobot size={30} mood="happy" />
-            </View>
-            <Text style={styles.aiTitle}>{t('insulinPage.aiTitle')}</Text>
-            <Pressable onPress={onClose} hitSlop={10}>
-              <Text style={styles.aiCloseX}>✕</Text>
-            </Pressable>
-          </View>
-          <ScrollView
-            ref={scrollRef}
-            style={styles.aiThread}
-            contentContainerStyle={{ paddingVertical: 8, gap: 8 }}
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-          >
-            {messages.map((m, i) => (
-              <View
-                key={i}
-                style={[styles.aiBubble, m.role === 'user' ? styles.aiBubbleUser : styles.aiBubbleAI]}
-              >
-                <Text style={[styles.aiBubbleText, m.role === 'user' && { color: '#fff' }]}>
-                  {m.content}
-                </Text>
-              </View>
-            ))}
-            {loading ? (
-              <View style={{ alignSelf: 'flex-start', padding: 8 }}>
-                <Spinner size={20} color={GREEN_D} />
-              </View>
-            ) : null}
-          </ScrollView>
-          <View style={styles.aiInputRow}>
-            <TextInput
-              value={input}
-              onChangeText={setInput}
-              placeholder={t('insulinPage.aiPlaceholder')}
-              placeholderTextColor="#9AA8A0"
-              style={styles.aiInput}
-              onSubmitEditing={send}
-              returnKeyType="send"
-            />
-            <Pressable
-              onPress={send}
-              disabled={!input.trim() || loading}
-              style={[styles.aiSend, (!input.trim() || loading) && { opacity: 0.5 }]}
-            >
-              <Text style={styles.aiSendText}>➤</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
   );
 }
 

@@ -252,19 +252,17 @@ export default function ProfileEditScreen() {
                 ))}
               </View>
               <View style={styles.row2}>
-                <Field
+                <NumField
                   flex
                   label={t('profile.height')}
-                  value={draft.height != null ? String(draft.height) : ''}
-                  onChangeText={(v) => setNum('height', v)}
-                  keyboardType="numeric"
+                  numValue={draft.height ?? undefined}
+                  onChangeNum={(v) => setNum('height', v)}
                 />
-                <Field
+                <NumField
                   flex
                   label={t('profile.weight')}
-                  value={draft.weight != null ? String(draft.weight) : ''}
-                  onChangeText={(v) => setNum('weight', v)}
-                  keyboardType="numeric"
+                  numValue={draft.weight ?? undefined}
+                  onChangeNum={(v) => setNum('weight', v)}
                 />
               </View>
             </>
@@ -295,49 +293,40 @@ export default function ProfileEditScreen() {
                 ))}
               </View>
               <View style={styles.row2}>
-                <Field
+                <NumField
                   flex
                   label={t('profile.targetLow')}
-                  value={String(draft.target_low ?? '')}
-                  onChangeText={(v) => setNum('target_low', v)}
-                  keyboardType="numeric"
+                  numValue={draft.target_low ?? undefined}
+                  onChangeNum={(v) => setNum('target_low', v)}
                 />
-                <Field
+                <NumField
                   flex
                   label={t('profile.targetHigh')}
-                  value={String(draft.target_high ?? '')}
-                  onChangeText={(v) => setNum('target_high', v)}
-                  keyboardType="numeric"
+                  numValue={draft.target_high ?? undefined}
+                  onChangeNum={(v) => setNum('target_high', v)}
                 />
               </View>
               {/* Daily glucose objective (mg/dL) — drives the objective ring on
                   the glycémie page. The patient chooses it themselves. */}
-              <Field
+              <NumField
                 label={t('profile.glucoseGoal')}
-                value={draft.daily_glucose_goal != null ? String(draft.daily_glucose_goal) : ''}
-                onChangeText={(v) => setNum('daily_glucose_goal', v)}
-                keyboardType="numeric"
+                numValue={draft.daily_glucose_goal ?? undefined}
+                onChangeNum={(v) => setNum('daily_glucose_goal', v)}
                 placeholder="180"
               />
               <Text style={styles.tirHint}>{t('profile.glucoseGoalHint')}</Text>
               <View style={styles.row2}>
-                <Field
+                <NumField
                   flex
                   label={t('profile.carbRatio')}
-                  value={draft.carb_ratio != null ? String(draft.carb_ratio) : ''}
-                  onChangeText={(v) => setNum('carb_ratio', v)}
-                  keyboardType="numeric"
+                  numValue={draft.carb_ratio ?? undefined}
+                  onChangeNum={(v) => setNum('carb_ratio', v)}
                 />
-                <Field
+                <NumField
                   flex
                   label={t('profile.correctionFactor')}
-                  value={
-                    draft.correction_factor != null
-                      ? String(draft.correction_factor)
-                      : ''
-                  }
-                  onChangeText={(v) => setNum('correction_factor', v)}
-                  keyboardType="numeric"
+                  numValue={draft.correction_factor ?? undefined}
+                  onChangeNum={(v) => setNum('correction_factor', v)}
                 />
               </View>
 
@@ -345,40 +334,25 @@ export default function ProfileEditScreen() {
                   numbers the bolus calculator and the AI actually use. */}
               <FieldLabel>{t('profile.mealRatios')}</FieldLabel>
               <View style={styles.row2}>
-                <Field
+                <NumField
                   flex
                   label={`🥐 ${t('profile.ratioBreakfast')}`}
-                  value={
-                    draft.insulin_per_10g_breakfast != null
-                      ? String(draft.insulin_per_10g_breakfast)
-                      : ''
-                  }
-                  onChangeText={(v) => setNum('insulin_per_10g_breakfast', v)}
-                  keyboardType="numeric"
+                  numValue={draft.insulin_per_10g_breakfast ?? undefined}
+                  onChangeNum={(v) => setNum('insulin_per_10g_breakfast', v)}
                   placeholder="1.5"
                 />
-                <Field
+                <NumField
                   flex
                   label={`☀️ ${t('profile.ratioLunch')}`}
-                  value={
-                    draft.insulin_per_10g_lunch != null
-                      ? String(draft.insulin_per_10g_lunch)
-                      : ''
-                  }
-                  onChangeText={(v) => setNum('insulin_per_10g_lunch', v)}
-                  keyboardType="numeric"
+                  numValue={draft.insulin_per_10g_lunch ?? undefined}
+                  onChangeNum={(v) => setNum('insulin_per_10g_lunch', v)}
                   placeholder="1"
                 />
-                <Field
+                <NumField
                   flex
                   label={`🌙 ${t('profile.ratioDinner')}`}
-                  value={
-                    draft.insulin_per_10g_dinner != null
-                      ? String(draft.insulin_per_10g_dinner)
-                      : ''
-                  }
-                  onChangeText={(v) => setNum('insulin_per_10g_dinner', v)}
-                  keyboardType="numeric"
+                  numValue={draft.insulin_per_10g_dinner ?? undefined}
+                  onChangeNum={(v) => setNum('insulin_per_10g_dinner', v)}
                   placeholder="1.2"
                 />
               </View>
@@ -398,12 +372,11 @@ export default function ProfileEditScreen() {
                   placeholder="Lantus, Levemir…"
                   autoCapitalize="words"
                 />
-                <Field
+                <NumField
                   flex
                   label={t('profile.basalDose')}
-                  value={draft.basal_dose != null ? String(draft.basal_dose) : ''}
-                  onChangeText={(v) => setNum('basal_dose', v)}
-                  keyboardType="numeric"
+                  numValue={draft.basal_dose ?? undefined}
+                  onChangeNum={(v) => setNum('basal_dose', v)}
                   placeholder="20"
                 />
               </View>
@@ -597,6 +570,61 @@ function Field({
         style={[styles.input, focused && styles.inputFocused]}
       />
     </View>
+  );
+}
+
+/**
+ * Numeric field that lets the patient type a decimal separator freely.
+ * The parent stores a plain number, so a controlled `String(number)` value
+ * used to strip the separator the instant it was typed — "1," became "1"
+ * and "1,5" was impossible. This keeps the in-progress TEXT locally while
+ * editing (comma OR dot both accepted), pushes the parsed number up through
+ * `onChangeNum`, and only normalizes the display back to the stored number
+ * on blur. Fixes decimal entry for ratios, correction factor, doses, etc.
+ */
+function NumField({
+  numValue,
+  onChangeNum,
+  ...props
+}: Omit<React.ComponentProps<typeof Field>, 'value' | 'onChangeText' | 'onFocus' | 'onBlur'> & {
+  numValue: number | undefined;
+  onChangeNum: (text: string) => void;
+}) {
+  const [text, setText] = useState(numValue != null ? String(numValue) : '');
+  const [focused, setFocused] = useState(false);
+  const [syncedNum, setSyncedNum] = useState(numValue);
+
+  // Adopt external changes (e.g. a profile reload) while NOT typing — the
+  // React-endorsed "adjust state during render" pattern, so no effect is
+  // needed and a re-parse of "1," (→ 1) never clobbers the comma the patient
+  // just typed. Runs only when the number actually differs from last synced.
+  if (!focused && numValue !== syncedNum) {
+    setSyncedNum(numValue);
+    const parsed = parseFloat(text.replace(',', '.'));
+    const matches = Number.isFinite(parsed) ? parsed === numValue : numValue == null;
+    if (!matches) setText(numValue != null ? String(numValue) : '');
+  }
+
+  const handle = (v: string) => {
+    // Digits plus a single decimal separator (comma or dot).
+    const cleaned = v.replace(/[^0-9.,]/g, '').replace(/([.,])(?=.*[.,])/g, '');
+    setText(cleaned);
+    onChangeNum(cleaned);
+  };
+
+  return (
+    <Field
+      {...props}
+      value={text}
+      keyboardType="decimal-pad"
+      onChangeText={handle}
+      onFocus={() => setFocused(true)}
+      onBlur={() => {
+        setFocused(false);
+        // Normalize a dangling "1," / "1." to the clean stored number.
+        setText(numValue != null ? String(numValue) : '');
+      }}
+    />
   );
 }
 

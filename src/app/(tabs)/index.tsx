@@ -17,9 +17,11 @@ import Svg, {
   Circle,
   Defs,
   Ellipse,
+  G,
   Line,
   Path,
   RadialGradient,
+  Rect,
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
@@ -44,7 +46,6 @@ import type { ActivityStatus, InsulinType, MealScan } from '@/types';
 
 /* Official Claude Design assets — reused exactly, never redrawn */
 const CIRC_ACTIVITY = require('../../assets/claude/circ-activity.png');
-const CIRC_BOLUS = require('../../assets/claude/circ-bolus.png');
 const SPARK_STAR = require('../../assets/claude/spark-star.png');
 const CHIP_BRAIN = require('../../assets/claude/chip-brain.png');
 const SCAN_IMG = require('../../assets/claude/scanimg.png');
@@ -72,6 +73,16 @@ const TYPE_KEY: Record<InsulinType, string> = {
 
 const CARB_GOAL = 250;
 const INSULIN_GOAL = 40;
+
+/* ── Peek-carousel geometry ──
+ * Each metric is its own card. The carousel bleeds edge-to-edge (full
+ * screen width) and every card is CARD_RATIO of that width, so the
+ * previous/next cards always peek in at both sides. CARD_GAP is the space
+ * between two cards; the snap step ("stride") is a card plus one gap. */
+const CARD_RATIO = 0.8;
+const CARD_GAP = 14;
+/** Snap step for a given carousel viewport width. */
+const strideFor = (viewW: number) => Math.round(viewW * CARD_RATIO) + CARD_GAP;
 
 function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
@@ -116,6 +127,40 @@ function ChevRight({ size = 13, color = '#6b7280' }: { size?: number; color?: st
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Path d="M9 6l6 6-6 6" stroke={color} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </Svg>
+  );
+}
+
+/* Bolus badge — replaces the old flat "U" disc. A purple gradient circle
+ * (keeps the bolus colour identity) holding a white syringe with a dose
+ * droplet at the tip: an unambiguous "insulin dose" glyph for the card
+ * that opens the bolus calculator. Angled 45° like the app's syringe art. */
+function BolusBadge({ size = 38 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 40 40">
+      <Defs>
+        <RadialGradient id="bolusBadge" cx="42%" cy="32%" r="80%">
+          <Stop offset="0" stopColor="#b79bfb" />
+          <Stop offset="1" stopColor="#7c5cf0" />
+        </RadialGradient>
+      </Defs>
+      <Circle cx={20} cy={20} r={20} fill="url(#bolusBadge)" />
+      {/* Dose droplet leaving the needle tip (upper-right after rotation) */}
+      <G transform="rotate(-45 20 20)">
+        {/* Thumb rest + plunger rod */}
+        <Rect x={6} y={15.6} width={2.2} height={8.8} rx={1.1} fill="#ffffff" />
+        <Rect x={8.1} y={18.9} width={3.4} height={2.2} rx={1.1} fill="#ffffff" />
+        {/* Barrel */}
+        <Rect x={11} y={15.6} width={12.6} height={8.8} rx={2.6} fill="#ffffff" />
+        {/* Graduation marks */}
+        <Line x1={15} y1={16.9} x2={15} y2={18.6} stroke="#8a6cf2" strokeWidth={1} strokeLinecap="round" />
+        <Line x1={17.6} y1={16.9} x2={17.6} y2={18.6} stroke="#8a6cf2" strokeWidth={1} strokeLinecap="round" />
+        <Line x1={20.2} y1={16.9} x2={20.2} y2={18.6} stroke="#8a6cf2" strokeWidth={1} strokeLinecap="round" />
+        {/* Hub cone + needle */}
+        <Path d="M23.6 17.4 L26.6 18.9 L26.6 21.1 L23.6 22.6 Z" fill="#ffffff" />
+        <Rect x={26.6} y={19.3} width={7.6} height={1.4} rx={0.7} fill="#ffffff" />
+        <Circle cx={35.6} cy={20} r={1.5} fill="#ffffff" />
+      </G>
     </Svg>
   );
 }
@@ -1156,6 +1201,7 @@ function GlyDayChart({
  * (unit, goal, zone table, day readings, routes), never by structure.
  */
 function MetricPage({
+  title,
   value,
   unit,
   zone,
@@ -1177,6 +1223,8 @@ function MetricPage({
   onOpen,
   onAdd,
 }: {
+  /** Card title (metric name) shown centred at the top of the card. */
+  title: string;
   value: number | null;
   unit: string;
   zone: GlyZone | null;
@@ -1204,6 +1252,12 @@ function MetricPage({
   const hasData = value != null;
   return (
     <Pressable onPress={onOpen}>
+      {/* Card title — centred, one per card (Glycémie · Glucides · Insuline) */}
+      <View style={styles.metricCardHead}>
+        <Text style={styles.metricCardTitle} numberOfLines={1}>
+          {title}
+        </Text>
+      </View>
       <View style={styles.gringWrap}>
         <GlucoseRing
           value={value}
@@ -1367,10 +1421,17 @@ export default function HomeScreen() {
   const glySliderFrac = lastGlucose
     ? sliderFrac(lastGlucose.value, low, high)
     : 0;
-  // Ring width follows the measured card width (mockup ratio ≈ 0.68).
+  // Peek-carousel geometry. `glyW` is the full-bleed carousel viewport
+  // (screen) width; each card is CARD_RATIO of it, and STRIDE (card + gap)
+  // is the snap step. SIDE is the content inset that centres the active
+  // card so its neighbours peek in equally on both sides.
   const [glyW, setGlyW] = React.useState(0);
+  const CARD_W = glyW > 0 ? Math.round(glyW * CARD_RATIO) : 0;
+  const STRIDE = CARD_W + CARD_GAP;
+  const SIDE = glyW > 0 ? Math.max(0, (glyW - STRIDE) / 2) : 0;
+  // Ring width follows the (now narrower) card width, same mockup ratio feel.
   const glyRingW =
-    glyW > 0 ? Math.min(264, Math.max(190, Math.round(glyW * 0.68))) : 214;
+    CARD_W > 0 ? Math.min(258, Math.max(180, Math.round(CARD_W * 0.64))) : 214;
   // Today's readings mapped onto the 00:00 → 24:00 chart.
   const dayReadings = useMemo(
     () =>
@@ -1381,11 +1442,13 @@ export default function HomeScreen() {
     [dayGlucose]
   );
 
-  // ── Metric carousel (Glycémie · Glucides · Insuline) ──
-  // Swipeable pages inside the card; dots + arrows in the header let the
-  // user know there's more and jump between them.
+  // ── Metric peek-carousel (Glycémie · Glucides · Insuline) ──
+  // Each metric is its own card: the active one sits centred and full-size
+  // while its neighbours peek in, scaled/faded. Swipe or tap a dot to move.
   const [metricPage, setMetricPage] = React.useState(0);
   const metricScrollRef = useRef<ScrollView>(null);
+  // Drives the live scale + opacity interpolation of every card on scroll.
+  const scrollX = useRef(new Animated.Value(0)).current;
   // Live mirrors for the restore callbacks below — state values would go
   // stale inside useFocusEffect closures.
   const metricPageRef = useRef(0);
@@ -1396,11 +1459,11 @@ export default function HomeScreen() {
   // never clobber the active page.
   const metricFocusedRef = useRef(false);
 
-  /** Re-apply the active page's scroll offset (no-op if width unknown). */
+  /** Re-apply the active card's scroll offset (no-op if width unknown). */
   const snapMetric = React.useCallback((animated: boolean) => {
     if (glyWRef.current > 0) {
       metricScrollRef.current?.scrollTo({
-        x: metricPageRef.current * glyWRef.current,
+        x: metricPageRef.current * strideFor(glyWRef.current),
         animated,
       });
     }
@@ -1432,14 +1495,17 @@ export default function HomeScreen() {
     const clamped = Math.max(0, Math.min(2, i));
     setMetricPage(clamped);
     metricPageRef.current = clamped;
-    metricScrollRef.current?.scrollTo({ x: clamped * glyW, animated: true });
+    metricScrollRef.current?.scrollTo({
+      x: clamped * strideFor(glyW),
+      animated: true,
+    });
   };
-  // Update the active page live as the carousel scrolls (not only on
-  // momentum end) so the header title + dots always track the visible
-  // page — even on a fast flick or a partial drag.
+  // Update the active card live as the carousel scrolls (not only on
+  // momentum end) so the dots always track the visible card — even on a
+  // fast flick or a partial drag.
   const onMetricScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!metricFocusedRef.current || glyW <= 0) return;
-    const i = Math.round(e.nativeEvent.contentOffset.x / glyW);
+    const i = Math.round(e.nativeEvent.contentOffset.x / strideFor(glyW));
     const clamped = Math.max(0, Math.min(2, i));
     metricPageRef.current = clamped;
     if (clamped !== metricPage) setMetricPage(clamped);
@@ -1783,7 +1849,7 @@ export default function HomeScreen() {
             onPress={() => router.push('/bolus')}
             accessibilityLabel={t('home.bolus')}
           >
-            <Image source={CIRC_BOLUS} style={{ width: 38, height: 38 }} />
+            <BolusBadge size={38} />
             <View style={{ flex: 1 }}>
               <Text style={styles.chipTitle}>{t('home.bolus')}</Text>
               <Text style={styles.chipSub} numberOfLines={1}>
@@ -1838,81 +1904,42 @@ export default function HomeScreen() {
           </Pressable>
         ) : null}
 
-        {/* ── Metric carousel card (Glycémie · Glucides · Insuline) ── */}
+        {/* ── Metric peek-carousel (Glycémie · Glucides · Insuline) ──
+            Bleeds edge-to-edge so neighbouring cards peek in; each card is
+            CARD_RATIO of the screen, the active one centred at full scale. */}
         <View
-          style={styles.glyCard}
+          style={styles.metricCarousel}
           onLayout={(e) => {
             const w = e.nativeEvent.layout.width;
             glyWRef.current = w;
             setGlyW(w);
             // Re-measured (e.g. shown again after being hidden): re-apply
-            // the active page's offset once the new width is committed.
+            // the active card's offset once the new width is committed.
             requestAnimationFrame(() => snapMetric(false));
           }}
         >
-          {/* Header: title of the active page + dots + prev/next arrows */}
-          <View style={styles.glyHead}>
-            <Text style={styles.glyTitle}>
-              {metricPage === 0
-                ? t('home.glycemia')
-                : metricPage === 1
-                  ? t('home.ringCarbs')
-                  : t('home.ringInsulin')}
-            </Text>
-            <View style={styles.metricNav}>
-              <Pressable
-                onPress={() => goToMetric(metricPage - 1)}
-                disabled={metricPage === 0}
-                hitSlop={8}
-                style={[styles.metricArrow, metricPage === 0 && styles.metricArrowOff]}
-              >
-                <Text style={styles.metricArrowText}>‹</Text>
-              </Pressable>
-              <View style={styles.metricDots}>
-                {[0, 1, 2].map((i) => (
-                  <Pressable key={i} onPress={() => goToMetric(i)} hitSlop={6}>
-                    <View
-                      style={[
-                        styles.metricDot,
-                        i === metricPage && styles.metricDotOn,
-                      ]}
-                    />
-                  </Pressable>
-                ))}
-              </View>
-              <Pressable
-                onPress={() => goToMetric(metricPage + 1)}
-                disabled={metricPage === 2}
-                hitSlop={8}
-                style={[styles.metricArrow, metricPage === 2 && styles.metricArrowOff]}
-              >
-                <Text style={styles.metricArrowText}>›</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Swipeable pages — width matches the measured card */}
           {glyW > 0 ? (
-            <ScrollView
+            <Animated.ScrollView
               ref={metricScrollRef}
               horizontal
-              pagingEnabled
-              snapToInterval={glyW}
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={STRIDE}
               snapToAlignment="start"
               disableIntervalMomentum
-              showsHorizontalScrollIndicator={false}
-              onScroll={onMetricScroll}
+              decelerationRate="fast"
+              scrollEventThrottle={16}
+              contentContainerStyle={{ paddingHorizontal: SIDE }}
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                { useNativeDriver: true, listener: onMetricScroll }
+              )}
               onMomentumScrollEnd={onMetricScroll}
               onContentSizeChange={() => snapMetric(false)}
-              scrollEventThrottle={16}
-              style={{ width: glyW, marginHorizontal: -20 }}
-              contentContainerStyle={{ paddingHorizontal: 0 }}
-              decelerationRate="fast"
             >
-              {/* PAGE 1 — Glycémie */}
-              <View style={{ width: glyW, paddingHorizontal: 20 }}>
+              {[
                 <MetricPage
                   key={`gly-${lastGlucose?.value ?? 'x'}-${dayReadings.length}`}
+                  title={t('home.glycemia')}
                   value={lastGlucose ? lastGlucose.value : null}
                   unit="mg/dL"
                   zone={glyZone}
@@ -1933,13 +1960,10 @@ export default function HomeScreen() {
                   detailHint={t('home.tapForDetail')}
                   onOpen={() => router.push('/glucose')}
                   onAdd={() => router.push('/log-glucose')}
-                />
-              </View>
-
-              {/* PAGE 2 — Glucides */}
-              <View style={{ width: glyW, paddingHorizontal: 20 }}>
+                />,
                 <MetricPage
                   key={`carb-${Math.round(totalCarbs)}-${carbReadings.length}`}
+                  title={t('home.ringCarbs')}
                   value={totalCarbs > 0 ? Math.round(totalCarbs) : null}
                   unit="g"
                   zone={carbZone}
@@ -1965,13 +1989,10 @@ export default function HomeScreen() {
                   detailHint={t('home.tapForDetail')}
                   onOpen={() => router.push('/nutrition')}
                   onAdd={() => router.push('/scan')}
-                />
-              </View>
-
-              {/* PAGE 3 — Insuline */}
-              <View style={{ width: glyW, paddingHorizontal: 20 }}>
+                />,
                 <MetricPage
                   key={`ins-${totalInsulin}-${insulinReadings.length}`}
+                  title={t('home.ringInsulin')}
                   value={totalInsulin > 0 ? totalInsulin : null}
                   unit="U"
                   zone={insulinZone}
@@ -1997,10 +2018,57 @@ export default function HomeScreen() {
                   detailHint={t('home.tapForDetail')}
                   onOpen={() => router.push('/insulin')}
                   onAdd={() => router.push('/log-insulin')}
-                />
-              </View>
-            </ScrollView>
+                />,
+              ].map((node, index) => {
+                // Each card scales from 1 (centred) to 0.92 as it moves to a
+                // peek slot, fading slightly — driven live by the scroll pos.
+                const inputRange = [
+                  (index - 1) * STRIDE,
+                  index * STRIDE,
+                  (index + 1) * STRIDE,
+                ];
+                const scale = scrollX.interpolate({
+                  inputRange,
+                  outputRange: [0.92, 1, 0.92],
+                  extrapolate: 'clamp',
+                });
+                const opacity = scrollX.interpolate({
+                  inputRange,
+                  outputRange: [0.5, 1, 0.5],
+                  extrapolate: 'clamp',
+                });
+                return (
+                  <View key={index} style={{ width: STRIDE }}>
+                    <Animated.View
+                      style={[
+                        styles.glyCard,
+                        styles.metricCard,
+                        {
+                          width: CARD_W,
+                          marginHorizontal: CARD_GAP / 2,
+                          opacity,
+                          transform: [{ scale }],
+                        },
+                      ]}
+                    >
+                      {node}
+                    </Animated.View>
+                  </View>
+                );
+              })}
+            </Animated.ScrollView>
           ) : null}
+
+          {/* Pagination dots — follow the active card */}
+          <View style={styles.metricDotsBottom}>
+            {[0, 1, 2].map((i) => (
+              <Pressable key={i} onPress={() => goToMetric(i)} hitSlop={8}>
+                <View
+                  style={[styles.metricDot, i === metricPage && styles.metricDotOn]}
+                />
+              </Pressable>
+            ))}
+          </View>
         </View>
 
         {/* ── Rings row (3 separate cards) ── */}
@@ -2438,17 +2506,6 @@ const styles = StyleSheet.create({
     shadowRadius: 28,
     elevation: 6,
   },
-  glyHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  glyTitle: {
-    fontFamily: F800,
-    fontSize: 24,
-    letterSpacing: -0.4,
-    color: '#0f3d24',
-  },
   glyDetailsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2474,25 +2531,32 @@ const styles = StyleSheet.create({
     marginTop: -1,
   },
 
-  /* Carousel nav (dots + arrows) */
-  metricNav: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  metricArrow: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(120,190,140,0.28)',
+  /* Peek carousel — full-bleed viewport, per-card title, bottom dots */
+  metricCarousel: {
+    marginTop: 9,
+    // Cancel the page's 18px horizontal padding so the carousel spans the
+    // full screen width and the neighbouring cards can peek in at the edges.
+    marginHorizontal: -18,
+  },
+  metricCard: {
+    // Inside the carousel row the top gap comes from `metricCarousel`.
+    marginTop: 0,
+  },
+  metricCardHead: { alignItems: 'center', marginBottom: 2 },
+  metricCardTitle: {
+    fontFamily: F800,
+    fontSize: 22,
+    letterSpacing: -0.4,
+    color: '#0f3d24',
+    textAlign: 'center',
+  },
+  metricDotsBottom: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    marginTop: 16,
   },
-  metricArrowOff: { opacity: 0.35 },
-  metricArrowText: {
-    fontFamily: F700,
-    fontSize: 18,
-    lineHeight: 20,
-    color: '#3f6b4d',
-    marginTop: -2,
-  },
-  metricDots: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   metricDot: {
     width: 7,
     height: 7,
