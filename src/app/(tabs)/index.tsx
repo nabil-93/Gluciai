@@ -129,6 +129,13 @@ function ChevRight({ size = 13, color = '#6b7280' }: { size?: number; color?: st
     </Svg>
   );
 }
+function ChevLeft({ size = 13, color = '#6b7280' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M15 6l-6 6 6 6" stroke={color} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </Svg>
+  );
+}
 
 /* Bolus badge — replaces the old flat "U" disc. A purple gradient circle
  * (keeps the bolus colour identity) holding a white syringe with a dose
@@ -1362,6 +1369,23 @@ export default function HomeScreen() {
     }
   }, []);
 
+  // THE FIX for the "cards flash / jump" when returning from a detail page:
+  // expo-router DETACHES this screen while a detail route is on top, so on
+  // the web its scroll node is destroyed and rebuilt at scrollLeft 0. The
+  // old rAF restore ran AFTER the first paint → one frame showed the wrong
+  // card, then it snapped. A callback ref fires during commit, BEFORE paint,
+  // so we position the freshly (re)attached node synchronously and the very
+  // first frame is already on the right card. (Web-only; native has no such
+  // reset. Also keeps metricScrollRef pointing at the node.)
+  const metricScrollNodeRef = React.useCallback((node: ScrollView | null) => {
+    metricScrollRef.current = node;
+    if (Platform.OS !== 'web' || !node || glyWRef.current <= 0) return;
+    const dom = (
+      node as unknown as { getScrollableNode?: () => HTMLElement | null }
+    ).getScrollableNode?.();
+    if (dom) dom.scrollLeft = metricPageRef.current * strideFor(glyWRef.current);
+  }, []);
+
   // THE FIX for "added an entry but the card still shows another page":
   // navigating to a log screen hides this screen; on web the hidden
   // ScrollView loses its scrollLeft (browser resets it to 0 without any
@@ -1851,7 +1875,7 @@ export default function HomeScreen() {
         >
           {glyW > 0 ? (
             <Animated.ScrollView
-              ref={metricScrollRef}
+              ref={metricScrollNodeRef}
               horizontal
               showsHorizontalScrollIndicator={false}
               snapToInterval={STRIDE}
@@ -1971,6 +1995,36 @@ export default function HomeScreen() {
                 );
               })}
             </Animated.ScrollView>
+          ) : null}
+
+          {/* Side arrows — hint that there are more cards to the sides and
+              step exactly one card on tap. Hidden at the ends. Centred on
+              the ring so they sit over the peeking neighbour cards. */}
+          {glyW > 0 && metricPage > 0 ? (
+            <Pressable
+              onPress={() => goToMetric(metricPage - 1)}
+              hitSlop={10}
+              style={[
+                styles.metricArrow,
+                styles.metricArrowLeft,
+                { top: 40 + glyRingW / 2 },
+              ]}
+            >
+              <ChevLeft size={19} color="#2b6b4a" />
+            </Pressable>
+          ) : null}
+          {glyW > 0 && metricPage < 2 ? (
+            <Pressable
+              onPress={() => goToMetric(metricPage + 1)}
+              hitSlop={10}
+              style={[
+                styles.metricArrow,
+                styles.metricArrowRight,
+                { top: 40 + glyRingW / 2 },
+              ]}
+            >
+              <ChevRight size={19} color="#2b6b4a" />
+            </Pressable>
           ) : null}
 
           {/* Pagination dots — follow the active card */}
@@ -2481,6 +2535,25 @@ const styles = StyleSheet.create({
     width: 20,
     backgroundColor: '#22b95e',
   },
+  // Floating circular prev/next arrows over the peeking side cards.
+  metricArrow: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginTop: -20,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: 'rgba(20,60,40,1)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    elevation: 6,
+    zIndex: 20,
+  },
+  metricArrowLeft: { left: 26 },
+  metricArrowRight: { right: 26 },
 
   /* Metric bar chart (carbs / insulin pages) */
   mBarsBox: { height: 90, justifyContent: 'flex-end', marginVertical: 4 },
