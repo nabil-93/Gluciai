@@ -79,15 +79,8 @@ const INSULIN_GOAL = 40;
  * screen width) and every card is CARD_RATIO of that width, so the
  * previous/next cards always peek in at both sides. CARD_GAP is the space
  * between two cards; the snap step ("stride") is a card plus one gap. */
-const CARD_RATIO = 0.76;
+const CARD_RATIO = 0.72;
 const CARD_GAP = 14;
-/* 3D "cube cards" tuning: the active card is the front face (0°); the two
- * neighbours are the left/right faces of a horizontal cube, steeply rotated
- * (CUBE_ANGLE) through a strong shared perspective and pushed out to the
- * sides so the three cards read as faces of one rotating cube. */
-const NEIGHBOR_SCALE = 0.9;
-const CUBE_ANGLE = 65; // side-face rotateY (a real cube edge would be 90°)
-const PERSPECTIVE = 1300; // 1200–1500 → deep, believable 3D
 /** Snap step for a given carousel viewport width. */
 const strideFor = (viewW: number) => Math.round(viewW * CARD_RATIO) + CARD_GAP;
 
@@ -1436,11 +1429,7 @@ export default function HomeScreen() {
   const CARD_W = glyW > 0 ? Math.round(glyW * CARD_RATIO) : 0;
   const STRIDE = CARD_W + CARD_GAP;
   const SIDE = glyW > 0 ? Math.max(0, (glyW - STRIDE) / 2) : 0;
-  // Cube geometry: CUBE_SHIFT is where a side face's centre lands (offset from
-  // the viewport centre). It sits just outside the front card's edge so its
-  // inner edge tucks behind the front face like a real cube corner.
-  const CUBE_SHIFT = glyW > 0 ? glyW * 0.42 : 0;
-  // Ring width follows the card width, same mockup ratio feel.
+  // Ring width follows the (now narrower) card width, same mockup ratio feel.
   const glyRingW =
     CARD_W > 0 ? Math.min(258, Math.max(180, Math.round(CARD_W * 0.64))) : 214;
   // Today's readings mapped onto the 00:00 → 24:00 chart.
@@ -2041,66 +2030,34 @@ export default function HomeScreen() {
                   onAdd={() => router.push('/log-insulin')}
                 />,
               ].map((node, index) => {
-                // 3D cube: the centred card is the flat front face (0°); the
-                // neighbours are the cube's left/right faces — pushed out to
-                // the sides (translateX) and steeply rotated (rotateY) through
-                // a shared perspective, so swiping turns the whole cube. All
-                // driven live by the scroll position.
+                // Each card scales from 1 (centred) to 0.92 as it moves to a
+                // peek slot, fading slightly — driven live by the scroll pos.
                 const inputRange = [
                   (index - 1) * STRIDE,
                   index * STRIDE,
                   (index + 1) * STRIDE,
                 ];
-                const translateX = scrollX.interpolate({
-                  inputRange,
-                  outputRange: [CUBE_SHIFT - STRIDE, 0, STRIDE - CUBE_SHIFT],
-                  extrapolate: 'clamp',
-                });
                 const scale = scrollX.interpolate({
                   inputRange,
-                  outputRange: [NEIGHBOR_SCALE, 1, NEIGHBOR_SCALE],
-                  extrapolate: 'clamp',
-                });
-                // Convex cube: each side face turns its OUTER edge away from
-                // the viewer (inner edge stays forward at the front-face edge),
-                // so a swipe reads as the cube rotating like a turntable.
-                const rotateY = scrollX.interpolate({
-                  inputRange,
-                  outputRange: [
-                    `${CUBE_ANGLE}deg`,
-                    '0deg',
-                    `-${CUBE_ANGLE}deg`,
-                  ],
+                  outputRange: [0.92, 1, 0.92],
                   extrapolate: 'clamp',
                 });
                 const opacity = scrollX.interpolate({
                   inputRange,
-                  outputRange: [0.72, 1, 0.72],
+                  outputRange: [0.5, 1, 0.5],
                   extrapolate: 'clamp',
                 });
-                // Front face on top; nearer faces above farther ones.
-                const active = index === metricPage;
-                const z = 10 - Math.abs(index - metricPage);
                 return (
-                  <View
-                    key={index}
-                    style={{ width: STRIDE, zIndex: z, elevation: z }}
-                  >
+                  <View key={index} style={{ width: STRIDE }}>
                     <Animated.View
                       style={[
                         styles.glyCard,
                         styles.metricCard,
-                        active && styles.metricCardFloat,
                         {
                           width: CARD_W,
                           marginHorizontal: CARD_GAP / 2,
                           opacity,
-                          transform: [
-                            { perspective: PERSPECTIVE },
-                            { translateX },
-                            { rotateY },
-                            { scale },
-                          ],
+                          transform: [{ scale }],
                         },
                       ]}
                     >
@@ -2594,14 +2551,6 @@ const styles = StyleSheet.create({
   metricCard: {
     // Inside the carousel row the top gap comes from `metricCarousel`.
     marginTop: 0,
-  },
-  // The centred card floats above the deck — a deeper, softer drop shadow.
-  metricCardFloat: {
-    shadowColor: 'rgba(20,60,40,1)',
-    shadowOffset: { width: 0, height: 26 },
-    shadowOpacity: 0.26,
-    shadowRadius: 42,
-    elevation: 20,
   },
   metricCardHead: { alignItems: 'center', marginBottom: 2 },
   metricCardTitle: {
