@@ -79,8 +79,15 @@ const INSULIN_GOAL = 40;
  * screen width) and every card is CARD_RATIO of that width, so the
  * previous/next cards always peek in at both sides. CARD_GAP is the space
  * between two cards; the snap step ("stride") is a card plus one gap. */
-const CARD_RATIO = 0.72;
+const CARD_RATIO = 0.68;
 const CARD_GAP = 14;
+/* 2.5D stacked-deck tuning: side cards are scaled down, dropped lower and
+ * tilted with a light rotateY (through a shared perspective) so they read as
+ * physical cards angled behind the floating active card. */
+const NEIGHBOR_SCALE = 0.86;
+const ROTATE_DEG = 8; // side-card tilt (5–8° = subtle premium depth)
+const NEIGHBOR_DROP = 16; // side cards sit slightly lower (translateY)
+const PERSPECTIVE = 850; // smaller = stronger 3D foreshortening
 /** Snap step for a given carousel viewport width. */
 const strideFor = (viewW: number) => Math.round(viewW * CARD_RATIO) + CARD_GAP;
 
@@ -1429,7 +1436,14 @@ export default function HomeScreen() {
   const CARD_W = glyW > 0 ? Math.round(glyW * CARD_RATIO) : 0;
   const STRIDE = CARD_W + CARD_GAP;
   const SIDE = glyW > 0 ? Math.max(0, (glyW - STRIDE) / 2) : 0;
-  // Ring width follows the (now narrower) card width, same mockup ratio feel.
+  // Stacked-deck peek: the neighbours are scaled down and pulled BEHIND the
+  // centred card (via translateX) so only a strip shows on each side. PEEK is
+  // where a neighbour's centre lands (offset from the viewport centre) —
+  // chosen so its outer edge reaches the screen edge and the rest tucks under
+  // the centred card.
+  const PEEK =
+    glyW > 0 ? Math.max(0, glyW / 2 - (NEIGHBOR_SCALE * CARD_W) / 2) : 0;
+  // Ring width follows the card width, same mockup ratio feel.
   const glyRingW =
     CARD_W > 0 ? Math.min(258, Math.max(180, Math.round(CARD_W * 0.64))) : 214;
   // Today's readings mapped onto the 00:00 → 24:00 chart.
@@ -2030,34 +2044,67 @@ export default function HomeScreen() {
                   onAdd={() => router.push('/log-insulin')}
                 />,
               ].map((node, index) => {
-                // Each card scales from 1 (centred) to 0.92 as it moves to a
-                // peek slot, fading slightly — driven live by the scroll pos.
+                // 2.5D stacked deck: the centred card floats full-size and
+                // flat on top; the neighbours are pulled behind it (translateX),
+                // scaled down, dropped a little (translateY) and tilted with a
+                // light rotateY through a shared perspective, so they read as
+                // physical cards angled into the deck. All driven by scrollX.
                 const inputRange = [
                   (index - 1) * STRIDE,
                   index * STRIDE,
                   (index + 1) * STRIDE,
                 ];
+                const translateX = scrollX.interpolate({
+                  inputRange,
+                  outputRange: [PEEK - STRIDE, 0, STRIDE - PEEK],
+                  extrapolate: 'clamp',
+                });
+                const translateY = scrollX.interpolate({
+                  inputRange,
+                  outputRange: [NEIGHBOR_DROP, 0, NEIGHBOR_DROP],
+                  extrapolate: 'clamp',
+                });
                 const scale = scrollX.interpolate({
                   inputRange,
-                  outputRange: [0.92, 1, 0.92],
+                  outputRange: [NEIGHBOR_SCALE, 1, NEIGHBOR_SCALE],
+                  extrapolate: 'clamp',
+                });
+                // Right neighbour tilts one way, left neighbour the other, so
+                // both angle their inner edge back toward the centre.
+                const rotateY = scrollX.interpolate({
+                  inputRange,
+                  outputRange: [`-${ROTATE_DEG}deg`, '0deg', `${ROTATE_DEG}deg`],
                   extrapolate: 'clamp',
                 });
                 const opacity = scrollX.interpolate({
                   inputRange,
-                  outputRange: [0.5, 1, 0.5],
+                  outputRange: [0.82, 1, 0.82],
                   extrapolate: 'clamp',
                 });
+                // Centred card on top; nearer neighbours above farther ones.
+                const active = index === metricPage;
+                const z = 10 - Math.abs(index - metricPage);
                 return (
-                  <View key={index} style={{ width: STRIDE }}>
+                  <View
+                    key={index}
+                    style={{ width: STRIDE, zIndex: z, elevation: z }}
+                  >
                     <Animated.View
                       style={[
                         styles.glyCard,
                         styles.metricCard,
+                        active && styles.metricCardFloat,
                         {
                           width: CARD_W,
                           marginHorizontal: CARD_GAP / 2,
                           opacity,
-                          transform: [{ scale }],
+                          transform: [
+                            { perspective: PERSPECTIVE },
+                            { translateX },
+                            { translateY },
+                            { rotateY },
+                            { scale },
+                          ],
                         },
                       ]}
                     >
@@ -2551,6 +2598,14 @@ const styles = StyleSheet.create({
   metricCard: {
     // Inside the carousel row the top gap comes from `metricCarousel`.
     marginTop: 0,
+  },
+  // The centred card floats above the deck — a deeper, softer drop shadow.
+  metricCardFloat: {
+    shadowColor: 'rgba(20,60,40,1)',
+    shadowOffset: { width: 0, height: 26 },
+    shadowOpacity: 0.26,
+    shadowRadius: 42,
+    elevation: 20,
   },
   metricCardHead: { alignItems: 'center', marginBottom: 2 },
   metricCardTitle: {
