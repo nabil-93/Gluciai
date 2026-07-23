@@ -50,12 +50,19 @@ const RATING: Record<DiabetesRating, { color: string; bg: string }> = {
   danger: { color: '#b91c1c', bg: '#fdeaea' },
 };
 
-/** Heart glyph for the per-card favorite toggle — filled red when saved. */
+/**
+ * Heart glyph for the per-card favorite toggle — filled red when saved.
+ * Symmetric about x=12 and centred in the 24×24 box, so it sits dead centre
+ * in the round button instead of leaning left with a dented right lobe.
+ */
+const HEART_PATH =
+  'M12 19.7C9.4 17.5 3.3 12.6 3.3 8.4A4.7 4.7 0 0 1 12 6.6a4.7 4.7 0 0 1 8.7 1.8c0 4.2-6.1 9.1-8.7 11.3z';
+
 function HeartGlyph({ filled }: { filled: boolean }) {
   return (
     <Svg width={17} height={17} viewBox="0 0 24 24">
       <Path
-        d="M12 21s-7.5-4.6-10-9.1C.4 8.9 1.8 5.5 5 5.1c2-.3 3.4.8 4.2 2 .3.5.8.5 1.1 0 .8-1.2 2.2-2.3 4.2-2 3.2.4 4.6 3.8 3 6.8C19.5 16.4 12 21 12 21z"
+        d={HEART_PATH}
         fill={filled ? '#ef4444' : 'none'}
         stroke={filled ? '#ef4444' : '#7b8595'}
         strokeWidth={2.1}
@@ -418,16 +425,6 @@ function HealthyFoodsScreen({
                           </View>
                         </LinearGradient>
                       )}
-                      {/* Favorite toggle — sits over the hero, top-left. */}
-                      <Pressable
-                        onPress={() => toggleFavoriteFood(f.id, isCustom ? f : null)}
-                        style={styles.cardFav}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel={t(isFav ? 'hf.favRemove' : 'hf.favAdd')}
-                      >
-                        <HeartGlyph filled={isFav} />
-                      </Pressable>
                       <View style={styles.cardBody}>
                         <Text style={styles.cardName} numberOfLines={2}>
                           {healthyFoodName(f, i18n.language)}
@@ -438,6 +435,18 @@ function HealthyFoodsScreen({
                         </View>
                       </View>
                     </PressableScale>
+                    {/* Favorite toggle — overlays the hero top-left, but as a
+                        SIBLING of the card: inside it, the web build nests a
+                        <button> in a <button>, which React rejects. */}
+                    <Pressable
+                      onPress={() => toggleFavoriteFood(f.id, isCustom ? f : null)}
+                      style={styles.cardFav}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={t(isFav ? 'hf.favRemove' : 'hf.favAdd')}
+                    >
+                      <HeartGlyph filled={isFav} />
+                    </Pressable>
                   </FadeInView>
                 );
               })}

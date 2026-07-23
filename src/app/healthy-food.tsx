@@ -37,13 +37,18 @@ const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
+/** Symmetric about x=12 and centred in the 24×24 box — the old path leaned
+ *  left and its right lobe was dented. Kept in step with the list screen. */
+const HEART_PATH =
+  'M12 19.7C9.4 17.5 3.3 12.6 3.3 8.4A4.7 4.7 0 0 1 12 6.6a4.7 4.7 0 0 1 8.7 1.8c0 4.2-6.1 9.1-8.7 11.3z';
+
 /** Heart glyph for the favorite toggle — a clear red heart (outline when not
  *  saved, solid when saved) so it reads well on any coloured hero. */
 function HeartIcon({ filled }: { filled: boolean }) {
   return (
     <Svg width={21} height={21} viewBox="0 0 24 24">
       <Path
-        d="M12 21s-7.5-4.6-10-9.1C.4 8.9 1.8 5.5 5 5.1c2-.3 3.4.8 4.2 2 .3.5.8.5 1.1 0 .8-1.2 2.2-2.3 4.2-2 3.2.4 4.6 3.8 3 6.8C19.5 16.4 12 21 12 21z"
+        d={HEART_PATH}
         fill={filled ? '#ef4444' : 'none'}
         stroke="#ef4444"
         strokeWidth={2.2}
