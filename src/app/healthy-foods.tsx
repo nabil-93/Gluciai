@@ -671,17 +671,8 @@ const styles = StyleSheet.create({
   headerRobot: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#e9fbf2',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#ffffff',
-    shadowColor: '#19c37d',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
   },
 
   modeRow: {

@@ -361,12 +361,8 @@ const styles = StyleSheet.create({
   inlineRobot: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f3f0ff',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#e7e2ff',
   },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(16,24,40,0.5)', justifyContent: 'center', padding: 14 },
@@ -389,7 +385,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eef0f5',
   },
-  robotWrap: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#f3f0ff', alignItems: 'center', justifyContent: 'center' },
+  robotWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headTitle: { fontFamily: F800, fontSize: 14.5, color: '#111827' },
   headSub: { fontFamily: F500, fontSize: 11, color: '#8b93a7', marginTop: 1 },
   closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f1f3f8', alignItems: 'center', justifyContent: 'center' },
@@ -410,15 +406,8 @@ const styles = StyleSheet.create({
   aiAvatar: {
     width: 28,
     height: 28,
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: 'rgba(30,50,70,1)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    elevation: 1,
   },
   aiBubble: {
     flexShrink: 1,

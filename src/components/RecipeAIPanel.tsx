@@ -300,8 +300,6 @@ const styles = StyleSheet.create({
   robotWrap: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f3f0ff',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -331,15 +329,8 @@ const styles = StyleSheet.create({
   aiAvatar: {
     width: 28,
     height: 28,
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: 'rgba(30,50,70,1)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    elevation: 1,
   },
   aiBubble: {
     flexShrink: 1,

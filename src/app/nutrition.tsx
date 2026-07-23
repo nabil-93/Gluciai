@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
 import { CoachChatModal } from '@/components/CoachChatModal';
 import { MealPeekModal } from '@/components/MealPeekModal';
+import { deleteMeal } from '@/services/data';
 import { getRecommendations } from '@/services/recommendations';
 import { setPendingScan } from '@/services/scanSession';
 import { useAppStore } from '@/store/useAppStore';
@@ -623,8 +624,16 @@ export default function NutritionScreen() {
         starters={t('coachChat.startersNutrition', { returnObjects: true }) as string[]}
       />
 
-      {/* ── Quick "peek" at a logged meal → full report ── */}
-      <MealPeekModal meal={peek} onClose={() => setPeek(null)} onDetails={openMealReport} />
+      {/* ── Quick "peek" at a logged meal → full report / delete ── */}
+      <MealPeekModal
+        meal={peek}
+        onClose={() => setPeek(null)}
+        onDetails={openMealReport}
+        onDelete={(m) => {
+          deleteMeal(m.id);
+          setPeek(null);
+        }}
+      />
     </View>
   );
 }
@@ -783,11 +792,8 @@ const styles = StyleSheet.create({
   coachRobot: {
     width: 56,
     height: 56,
-    borderRadius: 18,
-    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.card,
   },
   coachPill: {
     alignSelf: 'flex-start',

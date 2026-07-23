@@ -1039,15 +1039,8 @@ const styles = StyleSheet.create({
   aiAvatar: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: 'rgba(30,50,70,1)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
   },
   aiBubble: {
     flexShrink: 1,

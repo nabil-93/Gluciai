@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Svg, { Path } from 'react-native-svg';
@@ -33,12 +33,24 @@ export function MealPeekModal({
   meal,
   onClose,
   onDetails,
+  onDelete,
 }: {
   meal: MealScan | null;
   onClose: () => void;
   onDetails: (meal: MealScan) => void;
+  /** Remove this dish from the day (two-step confirm inside the window). */
+  onDelete?: (meal: MealScan) => void;
 }) {
   const { t, i18n } = useTranslation();
+
+  // Two-step delete confirm; reset (during render) whenever a different dish
+  // is opened, so a stale "confirm" never carries over between meals.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [lastId, setLastId] = useState(meal?.id);
+  if (meal?.id !== lastId) {
+    setLastId(meal?.id);
+    setConfirmDelete(false);
+  }
 
   const slot = (meal?.meal_type ?? 'snack') as MealType;
   const r = meal?.result;
@@ -98,6 +110,23 @@ export function MealPeekModal({
                     <Path d="m9 18 6-6-6-6" />
                   </Svg>
                 </Pressable>
+
+                {onDelete ? (
+                  <Pressable
+                    style={[styles.deleteBtn, confirmDelete && styles.deleteBtnConfirm]}
+                    onPress={() => {
+                      if (confirmDelete) onDelete(meal);
+                      else setConfirmDelete(true);
+                    }}
+                  >
+                    <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={confirmDelete ? '#fff' : '#c0563a'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <Path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    </Svg>
+                    <Text style={[styles.deleteText, confirmDelete && styles.deleteTextConfirm]}>
+                      {confirmDelete ? t('nutritionPage.deleteConfirm') : t('nutritionPage.deleteMeal')}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             </>
           ) : null}
@@ -195,4 +224,20 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   detailsText: { fontFamily: F800, fontSize: 14.5, color: '#fff' },
+
+  deleteBtn: {
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#f0d5cc',
+    backgroundColor: '#fdf3f0',
+    paddingVertical: 12,
+  },
+  deleteBtnConfirm: { backgroundColor: '#c0563a', borderColor: '#c0563a' },
+  deleteText: { fontFamily: F700, fontSize: 13, color: '#c0563a' },
+  deleteTextConfirm: { color: '#fff' },
 });

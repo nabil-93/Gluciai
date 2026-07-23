@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,9 +15,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import Svg, { Circle, Path } from 'react-native-svg';
 
+import { AddedSugarCard, SUGAR_SEARCH_NAME } from '@/components/AddedSugarCard';
+import { AnimatedRobot } from '@/components/ui';
 import { MealAssistant } from '@/components/MealAssistant';
 import { MealEditModal } from '@/components/MealEditModal';
 import { NutriScoreBar } from '@/components/NutriScoreBar';
+import { SaveConfirmModal } from '@/components/SaveConfirmModal';
 import { saveMeal } from '@/services/data';
 import { aggregateItems } from '@/services/nutrition/engine';
 import { nutriGrade, scoreMeal } from '@/services/nutrition/mealScore';
@@ -129,6 +134,41 @@ function itemsForEdit(result: NutritionResult, items: FoodItemResult[]): FoodIte
   ];
 }
 
+/** Per-100g values for table sugar, used to build the single "added sugar" row
+ *  the patient declares (grams / cubes / photo). Pure sucrose ≈ 400 kcal,
+ *  100 g carbs per 100 g, GI ≈ 65 — deterministic so totals recompute exactly. */
+function makeSugarItem(grams: number, label: string): FoodItemResult {
+  const f = grams / 100;
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+  return {
+    name: label,
+    search_name: SUGAR_SEARCH_NAME,
+    category: 'Snack',
+    portion_grams: Math.round(grams),
+    calories: Math.round(400 * f),
+    carbohydrates: r1(100 * f),
+    sugar: r1(100 * f),
+    protein: 0,
+    fat: 0,
+    fiber: 0,
+    glycemic_index: 65,
+    source: 'ai_estimate',
+    matched_food: label,
+    match_score: 100,
+    is_main_food: false,
+    is_estimated: true,
+    detection_confidence: 1,
+    nutrition_confidence: 0.6,
+  };
+}
+
+/** Qualitative glycemic-index band → i18n key + color (mealScore thresholds). */
+function giBand(gi: number): { key: 'giLow' | 'giModerate' | 'giHigh'; color: string } {
+  if (gi >= 70) return { key: 'giHigh', color: '#e63e11' };
+  if (gi >= 56) return { key: 'giModerate', color: ORANGE };
+  return { key: 'giLow', color: GREEN };
+}
+
 /** A single-value progress ring (score / goals / hydration). */
 function Ring({
   size,
@@ -201,7 +241,7 @@ function MacroDonut({ p, c, f }: { p: number; c: number; f: number }) {
 
 export default function ScanResultScreen() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const profile = useAppStore((s) => s.profile);
   const meals = useAppStore((s) => s.meals);
@@ -217,6 +257,23 @@ export default function ScanResultScreen() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editStartNew, setEditStartNew] = useState(false);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+
+  // "Scan réussi" badge: show the text for ~1s, then collapse it into the
+  // check logo, leaving only the logo.
+  const badgeAnim = useRef(new Animated.Value(0)).current;
+  const [badgeCollapsed, setBadgeCollapsed] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => {
+      Animated.timing(badgeAnim, {
+        toValue: 1,
+        duration: 300,
+        easing: Easing.in(Easing.ease),
+        useNativeDriver: true,
+      }).start(() => setBadgeCollapsed(true));
+    }, 1000);
+    return () => clearTimeout(id);
+  }, [badgeAnim]);
 
   if (!pending) return <Redirect href="/(tabs)" />;
 
@@ -251,6 +308,11 @@ export default function ScanResultScreen() {
   // the photo — it moves with the food (a lean, high-fibre plate → A/B; a
   // sugary, high-GI one → D/E).
   const grade = nutriGrade(quality.score);
+
+  // Glycemic index of the whole plate (carb-weighted, from the engine) — shown
+  // as a labelled chip in the calories card so the value is never a mystery.
+  const gi = Math.round(result.glycemic_index || 0);
+  const giInfo = giBand(gi);
 
   const micros = estimateMicros(items);
   const microAvg = microAverage(micros);
@@ -311,17 +373,26 @@ export default function ScanResultScreen() {
     setEditOpen(true);
   };
 
+  // Declare / update / clear the single "added sugar" row (sweet tea, juice…);
+  // the plate re-aggregates so calories, GI and score all move with it.
+  const setSugarGrams = (grams: number) => {
+    const base = items.filter((it) => it.search_name !== SUGAR_SEARCH_NAME);
+    const next = grams > 0 ? [...base, makeSugarItem(grams, t('analysis.sugarName'))] : base;
+    onItemsEdited(next);
+  };
+
+  // Save → confirmation window (which then auto-redirects home after 5s).
   const onSave = async () => {
-    if (saving || saved) return;
+    if (saving) return;
     setSaving(true);
     try {
       await persist();
+      setSaveModalOpen(true);
     } finally {
       setSaving(false);
     }
   };
-  const onAddToJournal = async () => {
-    await persist();
+  const goHome = () => {
     clearPendingScan();
     router.replace('/(tabs)');
   };
@@ -379,17 +450,34 @@ export default function ScanResultScreen() {
               style={styles.photoScrim}
               pointerEvents="none"
             />
-            <View style={styles.scanBadge}>
+            {/* Scan-success badge: text shows ~1s, then gathers into the logo */}
+            <View style={[styles.scanBadge, badgeCollapsed && styles.scanBadgeCollapsed]}>
               <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#16a860" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
                 <Circle cx={12} cy={12} r={9} />
                 <Path d="m8.4 12 2.3 2.3 4.6-4.8" />
               </Svg>
-              <Text style={styles.scanBadgeText}>{t('analysis.scanSuccess')}</Text>
+              {!badgeCollapsed ? (
+                <Animated.Text
+                  style={[
+                    styles.scanBadgeText,
+                    {
+                      opacity: badgeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+                      transform: [
+                        { translateX: badgeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) },
+                      ],
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {t('analysis.scanSuccess')}
+                </Animated.Text>
+              ) : null}
             </View>
-            {/* A–E score strip — the letter changes with the meal's quality */}
-            <View style={styles.scoreBar}>
-              <NutriScoreBar grade={grade} label={t('analysis.nutriScore')} />
-            </View>
+          </View>
+
+          {/* Nutri-Score — under the photo, above the calories card */}
+          <View style={styles.scoreBarBelow}>
+            <NutriScoreBar grade={grade} label={t('analysis.nutriScore')} />
           </View>
         </LinearGradient>
 
@@ -424,6 +512,18 @@ export default function ScanResultScreen() {
                 </Text>
               </View>
             </View>
+
+            {/* Glycemic index of the plate — labelled so the value is clear */}
+            {gi > 0 ? (
+              <View style={styles.giRow}>
+                <View style={[styles.giDot, { backgroundColor: giInfo.color }]} />
+                <Text style={styles.giLabel}>{t('analysis.giLabel')}</Text>
+                <Text style={[styles.giValue, { color: giInfo.color }]}>{gi}</Text>
+                <View style={[styles.giTag, { backgroundColor: giInfo.color }]}>
+                  <Text style={styles.giTagText}>{t(`analysis.${giInfo.key}`)}</Text>
+                </View>
+              </View>
+            ) : null}
 
             <View style={styles.macroRow}>
               <MacroMini label={t('result.protein')} value={P} pct={pPct} color={GREEN} />
@@ -476,6 +576,9 @@ export default function ScanResultScreen() {
             </Pressable>
           </View>
 
+          {/* ── Added-sugar prompt (sweet tea / juice…) ── */}
+          <AddedSugarCard items={items} language={i18n.language} onSetGrams={setSugarGrams} />
+
           {/* ── Nutritional split (donut) ── */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{t('analysis.distribution')}</Text>
@@ -489,16 +592,18 @@ export default function ScanResultScreen() {
             </View>
           </View>
 
-          {/* ── Personalised advice (opens the AI meal coach) ── */}
+          {/* ── Personalised advice — the AI robot + written advice (opens coach) ── */}
           <Pressable style={styles.advice} onPress={() => setAssistantOpen(true)}>
-            <View style={styles.adviceIcon}>
-              <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <Path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
-                <Path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
-              </Svg>
+            <View style={styles.adviceRobot}>
+              <AnimatedRobot size={34} mood="happy" />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.adviceTitle}>{t('analysis.advice')}</Text>
+              <View style={styles.adviceHead}>
+                <Text style={styles.adviceTitle}>{t('analysis.advice')}</Text>
+                <View style={styles.aiPill}>
+                  <Text style={styles.aiPillText}>{t('analysis.aiTag')}</Text>
+                </View>
+              </View>
               <Text style={styles.adviceBody}>{advice}</Text>
             </View>
             <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke="#8fbfa5" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
@@ -595,31 +700,21 @@ export default function ScanResultScreen() {
         </View>
       </ScrollView>
 
-      {/* ── Sticky action bar ── */}
+      {/* ── Sticky action bar — Enregistrer + Scanner un autre ── */}
       <View style={[styles.footer, { paddingBottom: 12 + insets.bottom }]}>
         <FooterBtn
-          flex={1}
-          label={saved ? t('analysis.saved') : t('analysis.save')}
-          active={saved}
+          flex={1.25}
+          primary
+          label={saving ? t('common.loading') : t('analysis.save')}
           onPress={onSave}
           icon={
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={saved ? GREEN : '#3a463f'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              {saved ? <Path d="M20 6 9 17l-5-5" /> : <Path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />}
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
             </Svg>
           }
         />
         <FooterBtn
-          flex={1.25}
-          label={t('analysis.addToJournal')}
-          onPress={onAddToJournal}
-          icon={
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#3a463f" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-              <Path d="M5 12h14M12 5v14" />
-            </Svg>
-          }
-        />
-        <FooterBtn
-          flex={1.55}
+          flex={1}
           label={t('analysis.scanAnother')}
           onPress={onScanAnother}
           icon={
@@ -645,6 +740,8 @@ export default function ScanResultScreen() {
         onClose={() => setEditOpen(false)}
         onSaved={onItemsEdited}
       />
+
+      <SaveConfirmModal open={saveModalOpen} onDone={goHome} />
     </View>
   );
 }
@@ -712,11 +809,11 @@ function BurnRow({ emoji, label, min }: { emoji: string; label: string; min: num
   );
 }
 
-function FooterBtn({ flex, label, icon, onPress, active }: { flex: number; label: string; icon: React.ReactNode; onPress: () => void; active?: boolean }) {
+function FooterBtn({ flex, label, icon, onPress, primary }: { flex: number; label: string; icon: React.ReactNode; onPress: () => void; primary?: boolean }) {
   return (
-    <Pressable style={[styles.footBtn, { flex }, active && styles.footBtnActive]} onPress={onPress}>
+    <Pressable style={[styles.footBtn, { flex }, primary && styles.footBtnPrimary]} onPress={onPress}>
       {icon}
-      <Text style={[styles.footLabel, active && { color: GREEN }]} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.footLabel, primary && styles.footLabelPrimary]} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
 }
@@ -766,7 +863,10 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   scanBadgeText: { color: '#16a860', fontSize: 12.5, fontFamily: F700 },
-  scoreBar: { position: 'absolute', left: 10, right: 10, bottom: 10 },
+  // Once the text has gathered into the check, the pill shrinks to the logo.
+  scanBadgeCollapsed: { paddingLeft: 8, paddingRight: 8, gap: 0 },
+  // Nutri-Score now lives under the photo (was overlaid on it).
+  scoreBarBelow: { marginHorizontal: 14, marginTop: 12 },
 
   body: { paddingHorizontal: 14, paddingTop: 13, gap: 12 },
   card: {
@@ -798,6 +898,22 @@ const styles = StyleSheet.create({
   calValue: { fontSize: 26, fontFamily: F800, color: INK, letterSpacing: -0.5 },
   calUnit: { fontSize: 12, color: MUTED, fontFamily: F600 },
   calSub: { fontSize: 10, color: '#aab2ab', fontFamily: F500, marginTop: 1 },
+
+  // Glycemic-index chip
+  giRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f2ee',
+  },
+  giDot: { width: 8, height: 8, borderRadius: 4 },
+  giLabel: { flex: 1, fontSize: 11.5, color: '#5a655d', fontFamily: F600 },
+  giValue: { fontSize: 15, fontFamily: F800 },
+  giTag: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9 },
+  giTagText: { fontSize: 10, fontFamily: F800, color: '#fff' },
 
   macroCol: { alignItems: 'flex-start', gap: 2 },
   macroTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -865,15 +981,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  adviceIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    backgroundColor: GREEN,
+  adviceRobot: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  adviceTitle: { fontSize: 13, fontFamily: F800, color: '#158a52', marginBottom: 2 },
+  adviceHead: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 2 },
+  adviceTitle: { fontSize: 13, fontFamily: F800, color: '#158a52' },
+  aiPill: {
+    backgroundColor: '#158a52',
+    borderRadius: 999,
+    paddingVertical: 2,
+    paddingHorizontal: 7,
+  },
+  aiPillText: { fontSize: 9, fontFamily: F800, color: '#fff', letterSpacing: 0.3 },
   adviceBody: { fontSize: 11.5, lineHeight: 16.5, color: '#5a7a67', fontFamily: F500 },
 
   // Four mini cards — 2×2 grid (was a cramped single row of four)
@@ -948,6 +1070,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     paddingHorizontal: 6,
   },
-  footBtnActive: { borderColor: GREEN, backgroundColor: '#f6fbf7' },
+  footBtnPrimary: { borderColor: '#159A57', backgroundColor: '#159A57' },
   footLabel: { fontSize: 10.5, fontFamily: F700, color: '#3a463f' },
+  footLabelPrimary: { color: '#fff' },
 });

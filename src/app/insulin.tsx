@@ -1016,11 +1016,8 @@ const styles = StyleSheet.create({
   coachRobot: {
     width: 50,
     height: 50,
-    borderRadius: 15,
-    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.card,
   },
   coachKicker: { fontFamily: F700, fontSize: 12, color: GREEN_D },
   coachTitle: { fontFamily: F800, fontSize: 14.5, color: INK, marginTop: 2 },

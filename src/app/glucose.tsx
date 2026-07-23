@@ -1347,11 +1347,8 @@ const styles = StyleSheet.create({
   coachRobot: {
     width: 50,
     height: 50,
-    borderRadius: 15,
-    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.card,
   },
   coachPill: {
     alignSelf: 'flex-start',
