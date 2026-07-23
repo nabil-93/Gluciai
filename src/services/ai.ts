@@ -464,13 +464,18 @@ export function buildHealthContext(): string {
 
   // Current status + recent account changes — the assistant must know the
   // patient's FULL situation (sick? new targets? new ratio?) before advising.
+  const statusNote =
+    activityStatus === 'sick'
+      ? 'ILLNESS raises glucose and insulin resistance — expect roughly +10–15% insulin needs.'
+      : activityStatus === 'injured'
+        ? 'REDUCED activity (injury): less exercise lowers insulin sensitivity — the app already adds ~+8% to the calculated dose.'
+        : activityStatus === 'paused'
+          ? 'training PAUSED, so less daily activity than usual — the app already adds ~+8% to the calculated dose.'
+          : 'usual activity level — no status adjustment.';
   lines.push(
-    `Patient status right now: ${activityStatus}` +
-      (activityStatus === 'sick'
-        ? ' (illness can RAISE glucose and change insulin needs — factor it in).'
-        : activityStatus === 'injured'
-          ? ' (reduced activity — factor it in).'
-          : '.')
+    `Patient status right now: ${activityStatus} — ${statusNote} ` +
+      `ALWAYS take this status into account BEFORE proposing any insulin dose, ` +
+      `and state how it changed the number.`
   );
   // Free-text notes the patient told the assistant ("drank water", "had a
   // coffee", "feeling stressed") — these can affect glucose/insulin, so the

@@ -15,9 +15,10 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import { MealAssistant } from '@/components/MealAssistant';
 import { MealEditModal } from '@/components/MealEditModal';
+import { NutriScoreBar } from '@/components/NutriScoreBar';
 import { saveMeal } from '@/services/data';
 import { aggregateItems } from '@/services/nutrition/engine';
-import { scoreMeal } from '@/services/nutrition/mealScore';
+import { nutriGrade, scoreMeal } from '@/services/nutrition/mealScore';
 import {
   estimateMealWaterMl,
   estimateMicros,
@@ -209,7 +210,10 @@ export default function ScanResultScreen() {
   const [items, setItems] = useState<FoodItemResult[]>(() => pending?.result.items ?? []);
   const [mealType] = useState<MealType>(() => defaultMealType());
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  // When opened to review a meal already in the journal (from the Nutrition
+  // page), start as "saved" so it can't be re-saved and the day isn't double
+  // counted; a fresh scan starts unsaved as before.
+  const [saved, setSaved] = useState(() => pending?.alreadySaved ?? false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editStartNew, setEditStartNew] = useState(false);
@@ -242,6 +246,11 @@ export default function ScanResultScreen() {
     sodium: result.sodium,
     glycemic_index: result.glycemic_index,
   });
+
+  // Front-of-pack A–E letter derived from the same quality score, shown on
+  // the photo — it moves with the food (a lean, high-fibre plate → A/B; a
+  // sugary, high-GI one → D/E).
+  const grade = nutriGrade(quality.score);
 
   const micros = estimateMicros(items);
   const microAvg = microAverage(micros);
@@ -364,12 +373,22 @@ export default function ScanResultScreen() {
                 <Text style={styles.photoPhText}>{t('analysis.mealPhoto')}</Text>
               </View>
             )}
+            {/* darken the foot of the photo so the frosted score bar reads */}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.34)']}
+              style={styles.photoScrim}
+              pointerEvents="none"
+            />
             <View style={styles.scanBadge}>
               <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#16a860" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
                 <Circle cx={12} cy={12} r={9} />
                 <Path d="m8.4 12 2.3 2.3 4.6-4.8" />
               </Svg>
               <Text style={styles.scanBadgeText}>{t('analysis.scanSuccess')}</Text>
+            </View>
+            {/* A–E score strip — the letter changes with the meal's quality */}
+            <View style={styles.scoreBar}>
+              <NutriScoreBar grade={grade} label={t('analysis.nutriScore')} />
             </View>
           </View>
         </LinearGradient>
@@ -732,10 +751,11 @@ const styles = StyleSheet.create({
   },
   photoPh: { alignItems: 'center', justifyContent: 'center' },
   photoPhText: { color: '#8b968c', fontFamily: F600, fontSize: 13 },
+  photoScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 96 },
   scanBadge: {
     position: 'absolute',
     left: 12,
-    bottom: 12,
+    top: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -746,6 +766,7 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   scanBadgeText: { color: '#16a860', fontSize: 12.5, fontFamily: F700 },
+  scoreBar: { position: 'absolute', left: 10, right: 10, bottom: 10 },
 
   body: { paddingHorizontal: 14, paddingTop: 13, gap: 12 },
   card: {

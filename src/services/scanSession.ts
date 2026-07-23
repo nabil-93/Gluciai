@@ -13,15 +13,20 @@ let pending: {
   imageSize?: { width: number; height: number };
   /** JPEG base64 of the analyzed photo — uploaded to storage on save */
   base64?: string;
+  /** True when the result screen is opened to REVIEW a meal already in the
+   *  journal (from the Nutrition page) — the report opens read-only so it
+   *  can't be saved twice and the day totals aren't double-counted. */
+  alreadySaved?: boolean;
 } | null = null;
 
 export function setPendingScan(
   result: NutritionResult,
   imageUri?: string,
   imageSize?: { width: number; height: number },
-  base64?: string
+  base64?: string,
+  alreadySaved?: boolean
 ) {
-  pending = { result, imageUri, imageSize, base64 };
+  pending = { result, imageUri, imageSize, base64, alreadySaved };
 }
 
 export function getPendingScan() {

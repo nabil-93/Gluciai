@@ -16,10 +16,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
 import { CoachChatModal } from '@/components/CoachChatModal';
+import { MealPeekModal } from '@/components/MealPeekModal';
 import { getRecommendations } from '@/services/recommendations';
+import { setPendingScan } from '@/services/scanSession';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
-import type { MealType } from '@/types';
+import type { MealScan, MealType } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -284,21 +286,33 @@ export default function NutritionScreen() {
     { kcal: 0, carbs: 0, protein: 0, fat: 0, fiber: 0 }
   );
 
-  /** Per-slot aggregates so each meal-type row shows what's logged. */
+  /** Per-slot aggregates + the actual logged meals, so each meal-type row can
+   *  show its scanned dishes as photo tiles under it. */
   const bySlot = useMemo(() => {
-    const map: Record<MealType, { count: number; carbs: number }> = {
-      breakfast: { count: 0, carbs: 0 },
-      lunch: { count: 0, carbs: 0 },
-      dinner: { count: 0, carbs: 0 },
-      snack: { count: 0, carbs: 0 },
+    const map: Record<MealType, { count: number; carbs: number; items: MealScan[] }> = {
+      breakfast: { count: 0, carbs: 0, items: [] },
+      lunch: { count: 0, carbs: 0, items: [] },
+      dinner: { count: 0, carbs: 0, items: [] },
+      snack: { count: 0, carbs: 0, items: [] },
     };
     for (const m of todayMeals) {
       const slot = (m.meal_type ?? 'snack') as MealType;
       map[slot].count += 1;
       map[slot].carbs += Math.round(m.result.carbohydrates ?? 0);
+      map[slot].items.push(m);
     }
     return map;
   }, [todayMeals]);
+
+  // The meal tapped from its photo → shown in a quick "peek" window.
+  const [peek, setPeek] = useState<MealScan | null>(null);
+  // "Plus de détails" → reuse the full scan-result report for the saved meal
+  // (opened read-only so it isn't re-saved / double-counted).
+  const openMealReport = (meal: MealScan) => {
+    setPeek(null);
+    setPendingScan(meal.result, meal.image_url, undefined, undefined, true);
+    router.push('/scan-result');
+  };
 
   const carbsPct = Math.min(1, totals.carbs / GOALS.carbs);
   const remaining = Math.max(0, GOALS.carbs - Math.round(totals.carbs));
@@ -471,24 +485,59 @@ export default function NutritionScreen() {
               const info = bySlot[slot];
               const meta = MEAL_META[slot];
               return (
-                <Pressable
+                <View
                   key={slot}
-                  onPress={() => router.push('/scan')}
-                  style={[styles.mealRow, i < MEAL_ORDER.length - 1 && styles.mealRowBorder]}
+                  style={[styles.mealBlock, i < MEAL_ORDER.length - 1 && styles.mealRowBorder]}
                 >
-                  <View style={[styles.mealChip, { backgroundColor: meta.chip }]}>{meta.icon}</View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.mealName}>{t(`nutritionPage.mt.${slot}`)}</Text>
-                    <Text style={styles.mealSub} numberOfLines={1}>
-                      {info.count > 0
-                        ? t('nutritionPage.mealSummary', { count: info.count, carbs: info.carbs })
-                        : t(`nutritionPage.mtAdd.${slot}`)}
-                    </Text>
-                  </View>
-                  <View style={styles.mealPlus}>
-                    <PlusThin />
-                  </View>
-                </Pressable>
+                  {/* Header: the meal moment + its running total, "+" adds a scan */}
+                  <Pressable style={styles.mealRow} onPress={() => router.push('/scan')}>
+                    <View style={[styles.mealChip, { backgroundColor: meta.chip }]}>{meta.icon}</View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.mealName}>{t(`nutritionPage.mt.${slot}`)}</Text>
+                      <Text style={styles.mealSub} numberOfLines={1}>
+                        {info.count > 0
+                          ? t('nutritionPage.mealSummary', { count: info.count, carbs: info.carbs })
+                          : t(`nutritionPage.mtAdd.${slot}`)}
+                      </Text>
+                    </View>
+                    <View style={styles.mealPlus}>
+                      <PlusThin />
+                    </View>
+                  </Pressable>
+
+                  {/* The scanned dishes for this moment, as tappable photo tiles */}
+                  {info.items.length > 0 ? (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.tileRow}
+                    >
+                      {info.items.map((m) => (
+                        <Pressable key={m.id} style={styles.tile} onPress={() => setPeek(m)}>
+                          <View style={styles.tilePhoto}>
+                            {m.image_url ? (
+                              <Image
+                                source={{ uri: m.image_url }}
+                                style={StyleSheet.absoluteFill}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View style={[StyleSheet.absoluteFill, styles.tilePh]}>
+                                <Text style={{ fontSize: 24 }}>🍽️</Text>
+                              </View>
+                            )}
+                            <View style={styles.tileKcal}>
+                              <Text style={styles.tileKcalText}>{Math.round(m.result.calories)}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.tileName} numberOfLines={1}>
+                            {m.result.food_name}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  ) : null}
+                </View>
               );
             })}
           </View>
@@ -573,6 +622,9 @@ export default function NutritionScreen() {
         errorText={t('common.error')}
         starters={t('coachChat.startersNutrition', { returnObjects: true }) as string[]}
       />
+
+      {/* ── Quick "peek" at a logged meal → full report ── */}
+      <MealPeekModal meal={peek} onClose={() => setPeek(null)} onDetails={openMealReport} />
     </View>
   );
 }
@@ -769,8 +821,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     ...shadows.card,
   },
+  mealBlock: {},
   mealRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
   mealRowBorder: { borderBottomWidth: 1, borderBottomColor: '#F0F3F1' },
+
+  // Scanned-dish photo tiles under each meal moment
+  tileRow: { gap: 10, paddingLeft: 58, paddingRight: 4, paddingBottom: 14 },
+  tile: { width: 96 },
+  tilePhoto: {
+    width: 96,
+    height: 72,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#eef4ef',
+  },
+  tilePh: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#eef4ef' },
+  tileKcal: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  tileKcalText: { fontFamily: F700, fontSize: 10.5, color: '#fff' },
+  tileName: { fontFamily: F600, fontSize: 11.5, color: INK, marginTop: 5, width: 96 },
   mealChip: {
     width: 44,
     height: 44,

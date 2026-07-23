@@ -2,6 +2,7 @@ import type {
   ActivityIntensity,
   ActivityKind,
   ActivityLog,
+  ActivityStatus,
   GlucoseLog,
   InsulinLog,
   MealScan,
@@ -46,6 +47,7 @@ export type BolusFlag =
   | 'noRatio' // profile ratios missing → defaults used
   | 'sick' // patient declared illness → needs raised
   | 'stress' // patient declared stress → needs raised
+  | 'lowActivity' // status injured/paused → less exercise, less sensitive
   | 'alcohol'; // alcohol → correction halved + dose reduced (hypo risk)
 
 /**
@@ -118,6 +120,11 @@ export interface BolusInputs {
   isSick?: boolean;
   /** Patient declared strong stress (+10 % needs, flagged). */
   isStressed?: boolean;
+  /** The account-wide activity status (home "Statut"). `injured`/`paused`
+   *  mean the patient dropped their usual exercise → reduced insulin
+   *  sensitivity → a small +8 % on the dose. `sick` is handled by `isSick`
+   *  (the toggle is pre-checked from this status), `active` = no change. */
+  activityStatus?: ActivityStatus;
   /** Alcohol with this meal → correction halved, −10 %, hypo warning. */
   alcohol?: boolean;
 }
@@ -134,6 +141,7 @@ export interface BolusResult {
   rawTotal: number;
   sickFactor: number; // 1 = fine, 1.15 = sick
   stressFactor: number; // 1 = fine, 1.1 = stressed
+  statusFactor: number; // 1 = active, 1.08 = injured/paused (reduced activity)
   alcoholFactor: number; // 1 = none, 0.9 = alcohol declared
   /* context the engine used (for the AI report + UI) */
   mealTime: MealType;
@@ -237,6 +245,12 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
   if (inputs.isSick) flags.push('sick');
   const stressFactor = inputs.isStressed ? 1.1 : 1;
   if (inputs.isStressed) flags.push('stress');
+  // Home "Statut": injured / paused = the patient stopped their usual
+  // exercise → insulin sensitivity drops → a small, conservative +8 %.
+  // (`sick` is already covered by isSick; `active` leaves the dose unchanged.)
+  const statusFactor =
+    inputs.activityStatus === 'injured' || inputs.activityStatus === 'paused' ? 1.08 : 1;
+  if (statusFactor > 1) flags.push('lowActivity');
   let alcoholFactor = 1;
   if (inputs.alcohol) {
     alcoholFactor = 0.9;
@@ -311,6 +325,7 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
     trendFactor *
     sickFactor *
     stressFactor *
+    statusFactor *
     alcoholFactor;
   raw = Math.max(0, raw);
 
@@ -337,6 +352,7 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
     trendFactor,
     sickFactor,
     stressFactor,
+    statusFactor,
     alcoholFactor,
     rawTotal: r1(raw),
     mealTime,

@@ -25,6 +25,23 @@ export interface MealScore {
   reasons: string[];
 }
 
+/** Front-of-pack style letter grade (Nutri-Score look: A best → E worst). */
+export type NutriGrade = 'A' | 'B' | 'C' | 'D' | 'E';
+
+/**
+ * Map the 0..100 meal-quality score to an A–E grade so a meal can carry a
+ * glanceable letter (like a Nutri-Score) in addition to the numeric ring.
+ * A meal that scores well for a diabetic (low GI/sugar, good fibre/protein)
+ * lands on A/B; sugary, high-GI, very caloric plates fall to D/E.
+ */
+export function nutriGrade(score: number): NutriGrade {
+  if (score >= 80) return 'A';
+  if (score >= 65) return 'B';
+  if (score >= 50) return 'C';
+  if (score >= 35) return 'D';
+  return 'E';
+}
+
 const COLORS = {
   excellent: '#37B24D',
   good: '#2FCB8E',

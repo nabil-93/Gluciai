@@ -37,15 +37,16 @@ const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
-/** Heart glyph for the favorite toggle — filled red when saved. */
+/** Heart glyph for the favorite toggle — a clear red heart (outline when not
+ *  saved, solid when saved) so it reads well on any coloured hero. */
 function HeartIcon({ filled }: { filled: boolean }) {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24">
+    <Svg width={21} height={21} viewBox="0 0 24 24">
       <Path
         d="M12 21s-7.5-4.6-10-9.1C.4 8.9 1.8 5.5 5 5.1c2-.3 3.4.8 4.2 2 .3.5.8.5 1.1 0 .8-1.2 2.2-2.3 4.2-2 3.2.4 4.6 3.8 3 6.8C19.5 16.4 12 21 12 21z"
         fill={filled ? '#ef4444' : 'none'}
-        stroke={filled ? '#ef4444' : '#8b93a7'}
-        strokeWidth={2}
+        stroke="#ef4444"
+        strokeWidth={2.2}
         strokeLinejoin="round"
       />
     </Svg>
@@ -139,9 +140,9 @@ export default function HealthyFoodDetailScreen() {
     `${JSON.stringify(dishForAI)}\n\n` +
     `Règles pour ce plat :\n` +
     `- Réponds à ses questions sur CE plat (nutrition, préparation, adaptation à SON diabète en te servant de son profil et de ses données).\n` +
-    `- S'il demande de MODIFIER le plat (ajouter/retirer un ingrédient, réduire les calories ou les glucides, changer la portion, le rendre plus rassasiant, etc.), RECALCULE une nutrition cohérente puis renvoie le plat mis à jour comme UN SEUL bloc, seul sur sa ligne, EXACTEMENT ainsi :\n` +
+    `- S'il demande de MODIFIER le plat (ajouter/retirer un ingrédient, réduire les calories ou les glucides, changer la portion, le rendre plus rassasiant, etc.), RECALCULE toute la nutrition de façon cohérente et exacte (calories = somme réelle des ingrédients, glucides/sucre/protéines/lipides/fibres/IG mis à jour), puis renvoie le plat mis à jour comme UN SEUL bloc, seul sur sa ligne, EXACTEMENT ainsi :\n` +
     `[[dish:{"name":"...","emoji":"...","category":"${food.category}","serving":"...","grams":0,"calories":0,"carbs":0,"sugar":0,"protein":0,"fat":0,"fiber":0,"gi":0,"why":"...","ingredients":["..."],"steps":["..."]}]]\n` +
-    `  Garde TOUS les champs, écris le texte (name/why/ingredients/steps) dans la langue du patient, puis ajoute une courte phrase expliquant ce que tu as changé. N'émets [[dish:...]] QUE lors d'une vraie modification, jamais sinon.`;
+    `  Garde TOUS les champs, écris le texte (name/why/ingredients/steps) dans la langue du patient. AVANT le bloc, présente la modification comme une PROPOSITION à confirmer (n'affirme jamais qu'elle est déjà appliquée) et résume en une phrase claire CE QUI CHANGE avec les chiffres (ex. « +1 œuf → +78 kcal, +6 g de protéines »). Le patient devra la confirmer pour l'appliquer. N'émets [[dish:...]] QUE lors d'une vraie demande de modification, jamais sinon.`;
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -364,6 +365,7 @@ export default function HealthyFoodDetailScreen() {
         errorText={t('common.error')}
         contextPreamble={dishContext}
         onDishUpdate={setOverride}
+        currentDish={food}
         starters={[
           t('hf.aiStarter1'),
           t('hf.aiStarter2'),
@@ -521,26 +523,37 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     top: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 46,
+    zIndex: 2,
+    shadowColor: 'rgba(20,30,45,1)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 7,
+    elevation: 4,
   },
   favBtn: {
     position: 'absolute',
     right: 16,
     top: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 46,
     zIndex: 2,
+    shadowColor: 'rgba(20,30,45,1)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 7,
+    elevation: 4,
   },
   heroEmoji: { fontSize: 64, marginTop: 14 },
   heroPhotoWrap: {

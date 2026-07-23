@@ -50,6 +50,13 @@ interface Msg {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  /** A dish edit the AI proposed on this turn, awaiting the patient's
+   *  confirmation (only set on the dish page, when `onDishUpdate` is given). */
+  pendingDish?: HealthyFood;
+  /** The dish as it was BEFORE this proposal — for the before→after preview. */
+  beforeDish?: HealthyFood | null;
+  /** Set once the patient acts on the proposal. */
+  editStatus?: 'applied' | 'cancelled';
 }
 
 type Turn = { role: 'user' | 'assistant'; content: string };
@@ -113,6 +120,7 @@ export function CoachChatModal({
   starters,
   contextPreamble,
   onDishUpdate,
+  currentDish,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -126,10 +134,13 @@ export function CoachChatModal({
   /** Hidden context prepended to every AI turn (e.g. the dish being viewed +
    *  a modify protocol). Never shown in the thread. */
   contextPreamble?: string;
-  /** Called with the rebuilt dish when the AI returns a `[[dish:{…}]]` edit. */
+  /** Called with the rebuilt dish once the patient CONFIRMS a `[[dish:{…}]]`
+   *  edit. Presence of this callback enables the propose→confirm gate. */
   onDishUpdate?: (dish: HealthyFood) => void;
+  /** The dish currently shown on the page — used to preview before→after. */
+  currentDish?: HealthyFood;
 }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const profile = useAppStore((s) => s.profile) as Profile | null;
@@ -142,6 +153,11 @@ export function CoachChatModal({
   // referenced while the component renders).
   const idc = useRef(0);
   const nextId = (p: string) => `${p}-${(idc.current += 1)}`;
+  // Latest on-screen dish, read inside async callbacks to snapshot "before".
+  const currentDishRef = useRef<HealthyFood | null>(currentDish ?? null);
+  useEffect(() => {
+    currentDishRef.current = currentDish ?? null;
+  }, [currentDish]);
 
   // Seed the greeting on open; wipe the thread on close (fresh chat each time).
   const [wasOpen, setWasOpen] = useState(false);
@@ -175,7 +191,8 @@ export function CoachChatModal({
     ];
   };
 
-  /** Fold an assistant reply into the thread: apply any dish edit, keep prose. */
+  /** Fold an assistant reply into the thread. A dish edit is NOT applied
+   *  immediately — it becomes a proposal card the patient confirms first. */
   const pushAssistant = (reply: string) => {
     const { dish, clean } = onDishUpdate
       ? extractDishUpdate(reply)
@@ -184,10 +201,39 @@ export function CoachChatModal({
       // Unique, URL-safe id for the edited dish (names may hold spaces/accents/Arabic).
       const id = `custom-mod-${(idc.current += 1)}`;
       const food = buildCustomHealthyFood(dish, id);
-      registerCustomDish(food);
-      onDishUpdate(food);
+      setMsgs((s) => [
+        ...s,
+        {
+          id: nextId('a'),
+          role: 'assistant',
+          content: clean || reply,
+          pendingDish: food,
+          beforeDish: currentDishRef.current,
+        },
+      ]);
+      return;
     }
     setMsgs((s) => [...s, { id: nextId('a'), role: 'assistant', content: clean || reply }]);
+  };
+
+  /** Patient confirmed a proposed edit → register + apply it live on the page. */
+  const confirmEdit = (msg: Msg) => {
+    if (!msg.pendingDish || !onDishUpdate) return;
+    registerCustomDish(msg.pendingDish);
+    onDishUpdate(msg.pendingDish);
+    setMsgs((s) =>
+      s.map((m) =>
+        m.id === msg.id ? { ...m, editStatus: 'applied', pendingDish: undefined } : m
+      )
+    );
+  };
+  /** Patient declined the proposed edit → keep the current dish untouched. */
+  const cancelEdit = (msgId: string) => {
+    setMsgs((s) =>
+      s.map((m) =>
+        m.id === msgId ? { ...m, editStatus: 'cancelled', pendingDish: undefined } : m
+      )
+    );
   };
 
   const ask = async (text: string) => {
@@ -265,6 +311,65 @@ export function CoachChatModal({
     );
   };
 
+  // The propose→confirm card for a dish edit: the recalculated nutrition with
+  // a before→after delta, plus Confirm / Cancel. Nothing is applied until the
+  // patient taps Confirm.
+  const renderEditCard = (m: Msg) => {
+    if (m.editStatus === 'applied') {
+      return <Text style={styles.editApplied}>✅ {t('hf.editApplied')}</Text>;
+    }
+    if (m.editStatus === 'cancelled') {
+      return <Text style={styles.editCancelled}>{t('hf.editCancelled')}</Text>;
+    }
+    if (!m.pendingDish) return null;
+    const after = m.pendingDish;
+    const before = m.beforeDish ?? null;
+    const cells: { label: string; value: number; unit: string; prev: number | null }[] = [
+      { label: t('hf.calories'), value: after.calories, unit: 'kcal', prev: before?.calories ?? null },
+      { label: t('hf.carbs'), value: after.carbs, unit: 'g', prev: before?.carbs ?? null },
+      { label: t('hf.protein'), value: after.protein, unit: 'g', prev: before?.protein ?? null },
+      { label: 'IG', value: after.gi, unit: '', prev: before?.gi ?? null },
+    ];
+    return (
+      <View style={styles.editCard}>
+        <Text style={styles.editTitle}>✏️ {t('hf.editProposed')}</Text>
+        <Text style={styles.editName} numberOfLines={2}>
+          {after.emoji} {healthyFoodName(after, i18n.language)}
+        </Text>
+        <View style={styles.editGrid}>
+          {cells.map((c, i) => {
+            const delta = c.prev == null ? null : c.value - c.prev;
+            return (
+              <View key={i} style={styles.editCell}>
+                <Text style={styles.editCellLabel}>{c.label}</Text>
+                <Text style={styles.editCellValue}>
+                  {c.value}
+                  {c.unit ? ` ${c.unit}` : ''}
+                </Text>
+                {delta == null || delta === 0 ? (
+                  <Text style={styles.editDeltaZero}>=</Text>
+                ) : (
+                  <Text style={[styles.editDelta, delta > 0 ? styles.editUp : styles.editDown]}>
+                    {delta > 0 ? '+' : '−'}
+                    {Math.abs(delta)}
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+        </View>
+        <View style={styles.editActions}>
+          <Pressable style={styles.editCancelBtn} onPress={() => cancelEdit(m.id)}>
+            <Text style={styles.editCancelText}>{t('hf.editCancel')}</Text>
+          </Pressable>
+          <Pressable style={styles.editConfirmBtn} onPress={() => confirmEdit(m)}>
+            <Text style={styles.editConfirmText}>✓ {t('hf.editConfirm')}</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  };
+
   const showStarters =
     !!starters?.length && !msgs.some((m) => m.role === 'user') && !thinking;
 
@@ -304,7 +409,10 @@ export function CoachChatModal({
                   <View style={styles.aiAvatar}>
                     <AnimatedRobot size={24} mood="happy" />
                   </View>
-                  <View style={styles.aiBubble}>{renderAssistant(m.content)}</View>
+                  <View style={styles.aiCol}>
+                    <View style={styles.aiBubble}>{renderAssistant(m.content)}</View>
+                    {renderEditCard(m)}
+                  </View>
                 </View>
               )
             )}
@@ -395,6 +503,7 @@ const styles = StyleSheet.create({
   userText: { fontFamily: F600, fontSize: 13, lineHeight: 19, color: '#14532d' },
 
   aiRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingRight: 24 },
+  aiCol: { flex: 1, minWidth: 0, gap: 8 },
   aiAvatar: {
     width: 28,
     height: 28,
@@ -424,6 +533,58 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   aiText: { fontFamily: F500, fontSize: 13, lineHeight: 19, color: '#26313f' },
+
+  // Propose→confirm card for a dish edit (before→after + actions).
+  editCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#cdeedd',
+    padding: 12,
+    gap: 10,
+    shadowColor: 'rgba(30,50,70,1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  editTitle: { fontFamily: F800, fontSize: 11.5, color: '#0f7a45', letterSpacing: 0.2 },
+  editName: { fontFamily: F700, fontSize: 13.5, color: '#111827', lineHeight: 19 },
+  editGrid: { flexDirection: 'row', gap: 6 },
+  editCell: {
+    flex: 1,
+    backgroundColor: '#f6faf8',
+    borderRadius: 11,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    gap: 1,
+  },
+  editCellLabel: { fontFamily: F600, fontSize: 8.5, color: '#7c8a83', textAlign: 'center' },
+  editCellValue: { fontFamily: F800, fontSize: 12, color: '#14312a', textAlign: 'center' },
+  editDelta: { fontFamily: F700, fontSize: 9.5 },
+  editUp: { color: '#d9822b' },
+  editDown: { color: '#16a860' },
+  editDeltaZero: { fontFamily: F700, fontSize: 9.5, color: '#b3bcb7' },
+  editActions: { flexDirection: 'row', gap: 8, marginTop: 1 },
+  editCancelBtn: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#f1f3f8',
+  },
+  editCancelText: { fontFamily: F700, fontSize: 12.5, color: '#5b6472' },
+  editConfirmBtn: {
+    flex: 1.4,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#19c37d',
+  },
+  editConfirmText: { fontFamily: F800, fontSize: 12.5, color: '#ffffff' },
+  editApplied: { fontFamily: F700, fontSize: 11.5, color: '#0f7a45', paddingLeft: 2 },
+  editCancelled: { fontFamily: F600, fontSize: 11.5, color: '#8b93a7', paddingLeft: 2 },
 
   // Tappable dish card rendered from a [[food:id]] token.
   foodCard: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, padding: 9 },

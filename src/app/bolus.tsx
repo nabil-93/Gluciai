@@ -120,6 +120,7 @@ export default function BolusScreen() {
         isSick,
         isStressed,
         alcohol,
+        activityStatus,
       }),
     [
       carbs,
@@ -137,6 +138,7 @@ export default function BolusScreen() {
       isSick,
       isStressed,
       alcohol,
+      activityStatus,
     ]
   );
 
@@ -167,6 +169,7 @@ export default function BolusScreen() {
       isSick,
       isStressed,
       alcohol,
+      activityStatus,
     });
     setEngine(result);
     setEditDose(result.total);
@@ -628,6 +631,14 @@ export default function BolusScreen() {
                     <Text style={styles.breakLabel}>😰 {t('bolus.brStress')}</Text>
                     <Text style={styles.breakValue}>
                       +{Math.round((engine.stressFactor - 1) * 100)}%
+                    </Text>
+                  </View>
+                ) : null}
+                {engine.statusFactor > 1 ? (
+                  <View style={styles.breakRow}>
+                    <Text style={styles.breakLabel}>🩹 {t('bolus.brLowActivity')}</Text>
+                    <Text style={styles.breakValue}>
+                      +{Math.round((engine.statusFactor - 1) * 100)}%
                     </Text>
                   </View>
                 ) : null}
