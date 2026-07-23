@@ -66,7 +66,17 @@
     "savedTitle": "Plat enregistré ✓",
     "savedBody": "Ton plat est bien à sa place dans ton journal.",
     "savedRedirect": "Redirection vers l'accueil…",
-    "savedGoHome": "Aller à l'accueil"
+    "savedGoHome": "Aller à l'accueil",
+    "giEstimated": "estimé",
+    "giCoverage": "Calculé sur {{pct}} % des glucides",
+    "unknownValues": "Valeurs inconnues",
+    "waterFromMeal": "{{ml}} ml apportés par ce repas",
+    "glLabel": "Charge glycémique",
+    "sugarUnitCubesInline": "morceaux",
+    "glHint": "Elle suit la portion — l'index note la qualité des glucides, la charge leur quantité.",
+    "mealMomentAsk": "Choisissez le repas pour enregistrer",
+    "mealPickerBody": "À quel repas correspond cette assiette ? Nécessaire pour l’ajouter à votre journal.",
+    "mealMomentMoved": "Sera déplacé vers « {{meal}} » — touchez Enregistrer"
   },
   "common": {
     "appName": "GluciAI",
@@ -613,7 +623,10 @@
       "unmatched": "Sans valeurs nutritionnelles (introuvable dans les bases) : {{value}} — touchez « Modifier l'aliment » pour corriger.",
       "ai_estimate": "Certaines valeurs sont estimées par IA (aliment absent des bases officielles).",
       "portions_adjusted": "Portions ajustées selon vos habitudes : {{value}}."
-    }
+    },
+    "plateMore": "{{first}} + {{count}} autres",
+    "plateTotalGrams": "{{grams}} g au total",
+    "warnTitle": "À vérifier"
   },
   "chat": {
     "title": "Coach IA",
@@ -792,7 +805,9 @@
     "errRatio": "Le ratio d'insuline par repas doit être entre 0,1 et 20 U / 10 g.",
     "errBasalDose": "La dose d'insuline lente doit être entre 1 et 200 U.",
     "errGlucoseGoal": "L'objectif de glycémie doit être entre 40 et 600 mg/dL.",
-    "saveError": "Échec de l'enregistrement — vos modifications n'ont pas été sauvegardées. Vérifiez vos valeurs et réessayez."
+    "saveError": "Échec de l'enregistrement — vos modifications n'ont pas été sauvegardées. Vérifiez vos valeurs et réessayez.",
+    "sectionSupport": "Support & Aide",
+    "subSupport": "WhatsApp, assistant, questions"
   },
   "log": {
     "glucoseTitle": "Enregistrer la glycémie",
@@ -1785,5 +1800,34 @@
     "injuredDesc": "Activité réduite prise en compte",
     "pausedLabel": "En pause",
     "pausedDesc": "Suivi allégé"
+  },
+  "support": {
+    "title": "Support & Aide",
+    "subtitle": "Une question sur l’app ? On est là.",
+    "aiTitle": "Assistant GluciAI",
+    "aiSub": "Il connaît toute l’application — comment scanner, corriger, régler vos ratios…",
+    "aiCta": "Poser une question",
+    "waTitle": "Nous écrire sur WhatsApp",
+    "waSub": "Une vraie personne vous répond",
+    "waCta": "Ouvrir WhatsApp",
+    "bubble": "Besoin d’un coup de main ? Je suis là 👋",
+    "chatTitle": "Assistant d’aide",
+    "placeholder": "Comment puis-je vous aider ?",
+    "intro": "Bonjour ! Je connais GluciAI par cœur. Demandez-moi comment scanner un repas, corriger une portion, régler vos ratios d’insuline… tout ce que vous voulez.",
+    "s1": "Comment corriger un aliment mal détecté ?",
+    "s2": "Comment régler mes ratios d’insuline ?",
+    "s3": "Que veut dire la charge glycémique ?",
+    "failTitle": "Je n’ai pas su répondre",
+    "failBody": "Cette question mérite un vrai humain. Notre équipe vous répond sur WhatsApp.",
+    "thinking": "Je réfléchis…",
+    "error": "Connexion impossible. Réessayez ou écrivez-nous sur WhatsApp.",
+    "waMissing": "Numéro WhatsApp non configuré.",
+    "voiceNote": "🎤 Note vocale"
+  },
+  "lastMeal": {
+    "title": "Analyse terminée !",
+    "subtitle": "Voici l’analyse de votre repas",
+    "detail": "Voir le détail",
+    "tip": "Astuce IA"
   }
 }

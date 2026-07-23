@@ -359,7 +359,9 @@ export default function BarcodeScreen() {
               <View
                 style={[styles.verdict, { borderColor: quality.color }]}
               >
-                <Text style={[styles.verdictScore, { color: quality.color }]}>
+                {/* border keeps the bright graphic colour, the label uses the
+                    readable twin (see MealScore.textColor) */}
+                <Text style={[styles.verdictScore, { color: quality.textColor }]}>
                   {quality.score}/100 · {quality.label}
                 </Text>
                 <Text style={styles.verdictQ}>{t('barcodePage.verdictQ')}</Text>

@@ -83,6 +83,63 @@ function scale(per100g: Per100g, grams: number) {
   };
 }
 
+/** Keep the untouched per-100 g values on the item so a later portion change
+ *  rescales from the source numbers instead of already-rounded ones. */
+function baseOf(per100g: Per100g): NonNullable<FoodItemResult['per100g_base']> {
+  return {
+    calories: per100g.calories,
+    carbs: per100g.carbs,
+    sugar: per100g.sugar,
+    protein: per100g.protein,
+    fat: per100g.fat,
+    fiber: per100g.fiber,
+    sodium: per100g.sodium,
+  };
+}
+
+/**
+ * Representative glycemic index per food category — the FALLBACK used when a
+ * matched food carries no GI of its own. Only the internal Moroccan DB
+ * publishes a GI; USDA, Open Food Facts, FatSecret, Edamam and the AI
+ * estimator all return none, so without this the plate index was driven by a
+ * single dish (or vanished entirely) and never moved when the patient
+ * rebalanced their plate.
+ *
+ * Values are conservative mid-range figures from the international GI tables
+ * (Foster-Powell et al.). Anything derived from them is flagged
+ * `glycemic_index_estimated` so the UI can present it as approximate — a
+ * category average is a reasonable prior, never a measurement.
+ *
+ * Categories with no meaningful carbohydrate (Protein, Seafood, Egg) are
+ * deliberately absent: they carry no glycemic load and must not dilute the
+ * carb-weighted average.
+ */
+const GI_BY_CATEGORY: Partial<Record<NonNullable<FoodItemResult['category']>, number>> = {
+  Rice: 70,
+  Bread: 70,
+  Pasta: 50,
+  Legumes: 32,
+  Vegetable: 35,
+  Fruit: 45,
+  Dairy: 35,
+  Soup: 45,
+  Sauce: 50,
+  Dessert: 65,
+  Drink: 60,
+  Snack: 60,
+  'Fast Food': 65,
+};
+
+/** Real GI when the database has one, else a flagged category estimate. */
+function giFor(
+  category: FoodItemResult['category'],
+  dbValue: number | undefined
+): { gi?: number; estimated: boolean } {
+  if (dbValue !== undefined && dbValue > 0) return { gi: dbValue, estimated: false };
+  const guess = category ? GI_BY_CATEGORY[category] : undefined;
+  return guess !== undefined ? { gi: guess, estimated: true } : { estimated: false };
+}
+
 /**
  * Resolve ONE detected food through the provider chain.
  *
@@ -147,13 +204,16 @@ export async function resolveFood(
 
   if (best?.hit) {
     const { hit } = best;
+    const gi = giFor(detected.category, hit.per100g.glycemic_index);
     return {
       name: detected.name,
       search_name: query,
       category: detected.category,
       portion_grams: detected.portion_grams,
       ...scale(hit.per100g, detected.portion_grams),
-      glycemic_index: hit.per100g.glycemic_index,
+      per100g_base: baseOf(hit.per100g),
+      glycemic_index: gi.gi,
+      glycemic_index_estimated: gi.estimated,
       source: hit.source,
       matched_database: hit.source,
       matched_food: hit.matchedName,
@@ -170,13 +230,16 @@ export async function resolveFood(
 
   // 6 — AI estimation, fallback only (every database missed).
   if (aiPer100g) {
+    const gi = giFor(detected.category, aiPer100g.glycemic_index);
     return {
       name: detected.name,
       search_name: query,
       category: detected.category,
       portion_grams: detected.portion_grams,
       ...scale(aiPer100g, detected.portion_grams),
-      glycemic_index: aiPer100g.glycemic_index,
+      per100g_base: baseOf(aiPer100g),
+      glycemic_index: gi.gi,
+      glycemic_index_estimated: gi.estimated,
       source: 'ai_estimate',
       matched_database: 'ai_estimate',
       matched_food: detected.name,
@@ -257,16 +320,25 @@ export async function reidentifyItem(
   item: FoodItemResult,
   correctedName: string
 ): Promise<FoodItemResult> {
-  const resolved = await resolveFood({
-    name: correctedName,
-    search_name: correctedName,
-    category: item.category,
-    portion_grams: item.portion_grams,
-    confidence: Math.max(item.detection_confidence, 0.9), // user is sure
-    bounding_box: item.bounding_box,
-    is_main_food: item.is_main_food,
-    is_estimated: false, // user confirmed the identity
-  });
+  const resolved = await resolveFood(
+    {
+      name: correctedName,
+      search_name: correctedName,
+      category: item.category,
+      portion_grams: item.portion_grams,
+      confidence: Math.max(item.detection_confidence, 0.9), // user is sure
+      bounding_box: item.bounding_box,
+      is_main_food: item.is_main_food,
+      is_estimated: false, // user confirmed the identity
+    },
+    undefined,
+    // keepUnmatched: when no database knows the corrected name we must return
+    // an explicit zero-nutrition placeholder (which raises the "unmatched"
+    // warning), NOT the previous food's values. Returning the old item here
+    // used to relabel rice as "rfissa" while silently keeping rice's carbs —
+    // a number the patient could dose insulin against.
+    { keepUnmatched: true }
+  );
   return resolved ?? item;
 }
 
@@ -278,11 +350,36 @@ export function rescaleItem(
   item: FoodItemResult,
   newGrams: number
 ): FoodItemResult {
-  const f = newGrams / Math.max(1, item.portion_grams);
+  const grams = Math.round(newGrams);
+
+  // Preferred path: recompute from the untouched per-100 g values. Scaling the
+  // CURRENT (already rounded) numbers compounds a rounding error on every
+  // edit, so 200 g → 7 g → 200 g no longer returns the original figures.
+  if (item.per100g_base) {
+    return {
+      ...item,
+      portion_grams: grams,
+      ...scale(
+        {
+          calories: item.per100g_base.calories,
+          carbs: item.per100g_base.carbs,
+          sugar: item.per100g_base.sugar,
+          protein: item.per100g_base.protein,
+          fat: item.per100g_base.fat,
+          fiber: item.per100g_base.fiber,
+          sodium: item.per100g_base.sodium,
+        },
+        grams
+      ),
+    };
+  }
+
+  // Legacy items (persisted before per100g_base existed) still scale linearly.
+  const f = grams / Math.max(1, item.portion_grams);
   const r = (v: number) => Math.round(v * f * 10) / 10;
   return {
     ...item,
-    portion_grams: Math.round(newGrams),
+    portion_grams: grams,
     calories: Math.round(item.calories * f),
     carbohydrates: r(item.carbohydrates),
     sugar: r(item.sugar),
@@ -325,6 +422,12 @@ export function aggregateItems(resolved: FoodItemResult[]): NutritionResult {
           ) / giCarbs
         )
       : 0;
+  // How much of the plate's carbohydrate the index actually speaks for, and
+  // whether any of it leans on a category estimate — both surfaced so the
+  // patient knows how solid the number is.
+  const gi_carb_coverage =
+    total.carbs > 0 ? Math.min(1, Math.round((giCarbs / total.carbs) * 100) / 100) : 0;
+  const glycemic_index_estimated = giItems.some((it) => it.glycemic_index_estimated);
 
   // Dominant source (by carbs contribution), overall confidences
   const bySource = new Map<NutritionSource, number>();
@@ -406,9 +509,16 @@ export function aggregateItems(resolved: FoodItemResult[]): NutritionResult {
   });
 
   return {
+    // Localized, not hardcoded French — this label is shown on the journal,
+    // the day view, the timeline, the bolus card and the doctor report.
     food_name:
-      names.length <= 2 ? names.join(' + ') : `${names[0]} + ${names.length - 1} autres`,
-    estimated_portion: `${Math.round(total.grams)} g au total`,
+      names.length <= 2
+        ? names.join(' + ')
+        : i18n.t('result.plateMore', { first: names[0], count: names.length - 1 }),
+    // Keep the number FIRST: scan-result parses it back out with parseInt.
+    estimated_portion: i18n.t('result.plateTotalGrams', {
+      grams: Math.round(total.grams),
+    }),
     calories: totals.calories,
     carbohydrates: totals.carbs,
     sugar: totals.sugar,
@@ -423,6 +533,11 @@ export function aggregateItems(resolved: FoodItemResult[]): NutritionResult {
     items: resolved,
     meal_score,
     glycemic_load,
+    // GL = GI x available carbs / 100. Unlike the index this scales with the
+    // portion, so it is what actually answers "how much will this raise me?".
+    glycemic_load_value: Math.round(((gi > 0 ? gi : 55) * totals.carbs) / 100),
+    glycemic_index_estimated,
+    gi_carb_coverage,
     // Stable highlight KEYS; the UI localizes each via
     // t(`insights.highlights.${key}`). Persisted scans re-localize.
     highlights,

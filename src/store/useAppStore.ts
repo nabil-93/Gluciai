@@ -123,6 +123,9 @@ interface AppState {
   addInsulinLog: (log: InsulinLog) => void;
   removeInsulinLog: (id: string) => void;
   addMeal: (meal: MealScan) => void;
+  /** Patch a meal already in the journal — used when the patient corrects the
+   *  slot they filed it under (lunch → dinner). */
+  updateMeal: (id: string, patch: Partial<MealScan>) => void;
   removeMeal: (id: string) => void;
   addActivityLog: (log: ActivityLog) => void;
   removeActivityLog: (id: string) => void;
@@ -221,6 +224,10 @@ export const useAppStore = create<AppState>()(
       removeInsulinLog: (id) =>
         set((s) => ({ insulinLogs: s.insulinLogs.filter((l) => l.id !== id) })),
       addMeal: (meal) => set((s) => ({ meals: [meal, ...s.meals] })),
+      updateMeal: (id, patch) =>
+        set((s) => ({
+          meals: s.meals.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+        })),
       removeMeal: (id) =>
         set((s) => ({ meals: s.meals.filter((m) => m.id !== id) })),
       addActivityLog: (log) =>

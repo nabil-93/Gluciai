@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -13,15 +13,17 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { AddedSugarCard, SUGAR_SEARCH_NAME } from '@/components/AddedSugarCard';
-import { AnimatedRobot } from '@/components/ui';
+import { AnimatedRobot, GlycemicBar, glycemicTone } from '@/components/ui';
 import { MealAssistant } from '@/components/MealAssistant';
 import { MealEditModal } from '@/components/MealEditModal';
+import { MEAL_TYPES, MealTypeModal } from '@/components/MealTypeModal';
 import { NutriScoreBar } from '@/components/NutriScoreBar';
 import { SaveConfirmModal } from '@/components/SaveConfirmModal';
-import { saveMeal } from '@/services/data';
+import { saveMeal, updateMealType } from '@/services/data';
 import { aggregateItems } from '@/services/nutrition/engine';
 import { nutriGrade, scoreMeal } from '@/services/nutrition/mealScore';
 import {
@@ -39,21 +41,39 @@ const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
+// Graphic colours — rings, donut segments, dots, chips. Chosen for the chart,
+// not for legibility on white.
 const GREEN = '#20bf6b';
 const ORANGE = '#f7941d';
 const PURPLE = '#8b5cf6';
 const BLUE = '#38a1f0';
-const INK = '#1e2a23';
-const MUTED = '#9aa49d';
 
-/** Suggest the meal of the day from the current hour. */
-function defaultMealType(): MealType {
-  const h = new Date().getHours();
-  if (h < 11) return 'breakfast';
-  if (h < 16) return 'lunch';
-  if (h < 22) return 'dinner';
-  return 'snack';
-}
+/**
+ * TEXT colours. The graphic palette above is far too light to read as type —
+ * #20bf6b on white is 2.4:1, #f7941d is 2.3:1, both well under the 4.5:1 WCAG
+ * AA floor. A meal report is read by patients who may be older or reading on a
+ * phone in daylight, so every number and label uses these darker twins while
+ * the charts keep the bright ones.
+ */
+const INK = '#1e2a23';
+/** Secondary text (units, captions, portions) — 4.9:1 on white. */
+const MUTED = '#67736B';
+/** Small field labels above a value — 5.8:1. */
+const LABEL = '#5C6860';
+const GREEN_TXT = '#0F7A42';
+const ORANGE_TXT = '#B45309';
+const PURPLE_TXT = '#7C3AED';
+
+/*
+ * NOTE — the meal is deliberately NOT pre-filled from the clock.
+ *
+ * A clock guess is wrong often enough to be dangerous: someone eating lunch at
+ * 16:00 would get "dinner" pre-ticked, not notice, and the plate would land in
+ * the wrong slot of their journal — which then feeds the daily totals and the
+ * per-meal insulin ratio. A pre-ticked default is exactly the kind of thing a
+ * patient scrolls past. The patient always chooses; the real timestamp is
+ * recorded separately by saveMeal, so the history still shows 16:00.
+ */
 
 /** Emoji shown next to each detected food, by its vision category. */
 const CATEGORY_EMOJI: Record<FoodCategory, string> = {
@@ -162,11 +182,41 @@ function makeSugarItem(grams: number, label: string): FoodItemResult {
   };
 }
 
-/** Qualitative glycemic-index band → i18n key + color (mealScore thresholds). */
-function giBand(gi: number): { key: 'giLow' | 'giModerate' | 'giHigh'; color: string } {
-  if (gi >= 70) return { key: 'giHigh', color: '#e63e11' };
-  if (gi >= 56) return { key: 'giModerate', color: ORANGE };
-  return { key: 'giLow', color: GREEN };
+/**
+ * Glycemic-LOAD band. GL = GI x carbs / 100; < 10 low, 10–20 medium, > 20 high.
+ * Different thresholds from the index, but deliberately the SAME three colours
+ * as `glycemicTone` (the shared GlycemicBar scale) so green/amber/red mean one
+ * thing across the app.
+ */
+function glBand(gl: number): { key: 'low' | 'medium' | 'high'; color: string } {
+  if (gl > 20) return { key: 'high', color: '#dc2626' };
+  if (gl >= 10) return { key: 'medium', color: '#d97706' };
+  return { key: 'low', color: '#0f9d58' };
+}
+
+/** glycemicTone's key → the shared IG explanation copy (already written for the
+ *  Sélection Santé dish pages, in all four languages — reused, not duplicated). */
+const IG_DESC_KEY = {
+  low: 'hf.igDescLow',
+  medium: 'hf.igDescMedium',
+  high: 'hf.igDescHigh',
+} as const;
+
+/**
+ * The engine stores warnings as translation KEYS ("warn:<key>" or
+ * "warn:<key>|<value>") so a plate scanned in one language still reads in the
+ * patient's current one. Anything that is not in that form is passed through
+ * untouched (older persisted scans held raw French sentences).
+ */
+function localizeWarning(raw: string, t: TFunction): string {
+  if (!raw.startsWith('warn:')) return raw;
+  const body = raw.slice(5);
+  const sep = body.indexOf('|');
+  const key = sep === -1 ? body : body.slice(0, sep);
+  const value = sep === -1 ? undefined : body.slice(sep + 1);
+  const translated = t(`result.warn.${key}`, { value });
+  // A key we do not know yet must never surface as "result.warn.xyz".
+  return translated === `result.warn.${key}` ? (value ?? key) : translated;
 }
 
 /** A single-value progress ring (score / goals / hydration). */
@@ -248,7 +298,13 @@ export default function ScanResultScreen() {
 
   const [pending] = useState(() => getPendingScan());
   const [items, setItems] = useState<FoodItemResult[]>(() => pending?.result.items ?? []);
-  const [mealType] = useState<MealType>(() => defaultMealType());
+  // A fresh scan starts empty — the patient picks (see the note above).
+  // Reviewing a meal already in the journal starts on the slot it was filed
+  // under, so a wrong choice can simply be corrected here.
+  const [mealType, setMealType] = useState<MealType | null>(
+    () => pending?.savedMeal?.mealType ?? null
+  );
+  const [mealAskOpen, setMealAskOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   // When opened to review a meal already in the journal (from the Nutrition
   // page), start as "saved" so it can't be re-saved and the day isn't double
@@ -275,10 +331,34 @@ export default function ScanResultScreen() {
     return () => clearTimeout(id);
   }, [badgeAnim]);
 
-  if (!pending) return <Redirect href="/(tabs)" />;
+  // Aggregating the plate runs the whole scoring / highlight pipeline, so it is
+  // memoised: without this it re-ran on every render (badge animation, each
+  // modal toggle) and `scoreMeal` was then computed a second time below.
+  // Both hooks must sit ABOVE the early return to keep the hook order stable.
+  const result = useMemo(
+    () => (items.length > 0 ? aggregateItems(items) : pending?.result ?? null),
+    [items, pending]
+  );
+  const quality = useMemo(
+    () =>
+      result
+        ? scoreMeal({
+            calories: result.calories,
+            carbs: result.carbohydrates,
+            sugar: result.sugar,
+            protein: result.protein,
+            fat: result.fat,
+            fiber: result.fiber,
+            sodium: result.sodium,
+            glycemic_index: result.glycemic_index,
+          })
+        : null,
+    [result]
+  );
 
-  const { imageUri, base64: imageBase64 } = pending;
-  const result = items.length > 0 ? aggregateItems(items) : pending.result;
+  if (!pending || !result || !quality) return <Redirect href="/(tabs)" />;
+
+  const { imageUri, base64: imageBase64, savedMeal } = pending;
 
   const cals = Math.round(result.calories);
   const P = Math.round(result.protein);
@@ -293,17 +373,6 @@ export default function ScanResultScreen() {
   const cPct = Math.round((cCal / totCal) * 100);
   const fPct = Math.max(0, 100 - pPct - cPct);
 
-  const quality = scoreMeal({
-    calories: result.calories,
-    carbs: result.carbohydrates,
-    sugar: result.sugar,
-    protein: result.protein,
-    fat: result.fat,
-    fiber: result.fiber,
-    sodium: result.sodium,
-    glycemic_index: result.glycemic_index,
-  });
-
   // Front-of-pack A–E letter derived from the same quality score, shown on
   // the photo — it moves with the food (a lean, high-fibre plate → A/B; a
   // sugary, high-GI one → D/E).
@@ -312,7 +381,17 @@ export default function ScanResultScreen() {
   // Glycemic index of the whole plate (carb-weighted, from the engine) — shown
   // as a labelled chip in the calories card so the value is never a mystery.
   const gi = Math.round(result.glycemic_index || 0);
-  const giInfo = giBand(gi);
+  const giTone = glycemicTone(gi);
+  // …paired with the glycemic LOAD, the number that actually tracks the
+  // portion. A 72-GI watermelon slice is a GL of 8; couscous at GI 65 is 39.
+  const gl = Math.round(result.glycemic_load_value ?? ((gi > 0 ? gi : 55) * C) / 100);
+  const glInfo = glBand(gl);
+  // Percentage of the plate's carbs the index actually covers (0 when unknown).
+  const giCoveragePct = Math.round((result.gi_carb_coverage ?? 0) * 100);
+
+  // Anything the engine flagged: unidentified foods, high sugar, AI estimates,
+  // portions auto-adjusted. Silent until now — these are the safety messages.
+  const warnings = (result.warnings ?? []).map((w) => localizeWarning(w, t));
 
   const micros = estimateMicros(items);
   const microAvg = microAverage(micros);
@@ -351,11 +430,13 @@ export default function ScanResultScreen() {
       ? quality.reasons.slice(0, 2).join(' · ')
       : t('analysis.adviceGood');
 
-  const persist = async () => {
+  const persist = async (meal: MealType) => {
     if (saved) return;
-    await saveMeal(result, imageUri, imageBase64, undefined, mealType);
+    await saveMeal(result, imageUri, imageBase64, undefined, meal);
     setSaved(true);
   };
+
+  const pickMeal = (m: MealType) => setMealType(m);
 
   // Applied from the edit modal AND the AI meal assistant: swap in the new
   // item list (totals/score/micros/hydration all recompute from it) and
@@ -382,15 +463,38 @@ export default function ScanResultScreen() {
   };
 
   // Save → confirmation window (which then auto-redirects home after 5s).
-  const onSave = async () => {
+  // With no meal chosen we can't file the plate anywhere, so ask first rather
+  // than refusing silently or guessing.
+  const saveAs = async (meal: MealType) => {
     if (saving) return;
     setSaving(true);
     try {
-      await persist();
+      await persist(meal);
+      setMealAskOpen(false);
       setSaveModalOpen(true);
     } finally {
       setSaving(false);
     }
+  };
+  const onSave = () => {
+    // Reviewing a meal already in the journal: nothing new to write, but the
+    // patient may have corrected the slot (filed as lunch, was actually
+    // dinner). Re-file that same row — never create a second copy — and keep
+    // its original timestamp so the history still shows when they ate.
+    if (saved && savedMeal) {
+      if (mealType && mealType !== savedMeal.mealType) {
+        updateMealType(savedMeal.id, mealType);
+        setSaveModalOpen(true);
+      } else {
+        goHome();
+      }
+      return;
+    }
+    if (!mealType) {
+      setMealAskOpen(true);
+      return;
+    }
+    void saveAs(mealType);
   };
   const goHome = () => {
     clearPendingScan();
@@ -507,37 +611,94 @@ export default function ScanResultScreen() {
                   <Text style={styles.scoreValue}>{quality.score}</Text>
                   <Text style={styles.scoreDenom}>/100</Text>
                 </Ring>
-                <Text style={[styles.scoreTag, { color: quality.color }]} numberOfLines={1}>
+                <Text style={[styles.scoreTag, { color: quality.textColor }]} numberOfLines={1}>
                   {quality.label}
                 </Text>
               </View>
             </View>
 
-            {/* Glycemic index of the plate — labelled so the value is clear */}
-            {gi > 0 ? (
-              <View style={styles.giRow}>
-                <View style={[styles.giDot, { backgroundColor: giInfo.color }]} />
-                <Text style={styles.giLabel}>{t('analysis.giLabel')}</Text>
-                <Text style={[styles.giValue, { color: giInfo.color }]}>{gi}</Text>
-                <View style={[styles.giTag, { backgroundColor: giInfo.color }]}>
-                  <Text style={styles.giTagText}>{t(`analysis.${giInfo.key}`)}</Text>
-                </View>
-              </View>
-            ) : null}
-
             <View style={styles.macroRow}>
-              <MacroMini label={t('result.protein')} value={P} pct={pPct} color={GREEN} />
-              <MacroMini label={t('result.carbs')} value={C} pct={cPct} color={ORANGE} />
-              <MacroMini label={t('result.fat')} value={F} pct={fPct} color={PURPLE} />
+              <MacroMini label={t('result.protein')} value={P} pct={pPct} color={GREEN} textColor={GREEN_TXT} />
+              <MacroMini label={t('result.carbs')} value={C} pct={cPct} color={ORANGE} textColor={ORANGE_TXT} />
+              <MacroMini label={t('result.fat')} value={F} pct={fPct} color={PURPLE} textColor={PURPLE_TXT} />
             </View>
           </View>
+
+          {/* ── Glycemic index (quality) + glycemic load (quantity) ──
+              The single most important pair for a diabetic, so it gets its own
+              card, using the same segmented meter as the Sélection Santé dish
+              pages. The index rates HOW FAST the carbs digest and barely moves;
+              the load multiplies it by HOW MUCH is on the plate, so it is what
+              reacts when the patient edits a portion. */}
+          {gi > 0 ? (
+            <View style={styles.card}>
+              <GlycemicBar
+                value={gi}
+                title={t('analysis.giLabel')}
+                scale={[
+                  t('analysis.giLow'),
+                  t('analysis.giModerate'),
+                  t('analysis.giHigh'),
+                ]}
+                description={t(IG_DESC_KEY[giTone.key])}
+              />
+
+              <View style={styles.glRow}>
+                <View style={styles.glText}>
+                  <Text style={styles.glLabel}>{t('analysis.glLabel')}</Text>
+                  <Text style={styles.glHint}>{t('analysis.glHint')}</Text>
+                </View>
+                <Text style={[styles.glValue, { color: glInfo.color }]}>{gl}</Text>
+                <View style={[styles.glTag, { backgroundColor: glInfo.color }]}>
+                  <Text style={styles.glTagText}>{t(`result.${glInfo.key}`)}</Text>
+                </View>
+              </View>
+
+              {/* Honest about how solid the index is: a category estimate,
+                  and/or only part of the carbs actually carrying a GI. */}
+              {result.glycemic_index_estimated || giCoveragePct < 100 ? (
+                <Text style={styles.giFoot}>
+                  {result.glycemic_index_estimated
+                    ? `${t('analysis.giEstimated')} · `
+                    : ''}
+                  {t('analysis.giCoverage', { pct: giCoveragePct })}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
+          {/* ── Safety notices from the engine ──
+              Unidentified foods, heavy sugar, AI-estimated values, portions
+              auto-adjusted. These drive whether the totals below can be
+              trusted for a bolus, so they sit directly under them. */}
+          {warnings.length > 0 ? (
+            <View style={[styles.card, styles.warnCard]}>
+              <View style={styles.warnHead}>
+                {/* Same rounded-square icon badge the calories card uses, tinted
+                    amber — one icon vocabulary across the page. */}
+                <View style={styles.warnIcon}>
+                  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#B9701A" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <Path d="M12 9v4M12 17h.01" />
+                  </Svg>
+                </View>
+                <Text style={styles.warnTitle}>{t('result.warnTitle')}</Text>
+              </View>
+              {warnings.map((w, i) => (
+                <View key={i} style={styles.warnItem}>
+                  <View style={styles.warnDot} />
+                  <Text style={styles.warnText}>{w}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           {/* ── Detected foods (editable) ── */}
           <View style={styles.card}>
             <View style={styles.foodsHead}>
               <Text style={styles.cardTitle}>{t('analysis.detectedFoods')}</Text>
               <Pressable style={styles.editBtn} onPress={openEditFoods} hitSlop={6}>
-                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#158a52" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#10723F" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <Path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
                 </Svg>
                 <Text style={styles.editBtnText}>{t('common.edit')}</Text>
@@ -557,9 +718,21 @@ export default function ScanResultScreen() {
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.foodKcal}>{Math.round(it.calories)} kcal</Text>
-                    <Text style={styles.foodConf}>
-                      {t('result.confidence')} {Math.round((it.detection_confidence ?? 0) * 100)}%
-                    </Text>
+                    {/* A food no database matched carries ZERO nutrition. Showing
+                        the vision model's confidence next to it read as "0 kcal,
+                        86% sure" — the 86% is only about SEEING the food, not
+                        about its values. Flag the gap instead. */}
+                    {it.nutrition_confidence === 0 ? (
+                      <View style={styles.unknownTag}>
+                        <Text style={styles.unknownTagText}>
+                          {t('analysis.unknownValues')}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.foodConf}>
+                        {t('result.confidence')} {Math.round((it.detection_confidence ?? 0) * 100)}%
+                      </Text>
+                    )}
                   </View>
                 </View>
               ))}
@@ -569,7 +742,7 @@ export default function ScanResultScreen() {
             </View>
             {/* Add a food the AI didn't see in the photo */}
             <Pressable style={styles.addFoodBtn} onPress={openAddFood}>
-              <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#158a52" strokeWidth={2.4} strokeLinecap="round">
+              <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#10723F" strokeWidth={2.4} strokeLinecap="round">
                 <Path d="M12 5v14M5 12h14" />
               </Svg>
               <Text style={styles.addFoodText}>{t('analysis.addFood')}</Text>
@@ -690,12 +863,68 @@ export default function ScanResultScreen() {
                 </Ring>
               </View>
               <Text style={styles.goalCaption}>{t('analysis.ofWaterNeeds')}</Text>
+              {/* The ring is this MEAL's contribution to the daily goal, not how
+                  hydrated the patient is — spelled out so a low ring doesn't
+                  read as a failure. */}
+              <Text style={styles.waterFromMeal}>
+                {t('analysis.waterFromMeal', { ml: mealWaterMl })}
+              </Text>
               <View style={styles.waterStat}>
                 <Text style={styles.waterStatVal}>{waterGoalL} L</Text>
                 <Text style={styles.waterStatUnit}>· {t('analysis.glasses', { n: waterGlasses })}</Text>
               </View>
               <Text style={styles.waterHint}>{t('analysis.drinkReminder')}</Text>
             </View>
+          </View>
+
+          {/* ── Which meal is this? — only while the plate is unsaved ──
+              Sits last, right above the save button, because it is the final
+              decision before filing the plate. Pre-filled from the clock in the
+              obvious hours; left empty (and required) when the hour is
+              ambiguous — see defaultMealType. Stays visible on an already-saved
+              meal so a wrong slot can be corrected and re-filed. */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{t('result.mealMoment')}</Text>
+            <View style={styles.mealRow}>
+              {MEAL_TYPES.map((m) => {
+                const on = mealType === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => pickMeal(m)}
+                    style={[styles.mealChip, on && styles.mealChipOn]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: on }}
+                  >
+                    {/* Solid fill + tick when chosen: at this size a tinted
+                        border alone was too quiet to read as "this one is
+                        selected", and the patient must be able to tell at a
+                        glance which meal their plate is about to be filed under. */}
+                    {on ? (
+                      <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round">
+                        <Path d="M20 6 9 17l-5-5" />
+                      </Svg>
+                    ) : null}
+                    <Text
+                      style={[styles.mealChipText, on && styles.mealChipTextOn]}
+                      numberOfLines={1}
+                    >
+                      {t(`mealType.${m}`)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {!mealType ? (
+              <Text style={[styles.mealHint, styles.mealHintAsk]}>
+                {t('analysis.mealMomentAsk')}
+              </Text>
+            ) : savedMeal && mealType !== savedMeal.mealType ? (
+              // Corrected the slot — say what the button will now do.
+              <Text style={[styles.mealHint, styles.mealHintMoved]}>
+                {t('analysis.mealMomentMoved', { meal: t(`mealType.${mealType}`) })}
+              </Text>
+            ) : null}
           </View>
         </View>
       </ScrollView>
@@ -741,6 +970,19 @@ export default function ScanResultScreen() {
         onSaved={onItemsEdited}
       />
 
+      {/* Forgot to pick a meal → ask here instead of blocking the save button
+          with no explanation. Confirming saves straight away. */}
+      <MealTypeModal
+        open={mealAskOpen}
+        initial={mealType}
+        saving={saving}
+        onCancel={() => setMealAskOpen(false)}
+        onConfirm={(m) => {
+          pickMeal(m);
+          void saveAs(m);
+        }}
+      />
+
       <SaveConfirmModal open={saveModalOpen} onDone={goHome} />
     </View>
   );
@@ -748,7 +990,9 @@ export default function ScanResultScreen() {
 
 /* ─────────────────────────── Small building blocks ─────────────────────── */
 
-function MacroMini({ label, value, pct, color }: { label: string; value: number; pct: number; color: string }) {
+/** `color` paints the dot (a graphic), `textColor` the percentage (type) — the
+ *  bright chart colours are unreadable at 11 px on white. */
+function MacroMini({ label, value, pct, color, textColor }: { label: string; value: number; pct: number; color: string; textColor: string }) {
   return (
     <View style={styles.macroCol}>
       <View style={styles.macroTop}>
@@ -759,7 +1003,7 @@ function MacroMini({ label, value, pct, color }: { label: string; value: number;
         <Text style={styles.macroVal}>{value}</Text>
         <Text style={styles.macroG}>g</Text>
       </View>
-      <Text style={[styles.macroPct, { color }]}>{pct}%</Text>
+      <Text style={[styles.macroPct, { color: textColor }]}>{pct}%</Text>
     </View>
   );
 }
@@ -813,7 +1057,7 @@ function FooterBtn({ flex, label, icon, onPress, primary }: { flex: number; labe
   return (
     <Pressable style={[styles.footBtn, { flex }, primary && styles.footBtnPrimary]} onPress={onPress}>
       {icon}
-      <Text style={[styles.footLabel, primary && styles.footLabelPrimary]} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.footLabel, primary && styles.footLabelPrimary]} numberOfLines={2}>{label}</Text>
     </Pressable>
   );
 }
@@ -862,7 +1106,7 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
     paddingRight: 12,
   },
-  scanBadgeText: { color: '#16a860', fontSize: 12.5, fontFamily: F700 },
+  scanBadgeText: { color: '#0F7A42', fontSize: 12.5, fontFamily: F700 },
   // Once the text has gathered into the check, the pill shrinks to the logo.
   scanBadgeCollapsed: { paddingLeft: 8, paddingRight: 8, gap: 0 },
   // Nutri-Score now lives under the photo (was overlaid on it).
@@ -893,39 +1137,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  calLabel: { fontSize: 11, color: '#7c877f', fontFamily: F600 },
+  calLabel: { fontSize: 11, color: LABEL, fontFamily: F600 },
   calValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
   calValue: { fontSize: 26, fontFamily: F800, color: INK, letterSpacing: -0.5 },
   calUnit: { fontSize: 12, color: MUTED, fontFamily: F600 },
-  calSub: { fontSize: 10, color: '#aab2ab', fontFamily: F500, marginTop: 1 },
+  calSub: { fontSize: 10, color: MUTED, fontFamily: F500, marginTop: 1 },
 
-  // Glycemic-index chip
-  giRow: {
+  // Glycemic load — sits under the shared GlycemicBar, same card
+  glRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    marginTop: 12,
-    paddingTop: 12,
+    gap: 9,
+    marginTop: 13,
+    paddingTop: 13,
     borderTopWidth: 1,
     borderTopColor: '#f0f2ee',
   },
-  giDot: { width: 8, height: 8, borderRadius: 4 },
-  giLabel: { flex: 1, fontSize: 11.5, color: '#5a655d', fontFamily: F600 },
-  giValue: { fontSize: 15, fontFamily: F800 },
-  giTag: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9 },
-  giTagText: { fontSize: 10, fontFamily: F800, color: '#fff' },
+  glText: { flex: 1, minWidth: 0 },
+  glLabel: { fontSize: 12.5, fontFamily: F700, color: INK },
+  // MUTED (#9aa49d) only reaches 2.6:1 on white — below AA for body text.
+  // MUTED is now the theme-aligned readable grey, which clears 4.5:1.
+  glHint: { fontSize: 10, lineHeight: 14, color: MUTED, fontFamily: F500, marginTop: 2 },
+  glValue: { fontSize: 19, lineHeight: 21, fontFamily: F800 },
+  glTag: { borderRadius: 999, paddingVertical: 3.5, paddingHorizontal: 9 },
+  glTagText: { fontSize: 10, fontFamily: F800, color: '#fff' },
+  giFoot: { fontSize: 10, color: MUTED, fontFamily: F500, marginTop: 10 },
 
   macroCol: { alignItems: 'flex-start', gap: 2 },
   macroTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   macroDot: { width: 7, height: 7, borderRadius: 2 },
-  macroLabel: { fontSize: 10, color: '#7c877f', fontFamily: F600 },
+  macroLabel: { fontSize: 10, color: LABEL, fontFamily: F600 },
   macroValRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
   macroVal: { fontSize: 17, fontFamily: F800, color: INK },
   macroG: { fontSize: 10, color: MUTED, fontFamily: F600 },
   macroPct: { fontSize: 11, fontFamily: F700 },
 
   scoreCol: { alignItems: 'center', gap: 3 },
-  scoreLabel: { fontSize: 10, color: '#7c877f', fontFamily: F600 },
+  scoreLabel: { fontSize: 10, color: LABEL, fontFamily: F600 },
   ringCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scoreValue: { fontSize: 16, fontFamily: F800, color: INK, lineHeight: 18 },
   scoreDenom: { fontSize: 7, color: MUTED, fontFamily: F600 },
@@ -942,13 +1190,22 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 10,
   },
-  editBtnText: { fontSize: 11, fontFamily: F700, color: '#158a52' },
+  editBtnText: { fontSize: 11, fontFamily: F700, color: '#10723F' },
   foodRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   foodEmoji: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   foodName: { fontSize: 11.5, fontFamily: F700, color: INK },
   foodPortion: { fontSize: 10.5, color: MUTED, fontFamily: F500 },
-  foodKcal: { fontSize: 12, fontFamily: F800, color: GREEN },
-  foodConf: { fontSize: 9.5, color: '#aab2ab', fontFamily: F500 },
+  foodKcal: { fontSize: 12, fontFamily: F800, color: GREEN_TXT },
+  foodConf: { fontSize: 9.5, color: MUTED, fontFamily: F500 },
+  unknownTag: {
+    backgroundColor: '#fdeceb',
+    borderRadius: 999,
+    paddingVertical: 2,
+    paddingHorizontal: 7,
+    marginTop: 2,
+  },
+  // Darkened from #c0563a (3.97:1) to clear AA on the tinted badge.
+  unknownTagText: { fontSize: 9.5, color: '#A33B22', fontFamily: F700 },
   addFoodBtn: {
     marginTop: 12,
     flexDirection: 'row',
@@ -962,7 +1219,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     backgroundColor: '#f4fbf7',
   },
-  addFoodText: { fontSize: 12, fontFamily: F700, color: '#158a52' },
+  addFoodText: { fontSize: 12, fontFamily: F700, color: '#10723F' },
 
   // Donut
   donutRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 13 },
@@ -988,15 +1245,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   adviceHead: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 2 },
-  adviceTitle: { fontSize: 13, fontFamily: F800, color: '#158a52' },
+  adviceTitle: { fontSize: 13, fontFamily: F800, color: '#10723F' },
   aiPill: {
-    backgroundColor: '#158a52',
+    // Darkened so the 9 px white "IA" label clears AA on the pill.
+    backgroundColor: '#10723F',
     borderRadius: 999,
     paddingVertical: 2,
     paddingHorizontal: 7,
   },
   aiPillText: { fontSize: 9, fontFamily: F800, color: '#fff', letterSpacing: 0.3 },
-  adviceBody: { fontSize: 11.5, lineHeight: 16.5, color: '#5a7a67', fontFamily: F500 },
+  adviceBody: { fontSize: 11.5, lineHeight: 16.5, color: '#47614F', fontFamily: F500 },
 
   // Four mini cards — 2×2 grid (was a cramped single row of four)
   miniRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 11 },
@@ -1017,8 +1275,8 @@ const styles = StyleSheet.create({
   },
   miniHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   miniTitle: { fontSize: 11.5, fontFamily: F700, color: INK, flex: 1 },
-  miniGood: { fontSize: 11, fontFamily: F700, color: GREEN },
-  miniFoot: { fontSize: 9.5, color: '#aab2ab', fontFamily: F500, marginTop: 'auto', paddingTop: 3 },
+  miniGood: { fontSize: 11, fontFamily: F700, color: GREEN_TXT },
+  miniFoot: { fontSize: 9.5, color: MUTED, fontFamily: F500, marginTop: 'auto', paddingTop: 3 },
 
   microRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   microLabel: { fontSize: 10, color: '#6b746e', fontFamily: F600, width: 62 },
@@ -1043,6 +1301,68 @@ const styles = StyleSheet.create({
   waterStatVal: { fontSize: 12, fontFamily: F800, color: INK },
   waterStatUnit: { fontSize: 9.5, fontFamily: F600, color: MUTED },
   waterHint: { textAlign: 'center', fontSize: 9.5, color: MUTED, fontFamily: F500, lineHeight: 13, marginTop: 'auto', paddingTop: 3 },
+  waterFromMeal: {
+    textAlign: 'center',
+    fontSize: 9.5,
+    color: '#2E6B9E',
+    fontFamily: F700,
+    marginTop: 2,
+  },
+
+  // Safety notices (unidentified foods, high sugar, AI estimates…)
+  // Layered on `card`, so it keeps the page's radius, padding and shadow and
+  // only changes the surface to amber — an alert, not a foreign component.
+  warnCard: {
+    backgroundColor: '#FFFBF3',
+    borderWidth: 1,
+    borderColor: '#F4E3C6',
+    gap: 9,
+  },
+  warnHead: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  warnIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: '#FDF0D9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // #8A5310 on #FFFBF3 ≈ 7.3:1, #7d6234 ≈ 5.3:1 — both clear AA for this size.
+  warnTitle: { fontSize: 12.5, fontFamily: F800, color: '#8A5310' },
+  warnItem: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  warnDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#D9A441',
+    marginTop: 5.5,
+  },
+  warnText: { flex: 1, fontSize: 11, lineHeight: 16, color: '#7d6234', fontFamily: F500 },
+
+  // Which-meal chips
+  mealRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 11 },
+  mealChip: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#e3e7e0',
+    backgroundColor: '#fbfcfa',
+  },
+  mealChipOn: { borderColor: '#0F7A42', backgroundColor: '#0F7A42' },
+  mealChipText: { fontSize: 11, fontFamily: F700, color: LABEL },
+  // White on #0F7A42 is 5.4:1 — the filled state stays readable.
+  mealChipTextOn: { color: '#fff' },
+  mealHint: { fontSize: 10, color: MUTED, fontFamily: F500, marginTop: 8 },
+  mealHintAsk: { color: '#B4441A', fontFamily: F700 },
+  mealHintMoved: { color: '#0F7A42', fontFamily: F700 },
 
   // Footer
   footer: {
@@ -1070,7 +1390,17 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     paddingHorizontal: 6,
   },
-  footBtnPrimary: { borderColor: '#159A57', backgroundColor: '#159A57' },
-  footLabel: { fontSize: 10.5, fontFamily: F700, color: '#3a463f' },
+  footBtnPrimary: { borderColor: '#0F7A42', backgroundColor: '#0F7A42' },
+  // German ("Weitere Mahlzeit scannen") needs ~130 px where only 117 px were
+  // available, so the label was silently truncated. Let it shrink and wrap to
+  // a second line instead of losing words.
+  footLabel: {
+    flexShrink: 1,
+    fontSize: 10.5,
+    lineHeight: 13,
+    fontFamily: F700,
+    color: '#3a463f',
+    textAlign: 'center',
+  },
   footLabelPrimary: { color: '#fff' },
 });

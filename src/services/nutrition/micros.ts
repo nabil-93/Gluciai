@@ -60,9 +60,19 @@ export interface MicroEstimate {
  * Estimate vitamin/mineral coverage (% of daily needs) for the whole plate
  * from each food's category density × its grams. Returns 0..100 per nutrient.
  */
+/**
+ * A food no database could identify is shown with ZERO nutrition on the
+ * plate. Counting its vitamins and minerals anyway would contradict that on
+ * the very same screen (0 kcal, yet 192 mg of potassium), so unidentified
+ * foods contribute nothing here either — they are surfaced as a warning
+ * instead, for the patient to correct.
+ */
+const isUnidentified = (it: FoodItemResult) => it.nutrition_confidence === 0;
+
 export function estimateMicros(items: FoodItemResult[]): MicroEstimate {
   const abs = { a: 0, c: 0, fe: 0, ca: 0, k: 0 };
   for (const it of items) {
+    if (isUnidentified(it)) continue;
     const d = MICRO_PER_100G[it.category ?? 'Unknown'] ?? MICRO_PER_100G.Unknown;
     const f = Math.max(0, it.portion_grams) / 100;
     abs.a += d.a * f;
@@ -116,6 +126,7 @@ const WATER_FRACTION: Record<FoodCategory, number> = {
 export function estimateMealWaterMl(items: FoodItemResult[]): number {
   let ml = 0;
   for (const it of items) {
+    if (isUnidentified(it)) continue; // same rule as the micronutrients above
     const frac = WATER_FRACTION[it.category ?? 'Unknown'] ?? WATER_FRACTION.Unknown;
     ml += frac * Math.max(0, it.portion_grams);
   }

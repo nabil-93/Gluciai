@@ -415,6 +415,25 @@ export function updateLabReport(rowId: string, patch: Partial<LabReport>) {
     );
 }
 
+/**
+ * Re-file a meal already in the journal under a different slot (the patient
+ * saved it as lunch but it was dinner). Patches in place — the entry keeps its
+ * id and its original timestamp, so the history still shows when they actually
+ * ate; only the label moves.
+ */
+export function updateMealType(rowId: string, mealType: MealType) {
+  useAppStore.getState().updateMeal(rowId, { meal_type: mealType });
+  if (isDemoMode || !supabase || !UUID_RE.test(rowId)) return;
+  supabase
+    .from('meal_scans')
+    .update({ meal_type: mealType })
+    .eq('id', rowId)
+    .then(
+      () => {},
+      () => {}
+    );
+}
+
 export function deleteLabReport(rowId: string) {
   useAppStore.getState().removeLabReport(rowId);
   remoteDelete('lab_reports', rowId);

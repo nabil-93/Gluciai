@@ -66,7 +66,17 @@
     "savedTitle": "Mahlzeit gespeichert ✓",
     "savedBody": "Deine Mahlzeit ist sicher in deinem Tagebuch.",
     "savedRedirect": "Weiterleitung zur Startseite…",
-    "savedGoHome": "Zur Startseite"
+    "savedGoHome": "Zur Startseite",
+    "giEstimated": "geschätzt",
+    "giCoverage": "Berechnet auf {{pct}} % der Kohlenhydrate",
+    "unknownValues": "Werte unbekannt",
+    "waterFromMeal": "{{ml}} ml aus dieser Mahlzeit",
+    "glLabel": "Glykämische Last",
+    "sugarUnitCubesInline": "Stück",
+    "glHint": "Sie folgt der Portion — der Index bewertet die Qualität der Kohlenhydrate, die Last ihre Menge.",
+    "mealMomentAsk": "Wähle die Mahlzeit zum Speichern",
+    "mealPickerBody": "Zu welcher Mahlzeit gehört dieser Teller? Nötig, um ihn ins Journal aufzunehmen.",
+    "mealMomentMoved": "Wird zu „{{meal}}“ verschoben — auf Speichern tippen"
   },
   "common": {
     "appName": "GluciAI",
@@ -613,7 +623,10 @@
       "unmatched": "Ohne Nährwerte (nicht in den Datenbanken): {{value}} — tippe auf „Lebensmittel bearbeiten“, um zu korrigieren.",
       "ai_estimate": "Einige Werte sind KI-Schätzungen (Lebensmittel nicht in offiziellen Datenbanken).",
       "portions_adjusted": "Portionen an deine Gewohnheiten angepasst: {{value}}."
-    }
+    },
+    "plateMore": "{{first}} + {{count}} weitere",
+    "plateTotalGrams": "{{grams}} g insgesamt",
+    "warnTitle": "Zu prüfen"
   },
   "chat": {
     "title": "KI-Coach",
@@ -792,7 +805,9 @@
     "errRatio": "Das Insulinverhältnis pro Mahlzeit muss zwischen 0,1 und 20 E / 10 g liegen.",
     "errBasalDose": "Die Basalinsulindosis muss zwischen 1 und 200 E liegen.",
     "errGlucoseGoal": "Das Blutzuckerziel muss zwischen 40 und 600 mg/dL liegen.",
-    "saveError": "Speichern fehlgeschlagen — deine Änderungen wurden nicht gespeichert. Prüfe die Werte und versuche es erneut."
+    "saveError": "Speichern fehlgeschlagen — deine Änderungen wurden nicht gespeichert. Prüfe die Werte und versuche es erneut.",
+    "sectionSupport": "Support & Hilfe",
+    "subSupport": "WhatsApp, Assistent, Fragen"
   },
   "log": {
     "glucoseTitle": "Blutzucker erfassen",
@@ -1785,5 +1800,34 @@
     "injuredDesc": "Reduzierte Aktivität berücksichtigt",
     "pausedLabel": "Pausiert",
     "pausedDesc": "Vereinfachte Nachverfolgung"
+  },
+  "support": {
+    "title": "Support & Hilfe",
+    "subtitle": "Eine Frage zur App? Wir sind da.",
+    "aiTitle": "GluciAI-Assistent",
+    "aiSub": "Er kennt die ganze App — scannen, korrigieren, Verhältnisse einstellen…",
+    "aiCta": "Frage stellen",
+    "waTitle": "Schreib uns auf WhatsApp",
+    "waSub": "Ein echter Mensch antwortet dir",
+    "waCta": "WhatsApp öffnen",
+    "bubble": "Brauchst du Hilfe? Ich bin da 👋",
+    "chatTitle": "Hilfe-Assistent",
+    "placeholder": "Wie kann ich helfen?",
+    "intro": "Hallo! Ich kenne GluciAI in- und auswendig. Frag mich, wie du eine Mahlzeit scannst, eine Portion korrigierst, deine Insulin-Verhältnisse einstellst — alles.",
+    "s1": "Wie korrigiere ich ein falsch erkanntes Lebensmittel?",
+    "s2": "Wie stelle ich meine Insulin-Verhältnisse ein?",
+    "s3": "Was bedeutet glykämische Last?",
+    "failTitle": "Das konnte ich nicht beantworten",
+    "failBody": "Hier hilft ein echter Mensch weiter. Unser Team antwortet auf WhatsApp.",
+    "thinking": "Ich denke nach…",
+    "error": "Keine Verbindung. Versuch es erneut oder schreib uns auf WhatsApp.",
+    "waMissing": "WhatsApp-Nummer nicht konfiguriert.",
+    "voiceNote": "🎤 Sprachnachricht"
+  },
+  "lastMeal": {
+    "title": "Analyse fertig!",
+    "subtitle": "Hier ist die Analyse deiner Mahlzeit",
+    "detail": "Details ansehen",
+    "tip": "KI-Tipp"
   }
 }

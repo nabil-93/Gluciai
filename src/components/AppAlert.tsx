@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
+import { SUPPORT_WHATSAPP as SUPPORT_WA } from '@/config/support';
 import {
   fetchPendingAlert,
   markAlertSeen,
@@ -13,7 +14,6 @@ import {
 } from '@/services/alerts';
 
 // Same support line the free-plan welcome uses.
-const SUPPORT_WA = '491637606478';
 
 /**
  * Centered in-app alert. The admin/doctor sends a message from the dashboard

@@ -37,8 +37,10 @@ import {
   RotaryDial,
   useReduceMotion,
 } from '@/components/ui';
+import { LastMealCard } from '@/components/LastMealCard';
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
 import { getDailyInsight, type Insight } from '@/services/insights';
+import { setPendingScan } from '@/services/scanSession';
 import { getPlannedReminders } from '@/services/notifications';
 import { useAppStore } from '@/store/useAppStore';
 import type { ActivityStatus, InsulinType, MealScan } from '@/types';
@@ -1528,6 +1530,29 @@ export default function HomeScreen() {
     return bySlot;
   }, [dayMeals]);
 
+  // The most recent scan of the displayed day — the recap card under the meal
+  // slots. Tied to the selected date so the whole section talks about the same
+  // day; on today (the default) that is simply the last meal scanned.
+  const lastMeal = useMemo(
+    () =>
+      dayMeals.length === 0
+        ? null
+        : dayMeals.reduce((a, b) =>
+            new Date(b.created_at) > new Date(a.created_at) ? b : a
+          ),
+    [dayMeals]
+  );
+
+  /** Reopen the full analysis report for an already-saved meal (read-only, so
+   *  it can't be saved twice or double-count the day). */
+  const openMealReport = (m: MealScan) => {
+    setPendingScan(m.result, m.image_url, undefined, undefined, true, {
+      id: m.id,
+      mealType: m.meal_type,
+    });
+    router.push('/scan-result');
+  };
+
   // Which meal slots exist for any given day — powers the calendar dots.
   const mealsByDay = useMemo(() => {
     const map: Record<string, Set<'breakfast' | 'lunch' | 'dinner'>> = {};
@@ -2228,6 +2253,11 @@ export default function HomeScreen() {
             );
           })}
         </View>
+
+        {/* ── Recap of the last scan — appears only once a meal exists ── */}
+        {lastMeal ? (
+          <LastMealCard meal={lastMeal} onPress={() => openMealReport(lastMeal)} />
+        ) : null}
 
         {/* ── Chronik (meal timeline) ── */}
         {mealTimeline.length > 0 ? (

@@ -37,12 +37,20 @@ function zoneColorAt(p: number): string {
   return `rgb(${ch(0)}, ${ch(1)}, ${ch(2)})`;
 }
 
-/** The tone (colour + which of the 3 scale words) for a whole IG value. */
+/**
+ * The tone for a whole IG value: `color` for graphics (bars, dots, chips) and
+ * `textColor` for type. The bright scale colours only reach ~3.2-3.5:1 on
+ * white, so small labels and the explanation sentence use the darker twins to
+ * clear the 4.5:1 WCAG AA floor without changing what the colours MEAN.
+ */
 export function glycemicTone(value: number) {
-  if (value <= 55) return { key: 'low' as const, color: '#0f9d58' };
-  if (value <= 69) return { key: 'medium' as const, color: '#d97706' };
-  return { key: 'high' as const, color: '#dc2626' };
+  if (value <= 55) return { key: 'low' as const, color: '#0f9d58', textColor: '#0B7A44' };
+  if (value <= 69) return { key: 'medium' as const, color: '#d97706', textColor: '#B45309' };
+  return { key: 'high' as const, color: '#dc2626', textColor: '#C81E1E' };
 }
+
+/** Scale-word colours under the bar — same three meanings, readable at 9.5 px. */
+const SCALE_TEXT = ['#0B7A44', '#B45309', '#C81E1E'] as const;
 
 /* One segment: filled ones animate in left→right, empty ones stay grey. */
 function Segment({
@@ -151,21 +159,23 @@ export function GlycemicBar({
           ))}
         </View>
         <View style={styles.valueWrap}>
+          {/* The big number is large enough for the bright tone; the small "IG"
+              unit and everything below use the readable twin. */}
           <Text style={[styles.value, { color: tone.color }]}>{value}</Text>
-          <Text style={[styles.valueUnit, { color: tone.color }]}>IG</Text>
+          <Text style={[styles.valueUnit, { color: tone.textColor }]}>IG</Text>
         </View>
       </View>
 
       {scale ? (
         <View style={styles.scaleRow}>
-          <Text style={[styles.scaleTxt, { color: '#0f9d58' }]}>{scale[0]}</Text>
-          <Text style={[styles.scaleTxt, { color: '#d97706' }]}>{scale[1]}</Text>
-          <Text style={[styles.scaleTxt, { color: '#dc2626' }]}>{scale[2]}</Text>
+          <Text style={[styles.scaleTxt, { color: SCALE_TEXT[0] }]}>{scale[0]}</Text>
+          <Text style={[styles.scaleTxt, { color: SCALE_TEXT[1] }]}>{scale[1]}</Text>
+          <Text style={[styles.scaleTxt, { color: SCALE_TEXT[2] }]}>{scale[2]}</Text>
         </View>
       ) : null}
 
       {description ? (
-        <Text style={[styles.desc, { color: tone.color }]}>{description}</Text>
+        <Text style={[styles.desc, { color: tone.textColor }]}>{description}</Text>
       ) : null}
     </View>
   );

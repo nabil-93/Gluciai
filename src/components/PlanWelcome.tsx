@@ -6,8 +6,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 
 import { useAppStore } from '@/store/useAppStore';
+import { SUPPORT_WHATSAPP as SUPPORT_WA } from '@/config/support';
 
-const SUPPORT_WA = '491637606478';
 
 function WhatsAppIcon() {
   return (

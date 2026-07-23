@@ -11,13 +11,13 @@ import { isRTL } from '@/i18n';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
 import type { UsageFeature } from '@/types';
+import { SUPPORT_WHATSAPP as SUPPORT_WA } from '@/config/support';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
 /** Support WhatsApp — where a locked-out patient asks to unlock a feature. */
-const SUPPORT_WA = '491637606478';
 const SUPPORT_WA_DISPLAY = '+49 163 7606478';
 
 function WhatsAppIcon({ size = 18 }: { size?: number }) {

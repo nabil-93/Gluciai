@@ -66,7 +66,17 @@
     "savedTitle": "Meal saved ✓",
     "savedBody": "Your meal is safely in your journal.",
     "savedRedirect": "Redirecting to home…",
-    "savedGoHome": "Go to home"
+    "savedGoHome": "Go to home",
+    "giEstimated": "estimated",
+    "giCoverage": "Based on {{pct}}% of carbs",
+    "unknownValues": "Unknown values",
+    "waterFromMeal": "{{ml}} ml from this meal",
+    "glLabel": "Glycemic load",
+    "sugarUnitCubesInline": "cubes",
+    "glHint": "It follows the portion — the index rates carb quality, the load their quantity.",
+    "mealMomentAsk": "Pick the meal to save",
+    "mealPickerBody": "Which meal is this plate for? Needed to add it to your journal.",
+    "mealMomentMoved": "Will be moved to \"{{meal}}\" — tap Save"
   },
   "common": {
     "appName": "GluciAI",
@@ -613,7 +623,10 @@
       "unmatched": "No nutrition values (not found in databases): {{value}} — tap \"Edit food\" to fix.",
       "ai_estimate": "Some values are AI-estimated (food not in official databases).",
       "portions_adjusted": "Portions adjusted to your habits: {{value}}."
-    }
+    },
+    "plateMore": "{{first}} + {{count}} more",
+    "plateTotalGrams": "{{grams}} g total",
+    "warnTitle": "To check"
   },
   "chat": {
     "title": "AI Coach",
@@ -792,7 +805,9 @@
     "errRatio": "The per-meal insulin ratio must be between 0.1 and 20 U / 10 g.",
     "errBasalDose": "The basal insulin dose must be between 1 and 200 U.",
     "errGlucoseGoal": "The glucose objective must be between 40 and 600 mg/dL.",
-    "saveError": "Save failed — your changes were not saved. Check your values and try again."
+    "saveError": "Save failed — your changes were not saved. Check your values and try again.",
+    "sectionSupport": "Support & Help",
+    "subSupport": "WhatsApp, assistant, questions"
   },
   "log": {
     "glucoseTitle": "Log glucose",
@@ -1785,5 +1800,34 @@
     "injuredDesc": "Reduced activity taken into account",
     "pausedLabel": "Paused",
     "pausedDesc": "Lighter tracking"
+  },
+  "support": {
+    "title": "Support & Help",
+    "subtitle": "A question about the app? We’re here.",
+    "aiTitle": "GluciAI assistant",
+    "aiSub": "It knows the whole app — how to scan, fix a food, set your ratios…",
+    "aiCta": "Ask a question",
+    "waTitle": "Message us on WhatsApp",
+    "waSub": "A real person answers you",
+    "waCta": "Open WhatsApp",
+    "bubble": "Need a hand? I’m right here 👋",
+    "chatTitle": "Help assistant",
+    "placeholder": "How can I help?",
+    "intro": "Hi! I know GluciAI inside out. Ask me how to scan a meal, fix a portion, set your insulin ratios — anything.",
+    "s1": "How do I fix a wrongly detected food?",
+    "s2": "How do I set my insulin ratios?",
+    "s3": "What does glycemic load mean?",
+    "failTitle": "I couldn’t answer that",
+    "failBody": "This one deserves a real human. Our team replies on WhatsApp.",
+    "thinking": "Thinking…",
+    "error": "Could not connect. Try again or message us on WhatsApp.",
+    "waMissing": "WhatsApp number not configured.",
+    "voiceNote": "🎤 Voice note"
+  },
+  "lastMeal": {
+    "title": "Analysis complete!",
+    "subtitle": "Here is your meal analysis",
+    "detail": "See details",
+    "tip": "AI tip"
   }
 }

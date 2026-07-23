@@ -311,7 +311,10 @@ export default function NutritionScreen() {
   // (opened read-only so it isn't re-saved / double-counted).
   const openMealReport = (meal: MealScan) => {
     setPeek(null);
-    setPendingScan(meal.result, meal.image_url, undefined, undefined, true);
+    setPendingScan(meal.result, meal.image_url, undefined, undefined, true, {
+      id: meal.id,
+      mealType: meal.meal_type,
+    });
     router.push('/scan-result');
   };
 

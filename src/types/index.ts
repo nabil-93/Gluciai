@@ -129,6 +129,26 @@ export interface FoodItemResult {
   detection_confidence: number;
   /** How reliable the nutrition values are (0..1, DB > AI) */
   nutrition_confidence: number;
+  /**
+   * True when `glycemic_index` is a category-based ESTIMATE rather than a
+   * database value (USDA/OFF/FatSecret/Edamam publish no GI). The UI must
+   * label it as approximate — we never present a guess as a measurement.
+   */
+  glycemic_index_estimated?: boolean;
+  /**
+   * Untouched per-100 g values this item was built from. Rescaling a portion
+   * always recomputes from THIS base instead of the already-rounded current
+   * values, so repeated edits never drift.
+   */
+  per100g_base?: {
+    calories: number;
+    carbs: number;
+    sugar: number;
+    protein: number;
+    fat: number;
+    fiber: number;
+    sodium?: number;
+  };
 }
 
 /** Stable, translatable meal-quality highlight keys. */
@@ -168,6 +188,14 @@ export interface NutritionResult {
   meal_score?: number;
   /** Estimated glycemic load bucket for the whole plate */
   glycemic_load?: 'Low' | 'Medium' | 'High';
+  /** Numeric glycemic load (GI x available carbs / 100) — moves with portions,
+   *  unlike the glycemic index, so it is the figure a patient acts on. */
+  glycemic_load_value?: number;
+  /** True when at least part of the plate GI came from category estimates. */
+  glycemic_index_estimated?: boolean;
+  /** Share (0..1) of the plate's carbs backed by a real or estimated GI —
+   *  lets the UI say how representative the displayed index actually is. */
+  gi_carb_coverage?: number;
   /**
    * Rule-based coaching as STABLE KEYS (e.g. "high_protein", "high_fiber",
    * "balanced_meal", "low_glycemic_load"). Computed locally from the

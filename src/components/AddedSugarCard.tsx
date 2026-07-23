@@ -25,9 +25,11 @@ const F800 = 'PlusJakartaSans_800ExtraBold';
 
 const AMBER = '#E8912A';
 const AMBER_D = '#B9701A';
+/** Readable twin of AMBER_D for TYPE (#B9701A is only 3.6:1 on the card). */
+const AMBER_TXT = '#8A5310';
 const AMBER_BG = '#FDF4E5';
 const INK = '#3a2e12';
-const MUTED = '#a68a5e';
+const MUTED = '#7d6234';
 
 /** search_name marker the parent uses to identify the single added-sugar row. */
 export const SUGAR_SEARCH_NAME = 'sugar';
@@ -201,8 +203,11 @@ export function AddedSugarCard({
             style={styles.amountInput}
             maxLength={4}
           />
-          <Text style={styles.amountUnit}>
-            {unit === 'cubes' ? t('analysis.sugarUnitCubes').toLowerCase() : 'g'}
+          <Text style={styles.amountUnit} numberOfLines={1}>
+            {/* Dedicated inline key instead of .toLowerCase() on the button
+                label: German nouns stay capitalised ("Stück", not "stück"),
+                and case folding is not a safe transform on translated text. */}
+            {unit === 'cubes' ? t('analysis.sugarUnitCubesInline') : 'g'}
           </Text>
         </View>
         <Pressable
@@ -430,8 +435,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { fontFamily: F800, fontSize: 13.5, color: AMBER_D },
-  body: { fontFamily: F500, fontSize: 11.5, lineHeight: 16.5, color: '#8a6d3b', marginTop: 3 },
+  title: { fontFamily: F800, fontSize: 13.5, color: AMBER_TXT },
+  body: { fontFamily: F500, fontSize: 11.5, lineHeight: 16.5, color: '#7d6234', marginTop: 3 },
 
   segRow: { flexDirection: 'row', gap: 8 },
   seg: {
@@ -444,8 +449,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   segActive: { backgroundColor: AMBER, borderColor: AMBER },
-  segText: { fontFamily: F700, fontSize: 12, color: AMBER_D },
-  segTextActive: { color: '#fff' },
+  segText: { fontFamily: F700, fontSize: 12, color: AMBER_TXT },
+  // Dark ink on the amber pill (5.4:1) rather than white (2.5:1) — the active
+  // segment stays obviously selected and the label is actually readable.
+  segTextActive: { color: INK },
 
   stepRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
   stepBtn: {
@@ -458,12 +465,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepSign: { fontFamily: F800, fontSize: 20, color: AMBER_D, lineHeight: 22 },
+  stepSign: { fontFamily: F800, fontSize: 20, color: AMBER_TXT, lineHeight: 22 },
   amountBox: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 4,
     minWidth: 96,
+    // On web a TextInput is an <input>, which carries a large intrinsic width
+    // (~280 px). Without these the box outgrew the row and pushed the − / +
+    // steppers outside the card. Shrinking is capped by minWidth above.
+    flexShrink: 1,
+    maxWidth: 150,
     justifyContent: 'center',
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -476,11 +488,14 @@ const styles = StyleSheet.create({
     fontFamily: F800,
     fontSize: 22,
     color: INK,
-    minWidth: 40,
+    // Fixed width (not minWidth): on web the <input>'s intrinsic size would
+    // otherwise blow the row apart. 4 digits max fit comfortably.
+    width: 54,
+    flexShrink: 0,
     textAlign: 'center',
     padding: 0,
   },
-  amountUnit: { fontFamily: F600, fontSize: 12, color: MUTED },
+  amountUnit: { fontFamily: F600, fontSize: 12, color: MUTED, flexShrink: 1 },
   hint: { fontFamily: F500, fontSize: 10.5, color: MUTED, textAlign: 'center', marginTop: -4 },
 
   actionRow: { flexDirection: 'row' },
@@ -497,9 +512,9 @@ const styles = StyleSheet.create({
     borderColor: '#e6c98f',
     backgroundColor: '#fffaf1',
   },
-  photoText: { fontFamily: F700, fontSize: 12, color: AMBER_D },
+  photoText: { fontFamily: F700, fontSize: 12, color: AMBER_TXT },
   addBtn: {
-    backgroundColor: AMBER_D,
+    backgroundColor: AMBER_TXT,
     borderRadius: 13,
     paddingVertical: 13,
     alignItems: 'center',
@@ -518,7 +533,7 @@ const styles = StyleSheet.create({
   },
   addedText: { fontFamily: F800, fontSize: 12.5, color: '#2f7a3f' },
   linkBtn: { paddingHorizontal: 4, paddingVertical: 2 },
-  linkText: { fontFamily: F700, fontSize: 11.5, color: AMBER_D },
+  linkText: { fontFamily: F700, fontSize: 11.5, color: AMBER_TXT },
 
   // Camera window
   camOverlay: {

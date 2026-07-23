@@ -20,7 +20,14 @@ export interface MealScore {
   score: number;
   /** Localized label (Excellent / Good / Moderate / Poor in the app language). */
   label: string;
+  /** Graphic colour — progress rings, bars, dots. */
   color: string;
+  /**
+   * The same meaning, dark enough to read as type. The graphic greens/ambers
+   * sit around 2.7-3.6:1 on white, under the 4.5:1 WCAG AA floor, so any
+   * TEXT rendering of the score label must use this instead.
+   */
+  textColor: string;
   /** Why the meal got this score (worst factors first) */
   reasons: string[];
 }
@@ -47,6 +54,14 @@ const COLORS = {
   good: '#2FCB8E',
   moderate: '#E0A93F',
   poor: '#F5763B',
+};
+
+/** Readable twins of COLORS, all ≥ 4.5:1 on white (see MealScore.textColor). */
+const TEXT_COLORS = {
+  excellent: '#257A34',
+  good: '#0F7A5A',
+  moderate: '#8A6416',
+  poor: '#B4441A',
 };
 
 export function scoreMeal(m: MealScoreInput): MealScore {
@@ -108,19 +123,21 @@ export function scoreMeal(m: MealScoreInput): MealScore {
         : score >= 50
           ? t('mealScore.labelModerate')
           : t('mealScore.labelPoor');
-  const color =
+  const tier =
     score >= 85
-      ? COLORS.excellent
+      ? 'excellent'
       : score >= 70
-        ? COLORS.good
+        ? 'good'
         : score >= 50
-          ? COLORS.moderate
-          : COLORS.poor;
+          ? 'moderate'
+          : ('poor' as const);
+  const color = COLORS[tier];
+  const textColor = TEXT_COLORS[tier];
 
   const reasons = [...penalties.map((p) => p.reason), ...bonuses];
   if (reasons.length === 0) {
     reasons.push(t('mealScore.balanced'));
   }
 
-  return { score, label, color, reasons };
+  return { score, label, color, textColor, reasons };
 }

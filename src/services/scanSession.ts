@@ -1,4 +1,4 @@
-import type { NutritionResult } from '@/types';
+import type { MealType, NutritionResult } from '@/types';
 
 /** In-memory handoff between the scanner and the result screen. */
 let pending: {
@@ -14,9 +14,13 @@ let pending: {
   /** JPEG base64 of the analyzed photo — uploaded to storage on save */
   base64?: string;
   /** True when the result screen is opened to REVIEW a meal already in the
-   *  journal (from the Nutrition page) — the report opens read-only so it
-   *  can't be saved twice and the day totals aren't double-counted. */
+   *  journal (from the Nutrition page or the home recap) — it can't be saved
+   *  twice and the day totals aren't double-counted. */
   alreadySaved?: boolean;
+  /** The journal row being reviewed. Carrying it lets the report re-file the
+   *  meal under a different slot (lunch → dinner) by PATCHING that row instead
+   *  of writing a second copy. */
+  savedMeal?: { id: string; mealType?: MealType };
 } | null = null;
 
 export function setPendingScan(
@@ -24,9 +28,10 @@ export function setPendingScan(
   imageUri?: string,
   imageSize?: { width: number; height: number },
   base64?: string,
-  alreadySaved?: boolean
+  alreadySaved?: boolean,
+  savedMeal?: { id: string; mealType?: MealType }
 ) {
-  pending = { result, imageUri, imageSize, base64, alreadySaved };
+  pending = { result, imageUri, imageSize, base64, alreadySaved, savedMeal };
 }
 
 export function getPendingScan() {

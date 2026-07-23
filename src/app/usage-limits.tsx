@@ -10,6 +10,7 @@ import { isRTL } from '@/i18n';
 import { refreshUsage } from '@/services/usage';
 import { useAppStore } from '@/store/useAppStore';
 import type { UsageFeature, UsageStat } from '@/types';
+import { SUPPORT_WHATSAPP as SUPPORT_WA } from '@/config/support';
 
 const F500 = 'PlusJakartaSans_500Medium';
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -23,7 +24,6 @@ const GREEN_DEEP = '#0FA968';
 const CARD_BORDER = '#E7EDE9';
 
 /** Support WhatsApp (same as LockedFeature) — to ask for a higher limit. */
-const SUPPORT_WA = '491637606478';
 
 const META: Record<UsageFeature, { emoji: string; tint: string }> = {
   scanner: { emoji: '📷', tint: '#E8F1FA' },

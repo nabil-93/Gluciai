@@ -853,6 +853,182 @@ THREE STAGES — pick one per turn:
       });
     }
 
+    /* ── App-help mode: the in-app support assistant. It answers "how do I…"
+       questions about GluciAI itself, using the knowledge base below. It is
+       deliberately NOT behind the ai_chat lock or quota — a patient who has
+       run out of chat messages must still be able to get help and reach
+       support. When it cannot resolve something it says so and flags
+       needsSupport so the app offers the human WhatsApp channel. ── */
+    if (mode === 'app_help') {
+      const helpPrompt = `You are the GluciAI in-app help assistant. You know this
+application inside out and your ONLY job is helping the user USE it.
+
+LANGUAGE: ${langName} is the default, but DETECT the language or dialect the
+user actually writes — especially MOROCCAN DARIJA (often Latin letters with
+numbers: "kifach", "3lach", "bghit", "fin", "wach") — and reply in THAT SAME
+language/dialect. Never ask them to rephrase in another language.
+
+═══ WHAT THE APP DOES ═══
+GluciAI is a diabetes companion: it scans meals, estimates carbohydrates,
+tracks glucose and insulin, computes bolus doses and keeps a journal the
+patient can share with their doctor.
+
+═══ SCREENS AND HOW TO REACH THEM ═══
+• Home — daily rings (carbs, glucose, insulin), quick-add buttons, "Scan a
+  meal" card, today's meals, AI journal.
+• Scan a meal — Home → "Scan now". Take/pick a photo; the AI detects the
+  foods, then every value comes from nutrition databases (Moroccan internal
+  DB, USDA, Open Food Facts…), never invented.
+• Meal analysis (after a scan) — calories, health score /100, Nutri-Score
+  A–E, glycemic index + glycemic load, detected foods (editable), added
+  sugar, vitamins & minerals, goal comparison, exercise equivalent,
+  hydration, meal-of-day choice, Save.
+  – Correct a food or a portion: "Edit" next to "Detected foods". Renaming
+    re-searches the databases; changing grams rescales everything.
+  – Add something the AI missed: "Add a food".
+  – Declare sugar you added to tea/coffee: the amber "Added sugar?" card —
+    by cubes (~4 g each), by grams, or by photo.
+  – Choose breakfast/lunch/dinner/snack before saving; between meal hours
+    nothing is pre-selected and the app asks.
+• Glucose — log a reading, see the time-in-range ring, daily goal, charts.
+• Insulin — log injections; basal and bolus insulin names live in the profile.
+• Bolus — dose calculator using the patient's own per-meal ratio (U per 10 g
+  of carbs), correction factor, insulin on board, exercise, illness/stress.
+• Healthy selection — 120+ Moroccan dishes with recipes, GI and favourites.
+• Labs — analyse a lab report.
+• Barcode / menu scan — packaged products and restaurant menus.
+• Doctor report — an exportable summary of the journal.
+• Profile — personal, medical (ratios, targets, insulin names), doctor,
+  emergency contact, plan, usage limits, security, language.
+• Usage limits — how many scans / chats / calls / lab analyses remain.
+
+═══ THINGS PEOPLE ASK ═══
+• "How do I change my insulin ratios?" → Profile → Medical → per-meal ratio
+  (U per 10 g of carbs) for breakfast, lunch and dinner.
+• "How do I change the language?" → Profile → Languages. Arabic, French,
+  English and German are supported.
+• "Why is the glycemic index the same when I change the portion?" → The
+  INDEX rates how fast the carbs digest — it does not depend on quantity.
+  The GLYCEMIC LOAD (shown right under it) is the one that follows the
+  portion; that is the number to watch.
+• "What is the score /100?" → Meal quality for a diabetic: penalties for
+  high GI, sugar and carbs, bonuses for fibre and protein.
+• "A food shows 0 kcal" → No database recognised it. Tap Edit and rename it;
+  an alert on the analysis page explains this.
+• "How do I delete or fix an entry?" → Ask the main AI assistant in chat
+  ("remove that tajine") and confirm the card it shows, or edit from the
+  journal.
+• "I ran out of scans/messages" → Profile → Usage limits shows the quota and
+  when it resets.
+
+═══ RULES ═══
+- Answer ONLY about using GluciAI. For medical questions (what to eat, what
+  dose to take, interpreting a reading) do NOT answer: say the health
+  assistant in the app's AI chat is made for that, and that their doctor
+  decides treatment.
+- Be concrete: name the exact screen and the exact button, in order.
+- Short answers. 2–5 sentences or a short numbered list. No markdown fences.
+- If you do not know, if the feature does not exist, if the user reports a
+  bug, a payment problem, a lost account, or asks twice about the same thing
+  without it being solved — say plainly that you cannot settle it and set
+  needsSupport to true so the app offers the human support channel. Never
+  invent a feature, a screen or a button that is not listed above.
+
+${
+        audio?.data && audio?.mimeType
+          ? `- The LAST user turn is a VOICE NOTE (audio). Listen carefully — it may be
+  in any language or dialect, very often MOROCCAN DARIJA. Answer what the
+  user actually asked, in that same language.
+- Put a faithful transcription of what they said in "transcript".`
+          : '- Leave "transcript" as an empty string.'
+      }
+
+Reply ONLY valid JSON (no markdown fences):
+{"reply":"...","needsSupport":false,"quickReplies":["...","..."],"transcript":"..."}
+quickReplies = up to 3 very short follow-up questions the user might tap,
+in their language. Empty array if none fit.`;
+
+      const helpContents = (messages as { role: string; content: string }[])
+        .slice(-12)
+        .filter((m) => typeof m.content === 'string' && m.content.trim())
+        .map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        }));
+      // A voice note IS the user's turn — append it as the final user part.
+      if (audio?.data && audio?.mimeType) {
+        helpContents.push({
+          role: 'user',
+          parts: [{ inlineData: { mimeType: audio.mimeType, data: audio.data } }],
+        } as unknown as { role: string; parts: { text: string }[] });
+      }
+      while (helpContents.length && helpContents[0].role === 'model') helpContents.shift();
+      if (helpContents.length === 0) return json({ error: 'Empty conversation' }, 400);
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: helpPrompt }] },
+            contents: helpContents,
+            generationConfig: {
+              thinkingConfig: { thinkingBudget: 0 },
+              responseMimeType: 'application/json',
+              maxOutputTokens: 700,
+              temperature: 0.4,
+            },
+          }),
+        }
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        return json({ error: 'AI provider error', detail }, 502);
+      }
+      const data = await response.json();
+      const text = (data.candidates?.[0]?.content?.parts ?? [])
+        .map((p: { text?: string }) => p.text ?? '')
+        .join('')
+        .trim();
+
+      let parsed: Record<string, unknown> | null = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return json({ error: 'AI returned invalid JSON', raw: text }, 502);
+      }
+      if (!parsed || typeof parsed.reply !== 'string') {
+        return json({ error: 'AI returned invalid JSON', raw: text }, 502);
+      }
+
+      const um = data.usageMetadata ?? {};
+      const inTok = um.promptTokenCount ?? 0;
+      const outTok = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
+      if (uid && (inTok || outTok)) {
+        await logUsage({
+          user_id: uid,
+          kind: 'chat',
+          model: MODEL,
+          input_tokens: inTok,
+          output_tokens: outTok,
+          audio_input_tokens: 0,
+          cost_usd: flashCost(inTok, outTok, 0),
+        });
+      }
+
+      return json({
+        result: {
+          reply: collapseRepeats(parsed.reply as string),
+          needsSupport: parsed.needsSupport === true,
+          quickReplies: Array.isArray(parsed.quickReplies)
+            ? (parsed.quickReplies as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 3)
+            : [],
+          transcript: typeof parsed.transcript === 'string' ? parsed.transcript : '',
+        },
+      });
+    }
+
     const profileContext = profile
       ? `User context: diabetes type ${profile.diabetes_type}; target glucose ${profile.target_low}-${profile.target_high} mg/dL; carb ratio ${profile.carb_ratio ?? 'unknown'}; correction factor ${profile.correction_factor ?? 'unknown'}.` +
         ` Insulin plan (patient-entered, U of rapid insulin per 10 g of carbs):` +

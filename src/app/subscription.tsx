@@ -18,8 +18,8 @@ import { isRTL } from '@/i18n';
 import { useAppStore } from '@/store/useAppStore';
 import { ALL_FEATURES, planStatus, type FeatureKey } from '@/services/features';
 import { shadows } from '@/theme';
+import { SUPPORT_WHATSAPP as SUPPORT_WA } from '@/config/support';
 
-const SUPPORT_WA = '491637606478';
 const SUPPORT_WA_DISPLAY = '+49 163 7606478';
 
 const F500 = 'PlusJakartaSans_500Medium';

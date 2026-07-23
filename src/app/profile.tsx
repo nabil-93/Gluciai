@@ -543,6 +543,15 @@ export default function ProfileScreen() {
           />
           <Divider />
           <Row
+            icon="phone"
+            tint="#E6F6EC"
+            color="#0F7A42"
+            title={t('profile.sectionSupport')}
+            sub={t('profile.subSupport')}
+            onPress={() => router.push('/support' as never)}
+          />
+          <Divider />
+          <Row
             icon="warn"
             tint="#FDF0E4"
             color="#E8833A"
