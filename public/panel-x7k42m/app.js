@@ -180,6 +180,29 @@ function inTimeBucket(iso, bucket) {
   if (bucket === 'old') return days >= 30;
   return true;
 }
+
+/* AI-consumption period filter (jour / semaine / mois / tous). Boundaries are
+ * LOCAL time (week starts Monday), matching the app's usage-limit windows. */
+function usagePeriodStart(period) {
+  const now = new Date();
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (period === 'day') return midnight;
+  if (period === 'week') {
+    const d = new Date(midnight);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // back to Monday
+    return d;
+  }
+  if (period === 'month') return new Date(now.getFullYear(), now.getMonth(), 1);
+  return null; // 'all' → no lower bound
+}
+function filterByPeriod(rows, period) {
+  const start = usagePeriodStart(period);
+  if (!start) return rows;
+  const t = start.getTime();
+  return rows.filter((r) => r.created_at && new Date(r.created_at).getTime() >= t);
+}
+const USAGE_PERIODS = [['day', 'Jour'], ['week', 'Semaine'], ['month', 'Mois'], ['all', 'Tous']];
+
 const daysLeft = (iso) => {
   if (!iso) return null;
   return Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
@@ -724,7 +747,7 @@ async function pagePatient(pid, initTab) {
   const glys = glysRes.rows, glysCount = glysRes.count;
   const labReports = labRes.rows;
   const labsCount = labRes.count;
-  const aiUsage = (await db.from('ai_usage').select('kind, input_tokens, output_tokens, audio_input_tokens, audio_output_tokens, cost_usd').eq('user_id', pid)).data ?? [];
+  const aiUsage = (await db.from('ai_usage').select('kind, input_tokens, output_tokens, audio_input_tokens, audio_output_tokens, cost_usd, created_at').eq('user_id', pid)).data ?? [];
   // Live usage-limit status (override→default resolved, with used/remaining)
   // + the per-user override rows, so the card can flag custom vs default.
   const usageStatus = (await db.rpc('usage_status', { p_user: pid })).data ?? [];
@@ -920,6 +943,16 @@ async function pagePatient(pid, initTab) {
   document.getElementById('backBtn').addEventListener('click', () => history.back());
   document.getElementById('alertBtn')?.addEventListener('click', () =>
     alertModal({ user_id: pid, name: prof.name, email: prof.email }));
+
+  /* AI-consumption period tabs (Jour / Semaine / Mois / Tous) — recompute the
+     breakdown from the already-fetched rows, no extra query. */
+  document.querySelectorAll('#usageTabs .uperiod-tab').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#usageTabs .uperiod-tab').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const body = document.getElementById('usageCardBody');
+      if (body) body.innerHTML = usageCardBody(filterByPeriod(aiUsage, btn.dataset.uperiod));
+    }));
 
   /* data tabs */
   const panel = document.getElementById('dataPanel');
@@ -1367,7 +1400,9 @@ function bindDefaultLimits() {
 }
 
 /* ── AI consumption card (patient detail) ── */
-function usageCard(rows, callInfo) {
+/* The inner breakdown of the AI-consumption card, recomputed each time the
+ * period tab changes (Jour / Semaine / Mois / Tous). */
+function usageCardBody(rows) {
   const totalCost = rows.reduce((a, r) => a + Number(r.cost_usd || 0), 0);
   const byKind = {};
   rows.forEach((r) => {
@@ -1377,7 +1412,25 @@ function usageCard(rows, callInfo) {
     k.out += (r.output_tokens || 0) + (r.audio_output_tokens || 0);
     k.cost += Number(r.cost_usd || 0);
   });
-  // Monthly voice-call quota chip
+  if (!rows.length) {
+    return `<div class="empty" style="padding:26px 20px"><div class="e">🧮</div><div class="t">Aucune utilisation IA sur cette période</div><div class="s">Le suivi exact est actif depuis le 11 juillet 2026.</div></div>`;
+  }
+  return `
+    <div class="pay-stats" style="padding-bottom:2px">
+      <span class="badge indigo">Coût total : ${fmtUsd(totalCost)}</span>
+      <span class="badge gray">${rows.length} requête${rows.length > 1 ? 's' : ''}</span>
+    </div>
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th>Fonction</th><th>Requêtes</th><th>Tokens entrée</th><th>Tokens sortie</th><th>Coût</th></tr></thead>
+      <tbody>${Object.entries(byKind).map(([k, v]) => `
+        <tr><td><b>${KIND_META[k]?.icon ?? '🤖'} ${KIND_META[k]?.label ?? esc(k)}</b></td>
+        <td>${v.n}</td><td>${fmtTok(v.in)}</td><td>${fmtTok(v.out)}</td>
+        <td><b style="color:var(--primary)">${fmtUsd(v.cost)}</b></td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+function usageCard(rows, callInfo) {
+  // Monthly voice-call quota chip (always "this month" by definition)
   let quotaChip = '';
   if (callInfo) {
     const { callMinMonth, callLimit } = callInfo;
@@ -1389,23 +1442,15 @@ function usageCard(rows, callInfo) {
       quotaChip = `<span class="badge ${cls}">📞 ${callMinMonth}/${callLimit} min ce mois · ${left} restantes</span>`;
     }
   }
+  // Period tabs — default "Tous" so the fiche opens on the full history.
+  const tabs = USAGE_PERIODS.map(([k, l]) =>
+    `<button class="tab uperiod-tab ${k === 'all' ? 'active' : ''}" data-uperiod="${k}">${l}</button>`).join('');
   return `
     <div class="card fade-up">
       <div class="card-head"><h3>🧮 Consommation IA</h3><a href="#/usage" style="font-size:12px;font-weight:700;color:var(--primary)">Vue globale ›</a></div>
       ${quotaChip ? `<div class="pay-stats" style="padding-bottom:0">${quotaChip}</div>` : ''}
-      ${rows.length ? `
-      <div class="pay-stats" style="padding-bottom:2px">
-        <span class="badge indigo">Coût total : ${fmtUsd(totalCost)}</span>
-        <span class="badge gray">${rows.length} requête${rows.length > 1 ? 's' : ''}</span>
-      </div>
-      <div class="table-wrap"><table class="data">
-        <thead><tr><th>Fonction</th><th>Requêtes</th><th>Tokens entrée</th><th>Tokens sortie</th><th>Coût</th></tr></thead>
-        <tbody>${Object.entries(byKind).map(([k, v]) => `
-          <tr><td><b>${KIND_META[k]?.icon ?? '🤖'} ${KIND_META[k]?.label ?? esc(k)}</b></td>
-          <td>${v.n}</td><td>${fmtTok(v.in)}</td><td>${fmtTok(v.out)}</td>
-          <td><b style="color:var(--primary)">${fmtUsd(v.cost)}</b></td></tr>`).join('')}</tbody>
-      </table></div>`
-      : `<div class="empty" style="padding:26px 20px"><div class="e">🧮</div><div class="t">Aucune utilisation IA enregistrée</div><div class="s">Le suivi exact est actif depuis le 11 juillet 2026.</div></div>`}
+      <div class="tabs" id="usageTabs" style="margin:2px 0 12px">${tabs}</div>
+      <div id="usageCardBody">${usageCardBody(rows)}</div>
     </div>`;
 }
 
@@ -1576,7 +1621,7 @@ const userHref = (p) =>
 async function pageUsers() {
   const page = shell('#/users', 'Utilisateurs', 'Tous les comptes : admins, médecins et patients', loading);
   const [profsRes, patients, usageRes] = await Promise.all([
-    db.from('profiles').select('user_id, role, name, email, phone, language, created_at').order('created_at', { ascending: false }),
+    db.from('profiles').select('user_id, role, name, email, phone, language, created_at, last_seen_at').order('created_at', { ascending: false }),
     fetchPatients(),
     db.from('ai_usage').select('user_id, cost_usd, created_at').order('created_at', { ascending: false }).limit(10000),
   ]);
@@ -1603,6 +1648,7 @@ async function pageUsers() {
       <td style="font-size:12px;color:var(--muted)">${p.phone ? '📱 ' + esc(p.phone) : '—'}</td>
       <td>${p.language ? `<span class="badge gray">${esc(String(p.language).toUpperCase())}</span>` : '—'}</td>
       <td style="color:var(--muted);font-size:12px">${fmtDate(p.created_at)}</td>
+      <td style="color:var(--muted);font-size:12px" title="${p.last_seen_at ? fmtDT(p.last_seen_at) : ''}">${p.last_seen_at ? timeAgo(p.last_seen_at) : '—'}</td>
       <td style="color:var(--muted);font-size:12px">${last ? timeAgo(last) : '—'}</td>
       <td>${p.role === 'patient' ? `<span class="badge blue">📷 ${ov?.meals_count ?? 0}</span> <span class="badge red">🩸 ${ov?.glucose_count ?? 0}</span>` : '—'}</td>
       <td>${u ? `<b style="color:var(--primary)">${fmtUsd(u.cost)}</b> <span style="font-size:11px;color:var(--muted-2)">(${u.n})</span>` : '—'}</td>
@@ -1611,15 +1657,17 @@ async function pageUsers() {
   };
   const tableHtml = (rows) => rows.length
     ? `<div class="table-wrap"><table class="data">
-        <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Téléphone</th><th>Langue</th><th>Inscrit le</th><th>Dernière activité</th><th>Données</th><th>Conso IA</th><th></th></tr></thead>
+        <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Téléphone</th><th>Langue</th><th>Inscrit le</th><th>Connexion</th><th>Dernière activité</th><th>Données</th><th>Conso IA</th><th></th></tr></thead>
         <tbody>${rows.map(rowHtml).join('')}</tbody></table></div>`
     : `<div class="empty"><div class="e">👥</div><div class="t">Aucun compte</div></div>`;
 
   const renderList = () => {
     const q = (document.getElementById('usearch')?.value || '').trim().toLowerCase();
     const fRole = document.getElementById('fRole')?.value || '';
+    const fConn = document.getElementById('fConnU')?.value || '';
     let f = profs;
     if (fRole) f = f.filter((p) => p.role === fRole);
+    if (fConn) f = f.filter((p) => inTimeBucket(p.last_seen_at, fConn));
     if (q) f = f.filter((p) => (p.name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q) || (p.phone || '').toLowerCase().includes(q));
     document.getElementById('ulist').innerHTML = tableHtml(f);
     document.getElementById('ucount').textContent = `${f.length} / ${profs.length}`;
@@ -1642,12 +1690,21 @@ async function pageUsers() {
         <option value="doctor">🩺 Médecins</option>
         <option value="patient">👤 Patients</option>
       </select>
+      <select class="sel" id="fConnU">
+        <option value="">📲 Dernière connexion</option>
+        <option value="today">Aujourd'hui</option>
+        <option value="7d">7 derniers jours</option>
+        <option value="30d">30 derniers jours</option>
+        <option value="old">+ de 30 jours</option>
+        <option value="never">Jamais connecté</option>
+      </select>
       <span class="badge gray" id="ucount"></span>
     </div>
     <div class="card fade-up" style="animation-delay:.05s" id="ulist"></div>`;
   renderList();
   document.getElementById('usearch').addEventListener('input', renderList);
   document.getElementById('fRole').addEventListener('change', renderList);
+  document.getElementById('fConnU').addEventListener('change', renderList);
 }
 
 /* ════════════════ DOCTORS (admin) ════════════════ */
@@ -1912,10 +1969,8 @@ async function pageUsage() {
   const render = async () => {
     const period = document.getElementById('uPeriod')?.value ?? 'month';
     let q = db.from('ai_usage').select('*').order('created_at', { ascending: false }).limit(5000);
-    const now = new Date();
-    if (period === 'month') q = q.gte('created_at', new Date(now.getFullYear(), now.getMonth(), 1).toISOString());
-    else if (period === '7d') q = q.gte('created_at', new Date(Date.now() - 7 * 86400e3).toISOString());
-    else if (period === '30d') q = q.gte('created_at', new Date(Date.now() - 30 * 86400e3).toISOString());
+    const start = usagePeriodStart(period);
+    if (start) q = q.gte('created_at', start.toISOString());
 
     const [{ data: rowsRaw }, profRes] = await Promise.all([
       q,
@@ -2002,10 +2057,10 @@ async function pageUsage() {
     ${defCard}
     <div class="page-actions fade-up">
       <select class="sel" id="uPeriod">
-        <option value="month">📅 Ce mois-ci</option>
-        <option value="7d">7 derniers jours</option>
-        <option value="30d">30 derniers jours</option>
-        <option value="all">Depuis le début</option>
+        <option value="day">📅 Aujourd'hui</option>
+        <option value="week">Cette semaine</option>
+        <option value="month" selected>Ce mois</option>
+        <option value="all">Tous</option>
       </select>
     </div>
     <div id="usageBody">${loading}</div>`;
