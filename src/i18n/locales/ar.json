@@ -1578,7 +1578,10 @@
     "aiAsk": "اضغط لطرح سؤال",
     "aiTitle": "مساعد الأنسولين",
     "aiPlaceholder": "اطرح سؤالك…",
-    "aiError": "تعذّر الرد، حاول مرة أخرى."
+    "aiError": "تعذّر الرد، حاول مرة أخرى.",
+    "calTitle": "الأنسولين المحقون",
+    "calCaption": "ثلث الحلقة لكل نوع أنسولين",
+    "calHint": "رمادي = لم يُحقن هذا النوع في ذلك اليوم."
   },
   "foodsPage": {
     "title": "مطبخ مغربي",
@@ -1686,7 +1689,12 @@
     "sodium": "الصوديوم",
     "yesterday": "أمس",
     "pickDay": "اختر يومًا",
-    "mealCount": "{{count}} وجبات"
+    "mealCount": "{{count}} وجبات",
+    "calTitle": "كربوهيدرات اليوم",
+    "calCaption": "الهدف: {{goal}} غ كربوهيدرات / يوم",
+    "calGoalOk": "ضمن الهدف",
+    "calGoalOver": "تجاوز الهدف",
+    "calHint": "تمتلئ الحلقة بحسب كربوهيدرات ذلك اليوم."
   },
   "menuScanPage": {
     "title": "قائمة المطعم",
@@ -1865,15 +1873,21 @@
     "emptyPeriod": "لا شيء مسجل في هذه الفترة.",
     "daysWithData": "{{n}} يوم بها بيانات",
     "filterAll": "الكل",
-    "legendHigh": "≥70% ضمن الهدف",
-    "legendMid": "40–70%",
-    "legendLow": "<40%",
+    "legendHigh": "يوم جيد",
+    "legendMid": "يوم متوسط",
+    "legendLow": "يوم صعب",
     "measure_weight": "الوزن",
     "measure_hba1c": "السكر التراكمي",
     "measure_bp_systolic": "الضغط الانقباضي",
     "measure_bp_diastolic": "الضغط الانبساطي",
     "note": "ملاحظة",
     "statusChanged": "تغيّر الحالة",
-    "settingsChanged": "تغيّرت الإعدادات"
+    "settingsChanged": "تغيّرت الإعدادات",
+    "legendTitle": "القياسات ضمن الهدف",
+    "legendTarget": "هدفك: {{low}}–{{high}} ملغ/دل",
+    "legendPctHigh": "≥ 70٪",
+    "legendPctMid": "40–70٪",
+    "legendPctLow": "< 40٪",
+    "legendRingHint": "تمتلئ الحلقة بنسبة قياساتك ضمن الهدف."
   }
 }

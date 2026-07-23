@@ -1578,7 +1578,10 @@
     "aiAsk": "Tap to ask a question",
     "aiTitle": "Insulin assistant",
     "aiPlaceholder": "Ask your question…",
-    "aiError": "I couldn't reply, please try again."
+    "aiError": "I couldn't reply, please try again.",
+    "calTitle": "Insulin injected",
+    "calCaption": "One third of the ring per insulin type",
+    "calHint": "Grey = that type was not injected that day."
   },
   "foodsPage": {
     "title": "Moroccan cuisine",
@@ -1686,7 +1689,12 @@
     "sodium": "Sodium",
     "yesterday": "Yesterday",
     "pickDay": "Pick a day",
-    "mealCount": "{{count}} meals"
+    "mealCount": "{{count}} meals",
+    "calTitle": "Carbs for the day",
+    "calCaption": "Goal: {{goal}} g of carbs / day",
+    "calGoalOk": "Within goal",
+    "calGoalOver": "Over goal",
+    "calHint": "The ring fills with the carbs eaten that day."
   },
   "menuScanPage": {
     "title": "Restaurant menu",
@@ -1865,15 +1873,21 @@
     "emptyPeriod": "Nothing logged in this period.",
     "daysWithData": "{{n}} day(s) with data",
     "filterAll": "All",
-    "legendHigh": "≥70% in target",
-    "legendMid": "40–70%",
-    "legendLow": "<40%",
+    "legendHigh": "Good day",
+    "legendMid": "Mixed day",
+    "legendLow": "Tough day",
     "measure_weight": "Weight",
     "measure_hba1c": "HbA1c",
     "measure_bp_systolic": "Systolic BP",
     "measure_bp_diastolic": "Diastolic BP",
     "note": "Note",
     "statusChanged": "Status changed",
-    "settingsChanged": "Settings changed"
+    "settingsChanged": "Settings changed",
+    "legendTitle": "Glucose in target",
+    "legendTarget": "Your target: {{low}}–{{high}} mg/dL",
+    "legendPctHigh": "≥ 70%",
+    "legendPctMid": "40–70%",
+    "legendPctLow": "< 40%",
+    "legendRingHint": "The ring fills with the share of your readings inside target."
   }
 }

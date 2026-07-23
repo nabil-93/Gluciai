@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import Svg, { Circle, Path } from 'react-native-svg';
 
+import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
 import { CalendarSheet } from '@/components/journal/CalendarSheet';
 import { DetailSheet, type VisibleEvent } from '@/components/journal/DetailSheet';
 import { CalendarGlyph, METRIC, logoFor, type MetricKey } from '@/components/journal/metricIcons';
@@ -248,6 +249,7 @@ export default function JournalScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { onScroll } = useTabBarScroll();
 
   // Subscribe so the journal live-updates as things are logged.
   const { meals, insulinLogs, glucoseLogs, activityLogs, measureLogs, eventLogs, profile } =
@@ -419,6 +421,8 @@ export default function JournalScreen() {
     <View style={styles.root}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={onScroll}
         contentContainerStyle={{
           paddingTop: insets.top + 10,
           paddingHorizontal: 16,

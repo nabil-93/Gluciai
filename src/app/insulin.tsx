@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
 import { CoachChatModal } from '@/components/CoachChatModal';
+import { DayPickerSheet } from '@/components/calendar/DayPickerSheet';
+import type { DayRing } from '@/components/calendar/RingCalendar';
 import { nowMs } from '@/lib/clock';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
@@ -220,6 +222,39 @@ export default function InsulinScreen() {
     d.setDate(d.getDate() - dayOffset);
     return d;
   }, [dayOffset]);
+
+  /** The calendar hands back a Date; the page tracks a day offset. */
+  const selectDate = (d: Date) => {
+    const a = new Date();
+    a.setHours(0, 0, 0, 0);
+    const b = new Date(d);
+    b.setHours(0, 0, 0, 0);
+    setDayOffset(Math.max(0, Math.round((a.getTime() - b.getTime()) / 86_400_000)));
+  };
+
+  /** Which insulin types were injected on a given day — one ring arc each. */
+  const typesByDay = useMemo(() => {
+    const map = new Map<string, Set<InsulinType>>();
+    for (const l of insulinLogs) {
+      const key = new Date(l.created_at).toDateString();
+      const set = map.get(key) ?? new Set<InsulinType>();
+      set.add(l.insulin_type);
+      map.set(key, set);
+    }
+    return map;
+  }, [insulinLogs]);
+
+  const ringFor = (d: Date): DayRing => {
+    const set = typesByDay.get(d.toDateString());
+    return {
+      kind: 'segments',
+      segments: (['rapid', 'long', 'mixed'] as const).map((type) => ({
+        color: TYPE_COLOR[type],
+        on: !!set?.has(type),
+      })),
+    };
+  };
+
   const dayLabel = (offset: number) => {
     if (offset === 0) return t('insulinPage.today');
     if (offset === 1) return t('insulinPage.yesterday');
@@ -696,44 +731,23 @@ export default function InsulinScreen() {
         </LinearGradient>
       </Pressable>
 
-      {/* ── Day picker ── */}
-      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
-        <Pressable style={styles.pickerOverlay} onPress={() => setPickerOpen(false)}>
-          <View style={styles.pickerSheet}>
-            <View style={styles.pickerHandle} />
-            <Text style={styles.pickerTitle}>{t('insulinPage.pickDay')}</Text>
-            {Array.from({ length: 7 }, (_, i) => i).map((off) => {
-              const d = new Date();
-              d.setDate(d.getDate() - off);
-              const n = insulinLogs.filter((l) => sameDay(l.created_at, d)).length;
-              const active = off === dayOffset;
-              return (
-                <Pressable
-                  key={off}
-                  onPress={() => {
-                    setDayOffset(off);
-                    setPickerOpen(false);
-                  }}
-                  style={[styles.pickerRow, active && styles.pickerRowActive]}
-                >
-                  <Text style={[styles.pickerDay, active && { color: GREEN_D }]}>{dayLabel(off)}</Text>
-                  <Text style={styles.pickerCount}>
-                    {n > 0 ? t('insulinPage.injCount', { count: n }) : '—'}
-                  </Text>
-                  {active ? (
-                    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
-                      <Circle cx={8} cy={8} r={7} fill={GREEN_D} />
-                      <Path d="M5 8.2L7 10.2L11 6.2" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-                    </Svg>
-                  ) : (
-                    <View style={styles.pickerRadio} />
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        </Pressable>
-      </Modal>
+      {/* ── Day picker — the shared ring calendar; here each day's ring is
+              cut in three, one arc per insulin type injected that day. ── */}
+      <DayPickerSheet
+        open={pickerOpen}
+        selected={selectedDate}
+        onSelect={selectDate}
+        onClose={() => setPickerOpen(false)}
+        ringFor={ringFor}
+        title={t('insulinPage.calTitle')}
+        caption={t('insulinPage.calCaption')}
+        hint={t('insulinPage.calHint')}
+        legend={[
+          { color: TYPE_COLOR.rapid, label: t('insulinPage.rapid') },
+          { color: TYPE_COLOR.long, label: t('insulinPage.long') },
+          { color: TYPE_COLOR.mixed, label: t('insulinPage.mixed') },
+        ]}
+      />
 
       {/* ── Injections of one type (from a type card) ── */}
       <Modal visible={!!typeModal} transparent animationType="fade" onRequestClose={() => setTypeModal(null)}>

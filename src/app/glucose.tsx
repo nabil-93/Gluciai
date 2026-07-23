@@ -28,6 +28,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
 import { CoachChatModal } from '@/components/CoachChatModal';
+import { DayPickerSheet } from '@/components/calendar/DayPickerSheet';
+import type { DayRing } from '@/components/calendar/RingCalendar';
 import { nowMs } from '@/lib/clock';
 import { deleteGlucose } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
@@ -41,6 +43,9 @@ const F800 = 'PlusJakartaSans_800ExtraBold';
 const INK = '#14231C';
 const GREEN = '#1FB268';
 const GREEN_D = '#159A57';
+/** Calendar ring for a day under 40 % in range — a deep red, not the soft
+ *  coral, so a bad day reads as bad at a glance. */
+const CAL_LOW = '#DC2626';
 
 /* ── Zones (same 4-colour scale as the home dashboard) ── */
 type GlyZone = {
@@ -152,7 +157,8 @@ function Gauge({
   const valueDash = Math.max(0, Math.min(1, frac)) * ARC;
   const valueStroke = zone && zone.key === 'normal' ? 'url(#gaugeGrad)' : zone?.color ?? '#CBD5E1';
   return (
-    <View style={{ width: S, height: 150 }}>
+    <View style={{ alignItems: 'center' }}>
+      <View style={{ width: S, height: 150 }}>
       <Svg width={S} height={S} style={{ position: 'absolute', top: 0, left: 0 }}>
         <Defs>
           <SvgLinearGradient id="gaugeGrad" x1="0" y1="1" x2="1" y2="0">
@@ -197,20 +203,26 @@ function Gauge({
         </Text>
       </View>
 
-      {/* Lower block: status pill / empty text, dropped into the bottom gap */}
-      <View style={styles.gaugeStatus} pointerEvents="none">
-        {value != null && zone ? (
-          <View style={[styles.gaugePill, { backgroundColor: zone.pale }]}>
-            <Text style={[styles.gaugePillText, { color: zone.color }]}>{zoneLabel}</Text>
-          </View>
-        ) : value == null ? (
-          <Text style={styles.gaugeEmpty}>{emptyText}</Text>
-        ) : null}
-      </View>
-
       <Text style={[styles.gaugeEnd, { left: 8 }]}>{lowLabel}</Text>
       <Text style={[styles.gaugeEnd, { right: 8 }]}>{highLabel}</Text>
       <View style={styles.gaugePointer} />
+      </View>
+
+      {/* Status pill sits UNDER the dial, in the card's own white space —
+          squeezed inside the arc it collided with the 70/180 end labels. */}
+      <View style={styles.gaugeStatus} pointerEvents="none">
+        {value != null && zone ? (
+          <View style={[styles.gaugePill, { backgroundColor: zone.pale }]}>
+            <Text style={[styles.gaugePillText, { color: zone.color }]} numberOfLines={1}>
+              {zoneLabel}
+            </Text>
+          </View>
+        ) : value == null ? (
+          <Text style={styles.gaugeEmpty} numberOfLines={2}>
+            {emptyText}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -411,6 +423,41 @@ export default function GlucoseScreen() {
     d.setDate(d.getDate() - dayOffset);
     return d;
   }, [dayOffset]);
+
+  /** The calendar hands back a Date; the page tracks a day offset. */
+  const selectDate = (d: Date) => {
+    const a = new Date();
+    a.setHours(0, 0, 0, 0);
+    const b = new Date(d);
+    b.setHours(0, 0, 0, 0);
+    setDayOffset(Math.max(0, Math.round((a.getTime() - b.getTime()) / 86_400_000)));
+  };
+
+  /** Per-day time-in-range — how far each calendar ring fills, and its color. */
+  const tirByDay = useMemo(() => {
+    const map = new Map<string, { inRange: number; count: number }>();
+    for (const g of glucoseLogs) {
+      const key = new Date(g.created_at).toDateString();
+      const cur = map.get(key) ?? { inRange: 0, count: 0 };
+      map.set(key, {
+        inRange: cur.inRange + (g.value >= low && g.value <= high ? 1 : 0),
+        count: cur.count + 1,
+      });
+    }
+    return map;
+  }, [glucoseLogs, low, high]);
+
+  const ringFor = (d: Date): DayRing => {
+    const s = tirByDay.get(d.toDateString());
+    if (!s || s.count === 0) return null;
+    const tir = s.inRange / s.count;
+    return {
+      kind: 'progress',
+      value: tir,
+      color: tir >= 0.7 ? '#19C37D' : tir >= 0.4 ? '#F2B84B' : CAL_LOW,
+    };
+  };
+
   const dayLabel = (offset: number) => {
     if (offset === 0) return t('glucosePage.today');
     if (offset === 1) return t('glucosePage.yesterday');
@@ -648,8 +695,12 @@ export default function GlucoseScreen() {
                   </View>
                   <Text style={styles.miniLabel} numberOfLines={2}>{t('glucosePage.avg')}</Text>
                 </View>
-                <Text style={styles.miniValue}>{weekStats ? weekStats.avg : '—'}</Text>
-                <Text style={styles.miniUnit}>mg/dL</Text>
+                <Text style={styles.miniValue} numberOfLines={1}>
+                  {weekStats ? weekStats.avg : '—'}
+                </Text>
+                <Text style={styles.miniUnit} numberOfLines={1}>
+                  mg/dL
+                </Text>
               </View>
               <View style={[styles.miniHalf, styles.miniHalfBorder]}>
                 <View style={styles.miniHead}>
@@ -658,8 +709,15 @@ export default function GlucoseScreen() {
                   </View>
                   <Text style={styles.miniLabel} numberOfLines={2}>{t('glucosePage.inTarget')}</Text>
                 </View>
-                <Text style={styles.miniValue}>{weekStats ? `${weekStats.tir}%` : '—'}</Text>
-                <Text style={styles.miniUnit}>{t('glucosePage.ofTime')}</Text>
+                <View style={styles.miniValueRow}>
+                  <Text style={styles.miniValue} numberOfLines={1}>
+                    {weekStats ? weekStats.tir : '—'}
+                  </Text>
+                  {weekStats ? <Text style={styles.miniValueSuffix}>%</Text> : null}
+                </View>
+                <Text style={styles.miniUnit} numberOfLines={1}>
+                  {t('glucosePage.ofTime')}
+                </Text>
               </View>
             </View>
 
@@ -1046,45 +1104,23 @@ export default function GlucoseScreen() {
       />
 
       {/* ── Day picker ── */}
-      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
-        <Pressable style={styles.pickerOverlay} onPress={() => setPickerOpen(false)}>
-          <View style={styles.pickerSheet}>
-            <View style={styles.pickerHandle} />
-            <Text style={styles.pickerTitle}>{t('glucosePage.pickDay')}</Text>
-            {Array.from({ length: 7 }, (_, i) => i).map((off) => {
-              const count = glucoseLogs.filter((g) => {
-                const d = new Date();
-                d.setDate(d.getDate() - off);
-                return sameDay(g.created_at, d);
-              }).length;
-              const active = off === dayOffset;
-              return (
-                <Pressable
-                  key={off}
-                  onPress={() => {
-                    setDayOffset(off);
-                    setPickerOpen(false);
-                  }}
-                  style={[styles.pickerRow, active && styles.pickerRowActive]}
-                >
-                  <Text style={[styles.pickerDay, active && { color: GREEN }]}>{dayLabel(off)}</Text>
-                  <Text style={styles.pickerCount}>
-                    {count > 0 ? `${count} ${count > 1 ? t('glucosePage.measures') : t('glucosePage.measure')}` : '—'}
-                  </Text>
-                  {active ? (
-                    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
-                      <Circle cx={8} cy={8} r={7} fill={GREEN} />
-                      <Path d="M5 8.2L7 10.2L11 6.2" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-                    </Svg>
-                  ) : (
-                    <View style={styles.pickerRadio} />
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        </Pressable>
-      </Modal>
+      {/* ── Day picker — the shared ring calendar; each day's ring fills with
+              that day's time in range, against the patient's own target. ── */}
+      <DayPickerSheet
+        open={pickerOpen}
+        selected={selectedDate}
+        onSelect={selectDate}
+        onClose={() => setPickerOpen(false)}
+        ringFor={ringFor}
+        title={t('journalV2.legendTitle')}
+        caption={t('journalV2.legendTarget', { low, high })}
+        hint={t('journalV2.legendRingHint')}
+        legend={[
+          { color: '#19C37D', key: t('journalV2.legendPctHigh'), label: t('journalV2.legendHigh') },
+          { color: '#F2B84B', key: t('journalV2.legendPctMid'), label: t('journalV2.legendMid') },
+          { color: CAL_LOW, key: t('journalV2.legendPctLow'), label: t('journalV2.legendLow') },
+        ]}
+      />
     </View>
   );
 }
@@ -1190,7 +1226,7 @@ const styles = StyleSheet.create({
   },
   gaugeCardLabel: { fontFamily: F600, fontSize: 12.5, color: '#5C6E63' },
   gaugeTop: { position: 'absolute', top: 30, left: 0, right: 0, alignItems: 'center' },
-  gaugeStatus: { position: 'absolute', top: 92, left: 0, right: 0, alignItems: 'center' },
+  gaugeStatus: { marginTop: 8, alignItems: 'center', alignSelf: 'stretch' },
   gaugeUnitRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   gaugeUnit: { fontFamily: F600, fontSize: 11.5, color: '#9AA8A0' },
   gaugeValue: { fontFamily: F800, fontSize: 40, color: INK, lineHeight: 42, marginTop: 2 },
@@ -1222,12 +1258,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     ...cardShadow,
   },
-  miniHalf: { flex: 1, minWidth: 0, paddingRight: 10 },
-  miniHalfBorder: { paddingRight: 0, paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: '#EDF1EE' },
+  miniHalf: { flex: 1, minWidth: 0, paddingRight: 6 },
+  miniHalfBorder: { paddingRight: 0, paddingLeft: 8, borderLeftWidth: 1, borderLeftColor: '#EDF1EE' },
   miniHead: { alignItems: 'flex-start', gap: 5 },
   miniIcon: { width: 22, height: 22, borderRadius: 7, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   miniLabel: { fontFamily: F600, fontSize: 10.5, lineHeight: 13, color: '#5C6E63', alignSelf: 'stretch' },
-  miniValue: { fontFamily: F800, fontSize: 21, color: INK, marginTop: 8 },
+  // "%" rides alongside the number rather than inside it — glued on, "100%"
+  // overflowed the ~55 px half and got clipped.
+  miniValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 1 },
+  miniValue: { fontFamily: F800, fontSize: 19, color: INK, marginTop: 8 },
+  miniValueSuffix: { fontFamily: F800, fontSize: 13, color: INK },
   miniUnit: { fontFamily: F600, fontSize: 11, color: '#9AA8A0' },
   trendCard: {
     backgroundColor: '#fff',

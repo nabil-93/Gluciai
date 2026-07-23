@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   Image,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
 import { CoachChatModal } from '@/components/CoachChatModal';
 import { MealPeekModal } from '@/components/MealPeekModal';
+import { DayPickerSheet } from '@/components/calendar/DayPickerSheet';
+import type { DayRing } from '@/components/calendar/RingCalendar';
 import { deleteMeal } from '@/services/data';
 import { getRecommendations } from '@/services/recommendations';
 import { setPendingScan } from '@/services/scanSession';
@@ -257,6 +258,37 @@ export default function NutritionScreen() {
     d.setDate(d.getDate() - dayOffset);
     return d;
   }, [dayOffset]);
+
+  /** The calendar hands back a Date; the page tracks a day offset. */
+  const selectDate = (d: Date) => {
+    const a = new Date();
+    a.setHours(0, 0, 0, 0);
+    const b = new Date(d);
+    b.setHours(0, 0, 0, 0);
+    setDayOffset(Math.max(0, Math.round((a.getTime() - b.getTime()) / 86_400_000)));
+  };
+
+  /** Carbs eaten per day — drives how far each calendar ring fills. */
+  const carbsByDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of meals) {
+      const key = new Date(m.created_at).toDateString();
+      map.set(key, (map.get(key) ?? 0) + (m.result?.carbohydrates ?? 0));
+    }
+    return map;
+  }, [meals]);
+
+  const ringFor = (d: Date): DayRing => {
+    const carbs = carbsByDay.get(d.toDateString());
+    if (!carbs) return null;
+    const ratio = carbs / GOALS.carbs;
+    return {
+      kind: 'progress',
+      value: Math.min(1, ratio),
+      color: ratio > 1 ? '#F97316' : GREEN,
+    };
+  };
+
   const dayLabel = (offset: number) => {
     if (offset === 0) return t('nutritionPage.today');
     if (offset === 1) return t('nutritionPage.yesterday');
@@ -577,43 +609,22 @@ export default function NutritionScreen() {
       </Pressable>
 
       {/* ── Day picker ── */}
-      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
-        <Pressable style={styles.pickerOverlay} onPress={() => setPickerOpen(false)}>
-          <View style={styles.pickerSheet}>
-            <View style={styles.pickerHandle} />
-            <Text style={styles.pickerTitle}>{t('nutritionPage.pickDay')}</Text>
-            {Array.from({ length: 7 }, (_, i) => i).map((off) => {
-              const d = new Date();
-              d.setDate(d.getDate() - off);
-              const n = meals.filter((m) => sameDay(m.created_at, d)).length;
-              const active = off === dayOffset;
-              return (
-                <Pressable
-                  key={off}
-                  onPress={() => {
-                    setDayOffset(off);
-                    setPickerOpen(false);
-                  }}
-                  style={[styles.pickerRow, active && styles.pickerRowActive]}
-                >
-                  <Text style={[styles.pickerDay, active && { color: GREEN_D }]}>{dayLabel(off)}</Text>
-                  <Text style={styles.pickerCount}>
-                    {n > 0 ? t('nutritionPage.mealCount', { count: n }) : '—'}
-                  </Text>
-                  {active ? (
-                    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
-                      <Circle cx={8} cy={8} r={7} fill={GREEN_D} />
-                      <Path d="M5 8.2L7 10.2L11 6.2" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-                    </Svg>
-                  ) : (
-                    <View style={styles.pickerRadio} />
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        </Pressable>
-      </Modal>
+      {/* ── Day picker — the shared ring calendar; each day's ring fills with
+              that day's carbs against the daily goal. ── */}
+      <DayPickerSheet
+        open={pickerOpen}
+        selected={selectedDate}
+        onSelect={selectDate}
+        onClose={() => setPickerOpen(false)}
+        ringFor={ringFor}
+        title={t('nutritionPage.calTitle')}
+        caption={t('nutritionPage.calCaption', { goal: GOALS.carbs })}
+        hint={t('nutritionPage.calHint')}
+        legend={[
+          { color: GREEN, label: t('nutritionPage.calGoalOk') },
+          { color: '#F97316', label: t('nutritionPage.calGoalOver') },
+        ]}
+      />
 
       {/* ── AI Coach — full-screen chat (text + voice) ── */}
       <CoachChatModal

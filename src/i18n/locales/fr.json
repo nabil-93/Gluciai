@@ -1578,7 +1578,10 @@
     "aiAsk": "Touche pour poser une question",
     "aiTitle": "Assistant insuline",
     "aiPlaceholder": "Pose ta question…",
-    "aiError": "Je n'ai pas pu répondre, réessaie."
+    "aiError": "Je n'ai pas pu répondre, réessaie.",
+    "calTitle": "Insuline injectée",
+    "calCaption": "Un tiers d'anneau par type d'insuline",
+    "calHint": "Gris = ce type n'a pas été injecté ce jour-là."
   },
   "foodsPage": {
     "title": "Cuisine marocaine",
@@ -1686,7 +1689,12 @@
     "sodium": "Sodium",
     "yesterday": "Hier",
     "pickDay": "Choisir un jour",
-    "mealCount": "{{count}} repas"
+    "mealCount": "{{count}} repas",
+    "calTitle": "Glucides du jour",
+    "calCaption": "Objectif : {{goal}} g de glucides / jour",
+    "calGoalOk": "Dans l'objectif",
+    "calGoalOver": "Objectif dépassé",
+    "calHint": "L'anneau se remplit selon les glucides mangés ce jour-là."
   },
   "menuScanPage": {
     "title": "Menu restaurant",
@@ -1865,15 +1873,21 @@
     "emptyPeriod": "Rien enregistré sur cette période.",
     "daysWithData": "{{n}} jour(s) avec données",
     "filterAll": "Tous",
-    "legendHigh": "≥70% dans la cible",
-    "legendMid": "40–70%",
-    "legendLow": "<40%",
+    "legendHigh": "Bonne journée",
+    "legendMid": "Journée moyenne",
+    "legendLow": "Journée difficile",
     "measure_weight": "Poids",
     "measure_hba1c": "HbA1c",
     "measure_bp_systolic": "Tension systolique",
     "measure_bp_diastolic": "Tension diastolique",
     "note": "Note",
     "statusChanged": "Statut modifié",
-    "settingsChanged": "Paramètres modifiés"
+    "settingsChanged": "Paramètres modifiés",
+    "legendTitle": "Glycémies dans la cible",
+    "legendTarget": "Ta cible : {{low}}–{{high}} mg/dL",
+    "legendPctHigh": "≥ 70 %",
+    "legendPctMid": "40–70 %",
+    "legendPctLow": "< 40 %",
+    "legendRingHint": "L'anneau se remplit selon la part de tes glycémies dans la cible."
   }
 }

@@ -38,6 +38,7 @@ import {
   useReduceMotion,
 } from '@/components/ui';
 import { LastMealCard } from '@/components/LastMealCard';
+import { DayRingGlyph, RingCalendar, type DayRing } from '@/components/calendar/RingCalendar';
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
 import { getDailyInsight, type Insight } from '@/services/insights';
 import { setPendingScan } from '@/services/scanSession';
@@ -491,63 +492,10 @@ const SLOT_DOT: Record<'breakfast' | 'lunch' | 'dinner', string> = {
 };
 
 /**
- * Calendar day ring split into three arcs — breakfast (green), lunch
- * (blue), dinner (purple). Each third lights up only if that meal was
- * scanned that day; the rest stay faint grey. So a day with only
- * breakfast shows one green arc and two grey arcs.
- */
-function MealRing({
-  slots,
-  size = 17,
-  stroke = 2.4,
-  selected = false,
-}: {
-  slots: Set<'breakfast' | 'lunch' | 'dinner'> | undefined;
-  size?: number;
-  stroke?: number;
-  selected?: boolean;
-}) {
-  const r = (size - stroke) / 2;
-  const cx = size / 2;
-  const cy = size / 2;
-  const GAP = 14; // degrees of gap between arcs
-  const SEG = 120 - GAP; // each arc sweep
-  const rad = (deg: number) => ((deg - 90) * Math.PI) / 180;
-  const pt = (deg: number) => ({
-    x: cx + r * Math.cos(rad(deg)),
-    y: cy + r * Math.sin(rad(deg)),
-  });
-  const arc = (startDeg: number) => {
-    const p1 = pt(startDeg + GAP / 2);
-    const p2 = pt(startDeg + GAP / 2 + SEG);
-    return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 0 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
-  };
-  const order: ['breakfast', 'lunch', 'dinner'] = ['breakfast', 'lunch', 'dinner'];
-  const idle = selected ? 'rgba(255,255,255,0.35)' : '#e2e5ec';
-  return (
-    <Svg width={size} height={size}>
-      {order.map((slot, i) => {
-        const on = slots?.has(slot);
-        const color = on ? (selected ? '#ffffff' : SLOT_DOT[slot]) : idle;
-        return (
-          <Path
-            key={slot}
-            d={arc(i * 120)}
-            stroke={color}
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            fill="none"
-          />
-        );
-      })}
-    </Svg>
-  );
-}
-
-/**
- * Inline month calendar shown when the "Heute" button is tapped. Lets the
- * user pick a day and shows small dots on days that already have scanned
- * meals (green = breakfast, blue = lunch, purple = dinner).
+ * Inline month calendar shown when the "Heute" button is tapped. Same grid
+ * every tracking screen uses (`RingCalendar`); here each day's ring is cut
+ * into three arcs — breakfast (green), lunch (blue), dinner (purple) — and a
+ * third lights up only if that meal was scanned that day.
  */
 function CalendarPopup({
   selected,
@@ -562,113 +510,31 @@ function CalendarPopup({
   mealsByDay: Record<string, Set<'breakfast' | 'lunch' | 'dinner'>>;
   locale: string;
 }) {
-  const [viewMonth, setViewMonth] = React.useState(
-    () => new Date(selected.getFullYear(), selected.getMonth(), 1)
-  );
-  const today = new Date();
-  const year = viewMonth.getFullYear();
-  const month = viewMonth.getMonth();
-
-  const monthLabel = viewMonth.toLocaleDateString(locale, {
-    month: 'long',
-    year: 'numeric',
-  });
-  // Weekday initials (Mon-first), localized.
-  const weekdays = React.useMemo(() => {
-    const base = new Date(2024, 0, 1); // a Monday
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
-      return d.toLocaleDateString(locale, { weekday: 'narrow' });
-    });
-  }, [locale]);
-
-  // Build the grid: leading blanks (Mon-first) + each day of the month.
-  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // 0 = Monday
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: (Date | null)[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
-
-  const shiftMonth = (delta: number) =>
-    setViewMonth(new Date(year, month + delta, 1));
+  const ringFor = (d: Date): DayRing => {
+    const slots = mealsByDay[d.toDateString()];
+    return {
+      kind: 'segments',
+      segments: (['breakfast', 'lunch', 'dinner'] as const).map((slot) => ({
+        color: SLOT_DOT[slot],
+        on: !!slots?.has(slot),
+      })),
+    };
+  };
 
   return (
     <>
       {/* Tap-away backdrop */}
       <Pressable style={styles.calBackdrop} onPress={onClose} />
       <View style={styles.calPopup}>
-        {/* Month nav */}
-        <View style={styles.calHead}>
-          <Pressable onPress={() => shiftMonth(-1)} hitSlop={10} style={styles.calNav}>
-            <Svg width={18} height={18} viewBox="0 0 24 24">
-              <Path d="M15 5l-7 7 7 7" stroke="#4b5563" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            </Svg>
-          </Pressable>
-          <Text style={styles.calMonth}>{monthLabel}</Text>
-          <Pressable onPress={() => shiftMonth(1)} hitSlop={10} style={styles.calNav}>
-            <Svg width={18} height={18} viewBox="0 0 24 24">
-              <Path d="M9 5l7 7-7 7" stroke="#4b5563" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            </Svg>
-          </Pressable>
-        </View>
-
-        {/* Weekday row */}
-        <View style={styles.calWeekRow}>
-          {weekdays.map((w, i) => (
-            <Text key={i} style={styles.calWeekday}>
-              {w}
-            </Text>
-          ))}
-        </View>
-
-        {/* Day grid — each day is a vertical pill: ring on top, number below */}
-        <View style={styles.calGrid}>
-          {cells.map((d, i) => {
-            if (!d)
-              return (
-                <View key={i} style={styles.calCell}>
-                  <View style={[styles.calPill, styles.calPillBlank]} />
-                </View>
-              );
-            const isSel = d.toDateString() === selected.toDateString();
-            const isToday = d.toDateString() === today.toDateString();
-            const isFuture = d > today;
-            const slots = mealsByDay[d.toDateString()];
-            return (
-              <Pressable
-                key={i}
-                style={styles.calCell}
-                disabled={isFuture}
-                onPress={() => {
-                  onSelect(d);
-                  onClose();
-                }}
-              >
-                <View
-                  style={[
-                    styles.calPill,
-                    isSel && styles.calPillSel,
-                    !isSel && isToday && styles.calPillToday,
-                  ]}
-                >
-                  {/* Ring split into 3 arcs — each lights up per scanned meal */}
-                  <MealRing slots={slots} selected={isSel} />
-                  <Text
-                    style={[
-                      styles.calDayText,
-                      isSel && styles.calDayTextSel,
-                      !isSel && isToday && styles.calDayTextToday,
-                      isFuture && styles.calDayTextMuted,
-                    ]}
-                  >
-                    {d.getDate()}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
+        <RingCalendar
+          selected={selected}
+          locale={locale}
+          ringFor={ringFor}
+          onSelect={(d) => {
+            onSelect(d);
+            onClose();
+          }}
+        />
       </View>
     </>
   );
@@ -752,8 +618,14 @@ function WeekStrip({
                 {/* The ring sits on the white disc (not the green pill), so
                     it keeps its meal colors even on the selected day —
                     white arcs would vanish against the disc. */}
-                <MealRing
-                  slots={mealsByDay[d.toDateString()]}
+                <DayRingGlyph
+                  ring={{
+                    kind: 'segments',
+                    segments: (['breakfast', 'lunch', 'dinner'] as const).map((slot) => ({
+                      color: SLOT_DOT[slot],
+                      on: !!mealsByDay[d.toDateString()]?.has(slot),
+                    })),
+                  }}
                   size={38}
                   stroke={2.8}
                 />
@@ -2318,7 +2190,9 @@ export default function HomeScreen() {
           accessibilityLabel={t('home.injections')}
         >
           <Image source={SYRINGE} style={{ width: 30, height: 30 }} />
-          <Text style={styles.injLabel}>{t('home.injections')}</Text>
+          <Text style={styles.injLabel} numberOfLines={1}>
+            {t('home.injections')}
+          </Text>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.injTitle} numberOfLines={1}>
               {dayInsulin.length === 0
@@ -3201,7 +3075,9 @@ const styles = StyleSheet.create({
     gap: 8,
     ...CARD_SHADOW,
   },
-  injLabel: { fontFamily: F700, fontSize: 13, color: '#111827', width: 70 },
+  // minWidth, not width: German "Injektionen" overflows a fixed 70 px box and
+  // breaks mid-word. Let the label take its natural width and never shrink.
+  injLabel: { fontFamily: F700, fontSize: 13, color: '#111827', minWidth: 70, flexShrink: 0 },
   injTitle: { fontFamily: F700, fontSize: 12.5, color: '#111827' },
   injSub: { fontFamily: F500, fontSize: 10.5, color: '#6b7280', marginTop: 1 },
 

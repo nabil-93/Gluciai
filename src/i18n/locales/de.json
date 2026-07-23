@@ -943,8 +943,8 @@
     "yesterday": "Gestern",
     "pickDay": "Tag auswählen",
     "noMeasure": "Keine Messung",
-    "avg": "Durchschnitt",
-    "inTarget": "Im Zielbereich",
+    "avg": "Ø Wert",
+    "inTarget": "Im Ziel",
     "objTitle": "Tagesziel",
     "objSubToday": "Blutzucker heute vs Ziel",
     "objEdit": "Ändern",
@@ -1578,7 +1578,10 @@
     "aiAsk": "Tippen, um zu fragen",
     "aiTitle": "Insulin-Assistent",
     "aiPlaceholder": "Stell deine Frage…",
-    "aiError": "Ich konnte nicht antworten, versuch es erneut."
+    "aiError": "Ich konnte nicht antworten, versuch es erneut.",
+    "calTitle": "Gespritztes Insulin",
+    "calCaption": "Ein Ringdrittel pro Insulinart",
+    "calHint": "Grau = diese Art wurde an dem Tag nicht gespritzt."
   },
   "foodsPage": {
     "title": "Marokkanische Küche",
@@ -1686,7 +1689,12 @@
     "sodium": "Natrium",
     "yesterday": "Gestern",
     "pickDay": "Tag wählen",
-    "mealCount": "{{count}} Mahlzeiten"
+    "mealCount": "{{count}} Mahlzeiten",
+    "calTitle": "Kohlenhydrate des Tages",
+    "calCaption": "Ziel: {{goal}} g Kohlenhydrate / Tag",
+    "calGoalOk": "Im Ziel",
+    "calGoalOver": "Ziel überschritten",
+    "calHint": "Der Ring füllt sich mit den Kohlenhydraten des Tages."
   },
   "menuScanPage": {
     "title": "Restaurantmenü",
@@ -1865,15 +1873,21 @@
     "emptyPeriod": "Nichts in diesem Zeitraum erfasst.",
     "daysWithData": "{{n}} Tag(e) mit Daten",
     "filterAll": "Alle",
-    "legendHigh": "≥70% im Zielbereich",
-    "legendMid": "40–70%",
-    "legendLow": "<40%",
+    "legendHigh": "Guter Tag",
+    "legendMid": "Durchwachsener Tag",
+    "legendLow": "Schwieriger Tag",
     "measure_weight": "Gewicht",
     "measure_hba1c": "HbA1c",
     "measure_bp_systolic": "Systolischer BD",
     "measure_bp_diastolic": "Diastolischer BD",
     "note": "Notiz",
     "statusChanged": "Status geändert",
-    "settingsChanged": "Einstellungen geändert"
+    "settingsChanged": "Einstellungen geändert",
+    "legendTitle": "Werte im Zielbereich",
+    "legendTarget": "Dein Ziel: {{low}}–{{high}} mg/dL",
+    "legendPctHigh": "≥ 70 %",
+    "legendPctMid": "40–70 %",
+    "legendPctLow": "< 40 %",
+    "legendRingHint": "Der Ring füllt sich mit dem Anteil deiner Werte im Zielbereich."
   }
 }
