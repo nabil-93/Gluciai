@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Spinner } from '@/components/ui/Spinner';
@@ -34,6 +35,30 @@ const ACCENT = '#37DE73';
 const ACCENT_LIGHT = '#B4FFD0';
 const PROGRESS = '#8A78F0';
 const GRID_LINE = 'rgba(130,235,170,0.06)';
+
+/* ── Viewfinder geometry ───────────────────────────────────────────────────
+ * The camera hands us a 4:3 still (the default on AVCapturePhotoOutput and on
+ * CameraX's ImageCapture alike). The preview layer, though, scales that frame
+ * to FILL whatever view it is given and throws away the overflow — iOS uses
+ * resizeAspectFill, Android FILL_CENTER. Hand it a full-screen box on a 19.5:9
+ * phone and it must blow the frame up ~1.6× to cover the height, hiding about
+ * 40 % of the WIDTH: the viewfinder looks zoomed in, while takePictureAsync
+ * still returns the whole wide frame. You aim at one thing and photograph
+ * another — fatal for a plate of food you are about to dose insulin against.
+ *
+ * So the preview gets a box of the sensor's own shape. Nothing is cropped:
+ * what you frame is exactly what is captured and sent to the vision model. */
+const PREVIEW_ASPECT = 3 / 4; // width ÷ height, portrait
+/* Breathing room between the live image and the corner brackets. Tuned so the
+ * bracketed area comes out at ~3:4 itself — the brackets then read as a true
+ * viewfinder — and so the top pair clears the subtitle that floats above it. */
+const FRAME_INSET_X = 22;
+const FRAME_INSET_Y = 30;
+/* How far each scrim is allowed to bleed from its letterbox band onto the
+ * live image — just enough to carry the text above it. */
+const SCRIM_FADE = 64;
+/* Space the controls dock needs at the bottom (70pt shutter + padding). */
+const DOCK_RESERVE = 118;
 
 /* Blocked from the admin dashboard, or the daily/weekly/monthly scan quota
  * spent? Show the lock instead of the camera. The quota is also enforced
@@ -86,6 +111,7 @@ function ScanScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { width: winW, height: winH } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   // Flash cycles off → auto → on. "on" = continuous torch (works on Android
@@ -121,10 +147,13 @@ function ScanScreen() {
     }
   }, [webCamSupported, permission, requestPermission]);
 
-  /* ── Laser sweep inside the scan box (up ↔ down, 3.6s round trip) ── */
+  /* ── Laser sweep inside the scan box (up ↔ down, 3.6s round trip) ──
+   * Only while the analysis runs. Sweeping a green line and a grid across a
+   * LIVE preview is what made the food look hazier here than in the phone's
+   * camera; during framing the image is now left untouched. */
   const laser = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (boxH <= 0) return;
+    if (boxH <= 0 || !analyzing) return;
     laser.setValue(0);
     const loop = Animated.loop(
       Animated.sequence([
@@ -144,7 +173,7 @@ function ScanScreen() {
     );
     loop.start();
     return () => loop.stop();
-  }, [boxH, laser]);
+  }, [analyzing, boxH, laser]);
   const laserY = laser.interpolate({
     inputRange: [0, 1],
     outputRange: [4, Math.max(4, boxH - 6)],
@@ -304,6 +333,42 @@ function ScanScreen() {
   // design stands in and capture goes through the OS camera / gallery.
   const liveCamera = !camError && !!permission?.granted && (!isWeb || webCamSupported);
 
+  /* Largest sensor-shaped box that fits the screen, centred — a "contain"
+   * viewfinder rather than a "cover" one. The dark bands it leaves above and
+   * below fall under the scrims, where the title and the dock already live. */
+  const previewW = Math.min(winW, winH * PREVIEW_ASPECT);
+  const previewH = previewW / PREVIEW_ASPECT;
+  const previewLeft = (winW - previewW) / 2;
+  const previewTop = (winH - previewH) / 2;
+
+  /* The corner brackets are pinned to the live image, so they now mark the
+   * true edges of the shot instead of floating over a cropped one. */
+  const frameTop = previewTop + FRAME_INSET_Y;
+  /* On a short screen the sensor frame is taller than the gap between the
+   * subtitle and the dock. The preview still shows all of it — only the guide
+   * brackets give way, rather than being drawn across the shutter button. */
+  const frameBottomLimit = winH - insets.bottom - DOCK_RESERVE;
+  const frameRect = {
+    left: previewLeft + FRAME_INSET_X,
+    top: frameTop,
+    width: Math.max(0, previewW - FRAME_INSET_X * 2),
+    height: Math.max(0, Math.min(previewH - FRAME_INSET_Y * 2, frameBottomLimit - frameTop)),
+  };
+
+  /* The scrims exist to keep the top bar, the title and the dock readable —
+   * not to tint the food. They used to run 46 % + 54 % of the screen, i.e.
+   * a veil over every pixel of the preview, which is most of why the image
+   * looked duller here than in the phone's own camera. Now each one covers
+   * its letterbox band plus a short fade onto the image, and the middle of
+   * the frame is left completely alone. */
+  const topBand = previewTop;
+  const bottomBand = Math.max(0, winH - previewTop - previewH);
+  const scrimTopH = topBand + SCRIM_FADE;
+  const scrimBottomH = bottomBand + SCRIM_FADE;
+  const clampStop = (v: number) => Math.min(0.94, Math.max(0.06, v));
+  const topFadeStop = clampStop(topBand / Math.max(1, scrimTopH));
+  const bottomFadeStop = clampStop(SCRIM_FADE / Math.max(1, scrimBottomH));
+
   /* ── Native: waiting on permission state ── */
   if (!isWeb && !permission) {
     return (
@@ -345,32 +410,39 @@ function ScanScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Full-bleed live camera stays running behind everything; the frozen
-          shot lives INSIDE the scan box. Dark backdrop when no preview. */}
-      {liveCamera ? (
-        <CameraView
-          ref={cameraRef}
-          style={StyleSheet.absoluteFill}
-          facing={facing}
-          enableTorch={flash === 'on'}
-          flash={flash === 'auto' ? 'auto' : 'off'}
-          onMountError={() => setCamError(true)}
-        />
-      ) : (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: BG }]} />
-      )}
+      {/* Live camera, sized to the sensor's own frame so the preview shows the
+          whole shot instead of a blown-up crop of it. The frozen capture lives
+          INSIDE the scan box. Dark backdrop when there is no preview. */}
+      <View style={styles.previewLayer} pointerEvents="none">
+        {liveCamera ? (
+          <CameraView
+            ref={cameraRef}
+            style={{ width: previewW, height: previewH }}
+            facing={facing}
+            // Android: switches the native preview's scaleType from FILL to
+            // FIT, so the layer itself stops cropping too. iOS ignores it and
+            // is handled by the box above being the sensor's own shape.
+            ratio="4:3"
+            enableTorch={flash === 'on'}
+            flash={flash === 'auto' ? 'auto' : 'off'}
+            onMountError={() => setCamError(true)}
+          />
+        ) : null}
+      </View>
 
-      {/* Top & bottom scrims for legibility (46% / 52%, like the reference) */}
+      {/* Scrims: each covers its letterbox band and fades out just past the
+          edge of the image, so the chrome stays readable and the food does
+          not sit under a veil. */}
       <LinearGradient
-        colors={['rgba(8,13,11,0.94)', 'rgba(8,13,11,0.55)', 'rgba(8,13,11,0)']}
-        locations={[0, 0.42, 1]}
-        style={styles.scrimTop}
+        colors={['rgba(8,13,11,0.96)', 'rgba(8,13,11,0.58)', 'rgba(8,13,11,0)']}
+        locations={[0, topFadeStop, 1]}
+        style={[styles.scrimTop, { height: scrimTopH }]}
         pointerEvents="none"
       />
       <LinearGradient
-        colors={['rgba(7,11,9,0)', 'rgba(7,11,9,0.7)', 'rgba(7,11,9,0.96)']}
-        locations={[0, 0.34, 1]}
-        style={styles.scrimBottom}
+        colors={['rgba(7,11,9,0)', 'rgba(7,11,9,0.66)', 'rgba(7,11,9,0.96)']}
+        locations={[0, bottomFadeStop, 1]}
+        style={[styles.scrimBottom, { height: scrimBottomH }]}
         pointerEvents="none"
       />
 
@@ -421,62 +493,8 @@ function ScanScreen() {
           <Text style={styles.subtitle}>{t('scanner.heroSubtitle')} ✨</Text>
         </View>
 
-        {/* ── Scan area: grid + laser + corners + checklist ── */}
-        <View style={styles.scanArea} pointerEvents="box-none">
-          <View
-            style={styles.gridBox}
-            onLayout={(e) => setBoxH(e.nativeEvent.layout.height)}
-          >
-            {/* Frozen shot pinned inside the box; grid + laser sweep on top
-                of it while the analysis runs. */}
-            {captured ? (
-              <Image
-                source={{ uri: captured }}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
-                transition={120}
-              />
-            ) : null}
-            <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
-              <Defs>
-                <Pattern id="grid" width={38} height={38} patternUnits="userSpaceOnUse">
-                  <Path d="M 38 0 L 0 0 0 38" fill="none" stroke={GRID_LINE} strokeWidth={1} />
-                </Pattern>
-              </Defs>
-              <Rect width="100%" height="100%" fill="url(#grid)" />
-            </Svg>
-            <Animated.View style={[styles.laser, { transform: [{ translateY: laserY }] }]}>
-              <LinearGradient
-                colors={['transparent', ACCENT, ACCENT_LIGHT, ACCENT, 'transparent']}
-                locations={[0, 0.18, 0.5, 0.82, 1]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.laserLine}
-              />
-            </Animated.View>
-          </View>
-
-          {/* Corner brackets */}
-          <View style={[styles.corner, styles.cTL]} />
-          <View style={[styles.corner, styles.cTR]} />
-          <View style={[styles.corner, styles.cBL]} />
-          <View style={[styles.corner, styles.cBR]} />
-
-          {/* Checklist (idle only) */}
-          {!analyzing ? (
-            <View style={styles.checklistWrap} pointerEvents="none">
-              <Glass style={styles.checklist} radius={16} tint="rgba(13,19,16,0.72)">
-                <View style={styles.checklistHead}>
-                  <Ionicons name="restaurant-outline" size={14} color={ACCENT} />
-                  <Text style={styles.checklistTitle}>{t('scanner.checklistTitle')}</Text>
-                </View>
-                <CheckRow label={t('scanner.check1')} />
-                <CheckRow label={t('scanner.check2')} />
-                <CheckRow label={t('scanner.check3')} />
-              </Glass>
-            </View>
-          ) : null}
-        </View>
+        {/* Spacer: the frame itself is pinned to the live image, below. */}
+        <View style={styles.scanArea} pointerEvents="none" />
 
         {error ? <Text style={styles.errorFloat}>{error}</Text> : null}
 
@@ -496,6 +514,67 @@ function ScanScreen() {
 
         {/* ── White analysis card (scanning only) ── */}
         {analyzing ? <AnalyzingCard percent={percent} uri={captured} t={t} /> : null}
+      </View>
+
+      {/* ── Scan frame: grid + laser + corners + checklist, laid exactly over
+          the camera frame, so the brackets mark what will really be shot ── */}
+      <View style={[styles.scanFrame, frameRect]} pointerEvents="none">
+        <View style={styles.gridBox} onLayout={(e) => setBoxH(e.nativeEvent.layout.height)}>
+          {/* Frozen shot pinned inside the box; grid + laser sweep on top of it
+              while the analysis runs. Contained, not cropped: this is the exact
+              frame the vision model is reading. */}
+          {captured ? (
+            <Image
+              source={{ uri: captured }}
+              style={StyleSheet.absoluteFill}
+              contentFit="contain"
+              transition={120}
+            />
+          ) : null}
+          {/* Analysis effects only — never over the live image. */}
+          {analyzing ? (
+            <>
+              <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+                <Defs>
+                  <Pattern id="grid" width={38} height={38} patternUnits="userSpaceOnUse">
+                    <Path d="M 38 0 L 0 0 0 38" fill="none" stroke={GRID_LINE} strokeWidth={1} />
+                  </Pattern>
+                </Defs>
+                <Rect width="100%" height="100%" fill="url(#grid)" />
+              </Svg>
+              <Animated.View style={[styles.laser, { transform: [{ translateY: laserY }] }]}>
+                <LinearGradient
+                  colors={['transparent', ACCENT, ACCENT_LIGHT, ACCENT, 'transparent']}
+                  locations={[0, 0.18, 0.5, 0.82, 1]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.laserLine}
+                />
+              </Animated.View>
+            </>
+          ) : null}
+        </View>
+
+        {/* Corner brackets */}
+        <View style={[styles.corner, styles.cTL]} />
+        <View style={[styles.corner, styles.cTR]} />
+        <View style={[styles.corner, styles.cBL]} />
+        <View style={[styles.corner, styles.cBR]} />
+
+        {/* Checklist (idle only) */}
+        {!analyzing ? (
+          <View style={styles.checklistWrap}>
+            <Glass style={styles.checklist} radius={16} tint="rgba(13,19,16,0.72)">
+              <View style={styles.checklistHead}>
+                <Ionicons name="restaurant-outline" size={14} color={ACCENT} />
+                <Text style={styles.checklistTitle}>{t('scanner.checklistTitle')}</Text>
+              </View>
+              <CheckRow label={t('scanner.check1')} />
+              <CheckRow label={t('scanner.check2')} />
+              <CheckRow label={t('scanner.check3')} />
+            </Glass>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -601,8 +680,21 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
   centered: { alignItems: 'center', justifyContent: 'center' },
 
-  scrimTop: { position: 'absolute', top: 0, left: 0, right: 0, height: '46%' },
-  scrimBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '54%' },
+  // Centres the sensor-shaped preview; the bands it leaves are the app's own
+  // background, so the letterbox reads as part of the dark scanner chrome.
+  previewLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: BG,
+  },
+
+  scrimTop: { position: 'absolute', top: 0, left: 0, right: 0 },
+  scrimBottom: { position: 'absolute', bottom: 0, left: 0, right: 0 },
 
   column: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16 },
 
@@ -661,13 +753,16 @@ const styles = StyleSheet.create({
   },
 
   // ── Scan area ──
+  // Layout spacer only: it holds the dock down while the frame below is
+  // positioned against the camera frame rather than against this column.
   scanArea: { flex: 1, minHeight: 210, marginTop: 12 },
+  scanFrame: { position: 'absolute' },
   gridBox: {
     position: 'absolute',
-    top: 4,
-    bottom: 4,
-    left: 30,
-    right: 30,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     borderRadius: 20,
     overflow: 'hidden',
   },
@@ -682,10 +777,10 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   corner: { position: 'absolute', width: 30, height: 30, borderColor: ACCENT },
-  cTL: { top: 4, left: 30, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 16 },
-  cTR: { top: 4, right: 30, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 16 },
-  cBL: { bottom: 4, left: 30, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 16 },
-  cBR: { bottom: 4, right: 30, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 16 },
+  cTL: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 16 },
+  cTR: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 16 },
+  cBL: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 16 },
+  cBR: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 16 },
 
   checklistWrap: { position: 'absolute', left: 0, right: 0, bottom: 22, alignItems: 'center' },
   checklist: { width: 250, paddingVertical: 13, paddingHorizontal: 15 },

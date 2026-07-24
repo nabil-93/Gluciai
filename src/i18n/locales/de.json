@@ -1224,7 +1224,12 @@
     "noValuesSub": "Gib die Werte pro 100 g vom Etikett ein.",
     "kcal100": "kcal /100g",
     "carbs100": "Kohlenh. /100g",
-    "sugar100": "Zucker /100g"
+    "sugar100": "Zucker /100g",
+    "addProduct": "Produkt hinzufügen",
+    "addHelp": "Keine Datenbank kennt diesen Barcode. Gib den Namen und die Werte vom Etikett ein — das Produkt wird dann für alle gespeichert.",
+    "namePlaceholder": "Produktname",
+    "newProductTitle": "Neues Produkt",
+    "newProductSub": "Gib ihm einen Namen und übertrage die Werte pro 100 g vom Etikett. Es wird zur gemeinsamen Datenbank hinzugefügt."
   },
   "mealType": {
     "breakfast": "Frühstück",

@@ -1224,7 +1224,12 @@
     "noValuesSub": "Enter the values per 100 g from the product label.",
     "kcal100": "kcal /100g",
     "carbs100": "Carbs /100g",
-    "sugar100": "Sugar /100g"
+    "sugar100": "Sugar /100g",
+    "addProduct": "Add this product",
+    "addHelp": "No database knows this barcode. Enter the name and the values from the label — the product is then saved for every user.",
+    "namePlaceholder": "Product name",
+    "newProductTitle": "New product",
+    "newProductSub": "Give it a name and copy the per-100 g values from the label. It gets added to the shared database."
   },
   "mealType": {
     "breakfast": "Breakfast",

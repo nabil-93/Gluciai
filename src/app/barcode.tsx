@@ -21,7 +21,10 @@ import {
 } from '@/components/WebBarcodeScanner';
 import { saveMeal } from '@/services/data';
 import { scoreMeal } from '@/services/nutrition/mealScore';
-import { lookupBarcodeMulti } from '@/services/nutrition/providers/barcodeLookup';
+import {
+  lookupBarcodeMulti,
+  saveToCatalog,
+} from '@/services/nutrition/providers/barcodeLookup';
 import type { BarcodeProduct } from '@/services/nutrition/providers/openfoodfacts';
 import { colors, shadows } from '@/theme';
 import type { NutritionResult } from '@/types';
@@ -62,7 +65,9 @@ export default function BarcodeScreen() {
       if (p) {
         setProduct(p);
         setNutritionKnown(p.nutritionKnown);
-        setGrams(p.servingGrams ?? 100);
+        // Round to match the chip that represents it, so the active portion
+        // is always visibly selected rather than silently in effect.
+        setGrams(p.servingGrams ? Math.round(p.servingGrams) : 100);
       } else {
         setNotFound(code.trim());
         scannedRef.current = false;
@@ -86,6 +91,12 @@ export default function BarcodeScreen() {
       prev ? { ...prev, per100g: { ...prev.per100g, [key]: v } } : prev
     );
   };
+
+  const portions = useMemo(() => {
+    const serving = product?.servingGrams;
+    const all = serving ? [...PORTIONS, Math.round(serving)] : PORTIONS;
+    return [...new Set(all)].sort((a, b) => a - b);
+  }, [product?.servingGrams]);
 
   // Scaled values + diabetes verdict
   const scaled = useMemo(() => {
@@ -142,9 +153,37 @@ export default function BarcodeScreen() {
           ? [t('barcodePage.sugarWarning', { sugar: Math.round(scaled.sugar) })]
           : [],
     };
+    // The patient read these off the packaging, which outranks every remote
+    // database — contribute them so the next person to scan this barcode gets
+    // the product straight away.
+    if (!nutritionKnown && product.per100g.calories >= 0 && product.name.trim()) {
+      saveToCatalog(product, 'user', true);
+    }
+
     await saveMeal(result, product.imageUrl);
     setSaved(true);
     setTimeout(close, 800);
+  };
+
+  /** Unknown barcode → the patient becomes the source. Opens the same product
+   *  card with empty fields, filed under the code that was just scanned. */
+  const addUnknownProduct = (code: string) => {
+    setProduct({
+      barcode: code,
+      name: '',
+      per100g: {
+        calories: 0,
+        carbs: 0,
+        sugar: 0,
+        protein: 0,
+        fat: 0,
+        fiber: 0,
+        sodium: 0,
+      },
+    });
+    setNutritionKnown(false);
+    setNotFound(null);
+    setGrams(100);
   };
 
   return (
@@ -259,9 +298,19 @@ export default function BarcodeScreen() {
                 <Text style={styles.searching}>{camError}</Text>
               ) : null}
               {notFound ? (
-                <Text style={styles.notFound}>
-                  {t('barcode.notFound', { code: notFound })}
-                </Text>
+                <>
+                  <Text style={styles.notFound}>
+                    {t('barcode.notFound', { code: notFound })}
+                  </Text>
+                  <Text style={styles.notFoundHelp}>
+                    {t('barcode.addHelp')}
+                  </Text>
+                  <AppButton
+                    label={t('barcode.addProduct')}
+                    onPress={() => addUnknownProduct(notFound)}
+                    style={{ marginTop: 10 }}
+                  />
+                </>
               ) : null}
             </BevelCard>
           </>
@@ -281,7 +330,19 @@ export default function BarcodeScreen() {
                 </View>
               )}
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.productName}>{product.name}</Text>
+                {product.name ? (
+                  <Text style={styles.productName}>{product.name}</Text>
+                ) : (
+                  <TextInput
+                    defaultValue=""
+                    onChangeText={(v) =>
+                      setProduct((prev) => (prev ? { ...prev, name: v } : prev))
+                    }
+                    placeholder={t('barcode.namePlaceholder')}
+                    placeholderTextColor={colors.textPlaceholder}
+                    style={styles.nameInput}
+                  />
+                )}
                 {product.brand ? (
                   <Text style={styles.productBrand}>{product.brand}</Text>
                 ) : null}
@@ -294,11 +355,14 @@ export default function BarcodeScreen() {
             {/* Nutrition unknown → let the patient type it from the label */}
             {!nutritionKnown ? (
               <View style={styles.editBanner}>
+                {/* Two ways in here: a product a database knew by name but
+                    not by numbers, or one the patient is adding from scratch
+                    because nothing had heard of the barcode. */}
                 <Text style={styles.editBannerTitle}>
-                  ✏️ {t('barcode.noValuesTitle')}
+                  ✏️ {t(product.name ? 'barcode.noValuesTitle' : 'barcode.newProductTitle')}
                 </Text>
                 <Text style={styles.editBannerSub}>
-                  {t('barcode.noValuesSub')}
+                  {t(product.name ? 'barcode.noValuesSub' : 'barcode.newProductSub')}
                 </Text>
                 <View style={styles.editRow}>
                   <EditField
@@ -324,7 +388,10 @@ export default function BarcodeScreen() {
             <BevelCard style={{ marginTop: 12 }}>
               <Text style={styles.portionTitle}>{t('barcodePage.portionTitle')}</Text>
               <View style={styles.portionRow}>
-                {PORTIONS.map((p) => (
+                {/* The product's own serving size joins the presets, so the
+                    active portion always has a chip to highlight — otherwise
+                    a 33 g serving reads as if 100 g were selected. */}
+                {portions.map((p) => (
                   <Pressable
                     key={p}
                     onPress={() => setGrams(p)}
@@ -512,6 +579,12 @@ const styles = StyleSheet.create({
   manualBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   searching: { marginTop: 10, fontSize: 13.5, color: colors.ai },
   notFound: { marginTop: 10, fontSize: 13.5, lineHeight: 19, color: colors.danger },
+  notFoundHelp: {
+    marginTop: 6,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: colors.textSecondary,
+  },
   productCard: { flexDirection: 'row', gap: 14, alignItems: 'center' },
   productImg: { width: 64, height: 64, borderRadius: 12, backgroundColor: '#fff' },
   productImgFallback: {
@@ -520,6 +593,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   productName: { fontSize: 16.5, fontWeight: '750' as any, color: colors.text },
+  nameInput: {
+    fontSize: 16.5,
+    fontWeight: '700',
+    color: colors.text,
+    borderBottomWidth: 1.5,
+    borderBottomColor: colors.primary,
+    paddingVertical: 2,
+  },
   productBrand: { marginTop: 2, fontSize: 13.5, color: colors.textSecondary },
   productSource: { marginTop: 4, fontSize: 12, color: colors.carbs, fontWeight: '600' },
   editBanner: {

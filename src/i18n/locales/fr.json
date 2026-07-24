@@ -1224,7 +1224,12 @@
     "noValuesSub": "Saisissez les valeurs pour 100 g depuis l’étiquette du produit.",
     "kcal100": "kcal /100g",
     "carbs100": "Glucides /100g",
-    "sugar100": "Sucre /100g"
+    "sugar100": "Sucre /100g",
+    "addProduct": "Ajouter ce produit",
+    "addHelp": "Aucune base ne connaît ce code-barres. Saisissez le nom et les valeurs de l'étiquette : le produit sera enregistré pour tous les utilisateurs.",
+    "namePlaceholder": "Nom du produit",
+    "newProductTitle": "Nouveau produit",
+    "newProductSub": "Donnez-lui un nom et recopiez les valeurs pour 100 g de l'étiquette. Il sera ajouté à la base partagée."
   },
   "mealType": {
     "breakfast": "Petit-déj",

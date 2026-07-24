@@ -2374,10 +2374,13 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 3,
   },
-  /* SOS — the emergency sticker, sized to sit level with the robot. */
+  /* SOS — the emergency sticker. The robot's art sits high in its own box,
+   * so a centred disc reads as hanging low next to it; the bottom margin
+   * lifts the badge onto the robot's optical centre line. */
   sosBtn: {
     width: 44,
     height: 44,
+    marginBottom: 10,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
