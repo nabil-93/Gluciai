@@ -34,6 +34,7 @@ import {
   AnimatedRobot,
   Avatar,
   FadeInView,
+  PastDayNote,
   PressableScale,
   RotaryDial,
   dateParam,
@@ -2153,6 +2154,14 @@ export default function HomeScreen() {
             ) : null}
           </View>
         </View>
+
+        {/* Scrolling the date back leaves the section looking exactly like
+            today's — same slots, same layout. Say whose day it is, right
+            above the cards it applies to. */}
+        {!isViewingToday ? (
+          <PastDayNote date={selectedDate} style={{ marginBottom: 10 }} />
+        ) : null}
+
         <View style={styles.mealsRow}>
           {mealDefs.map((d) => {
             const meal = mealSlots[d.key];
