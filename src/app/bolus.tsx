@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView, Spinner } from '@/components/ui';
+import { ComposerHero } from '@/components/bolus/ComposerHero';
 import { DoseHero } from '@/components/bolus/DoseHero';
 import {
   checkModifiedDoseAI,
@@ -277,48 +278,76 @@ export default function BolusScreen() {
         {/* ════════ PHASE: INPUT ════════ */}
         {phase === 'input' ? (
           <FadeInView>
-            <View style={styles.inputCard}>
-              <Text style={styles.inputLabel}>{t('bolus.carbsLabel')}</Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  value={carbs}
-                  onChangeText={(v) => setCarbs(sanitizeDecimal(v))}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                  placeholderTextColor="#98a1af"
-                  style={styles.bigInput}
-                />
-                <Text style={styles.unit}>g</Text>
+            {/* Opening banner — mirrors the result page's DoseHero */}
+            <ComposerHero
+              pill={t('bolus.heroPill')}
+              title={t('bolus.heroTitle')}
+              subtitle={t('bolus.heroSub')}
+            />
+
+            {/* The two numbers that drive the dose, grouped as one composer
+                card: a carb row and a glucose row, each with a tinted badge. */}
+            <View style={styles.composer}>
+              <View style={styles.composerRow}>
+                <View style={[styles.badge, styles.badgeCarb]}>
+                  <Text style={styles.badgeEmoji}>🍞</Text>
+                </View>
+                <View style={styles.composerField}>
+                  <Text style={styles.inputLabel}>{t('bolus.carbsLabel')}</Text>
+                  <View style={styles.inputRow}>
+                    <TextInput
+                      value={carbs}
+                      onChangeText={(v) => setCarbs(sanitizeDecimal(v))}
+                      keyboardType="decimal-pad"
+                      placeholder="0"
+                      placeholderTextColor="#c2cad6"
+                      style={styles.bigInput}
+                    />
+                    <Text style={styles.unit}>g</Text>
+                  </View>
+                </View>
               </View>
+
               {lastMeal ? (
                 <Pressable
                   onPress={() => setCarbs(String(Math.round(lastMeal.result.carbohydrates)))}
+                  style={styles.prefillPill}
                 >
-                  <Text style={styles.prefillHint}>
+                  <Text style={styles.prefillHint} numberOfLines={1}>
                     🍽️ {lastMeal.result.food_name} · {Math.round(lastMeal.result.carbohydrates)} g
                   </Text>
                 </Pressable>
               ) : null}
-            </View>
 
-            <View style={styles.inputCard}>
-              <Text style={styles.inputLabel}>{t('bolus.glucoseLabel')}</Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  value={glucose}
-                  onChangeText={(v) => setGlucose(sanitizeDecimal(v))}
-                  keyboardType="decimal-pad"
-                  placeholder="—"
-                  placeholderTextColor="#98a1af"
-                  style={styles.bigInput}
-                />
-                <Text style={styles.unit}>mg/dL</Text>
+              <View style={styles.composerDivider} />
+
+              <View style={styles.composerRow}>
+                <View style={[styles.badge, styles.badgeGluc]}>
+                  <Text style={styles.badgeEmoji}>🩸</Text>
+                </View>
+                <View style={styles.composerField}>
+                  <Text style={styles.inputLabel}>{t('bolus.glucoseLabel')}</Text>
+                  <View style={styles.inputRow}>
+                    <TextInput
+                      value={glucose}
+                      onChangeText={(v) => setGlucose(sanitizeDecimal(v))}
+                      keyboardType="decimal-pad"
+                      placeholder="—"
+                      placeholderTextColor="#c2cad6"
+                      style={styles.bigInput}
+                    />
+                    <Text style={styles.unit}>mg/dL</Text>
+                  </View>
+                </View>
               </View>
             </View>
 
             {/* Which meal → picks the patient's per-meal ratio */}
             <View style={styles.inputCard}>
-              <Text style={styles.inputLabel}>{t('bolus.mealMoment')}</Text>
+              <View style={styles.cardHead}>
+                <Text style={styles.cardHeadIcon}>🕐</Text>
+                <Text style={styles.cardHeadText}>{t('bolus.mealMoment')}</Text>
+              </View>
               <View style={styles.qRow}>
                 {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((m) => {
                   const on = mealTime === m;
@@ -349,7 +378,10 @@ export default function BolusScreen() {
             {/* Sport today / planned — reduces the dose. Picking an
                 intensity opens the details: which sport, duration, timing. */}
             <View style={styles.inputCard}>
-              <Text style={styles.inputLabel}>{t('bolus.sportQ')}</Text>
+              <View style={styles.cardHead}>
+                <Text style={styles.cardHeadIcon}>🏃</Text>
+                <Text style={styles.cardHeadText}>{t('bolus.sportQ')}</Text>
+              </View>
               <View style={styles.qRow}>
                 {(['none', 'low', 'medium', 'high'] as const).map((v) => {
                   const on = sport === v;
@@ -441,7 +473,10 @@ export default function BolusScreen() {
 
             {/* Current state — sick / stress / alcohol (multi-select) */}
             <View style={styles.inputCard}>
-              <Text style={styles.inputLabel}>{t('bolus.stateQ')}</Text>
+              <View style={styles.cardHead}>
+                <Text style={styles.cardHeadIcon}>💗</Text>
+                <Text style={styles.cardHeadText}>{t('bolus.stateQ')}</Text>
+              </View>
               <View style={styles.qRow}>
                 {(
                   [
@@ -475,7 +510,12 @@ export default function BolusScreen() {
 
             {/* What the AI will take into account */}
             <View style={styles.ctxCard}>
-              <Text style={styles.ctxTitle}>🤖 {t('bolus.ctxTitle')}</Text>
+              <View style={styles.ctxHead}>
+                <View style={styles.ctxAvatar}>
+                  <Text style={styles.ctxAvatarEmoji}>🤖</Text>
+                </View>
+                <Text style={styles.ctxTitle}>{t('bolus.ctxTitle')}</Text>
+              </View>
               <View style={styles.chipsWrap}>
                 {lastMeal ? (
                   <View style={styles.chip}>
@@ -526,14 +566,19 @@ export default function BolusScreen() {
               </View>
             </View>
 
-            <Pressable onPress={calculate} disabled={!carbs && !glucose}>
+            <Pressable
+              onPress={calculate}
+              disabled={!carbs && !glucose}
+              style={{ marginTop: 4 }}
+            >
               <LinearGradient
                 colors={['#2ec983', '#1fbc78']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
-                style={[styles.cta, !carbs && !glucose && { opacity: 0.5 }]}
+                style={[styles.ctaBig, !carbs && !glucose && { opacity: 0.5 }]}
               >
                 <Text style={styles.ctaText}>🤖 {t('bolus.calculate')}</Text>
+                <Text style={styles.ctaArrow}>→</Text>
               </LinearGradient>
             </Pressable>
           </FadeInView>
@@ -924,11 +969,50 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     ...shadows.card,
   },
-  inputLabel: { fontFamily: F600, fontSize: 13.5, color: '#667085' },
-  inputRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 4 },
-  bigInput: { fontFamily: F800, fontSize: 38, color: INK, minWidth: 90, padding: 0 },
-  unit: { fontFamily: F600, fontSize: 16, color: '#98A2B3' },
-  prefillHint: { marginTop: 8, fontFamily: F600, fontSize: 12.5, color: GREEN },
+  inputLabel: { fontFamily: F600, fontSize: 13, color: '#7a8797' },
+  inputRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 2 },
+  bigInput: { fontFamily: F800, fontSize: 36, color: INK, minWidth: 80, padding: 0 },
+  unit: { fontFamily: F600, fontSize: 15, color: '#98A2B3' },
+  prefillHint: { fontFamily: F700, fontSize: 12, color: '#0e7a4d' },
+
+  /* ── Composer: the two dose-driving numbers grouped in one card ── */
+  composer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 12,
+    ...shadows.card,
+  },
+  composerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  composerField: { flex: 1, minWidth: 0 },
+  badge: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeCarb: { backgroundColor: '#fdf0dc' },
+  badgeGluc: { backgroundColor: '#fde6e6' },
+  badgeEmoji: { fontSize: 22 },
+  composerDivider: { height: 1, backgroundColor: '#eef1f6', marginVertical: 14 },
+  prefillPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eafaf1',
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    marginTop: 12,
+    marginLeft: 60,
+    maxWidth: '80%',
+  },
+
+  /* ── Card header (meal / sport / state) ── */
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardHeadIcon: { fontSize: 15 },
+  cardHeadText: { fontFamily: F700, fontSize: 14, color: INK },
 
   /* Question chips (meal moment / sport / state) */
   qRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
@@ -974,13 +1058,25 @@ const styles = StyleSheet.create({
   ratioNote: { marginTop: 10, fontFamily: F600, fontSize: 12, color: GREEN },
 
   ctxCard: {
-    backgroundColor: '#f3f0ff',
-    borderRadius: 18,
-    padding: 15,
+    backgroundColor: '#f4f1ff',
+    borderRadius: 20,
+    padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e9e3ff',
   },
+  ctxHead: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  ctxAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: '#ede7ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ctxAvatarEmoji: { fontSize: 16 },
   ctxTitle: { fontFamily: F700, fontSize: 13.5, color: '#4c3fa8' },
-  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 10 },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 12 },
   chip: {
     backgroundColor: '#ffffff',
     borderRadius: 999,
@@ -1001,6 +1097,20 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   ctaText: { fontFamily: F700, fontSize: 15, color: '#ffffff' },
+  ctaBig: {
+    height: 56,
+    borderRadius: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    shadowColor: GREEN,
+    shadowOpacity: 0.34,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+  },
+  ctaArrow: { fontFamily: F800, fontSize: 18, color: '#ffffff', marginTop: -1 },
 
   /* Loading */
   loadingBox: { alignItems: 'center', paddingVertical: 60 },

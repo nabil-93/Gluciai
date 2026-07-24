@@ -1032,6 +1032,9 @@
   },
   "bolus": {
     "title": "Insulindosis",
+    "heroPill": "Smarte Dosis",
+    "heroTitle": "Berechnen wir deine Dosis",
+    "heroSub": "Deine Mahlzeit und dein Glukosewert — die KI rechnet.",
     "carbsLabel": "Kohlenhydrate der Mahlzeit",
     "glucoseLabel": "Aktueller Blutzucker",
     "ctxTitle": "Die KI berücksichtigt",

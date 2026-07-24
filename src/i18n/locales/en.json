@@ -1032,6 +1032,9 @@
   },
   "bolus": {
     "title": "Insulin dose",
+    "heroPill": "Smart dose",
+    "heroTitle": "Let's compute your dose",
+    "heroSub": "Your meal and glucose — the AI does the math.",
     "carbsLabel": "Meal carbohydrates",
     "glucoseLabel": "Current glucose",
     "ctxTitle": "The AI takes into account",

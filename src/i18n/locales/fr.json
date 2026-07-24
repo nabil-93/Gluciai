@@ -1032,6 +1032,9 @@
   },
   "bolus": {
     "title": "Dose d'insuline",
+    "heroPill": "Dose intelligente",
+    "heroTitle": "Calculons ta dose",
+    "heroSub": "Ton repas et ta glycémie — l'IA s'occupe du calcul.",
     "carbsLabel": "Glucides du repas",
     "glucoseLabel": "Glycémie actuelle",
     "ctxTitle": "L'IA prend en compte",
