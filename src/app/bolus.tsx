@@ -777,13 +777,48 @@ export default function BolusScreen() {
                           </View>
                         </View>
                       ))}
-                      {engine.ratioSource === 'default' ? (
-                        <Pressable onPress={goMedical} style={styles.paramWarnRow}>
-                          <Text style={styles.paramWarn}>⚠️ {t('bolus.paramDefaultWarn')}</Text>
-                          <Text style={styles.fixLink}>{t('bolus.fixInProfile')} →</Text>
-                        </Pressable>
-                      ) : null}
                     </View>
+                  );
+                })()
+              : null}
+
+            {/* Deterministic "complete your profile" banner — does NOT depend
+                on the AI text. It appears whenever a value that drives the dose
+                is still missing from the profile (no personal ratio, no meal
+                insulin name), lists exactly what's missing, and taps through to
+                Profile → Medical. */}
+            {!isHypo
+              ? (() => {
+                  const missing: { icon: string; text: string }[] = [];
+                  if (engine.ratioSource === 'default')
+                    missing.push({ icon: '🍽️', text: t('bolus.missRatio') });
+                  if (!engine.bolusInsulinName)
+                    missing.push({ icon: '💉', text: t('bolus.missInsulin') });
+                  if (missing.length === 0) return null;
+                  return (
+                    <Pressable onPress={goMedical} style={styles.completeCard}>
+                      <View style={styles.completeHead}>
+                        <View style={styles.completeIcon}>
+                          <Text style={{ fontSize: 18 }}>🩺</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.completeTitle}>{t('bolus.completeTitle')}</Text>
+                          <Text style={styles.completeSub}>{t('bolus.completeSub')}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.completeList}>
+                        {missing.map((m, i) => (
+                          <View key={i} style={styles.completeItem}>
+                            <Text style={styles.completeItemIcon}>{m.icon}</Text>
+                            <Text style={styles.completeItemText}>{m.text}</Text>
+                          </View>
+                        ))}
+                      </View>
+                      <View style={styles.completeCta}>
+                        <Text style={styles.completeCtaText}>{t('bolus.completeCta')}</Text>
+                        <Text style={styles.completeCtaArrow}>→</Text>
+                      </View>
+                    </Pressable>
                   );
                 })()
               : null}
@@ -1269,15 +1304,42 @@ const styles = StyleSheet.create({
   paramValWrap: { alignItems: 'flex-end', maxWidth: '52%' },
   paramVal: { fontFamily: F800, fontSize: 13, color: INK },
   paramNote: { fontFamily: F500, fontSize: 9.5, color: '#9AA7A0', marginTop: 1 },
-  paramWarnRow: {
-    marginTop: 12,
+  /* ── Deterministic "complete your profile" banner ── */
+  completeCard: {
     backgroundColor: '#fff8ec',
-    borderRadius: 12,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#f2e0bd',
-    padding: 11,
+    padding: 16,
+    marginTop: 14,
   },
-  paramWarn: { fontFamily: F600, fontSize: 11, lineHeight: 15, color: '#B45309' },
+  completeHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
+  completeIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#fdeccb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeTitle: { fontFamily: F800, fontSize: 14, color: '#7a4d09' },
+  completeSub: { fontFamily: F500, fontSize: 11.5, lineHeight: 16, color: '#9a6b25', marginTop: 2 },
+  completeList: { marginTop: 12, gap: 8 },
+  completeItem: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  completeItemIcon: { fontSize: 14, width: 20, textAlign: 'center' },
+  completeItemText: { flex: 1, fontFamily: F600, fontSize: 12.5, color: '#6b4a12' },
+  completeCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 14,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: GREEN,
+  },
+  completeCtaText: { fontFamily: F800, fontSize: 13.5, color: '#ffffff' },
+  completeCtaArrow: { fontFamily: F800, fontSize: 15, color: '#ffffff', marginTop: -1 },
 
   /* ── Deterministic "why this dose" explanation (AI-report fallback) ── */
   whySummary: { fontFamily: F700, fontSize: 13.5, lineHeight: 20, color: INK },
