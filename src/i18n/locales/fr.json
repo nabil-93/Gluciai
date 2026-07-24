@@ -275,7 +275,12 @@
     "ratioPlaceholder": "ex. 1.5",
     "per10g": "U / 10 g",
     "glucoseGoal": "Objectif de glycémie (mg/dL)",
-    "glucoseGoalInfo": "Fixez la glycémie que vous visez pour la journée. 180 mg/dL est un bon repère — vous la suivrez chaque jour sur la page Glycémie."
+    "glucoseGoalInfo": "Fixez la glycémie que vous visez pour la journée. 180 mg/dL est un bon repère — vous la suivrez chaque jour sur la page Glycémie.",
+    "bolusStepTitle": "Votre insuline rapide",
+    "bolusStepSub": "Celle que vous prenez aux repas — commençons par elle.",
+    "bolusStepHint": "Renseignez d’abord votre insuline rapide en entier (nom, ratios par repas, facteur de correction). L’insuline lente viendra juste après.",
+    "basalStepTitle": "Votre insuline lente",
+    "basalStepSub": "Le nom, la dose et le moment de l’injection."
   },
   "home": {
     "goodMorning": "Bonjour",

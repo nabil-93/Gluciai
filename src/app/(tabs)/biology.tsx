@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BevelCard, ChevronRight, PlusGlyph, Spinner } from '@/components/ui';
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
+import { parseDecimal, sanitizeDecimal } from '@/lib/num';
 import { deleteMeasure, saveMeasure } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, typography } from '@/theme';
@@ -72,7 +73,7 @@ export default function BiologyScreen() {
   }, [measureLogs]);
 
   const add = async (kind: MeasureKind, unit: string) => {
-    const v = Number(value.replace(',', '.'));
+    const v = parseDecimal(value) ?? 0;
     if (!v || v <= 0) return;
     setSaving(true);
     try {
@@ -232,8 +233,8 @@ export default function BiologyScreen() {
                 <View style={styles.form}>
                   <TextInput
                     value={value}
-                    onChangeText={setValue}
-                    keyboardType="numeric"
+                    onChangeText={(v) => setValue(sanitizeDecimal(v))}
+                    keyboardType="decimal-pad"
                     placeholder={t('biology.valuePlaceholder', { unit: k.unit })}
                     placeholderTextColor={colors.textPlaceholder}
                     style={styles.input}
@@ -241,10 +242,10 @@ export default function BiologyScreen() {
                   />
                   <Pressable
                     onPress={() => add(k.key, k.unit)}
-                    disabled={saving || !Number(value.replace(',', '.'))}
+                    disabled={saving || !parseDecimal(value)}
                     style={[
                       styles.saveBtn,
-                      (!Number(value.replace(',', '.')) || saving) && {
+                      (!parseDecimal(value) || saving) && {
                         opacity: 0.4,
                       },
                     ]}

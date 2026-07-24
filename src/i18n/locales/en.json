@@ -275,7 +275,12 @@
     "ratioPlaceholder": "e.g. 1.5",
     "per10g": "U / 10 g",
     "glucoseGoal": "Glucose objective (mg/dL)",
-    "glucoseGoalInfo": "Set the glucose you aim for during the day. 180 mg/dL is a good reference — you'll track it each day on the Glucose page."
+    "glucoseGoalInfo": "Set the glucose you aim for during the day. 180 mg/dL is a good reference — you'll track it each day on the Glucose page.",
+    "bolusStepTitle": "Your rapid insulin",
+    "bolusStepSub": "The one you take with meals — let’s set it up first.",
+    "bolusStepHint": "Set up your rapid insulin fully first (name, per-meal ratios, correction factor). Your long insulin comes right after.",
+    "basalStepTitle": "Your long insulin",
+    "basalStepSub": "Its name, dose and time of injection."
   },
   "home": {
     "goodMorning": "Good morning",

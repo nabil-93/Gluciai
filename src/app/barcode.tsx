@@ -508,7 +508,7 @@ function EditField({
       <TextInput
         defaultValue={value ? String(value) : ''}
         onChangeText={onChange}
-        keyboardType="numeric"
+        keyboardType="decimal-pad"
         placeholder="0"
         placeholderTextColor={colors.textPlaceholder}
         style={styles.editFieldInput}

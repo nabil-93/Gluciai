@@ -27,6 +27,7 @@ import {
   type DoseRisk,
 } from '@/services/bolusEngine';
 import { saveInsulin } from '@/services/data';
+import { parseDecimal, sanitizeDecimal } from '@/lib/num';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
 import type { ActivityIntensity, ActivityKind, MealType } from '@/types';
@@ -100,8 +101,8 @@ export default function BolusScreen() {
   const preview = useMemo(
     () =>
       computeSmartBolus({
-        carbs: Number(carbs) || 0,
-        glucose: Number(glucose) > 0 ? Number(glucose) : null,
+        carbs: parseDecimal(carbs) ?? 0,
+        glucose: (parseDecimal(glucose) ?? 0) > 0 ? parseDecimal(glucose)! : null,
         profile,
         insulinLogs,
         activityLogs,
@@ -149,8 +150,8 @@ export default function BolusScreen() {
 
   const calculate = async () => {
     const result = computeSmartBolus({
-      carbs: Number(carbs) || 0,
-      glucose: Number(glucose) > 0 ? Number(glucose) : null,
+      carbs: parseDecimal(carbs) ?? 0,
+      glucose: (parseDecimal(glucose) ?? 0) > 0 ? parseDecimal(glucose)! : null,
       profile,
       insulinLogs,
       activityLogs,
@@ -280,8 +281,8 @@ export default function BolusScreen() {
               <View style={styles.inputRow}>
                 <TextInput
                   value={carbs}
-                  onChangeText={setCarbs}
-                  keyboardType="numeric"
+                  onChangeText={(v) => setCarbs(sanitizeDecimal(v))}
+                  keyboardType="decimal-pad"
                   placeholder="0"
                   placeholderTextColor="#98a1af"
                   style={styles.bigInput}
@@ -304,8 +305,8 @@ export default function BolusScreen() {
               <View style={styles.inputRow}>
                 <TextInput
                   value={glucose}
-                  onChangeText={setGlucose}
-                  keyboardType="numeric"
+                  onChangeText={(v) => setGlucose(sanitizeDecimal(v))}
+                  keyboardType="decimal-pad"
                   placeholder="—"
                   placeholderTextColor="#98a1af"
                   style={styles.bigInput}

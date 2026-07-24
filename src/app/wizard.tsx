@@ -20,6 +20,7 @@ import { FadeInView, Spinner } from '@/components/ui';
 import { CONSENT_IDS, CONSENT_META } from '@/data/consent';
 import { isRTL } from '@/i18n';
 import { confirmAsync } from '@/lib/confirm';
+import { parseDecimal, parsePositive, sanitizeDecimal } from '@/lib/num';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { saveProfile } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
@@ -32,13 +33,19 @@ const N800 = 'Nunito_800ExtraBold';
 
 const GREEN = '#1fbc78';
 
+/* Insulin is configured ONE insulin at a time: the rapid/meal insulin is
+ * finished end-to-end (its name → the three meal ratios → the correction
+ * factor) before the long/basal insulin is asked for at all. Mixing the two
+ * on one screen — a basal name sitting next to a bolus name — was confusing
+ * and made the flow read as if it jumped back and forth between them. */
 const STEPS = [
   'personal',
   'diabetes',
   'insulin',
-  'insulinPlan',
-  'carbRatio',
-  'correction',
+  'bolusName', // rapid/meal insulin — name (only if a meal insulin is used)
+  'carbRatio', // rapid — per-meal ratios
+  'correction', // rapid — correction factor
+  'basalPlan', // long/basal insulin — name + dose + time (only if basal is used)
   'target',
   'emergency',
   'doctor',
@@ -55,9 +62,10 @@ const HEROES: Record<(typeof STEPS)[number], any> = {
   personal: require('../assets/nfss/il_s1.png'),
   diabetes: require('../assets/nfss/il_s2.png'),
   insulin: require('../assets/nfss/il_s3.png'),
-  insulinPlan: require('../assets/nfss/il_s3.png'),
+  bolusName: require('../assets/nfss/il_s3.png'),
   carbRatio: require('../assets/nfss/il_s3.png'),
   correction: require('../assets/nfss/il_s6.png'),
+  basalPlan: require('../assets/nfss/il_s3.png'),
   target: require('../assets/nfss/il_s6.png'),
   emergency: require('../assets/nfss/il_s7.png'),
   doctor: require('../assets/nfss/il_s8.png'),
@@ -176,7 +184,7 @@ function Field({
   value: string;
   onChangeText: (v: string) => void;
   placeholder: string;
-  keyboardType?: 'numeric' | 'phone-pad' | 'default';
+  keyboardType?: 'numeric' | 'decimal-pad' | 'phone-pad' | 'default';
   unit?: string;
   autoCapitalize?: 'words' | 'none';
 }) {
@@ -445,10 +453,7 @@ export default function WizardScreen() {
   const allConsented = CONSENT_IDS.every((id) => consents[id]);
 
   /* "1,5" and "1.5" both work; anything else → undefined (never saved). */
-  const num = (v: string) => {
-    const n = parseFloat(v.replace(',', '.'));
-    return Number.isFinite(n) && n > 0 ? n : undefined;
-  };
+  const num = parsePositive;
 
   const canContinue = useMemo(() => {
     switch (key) {
@@ -457,8 +462,11 @@ export default function WizardScreen() {
       case 'carbRatio':
         // The AI's dose math depends on these three numbers — require them.
         return !!num(ratioBreakfast) && !!num(ratioLunch) && !!num(ratioDinner);
-      case 'target':
-        return Number(targetLow) > 0 && Number(targetHigh) > Number(targetLow);
+      case 'target': {
+        const lo = parseDecimal(targetLow);
+        const hi = parseDecimal(targetHigh);
+        return lo != null && lo > 0 && hi != null && hi > lo;
+      }
       case 'consent':
         return allConsented;
       default:
@@ -472,19 +480,30 @@ export default function WizardScreen() {
     );
   };
 
+  /* Which steps apply to THIS patient. The rapid-insulin steps (its name, the
+   * meal ratios, the correction factor) exist only when a meal insulin is
+   * used; the basal step only when a long insulin is used. Everything else is
+   * always shown. Navigation walks over the steps that don't apply so the
+   * order stays exactly: rapid name → ratios → correction → basal. */
+  const stepApplies = (k: (typeof STEPS)[number]) => {
+    if (k === 'bolusName' || k === 'carbRatio' || k === 'correction') return usesMealInsulin;
+    if (k === 'basalPlan') return usesBasal;
+    return true;
+  };
+  const nextApplicable = (from: number) => {
+    let i = from + 1;
+    while (i < STEPS.length - 1 && !stepApplies(STEPS[i])) i++;
+    return i;
+  };
+  const prevApplicable = (from: number) => {
+    let i = from - 1;
+    while (i > 0 && !stepApplies(STEPS[i])) i--;
+    return i;
+  };
+
   const next = async () => {
-    // Skip insulin-dose steps for users without insulin
-    if (key === 'insulin' && !usesInsulin) {
-      setStep(STEPS.indexOf('target'));
-      return;
-    }
-    // Basal-only patients: no meal ratios / correction factor to configure
-    if (key === 'insulinPlan' && !usesMealInsulin) {
-      setStep(STEPS.indexOf('target'));
-      return;
-    }
     if (step < STEPS.length - 1) {
-      setStep(step + 1);
+      setStep(nextApplicable(step));
       return;
     }
     // Finish
@@ -513,14 +532,14 @@ export default function WizardScreen() {
       name: existingName,
       birth_date: composeBirthDate(birthYear, birthMonth, birthDay),
       gender,
-      height: Number(height) || undefined,
-      weight: Number(weight) || undefined,
+      height: parsePositive(height),
+      weight: parsePositive(weight),
       diabetes_type: diabetesType ?? 'type2',
       insulin_types: insulinTypes,
       language: i18n.language,
-      target_low: Number(targetLow) || 70,
-      target_high: Number(targetHigh) || 180,
-      daily_glucose_goal: Math.min(600, Math.max(40, Number(glucoseGoal) || 180)),
+      target_low: parsePositive(targetLow) ?? 70,
+      target_high: parsePositive(targetHigh) ?? 180,
+      daily_glucose_goal: Math.min(600, Math.max(40, parsePositive(glucoseGoal) ?? 180)),
       // Legacy global ratio (g of carbs per 1 U) derived from the per-meal
       // plan so every older code path keeps working: 10 / (U per 10 g).
       carb_ratio: (() => {
@@ -528,7 +547,7 @@ export default function WizardScreen() {
         const u = num(ratioLunch) ?? num(ratioBreakfast) ?? num(ratioDinner);
         return u ? Math.round((10 / u) * 10) / 10 : undefined;
       })(),
-      correction_factor: usesMealInsulin ? Number(correction) || undefined : undefined,
+      correction_factor: usesMealInsulin ? parsePositive(correction) : undefined,
       insulin_per_10g_breakfast: usesMealInsulin ? num(ratioBreakfast) : undefined,
       insulin_per_10g_lunch: usesMealInsulin ? num(ratioLunch) : undefined,
       insulin_per_10g_dinner: usesMealInsulin ? num(ratioDinner) : undefined,
@@ -560,16 +579,7 @@ export default function WizardScreen() {
       router.replace('/auth');
       return;
     }
-    // Mirror the skip logic when going back from target
-    if (key === 'target' && !usesInsulin) {
-      setStep(STEPS.indexOf('insulin'));
-      return;
-    }
-    if (key === 'target' && !usesMealInsulin) {
-      setStep(STEPS.indexOf('insulinPlan'));
-      return;
-    }
-    setStep(step - 1);
+    setStep(prevApplicable(step));
   };
 
   /* Titles & subtitles per step, from i18n */
@@ -577,9 +587,10 @@ export default function WizardScreen() {
     personal: { title: t('wizard.personalTitle'), sub: t('wizard.personalSub') },
     diabetes: { title: t('wizard.diabetesTitle') },
     insulin: { title: t('wizard.insulinTitle'), sub: t('wizard.insulinSub') },
-    insulinPlan: { title: t('wizard.insulinPlanTitle'), sub: t('wizard.insulinPlanSub') },
+    bolusName: { title: t('wizard.bolusStepTitle'), sub: t('wizard.bolusStepSub') },
     carbRatio: { title: t('wizard.mealRatiosTitle'), sub: t('wizard.mealRatiosSub') },
     correction: { title: t('wizard.correctionTitle'), sub: t('wizard.correctionSub') },
+    basalPlan: { title: t('wizard.basalStepTitle'), sub: t('wizard.basalStepSub') },
     target: { title: t('wizard.targetTitle'), sub: t('wizard.targetSub') },
     emergency: { title: t('wizard.emergencyTitle'), sub: t('wizard.emergencySub') },
     doctor: { title: t('wizard.doctorTitle'), sub: t('wizard.doctorSub') },
@@ -721,17 +732,17 @@ export default function WizardScreen() {
                 label={t('wizard.height')}
                 icon={<RulerIcon />}
                 value={height}
-                onChangeText={setHeight}
+                onChangeText={(v) => setHeight(sanitizeDecimal(v))}
                 placeholder={t('wizard.heightPlaceholder')}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
               />
               <Field
                 label={t('wizard.weight')}
                 icon={<ScaleIcon />}
                 value={weight}
-                onChangeText={setWeight}
+                onChangeText={(v) => setWeight(sanitizeDecimal(v))}
                 placeholder={t('wizard.weightPlaceholder')}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
               />
               <InfoBox text={t('wizard.personalInfoNote')} />
             </>
@@ -792,103 +803,90 @@ export default function WizardScreen() {
             </View>
           ) : null}
 
-          {/* ── INSULIN PLAN: which insulins the patient uses ── */}
-          {key === 'insulinPlan' ? (
+          {/* ── RAPID / MEAL INSULIN: its name ── */}
+          {key === 'bolusName' ? (
             <>
-              {usesMealInsulin ? (
-                <>
-                  <Field
-                    label={t('wizard.bolusInsulinName')}
-                    icon={<Text style={{ fontSize: 16 }}>💉</Text>}
-                    value={bolusName}
-                    onChangeText={setBolusName}
-                    placeholder={t('wizard.bolusInsulinPlaceholder')}
-                    autoCapitalize="words"
-                  />
-                  <View style={styles.nameChipRow}>
-                    {RAPID_NAMES.map((n) => (
-                      <Pressable
-                        key={n}
-                        onPress={() => setBolusName(n)}
-                        style={[styles.nameChip, bolusName === n && styles.nameChipOn]}
-                      >
-                        <Text
-                          style={[
-                            styles.nameChipText,
-                            bolusName === n && styles.nameChipTextOn,
-                          ]}
-                        >
-                          {n}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </>
-              ) : null}
-              {usesBasal ? (
-                <>
-                  <Field
-                    label={t('wizard.basalInsulinName')}
-                    icon={<Text style={{ fontSize: 16 }}>⏱️</Text>}
-                    value={basalName}
-                    onChangeText={setBasalName}
-                    placeholder={t('wizard.basalInsulinPlaceholder')}
-                    autoCapitalize="words"
-                  />
-                  <View style={styles.nameChipRow}>
-                    {BASAL_NAMES.map((n) => (
-                      <Pressable
-                        key={n}
-                        onPress={() => setBasalName(n)}
-                        style={[styles.nameChip, basalName === n && styles.nameChipOn]}
-                      >
-                        <Text
-                          style={[
-                            styles.nameChipText,
-                            basalName === n && styles.nameChipTextOn,
-                          ]}
-                        >
-                          {n}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  <Field
-                    label={t('wizard.basalDose')}
-                    icon={<ScaleIcon />}
-                    value={basalDose}
-                    onChangeText={setBasalDose}
-                    placeholder={t('wizard.basalDosePlaceholder')}
-                    keyboardType="numeric"
-                    unit="U"
-                  />
-                  <View style={{ marginTop: 12 }}>
-                    <Text style={styles.fieldLabel}>{t('wizard.basalTime')}</Text>
-                    <View style={styles.nameChipRow}>
-                      {(['morning', 'evening', 'both'] as const).map((v) => (
-                        <Pressable
-                          key={v}
-                          onPress={() => setBasalTime(v)}
-                          style={[styles.nameChip, basalTime === v && styles.nameChipOn]}
-                        >
-                          <Text
-                            style={[
-                              styles.nameChipText,
-                              basalTime === v && styles.nameChipTextOn,
-                            ]}
-                          >
-                            {t(`wizard.basal_${v}`)}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-                </>
-              ) : null}
-              <InfoBox
-                title={t('wizard.whyImportant')}
-                text={t('wizard.insulinPlanHint')}
+              <Field
+                label={t('wizard.bolusInsulinName')}
+                icon={<Text style={{ fontSize: 16 }}>💉</Text>}
+                value={bolusName}
+                onChangeText={setBolusName}
+                placeholder={t('wizard.bolusInsulinPlaceholder')}
+                autoCapitalize="words"
               />
+              <View style={styles.nameChipRow}>
+                {RAPID_NAMES.map((n) => (
+                  <Pressable
+                    key={n}
+                    onPress={() => setBolusName(n)}
+                    style={[styles.nameChip, bolusName === n && styles.nameChipOn]}
+                  >
+                    <Text
+                      style={[styles.nameChipText, bolusName === n && styles.nameChipTextOn]}
+                    >
+                      {n}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <InfoBox title={t('wizard.whyImportant')} text={t('wizard.bolusStepHint')} />
+            </>
+          ) : null}
+
+          {/* ── LONG / BASAL INSULIN: name + dose + time, all together ── */}
+          {key === 'basalPlan' ? (
+            <>
+              <Field
+                label={t('wizard.basalInsulinName')}
+                icon={<Text style={{ fontSize: 16 }}>⏱️</Text>}
+                value={basalName}
+                onChangeText={setBasalName}
+                placeholder={t('wizard.basalInsulinPlaceholder')}
+                autoCapitalize="words"
+              />
+              <View style={styles.nameChipRow}>
+                {BASAL_NAMES.map((n) => (
+                  <Pressable
+                    key={n}
+                    onPress={() => setBasalName(n)}
+                    style={[styles.nameChip, basalName === n && styles.nameChipOn]}
+                  >
+                    <Text
+                      style={[styles.nameChipText, basalName === n && styles.nameChipTextOn]}
+                    >
+                      {n}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Field
+                label={t('wizard.basalDose')}
+                icon={<ScaleIcon />}
+                value={basalDose}
+                onChangeText={(v) => setBasalDose(sanitizeDecimal(v))}
+                placeholder={t('wizard.basalDosePlaceholder')}
+                keyboardType="decimal-pad"
+                unit="U"
+              />
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.fieldLabel}>{t('wizard.basalTime')}</Text>
+                <View style={styles.nameChipRow}>
+                  {(['morning', 'evening', 'both'] as const).map((v) => (
+                    <Pressable
+                      key={v}
+                      onPress={() => setBasalTime(v)}
+                      style={[styles.nameChip, basalTime === v && styles.nameChipOn]}
+                    >
+                      <Text
+                        style={[styles.nameChipText, basalTime === v && styles.nameChipTextOn]}
+                      >
+                        {t(`wizard.basal_${v}`)}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+              <InfoBox title={t('wizard.whyImportant')} text={t('wizard.insulinPlanHint')} />
             </>
           ) : null}
 
@@ -899,27 +897,27 @@ export default function WizardScreen() {
                 label={t('wizard.ratioBreakfast')}
                 icon={<Text style={{ fontSize: 16 }}>🥐</Text>}
                 value={ratioBreakfast}
-                onChangeText={setRatioBreakfast}
+                onChangeText={(v) => setRatioBreakfast(sanitizeDecimal(v))}
                 placeholder={t('wizard.ratioPlaceholder')}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 unit={t('wizard.per10g')}
               />
               <Field
                 label={t('wizard.ratioLunch')}
                 icon={<Text style={{ fontSize: 16 }}>☀️</Text>}
                 value={ratioLunch}
-                onChangeText={setRatioLunch}
+                onChangeText={(v) => setRatioLunch(sanitizeDecimal(v))}
                 placeholder={t('wizard.ratioPlaceholder')}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 unit={t('wizard.per10g')}
               />
               <Field
                 label={t('wizard.ratioDinner')}
                 icon={<Text style={{ fontSize: 16 }}>🌙</Text>}
                 value={ratioDinner}
-                onChangeText={setRatioDinner}
+                onChangeText={(v) => setRatioDinner(sanitizeDecimal(v))}
                 placeholder={t('wizard.ratioPlaceholder')}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 unit={t('wizard.per10g')}
               />
               <InfoBox
@@ -936,9 +934,9 @@ export default function WizardScreen() {
                 label={t('wizard.correctionTitle')}
                 icon={<DownIcon />}
                 value={correction}
-                onChangeText={setCorrection}
+                onChangeText={(v) => setCorrection(sanitizeDecimal(v))}
                 placeholder={t('wizard.correctionPlaceholder')}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 unit="mg/dl"
               />
               <InfoBox
@@ -955,18 +953,18 @@ export default function WizardScreen() {
                 label={t('wizard.targetLow')}
                 icon={<DownIcon />}
                 value={targetLow}
-                onChangeText={setTargetLow}
+                onChangeText={(v) => setTargetLow(sanitizeDecimal(v))}
                 placeholder={t('wizard.targetLowPlaceholder')}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 unit="mg/dl"
               />
               <Field
                 label={t('wizard.targetHigh')}
                 icon={<UpIcon />}
                 value={targetHigh}
-                onChangeText={setTargetHigh}
+                onChangeText={(v) => setTargetHigh(sanitizeDecimal(v))}
                 placeholder={t('wizard.targetHighPlaceholder')}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 unit="mg/dl"
               />
               {/* Daily glucose objective (mg/dL) the patient sets for
@@ -975,9 +973,9 @@ export default function WizardScreen() {
                 label={t('wizard.glucoseGoal')}
                 icon={<TargetWizIcon />}
                 value={glucoseGoal}
-                onChangeText={setGlucoseGoal}
+                onChangeText={(v) => setGlucoseGoal(sanitizeDecimal(v))}
                 placeholder="180"
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 unit="mg/dl"
               />
               <InfoBox

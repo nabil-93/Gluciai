@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Spinner } from '@/components/ui';
+import { parseDecimal, sanitizeDecimal } from '@/lib/num';
 import { saveGlucose } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
@@ -58,7 +59,7 @@ export default function LogGlucoseScreen() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const num = Number(value);
+  const num = parseDecimal(value) ?? 0;
   const z = zone(num, low, high);
 
   const close = () => {
@@ -94,8 +95,8 @@ export default function LogGlucoseScreen() {
           <View style={styles.valueRow}>
             <TextInput
               value={value}
-              onChangeText={setValue}
-              keyboardType="numeric"
+              onChangeText={(v) => setValue(sanitizeDecimal(v))}
+              keyboardType="decimal-pad"
               placeholder="—"
               placeholderTextColor="#D1D5DB"
               autoFocus

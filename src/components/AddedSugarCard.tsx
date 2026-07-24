@@ -14,6 +14,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import { AnimatedRobot } from '@/components/ui';
 import { Spinner } from '@/components/ui/Spinner';
+import { parseDecimal, sanitizeDecimal } from '@/lib/num';
 import { capturePhoto } from '@/services/imageInput';
 import { sendMealEdit } from '@/services/mealEdit';
 import type { FoodItemResult } from '@/types';
@@ -108,7 +109,7 @@ export function AddedSugarCard({
   if (!food && addedGrams === null) return null;
 
   const gramsFromInput = () => {
-    const n = Math.max(0, Math.round(Number(amount.replace(',', '.')) || 0));
+    const n = Math.max(0, Math.round(parseDecimal(amount) ?? 0));
     return unit === 'cubes' ? n * GRAMS_PER_CUBE : n;
   };
 
@@ -190,7 +191,7 @@ export function AddedSugarCard({
       <View style={styles.stepRow}>
         <Pressable
           style={styles.stepBtn}
-          onPress={() => setAmount((a) => String(Math.max(0, (Math.round(Number(a) || 0) - 1))))}
+          onPress={() => setAmount((a) => String(Math.max(0, Math.round(parseDecimal(a) ?? 0) - 1)))}
           hitSlop={6}
         >
           <Text style={styles.stepSign}>−</Text>
@@ -198,8 +199,8 @@ export function AddedSugarCard({
         <View style={styles.amountBox}>
           <TextInput
             value={amount}
-            onChangeText={(v) => setAmount(v.replace(/[^0-9.,]/g, ''))}
-            keyboardType="numeric"
+            onChangeText={(v) => setAmount(sanitizeDecimal(v))}
+            keyboardType="decimal-pad"
             style={styles.amountInput}
             maxLength={4}
           />
@@ -212,7 +213,7 @@ export function AddedSugarCard({
         </View>
         <Pressable
           style={styles.stepBtn}
-          onPress={() => setAmount((a) => String(Math.round(Number(a) || 0) + 1))}
+          onPress={() => setAmount((a) => String(Math.round(parseDecimal(a) ?? 0) + 1))}
           hitSlop={6}
         >
           <Text style={styles.stepSign}>+</Text>

@@ -275,7 +275,12 @@
     "ratioPlaceholder": "z. B. 1.5",
     "per10g": "E / 10 g",
     "glucoseGoal": "Blutzuckerziel (mg/dL)",
-    "glucoseGoalInfo": "Lege den Blutzucker fest, den du für den Tag anstrebst. 180 mg/dL ist ein guter Richtwert — du verfolgst ihn täglich auf der Blutzucker-Seite."
+    "glucoseGoalInfo": "Lege den Blutzucker fest, den du für den Tag anstrebst. 180 mg/dL ist ein guter Richtwert — du verfolgst ihn täglich auf der Blutzucker-Seite.",
+    "bolusStepTitle": "Ihr schnelles Insulin",
+    "bolusStepSub": "Das, das Sie zu den Mahlzeiten spritzen — beginnen wir damit.",
+    "bolusStepHint": "Richten Sie zuerst Ihr schnelles Insulin vollständig ein (Name, Verhältnisse pro Mahlzeit, Korrekturfaktor). Das lange Insulin folgt direkt danach.",
+    "basalStepTitle": "Ihr langes Insulin",
+    "basalStepSub": "Name, Dosis und Zeitpunkt der Injektion."
   },
   "home": {
     "goodMorning": "Guten Morgen",
