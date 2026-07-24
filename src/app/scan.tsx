@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -47,8 +47,16 @@ const GRID_LINE = 'rgba(130,235,170,0.06)';
  * another — fatal for a plate of food you are about to dose insulin against.
  *
  * So the preview gets a box of the sensor's own shape. Nothing is cropped:
- * what you frame is exactly what is captured and sent to the vision model. */
-const PREVIEW_ASPECT = 3 / 4; // width ÷ height, portrait
+ * what you frame is exactly what is captured and sent to the vision model.
+ *
+ * 4:3 is only the OPENING GUESS, though. On the web build the browser alone
+ * decides the stream's shape — expo-camera asks getUserMedia for nothing but a
+ * facingMode — and it hands back 4:3 on one phone and 16:9 on the next, while
+ * the <video> is styled `object-fit: cover` and the capture path draws the
+ * FULL videoWidth × videoHeight to a canvas. Guess wrong there and the crop is
+ * back. So the guess is replaced by the frame's real shape as soon as the
+ * stream (or the first photo) can tell us what it is. */
+const PREVIEW_ASPECT = 3 / 4; // width ÷ height, portrait — starting assumption only
 /* Breathing room between the live image and the corner brackets. Tuned so the
  * bracketed area comes out at ~3:4 itself — the brackets then read as a true
  * viewfinder — and so the top pair clears the subtitle that floats above it. */
@@ -124,7 +132,11 @@ function ScanScreen() {
   const [error, setError] = useState<string | null>(null);
   const [camError, setCamError] = useState(false);
   const [boxH, setBoxH] = useState(0);
+  /* Real shape of the camera frame, w ÷ h, portrait. Starts as the 4:3 guess
+   * and is corrected the moment the stream or a capture reveals the truth. */
+  const [frameAspect, setFrameAspect] = useState(PREVIEW_ASPECT);
   const cameraRef = useRef<CameraView>(null);
+  const previewWrapRef = useRef<View>(null);
 
   // Refs the percent-climb interval reads without re-subscribing.
   const stageRef = useRef<ScanStage>('detecting');
@@ -294,6 +306,9 @@ function ScanScreen() {
     if (!cameraRef.current || analyzing) return;
     const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 1 });
     if (!photo?.uri) return;
+    // The photo is the ground truth about the frame's shape — if the preview
+    // box guessed wrong, the next one is already right.
+    applyAspect(photo.width, photo.height, true);
     await runOn(photo.uri, photo.base64);
   };
 
@@ -333,26 +348,80 @@ function ScanScreen() {
   // design stands in and capture goes through the OS camera / gallery.
   const liveCamera = !camError && !!permission?.granted && (!isWeb || webCamSupported);
 
+  /**
+   * Record the frame's real shape. `forcePortrait` is for native stills, whose
+   * width/height come back in sensor orientation (4032×3024 for a photo taken
+   * upright); the app is portrait-locked, so the frame is always the taller of
+   * the two. Web reports the <video>'s own intrinsic size, already rotated for
+   * the device, so there it is taken as-is. Absurd values are ignored rather
+   * than allowed to reshape the viewfinder.
+   */
+  const applyAspect = useCallback(
+    (w?: number | null, h?: number | null, forcePortrait = false) => {
+      if (!w || !h) return;
+      const a = forcePortrait ? Math.min(w, h) / Math.max(w, h) : w / h;
+      if (Number.isFinite(a) && a >= 0.3 && a <= 3) setFrameAspect(a);
+    },
+    []
+  );
+
+  /* Web: expo-camera renders a plain <video> styled `object-fit: cover`, and
+   * the browser picks the stream size on its own — so unless this box matches
+   * the stream exactly, the crop is straight back. The only place that size
+   * exists is the element itself. */
+  useEffect(() => {
+    if (!isWeb || !liveCamera) return;
+
+    let video: HTMLVideoElement | null = null;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = () => applyAspect(video?.videoWidth, video?.videoHeight);
+
+    const attach = () => {
+      const root = previewWrapRef.current as unknown as HTMLElement | null;
+      video = root?.querySelector?.('video') ?? null;
+      if (!video) {
+        // The element appears a tick after the stream is granted.
+        if (tries++ < 40) timer = setTimeout(attach, 100);
+        return;
+      }
+      read();
+      video.addEventListener('loadedmetadata', read);
+      video.addEventListener('resize', read);
+    };
+    attach();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      video?.removeEventListener('loadedmetadata', read);
+      video?.removeEventListener('resize', read);
+    };
+  }, [isWeb, liveCamera, applyAspect]);
+
   /* Largest sensor-shaped box that fits the screen, centred — a "contain"
    * viewfinder rather than a "cover" one. The dark bands it leaves above and
    * below fall under the scrims, where the title and the dock already live. */
-  const previewW = Math.min(winW, winH * PREVIEW_ASPECT);
-  const previewH = previewW / PREVIEW_ASPECT;
+  const previewW = Math.min(winW, winH * frameAspect);
+  const previewH = previewW / frameAspect;
   const previewLeft = (winW - previewW) / 2;
   const previewTop = (winH - previewH) / 2;
+  // A wide stream leaves a short preview; the brackets shrink with it instead
+  // of inverting the box.
+  const insetX = Math.min(FRAME_INSET_X, previewW * 0.12);
+  const insetY = Math.min(FRAME_INSET_Y, previewH * 0.12);
 
   /* The corner brackets are pinned to the live image, so they now mark the
    * true edges of the shot instead of floating over a cropped one. */
-  const frameTop = previewTop + FRAME_INSET_Y;
+  const frameTop = previewTop + insetY;
   /* On a short screen the sensor frame is taller than the gap between the
    * subtitle and the dock. The preview still shows all of it — only the guide
    * brackets give way, rather than being drawn across the shutter button. */
   const frameBottomLimit = winH - insets.bottom - DOCK_RESERVE;
   const frameRect = {
-    left: previewLeft + FRAME_INSET_X,
+    left: previewLeft + insetX,
     top: frameTop,
-    width: Math.max(0, previewW - FRAME_INSET_X * 2),
-    height: Math.max(0, Math.min(previewH - FRAME_INSET_Y * 2, frameBottomLimit - frameTop)),
+    width: Math.max(0, previewW - insetX * 2),
+    height: Math.max(0, Math.min(previewH - insetY * 2, frameBottomLimit - frameTop)),
   };
 
   /* The scrims exist to keep the top bar, the title and the dock readable —
@@ -413,20 +482,28 @@ function ScanScreen() {
       {/* Live camera, sized to the sensor's own frame so the preview shows the
           whole shot instead of a blown-up crop of it. The frozen capture lives
           INSIDE the scan box. Dark backdrop when there is no preview. */}
-      <View style={styles.previewLayer} pointerEvents="none">
+      <View ref={previewWrapRef} style={styles.previewLayer} pointerEvents="none">
         {liveCamera ? (
-          <CameraView
-            ref={cameraRef}
-            style={{ width: previewW, height: previewH }}
-            facing={facing}
+          /* The size has to live on a plain View, not on CameraView: the
+           * component puts `flex: 1` on its own root, and inside a column
+           * flex parent that flex-grow beats any height passed in — the box
+           * silently stretched back to the full screen and the crop with it.
+           * A fixed-size parent with the camera absolutely filling it cannot
+           * be overridden that way. */
+          <View style={{ width: previewW, height: previewH, overflow: 'hidden' }}>
+            <CameraView
+              ref={cameraRef}
+              style={StyleSheet.absoluteFill}
+              facing={facing}
             // Android: switches the native preview's scaleType from FILL to
             // FIT, so the layer itself stops cropping too. iOS ignores it and
             // is handled by the box above being the sensor's own shape.
-            ratio="4:3"
-            enableTorch={flash === 'on'}
-            flash={flash === 'auto' ? 'auto' : 'off'}
-            onMountError={() => setCamError(true)}
-          />
+              ratio="4:3"
+              enableTorch={flash === 'on'}
+              flash={flash === 'auto' ? 'auto' : 'off'}
+              onMountError={() => setCamError(true)}
+            />
+          </View>
         ) : null}
       </View>
 
