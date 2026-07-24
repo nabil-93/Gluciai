@@ -3,6 +3,11 @@
     "mealPhoto": "Photo du repas",
     "scanSuccess": "Scan réussi",
     "estimation": "Estimation",
+    "calLight": "Léger",
+    "calModerate": "Modéré",
+    "calHigh": "Élevé",
+    "calVeryHigh": "Très élevé",
+    "calOfMeal": "sur ~{{max}} kcal pour un repas complet",
     "healthScore": "Score santé",
     "nutriScore": "Nutri-Score",
     "detectedFoods": "Détail des aliments détectés",
@@ -76,7 +81,10 @@
     "glHint": "Elle suit la portion — l'index note la qualité des glucides, la charge leur quantité.",
     "mealMomentAsk": "Choisissez le repas pour enregistrer",
     "mealPickerBody": "À quel repas correspond cette assiette ? Nécessaire pour l’ajouter à votre journal.",
-    "mealMomentMoved": "Sera déplacé vers « {{meal}} » — touchez Enregistrer"
+    "mealMomentMoved": "Sera déplacé vers « {{meal}} » — touchez Enregistrer",
+    "sharePdf": "Partager le rapport (PDF)",
+    "pdfFooter": "Rapport généré par GluciAI — valeurs estimées à partir de la photo et des portions saisies, à interpréter par un professionnel de santé. Ne remplace pas un avis médical.",
+    "pdfFood": "Aliment"
   },
   "common": {
     "appName": "GluciAI",
@@ -274,7 +282,8 @@
     "goodEvening": "Bonsoir",
     "greeting": "Bonjour",
     "greetingName": "Bonjour {{name}}",
-    "greetingSub": "Prends soin de ta santé aujourd'hui",
+    "greetingSub": "Prends soin de ta santé",
+    "sosA11y": "Urgence — appeler les secours",
     "aiInsight": "Analyse IA",
     "todayGlucose": "Glycémie",
     "todayInsulin": "Insuline",

@@ -3,6 +3,11 @@
     "mealPhoto": "صورة الوجبة",
     "scanSuccess": "تم المسح بنجاح",
     "estimation": "تقدير",
+    "calLight": "خفيف",
+    "calModerate": "متوسط",
+    "calHigh": "مرتفع",
+    "calVeryHigh": "مرتفع جدًا",
+    "calOfMeal": "من ~{{max}} سعرة لوجبة كاملة",
     "healthScore": "نقاط الصحة",
     "nutriScore": "التقييم الغذائي",
     "detectedFoods": "الأطعمة المكتشفة",
@@ -76,7 +81,10 @@
     "glHint": "يتبع الحصة — المؤشر يقيّم جودة الكربوهيدرات، والحمل كميتها.",
     "mealMomentAsk": "اختر الوجبة للحفظ",
     "mealPickerBody": "لأي وجبة يعود هذا الطبق؟ مطلوب لإضافته إلى سجلك.",
-    "mealMomentMoved": "سيُنقل إلى «{{meal}}» — اضغط حفظ"
+    "mealMomentMoved": "سيُنقل إلى «{{meal}}» — اضغط حفظ",
+    "sharePdf": "مشاركة التقرير (PDF)",
+    "pdfFooter": "تقرير من إنشاء GluciAI — القيم تقديرية انطلاقًا من الصورة والكميات المُدخلة، يجب أن يفسّرها مختص صحي. لا يغني عن استشارة طبية.",
+    "pdfFood": "الطعام"
   },
   "common": {
     "appName": "GluciAI",
@@ -275,6 +283,7 @@
     "greeting": "مرحبًا",
     "greetingName": "مرحبًا {{name}}",
     "greetingSub": "اعتنِ بصحتك اليوم",
+    "sosA11y": "طوارئ — اتصل بالإسعاف",
     "aiInsight": "تحليل ذكي",
     "todayGlucose": "سكر الدم",
     "todayInsulin": "الأنسولين",

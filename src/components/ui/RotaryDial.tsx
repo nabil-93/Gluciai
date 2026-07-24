@@ -145,6 +145,14 @@ export interface RotaryDialProps {
   animateOnMount?: boolean;
   /** Stagger the sweep start (ms) so a row of dials fires in sequence. */
   animateDelay?: number;
+  /**
+   * Custom centre content — a label / value / caption stack, rendered in the
+   * face's clear zone instead of the plain number. Keep it inside ~58% of
+   * `size` or it runs under the pointer sweep.
+   */
+  children?: React.ReactNode;
+  /** Captions under the two ends of the arc. Defaults to the 0..100 scale. */
+  scaleLabels?: [string, string];
 }
 
 // Sweep timings (ms) — like an instrument cluster self-test:
@@ -166,6 +174,8 @@ export function RotaryDial({
   size = 120,
   animateOnMount = false,
   animateDelay = 0,
+  children,
+  scaleLabels,
 }: RotaryDialProps) {
   const target = Math.max(0, Math.min(100, value));
   const reduceMotion = useReduceMotion();
@@ -323,14 +333,16 @@ export function RotaryDial({
           (e.g. "100g") auto-shrink so they never overflow the face. */}
       {!hideNumber ? (
         <View pointerEvents="none" style={styles.center}>
-          <Text
-            style={[styles.value, { fontSize: size * 0.26 }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.5}
-          >
-            {shown}
-          </Text>
+          {children ?? (
+            <Text
+              style={[styles.value, { fontSize: size * 0.26 }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.5}
+            >
+              {shown}
+            </Text>
+          )}
         </View>
       ) : null}
 
@@ -348,7 +360,7 @@ export function RotaryDial({
           },
         ]}
       >
-        0
+        {scaleLabels?.[0] ?? '0'}
       </Text>
       <Text
         style={[
@@ -361,7 +373,7 @@ export function RotaryDial({
           },
         ]}
       >
-        100
+        {scaleLabels?.[1] ?? '100'}
       </Text>
     </View>
   );

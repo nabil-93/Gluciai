@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +11,8 @@ import {
 } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +20,7 @@ import type { TFunction } from 'i18next';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { AddedSugarCard, SUGAR_SEARCH_NAME } from '@/components/AddedSugarCard';
-import { AnimatedRobot, GlycemicBar, glycemicTone } from '@/components/ui';
+import { AnimatedRobot, GlycemicBar, RotaryDial, glycemicTone } from '@/components/ui';
 import { MealAssistant } from '@/components/MealAssistant';
 import { MealEditModal } from '@/components/MealEditModal';
 import { MEAL_TYPES, MealTypeModal } from '@/components/MealTypeModal';
@@ -116,6 +119,62 @@ function dailyCalorieGoal(
   const s = gender === 'female' ? -161 : 5;
   const bmr = 10 * weight + 6.25 * height - 5 * age + s;
   return Math.round((bmr * 1.45) / 50) * 50;
+}
+
+/** Web-only: print an HTML document that is NOT the live page. expo-print's
+ *  web shim calls window.print() and drops the html, which would export the
+ *  app screen instead of the report, so the report gets its own frame. */
+function printHtmlInFrame(html: string) {
+  return new Promise<void>((resolve) => {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(frame);
+    const doc = frame.contentWindow?.document;
+    if (!doc) {
+      frame.remove();
+      resolve();
+      return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+    // Give the photo a moment to decode — printing too early drops it.
+    setTimeout(() => {
+      try {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+      } catch {
+        // popup/print blocked — nothing else to try
+      }
+      setTimeout(() => frame.remove(), 1500);
+      resolve();
+    }, 350);
+  });
+}
+
+/** Food names and AI copy go straight into the shared PDF's markup. */
+function esc(s: string) {
+  return String(s).replace(/[&<>"]/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'
+  );
+}
+
+/** Full-scale reading of the calorie dial: one substantial main meal, i.e.
+ *  ~40 % of the day's allowance, rounded to a clean 50 kcal step so the
+ *  number printed under the arc stays legible (2000 kcal/day → 800). */
+function mealCalorieScale(dailyGoal: number) {
+  return Math.max(400, Math.round((dailyGoal * 0.4) / 50) * 50);
+}
+
+/** Where the needle sits translated into words + colour. The dial itself
+ *  already runs green → red; this repeats it in text for anyone who reads the
+ *  chip before the gauge (and for screen readers). */
+function calorieTone(pct: number) {
+  if (pct <= 35) return { key: 'analysis.calLight', dot: GREEN, bg: '#e8f7ef', text: GREEN_TXT };
+  if (pct <= 65) return { key: 'analysis.calModerate', dot: '#eab308', bg: '#fdf6e3', text: '#8A6100' };
+  if (pct <= 90) return { key: 'analysis.calHigh', dot: ORANGE, bg: '#fff2e2', text: ORANGE_TXT };
+  return { key: 'analysis.calVeryHigh', dot: '#ef4444', bg: '#fdeceb', text: '#B3261E' };
 }
 
 /** Minutes of each activity needed to burn `cal` kcal (moderate intensity,
@@ -311,6 +370,7 @@ export default function ScanResultScreen() {
   // counted; a fresh scan starts unsaved as before.
   const [saved, setSaved] = useState(() => pending?.alreadySaved ?? false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editStartNew, setEditStartNew] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
@@ -411,6 +471,10 @@ export default function ScanResultScreen() {
   const eatenF = todays.reduce((s, m) => s + (m.result.fat || 0), 0);
   const projected = eaten + (saved ? 0 : cals);
   const mealSharePct = Math.min(100, Math.round((cals / goal) * 100));
+  // Calorie dial: this plate against what one main meal is worth.
+  const calScaleMax = mealCalorieScale(goal);
+  const calPct = Math.min(100, Math.round((cals / calScaleMax) * 100));
+  const calTone = calorieTone(calPct);
   const remainCal = Math.max(0, Math.round(goal - projected));
   const remainP = Math.max(0, Math.round((goal * 0.25) / 4 - eatenP - (saved ? 0 : P)));
   const remainC = Math.max(0, Math.round((goal * 0.5) / 4 - eatenC - (saved ? 0 : C)));
@@ -429,6 +493,234 @@ export default function ScanResultScreen() {
     quality.reasons.length > 0
       ? quality.reasons.slice(0, 2).join(' · ')
       : t('analysis.adviceGood');
+
+  /* ── Share the report as a PDF ──────────────────────────────────────────
+     Not a screenshot: the same report re-laid out for paper, so it stays
+     sharp, selectable and paginates properly when a patient sends it to
+     their doctor. Everything on screen is here, in the app's language. */
+  const buildPdfHtml = () => {
+    // A meal reopened from the journal keeps its real timestamp; a fresh scan
+    // is stamped now.
+    const createdAt =
+      meals.find((m) => m.id === savedMeal?.id)?.created_at ?? new Date().toISOString();
+    const dt = new Date(createdAt);
+    const stamp = `${dt.toLocaleDateString(i18n.language)} · ${dt.toLocaleTimeString(
+      i18n.language,
+      { hour: '2-digit', minute: '2-digit' }
+    )}`;
+    const photo = imageBase64
+      ? `data:image/jpeg;base64,${imageBase64}`
+      : imageUri && /^https?:/.test(imageUri)
+        ? imageUri
+        : null;
+    const mealLabel = mealType ? t(`mealType.${mealType}`) : '';
+
+    const row = (label: string, value: string) =>
+      `<tr><td>${esc(label)}</td><td class="v">${esc(value)}</td></tr>`;
+    const bar = (label: string, pct: number) =>
+      `<div class="mrow"><span>${esc(label)}</span>
+         <span class="track"><span class="fill" style="width:${Math.min(100, pct)}%"></span></span>
+         <b>${pct}%</b></div>`;
+
+    return `<!doctype html><html lang="${i18n.language}"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  @page { size: A4; margin: 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+         color: #1e2a23; margin: 0; font-size: 11.5px; line-height: 1.45; }
+  h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: -.3px; }
+  h2 { font-size: 12.5px; margin: 0 0 8px; color: #0F7A42; text-transform: uppercase;
+       letter-spacing: .6px; }
+  .sub { color: #67736B; font-size: 11px; margin: 0; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start;
+          border-bottom: 2px solid #0F7A42; padding-bottom: 10px; margin-bottom: 14px; }
+  .brand { font-weight: 800; color: #0F7A42; font-size: 12px; letter-spacing: .5px; }
+  .grid { display: flex; gap: 12px; margin-bottom: 14px; }
+  .card { border: 1px solid #e6ebe7; border-radius: 10px; padding: 12px 14px;
+          break-inside: avoid; }
+  .card.grow { flex: 1; }
+  .photo { width: 190px; height: 140px; object-fit: cover; border-radius: 10px; }
+  .kcal { font-size: 34px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+  .kcal small { font-size: 13px; font-weight: 600; color: #67736B; margin-left: 4px; }
+  .chip { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 10.5px;
+          font-weight: 700; margin-top: 8px; }
+  .scale { height: 7px; border-radius: 4px; margin: 10px 0 4px;
+           background: linear-gradient(90deg,#20bf6b,#eab308,#f7941d,#ef4444); position: relative; }
+  .scale i { position: absolute; top: -3px; width: 3px; height: 13px; background: #1e2a23;
+             border-radius: 2px; }
+  .scaleEnds { display: flex; justify-content: space-between; color: #8b958e; font-size: 9.5px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 5px 0; border-bottom: 1px solid #f0f3f1; }
+  td.v { text-align: right; font-weight: 700; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+       color: #67736B; padding-bottom: 6px; border-bottom: 1px solid #e6ebe7; }
+  .mrow { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .mrow span:first-child { width: 92px; color: #5C6860; }
+  .track { flex: 1; height: 6px; border-radius: 3px; background: #eef1ee; overflow: hidden; }
+  .fill { display: block; height: 100%; background: #20bf6b; }
+  .warn { border-color: #f2d9b0; background: #fffaf1; }
+  .warn li { margin: 3px 0; }
+  .foot { margin-top: 16px; padding-top: 10px; border-top: 1px solid #e6ebe7;
+          color: #8b958e; font-size: 9.5px; }
+</style></head><body>
+
+  <div class="head">
+    <div>
+      <h1>${esc(result.food_name)}</h1>
+      <p class="sub">${esc(stamp)}${mealLabel ? ` · ${esc(mealLabel)}` : ''} · ${esc(
+        result.estimated_portion
+      )}</p>
+    </div>
+    <div style="text-align:right">
+      <div class="brand">GluciAI</div>
+      <p class="sub">${esc(t('result.title'))}</p>
+    </div>
+  </div>
+
+  <div class="grid">
+    ${photo ? `<img class="photo" src="${photo}" />` : ''}
+    <div class="card grow">
+      <h2>${esc(t('result.calories'))}</h2>
+      <div class="kcal">${cals}<small>kcal</small></div>
+      <div class="scale"><i style="left:calc(${calPct}% - 1.5px)"></i></div>
+      <div class="scaleEnds"><span>0</span><span>${calScaleMax} kcal</span></div>
+      <span class="chip" style="background:${calTone.bg};color:${calTone.text}">
+        ${esc(t(calTone.key))} · ${calPct}%
+      </span>
+    </div>
+    <div class="card">
+      <h2>${esc(t('analysis.healthScore'))}</h2>
+      <div class="kcal">${quality.score}<small>/100</small></div>
+      <p class="sub" style="margin-top:4px">${esc(quality.label)}</p>
+      <p class="sub">Nutri-Score : <b>${grade}</b></p>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card grow">
+      <h2>${esc(t('analysis.distribution'))}</h2>
+      <table>
+        ${row(t('result.protein'), `${P} g · ${pPct}%`)}
+        ${row(t('result.carbs'), `${C} g · ${cPct}%`)}
+        ${row(t('result.fat'), `${F} g · ${fPct}%`)}
+        ${row(t('result.fiber'), `${Math.round(result.fiber)} g`)}
+        ${row(t('result.sugar'), `${Math.round(result.sugar)} g`)}
+      </table>
+    </div>
+    <div class="card grow">
+      <h2>${esc(t('analysis.giLabel'))}</h2>
+      <table>
+        ${row(t('analysis.giLabel'), `${gi}`)}
+        ${row(t('analysis.glLabel'), `${gl} · ${t(`result.${glInfo.key}`)}`)}
+        ${row(t('analysis.hydration'), `${mealWaterMl} ml`)}
+      </table>
+      ${
+        giCoveragePct < 100
+          ? `<p class="sub" style="margin-top:8px">${esc(
+              t('analysis.giCoverage', { pct: giCoveragePct })
+            )}</p>`
+          : ''
+      }
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>${esc(t('analysis.detectedFoods'))}</h2>
+    <table>
+      <tr><th>${esc(t('analysis.pdfFood'))}</th><th style="text-align:right">g</th>
+          <th style="text-align:right">kcal</th><th style="text-align:right">${esc(
+            t('result.carbs')
+          )}</th></tr>
+      ${
+        items
+          .map(
+            (it) =>
+              `<tr><td>${esc(it.name)}</td>
+                   <td class="v">${Math.round(it.portion_grams)}</td>
+                   <td class="v">${Math.round(it.calories)}</td>
+                   <td class="v">${Math.round(it.carbohydrates)} g</td></tr>`
+          )
+          .join('') || `<tr><td colspan="4">—</td></tr>`
+      }
+    </table>
+  </div>
+
+  <div class="grid">
+    <div class="card grow">
+      <h2>${esc(t('analysis.vitamins'))}</h2>
+      ${bar(t('analysis.vitaminA'), micros.a)}
+      ${bar(t('analysis.vitaminC'), micros.c)}
+      ${bar(t('analysis.iron'), micros.fe)}
+      ${bar(t('analysis.calcium'), micros.ca)}
+      ${bar(t('analysis.potassium'), micros.k)}
+    </div>
+    <div class="card grow">
+      <h2>${esc(t('analysis.toBurn'))}</h2>
+      <table>
+        ${row(t('analysis.walk'), `${burn.walk} min`)}
+        ${row(t('analysis.run'), `${burn.run} min`)}
+        ${row(t('analysis.bike'), `${burn.bike} min`)}
+        ${row(t('analysis.swim'), `${burn.swim} min`)}
+      </table>
+    </div>
+    <div class="card grow">
+      <h2>${esc(t('analysis.goals'))}</h2>
+      <table>${row(t('analysis.ofDailyCalories'), `${mealSharePct}%`)}</table>
+      <p class="sub" style="margin:10px 0 2px">${esc(t('analysis.remaining'))}</p>
+      <table>
+        ${row('kcal', `${remainCal}`)}
+        ${row(t('result.protein'), `${remainP} g`)}
+        ${row(t('result.carbs'), `${remainC} g`)}
+        ${row(t('result.fat'), `${remainF} g`)}
+      </table>
+    </div>
+  </div>
+
+  ${
+    warnings.length > 0
+      ? `<div class="card warn"><h2>${esc(t('result.warnTitle'))}</h2>
+           <ul>${warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></div>`
+      : ''
+  }
+
+  <div class="foot">${esc(t('analysis.pdfFooter'))}</div>
+</body></html>`;
+  };
+
+  const onShare = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      const html = buildPdfHtml();
+      // Web has no file to hand off, and expo-print's web shim just prints the
+      // live page — so render the report into its own frame and print THAT;
+      // the browser's "Save as PDF" is the share path there.
+      if (Platform.OS === 'web') {
+        await printHtmlInFrame(html);
+        return;
+      }
+      // A binary built before expo-sharing was added throws here rather than
+      // answering false — treat that the same as "no share sheet" and fall
+      // back to the OS print sheet, which can still save/send the PDF.
+      const canShare = await Sharing.isAvailableAsync().catch(() => false);
+      if (!canShare) {
+        await Print.printAsync({ html });
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        UTI: 'com.adobe.pdf',
+        dialogTitle: t('analysis.sharePdf'),
+      });
+    } catch {
+      // Cancelled from the system sheet, or printing unavailable — nothing to
+      // recover from, and an error toast here would just be noise.
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const persist = async (meal: MealType) => {
     if (saved) return;
@@ -530,7 +822,16 @@ export default function ScanResultScreen() {
               </Svg>
             </Pressable>
             <Text style={styles.navTitle}>{t('result.title')}</Text>
-            <Pressable style={styles.navBtn} onPress={() => setAssistantOpen(true)} hitSlop={8}>
+            {/* Share — exports the whole report as a PDF and hands it to the
+                system share sheet (a patient sending it to their doctor). */}
+            <Pressable
+              style={[styles.navBtn, sharing && styles.navBtnBusy]}
+              onPress={onShare}
+              disabled={sharing}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('analysis.sharePdf')}
+            >
               <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <Circle cx={18} cy={5} r={3} />
                 <Circle cx={6} cy={12} r={3} />
@@ -589,20 +890,34 @@ export default function ScanResultScreen() {
           {/* ── Calories + score (row 1) then macros (row 2) ── */}
           <View style={styles.card}>
             <View style={styles.calTop}>
-              <View style={styles.calLeft}>
-                <View style={styles.calIcon}>
-                  <Svg width={21} height={21} viewBox="0 0 24 24" fill={ORANGE}>
-                    <Path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-                  </Svg>
+              {/* The plate's energy on a gauge instead of a flat number: the
+                  needle and its ticks run green → red as the meal eats into
+                  what one main meal is worth, so "how heavy is this?" is read
+                  before any digit is. The figures stay in the middle. */}
+              <RotaryDial
+                size={116}
+                value={calPct}
+                animateOnMount
+                scaleLabels={['0', String(calScaleMax)]}
+              >
+                <Text style={styles.calDialLabel}>{t('result.calories')}</Text>
+                <View style={styles.calValueRow}>
+                  <Text style={styles.calValue}>{cals}</Text>
+                  <Text style={styles.calUnit}>kcal</Text>
                 </View>
-                <View>
-                  <Text style={styles.calLabel}>{t('result.calories')}</Text>
-                  <View style={styles.calValueRow}>
-                    <Text style={styles.calValue}>{cals}</Text>
-                    <Text style={styles.calUnit}>kcal</Text>
-                  </View>
-                  <Text style={styles.calSub}>{t('analysis.estimation')}</Text>
+                <Text style={styles.calSub}>{t('analysis.estimation')}</Text>
+              </RotaryDial>
+
+              <View style={styles.calTone}>
+                <View style={[styles.calToneChip, { backgroundColor: calTone.bg }]}>
+                  <View style={[styles.calToneDot, { backgroundColor: calTone.dot }]} />
+                  <Text style={[styles.calToneText, { color: calTone.text }]} numberOfLines={1}>
+                    {t(calTone.key)}
+                  </Text>
                 </View>
+                <Text style={styles.calToneHint}>
+                  {t('analysis.calOfMeal', { max: calScaleMax })}
+                </Text>
               </View>
 
               <View style={styles.scoreCol}>
@@ -1081,6 +1396,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  navBtnBusy: { opacity: 0.5 },
   navTitle: { color: '#fff', fontSize: 17, fontFamily: F700 },
   photo: {
     marginTop: 6,
@@ -1128,20 +1444,26 @@ const styles = StyleSheet.create({
   // Calories card
   calTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
   macroRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, paddingHorizontal: 4 },
-  calLeft: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  calIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: '#fff2e2',
+  // Centre stack of the calorie dial. Sizes are held down on purpose: the
+  // clear zone inside the needle sweep is only ~58% of the dial's width.
+  calDialLabel: { fontSize: 9.5, color: LABEL, fontFamily: F600 },
+  calValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
+  calValue: { fontSize: 23, lineHeight: 27, fontFamily: F800, color: INK, letterSpacing: -0.5 },
+  calUnit: { fontSize: 10, color: MUTED, fontFamily: F600 },
+  calSub: { fontSize: 8.5, color: MUTED, fontFamily: F500 },
+
+  calTone: { flex: 1, minWidth: 0, alignItems: 'center', gap: 5 },
+  calToneChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 5,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
   },
-  calLabel: { fontSize: 11, color: LABEL, fontFamily: F600 },
-  calValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
-  calValue: { fontSize: 26, fontFamily: F800, color: INK, letterSpacing: -0.5 },
-  calUnit: { fontSize: 12, color: MUTED, fontFamily: F600 },
-  calSub: { fontSize: 10, color: MUTED, fontFamily: F500, marginTop: 1 },
+  calToneDot: { width: 6, height: 6, borderRadius: 3 },
+  calToneText: { fontSize: 10.5, fontFamily: F800 },
+  calToneHint: { fontSize: 9, lineHeight: 12, color: MUTED, fontFamily: F500, textAlign: 'center' },
 
   // Glycemic load — sits under the shared GlycemicBar, same card
   glRow: {

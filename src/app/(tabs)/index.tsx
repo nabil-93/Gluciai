@@ -19,6 +19,7 @@ import Svg, {
   Ellipse,
   G,
   Line,
+  LinearGradient as SvgLinearGradient,
   Path,
   RadialGradient,
   Rect,
@@ -136,6 +137,62 @@ function ChevLeft({ size = 13, color = '#6b7280' }: { size?: number; color?: str
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Path d="M15 6l-6 6 6 6" stroke={color} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </Svg>
+  );
+}
+
+/* Handset + "SOS" wordmark, auto-traced from the reference sticker artwork so
+ * the shapes ARE the original ones (the 95px PNG itself is far too small to
+ * ship). Coordinates are in the tracing bitmap's space: the reference face
+ * circle is centred on (180, 236) with r 136, hence the transform below.
+ * The O is the one glyph that is drawn rather than traced — at 8 source pixels
+ * wide its counter traced into a slot, so it is rebuilt as a clean ring on the
+ * traced outline's own box. */
+const SOS_GLYPH =
+  'M 116.994 160.898 C 108.973 163.454, 99.292 172.027, 95.766 179.698 C 90.344 191.489, 94.716 220.135, 105.578 244 C 114.499 263.600, 124.666 278.648, 138.920 293.347 C 157.408 312.412, 182.017 327, 195.690 327 C 207.377 327, 224 312.732, 224 302.701 C 224 299.026, 223.319 298.140, 212.542 287.785 C 192.407 268.438, 192.648 268.496, 179.392 279.688 C 171.414 286.424, 169.892 286.034, 158.125 274.250 C 147.214 263.323, 137.688 249.964, 132.067 237.707 C 125.459 223.300, 125.769 220.252, 134.424 214.507 C 140.572 210.426, 144.709 206.008, 145.561 202.613 C 146.046 200.681, 139.699 184.919, 131.362 167.350 C 128.796 161.943, 122.536 159.132, 116.994 160.898 ' +
+  'M 190.500 212.403 C 184.099 215.228, 181.383 221.165, 183.574 227.539 C 185.074 231.899, 187.243 233.907, 194.500 237.650 C 201.324 241.169, 203 242.835, 203 246.098 C 203 249.392, 199.831 252, 195.828 252 C 193.887 252, 192.333 250.992, 190.432 248.500 C 187.545 244.715, 185.014 244.073, 182.921 246.595 C 179.741 250.426, 188.215 258, 195.680 258 C 205.120 258, 210 253.608, 210 245.112 C 210 238.823, 207.052 235.065, 198.887 230.943 C 189.859 226.386, 187.904 221.262, 193.957 218.023 C 196.810 216.496, 197.606 216.715, 201.437 220.079 C 206.963 224.931, 211.356 222.244, 207.505 216.367 C 204.378 211.595, 196.493 209.757, 190.500 212.403 ' +
+  'M 217.1 234.7 A 15.2 23.3 0 1 1 247.5 234.7 A 15.2 23.3 0 1 1 217.1 234.7 Z M 223.7 234.7 A 8.6 17.3 0 1 1 240.9 234.7 A 8.6 17.3 0 1 1 223.7 234.7 Z ' +
+  'M 262 212.695 C 255.272 216.165, 253.339 225.348, 258.071 231.363 C 259.085 232.652, 263.081 235.371, 266.949 237.404 C 276.390 242.365, 277.916 245.174, 273.545 249.545 C 270.192 252.898, 267.548 252.629, 263.297 248.500 C 261.315 246.575, 259.349 245, 258.928 245 C 252.782 245, 253.916 251.964, 260.724 256.023 C 270.904 262.093, 283.786 255.137, 282.669 244.174 C 282.134 238.922, 278.675 234.951, 271.500 231.351 C 268.750 229.971, 265.712 228.133, 264.750 227.266 C 262.264 225.027, 262.512 220.455, 265.223 218.557 C 268.522 216.246, 270.789 216.646, 273.940 220.096 C 275.645 221.962, 277.509 223.050, 278.634 222.835 C 281.613 222.267, 281.430 218.513, 278.249 214.953 C 274.592 210.860, 267.475 209.871, 262 212.695';
+/* face r 35 ÷ traced face r 136, then eased in 8% so the artwork keeps the
+ * same breathing room inside this badge's (thicker) bezel as it has there. */
+const SOS_GLYPH_SCALE = ((35 / 136) * 0.92).toFixed(5);
+
+/* SOS badge — vector rebuild of the emergency-call sticker the design calls
+ * for: white rim, deep-red bezel, glossy red face, big white handset and the
+ * word SOS inside the disc. Vector (not the PNG) so it stays sharp at 3x. */
+function SosBadge({ size = 44 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      <Defs>
+        {/* Bezel: lit on the top-left, deep red where it turns away. */}
+        <SvgLinearGradient id="sosBezel" x1="0.18" y1="0" x2="0.8" y2="1">
+          <Stop offset="0" stopColor="#e8453a" />
+          <Stop offset="0.5" stopColor="#cf1f1a" />
+          <Stop offset="1" stopColor="#9d100d" />
+        </SvgLinearGradient>
+        {/* Face: the raised button top. */}
+        <SvgLinearGradient id="sosFace" x1="0.5" y1="0" x2="0.5" y2="1">
+          <Stop offset="0" stopColor="#f4564b" />
+          <Stop offset="0.55" stopColor="#e1281f" />
+          <Stop offset="1" stopColor="#c81a15" />
+        </SvgLinearGradient>
+        {/* Gloss: the highlight sitting on the upper half of the dome. */}
+        <SvgLinearGradient id="sosGloss" x1="0.5" y1="0" x2="0.5" y2="1">
+          <Stop offset="0" stopColor="#ffffff" stopOpacity={0.42} />
+          <Stop offset="1" stopColor="#ffffff" stopOpacity={0} />
+        </SvgLinearGradient>
+      </Defs>
+
+      <Circle cx={50} cy={50} r={50} fill="#ffffff" />
+      <Circle cx={50} cy={50} r={43} fill="url(#sosBezel)" />
+      <Circle cx={50} cy={50} r={35} fill="url(#sosFace)" />
+      <Ellipse cx={50} cy={30} rx={30} ry={18} fill="url(#sosGloss)" />
+
+      {/* Handset + SOS: the artwork traced straight off the reference sticker,
+          mapped so the face circle here plays the role the face plays there. */}
+      <G transform={`translate(50 50) scale(${SOS_GLYPH_SCALE}) translate(-180 -236)`}>
+        <Path fill="#ffffff" fillRule="evenodd" d={SOS_GLYPH} />
+      </G>
     </Svg>
   );
 }
@@ -1650,8 +1707,25 @@ export default function HomeScreen() {
                 : t('home.greeting')}{' '}
               <Text style={{ fontSize: 24 }}>👋</Text>
             </Text>
-            <Text style={styles.greetingSub}>{t('home.greetingSub')}</Text>
+            <Text style={styles.greetingSub} numberOfLines={1}>
+              {t('home.greetingSub')}
+            </Text>
           </View>
+          {/* SOS — one tap from anywhere on the home screen to the emergency
+              page (SAMU / contact / medical ID). Kept next to the greeting so
+              a bystander finds it instantly. */}
+          <PressableScale
+            onPress={() => {
+              if (Platform.OS !== 'web') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }
+              router.push('/emergency' as any);
+            }}
+            accessibilityLabel={t('home.sosA11y')}
+            style={styles.sosBtn}
+          >
+            <SosBadge size={44} />
+          </PressableScale>
           <PressableScale
             onPress={() => router.push('/ai-journal' as any)}
             accessibilityLabel={t('notifications.open', {
@@ -2299,6 +2373,19 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     color: '#6b7280',
     marginTop: 3,
+  },
+  /* SOS — the emergency sticker, sized to sit level with the robot. */
+  sosBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#8f1410',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    elevation: 6,
   },
   robotBtn: {
     width: 58,

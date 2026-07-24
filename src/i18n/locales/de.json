@@ -3,6 +3,11 @@
     "mealPhoto": "Foto der Mahlzeit",
     "scanSuccess": "Scan erfolgreich",
     "estimation": "Schätzung",
+    "calLight": "Leicht",
+    "calModerate": "Moderat",
+    "calHigh": "Hoch",
+    "calVeryHigh": "Sehr hoch",
+    "calOfMeal": "von ~{{max}} kcal für eine ganze Mahlzeit",
     "healthScore": "Gesundheitswert",
     "nutriScore": "Nutri-Score",
     "detectedFoods": "Erkannte Lebensmittel",
@@ -76,7 +81,10 @@
     "glHint": "Sie folgt der Portion — der Index bewertet die Qualität der Kohlenhydrate, die Last ihre Menge.",
     "mealMomentAsk": "Wähle die Mahlzeit zum Speichern",
     "mealPickerBody": "Zu welcher Mahlzeit gehört dieser Teller? Nötig, um ihn ins Journal aufzunehmen.",
-    "mealMomentMoved": "Wird zu „{{meal}}“ verschoben — auf Speichern tippen"
+    "mealMomentMoved": "Wird zu „{{meal}}“ verschoben — auf Speichern tippen",
+    "sharePdf": "Bericht teilen (PDF)",
+    "pdfFooter": "Von GluciAI erstellter Bericht — Werte aus Foto und eingegebenen Portionen geschätzt, von einer Fachperson zu bewerten. Ersetzt keine ärztliche Beratung.",
+    "pdfFood": "Lebensmittel"
   },
   "common": {
     "appName": "GluciAI",
@@ -274,7 +282,8 @@
     "goodEvening": "Guten Abend",
     "greeting": "Hallo",
     "greetingName": "Hallo {{name}}",
-    "greetingSub": "Kümmere dich heute um deine Gesundheit",
+    "greetingSub": "Bleib heute gesund",
+    "sosA11y": "Notfall — Hilfe rufen",
     "aiInsight": "KI-Einblick",
     "todayGlucose": "Blutzucker",
     "todayInsulin": "Insulin",
