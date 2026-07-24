@@ -176,6 +176,14 @@ export default function BolusScreen() {
     });
     setEngine(result);
     setEditDose(result.total);
+    // A hypo is a STOP, not a dose. Never ask the AI to narrate a number the
+    // patient must not act on — go straight to the safety result so the page
+    // can only ever say "treat the low first, no bolus now".
+    if (result.flags.includes('hypo')) {
+      setReport(null);
+      setPhase('report');
+      return;
+    }
     setPhase('loading');
     // The AI writes the detailed report; if unreachable we still show the
     // engine result with the local explanations.
@@ -745,6 +753,11 @@ export default function BolusScreen() {
               </View>
             ) : null}
 
+            {/* Everything below narrates a DOSE — its warnings, the AI report,
+                the "why this number". None of it may show for a hypo, where
+                the only safe message is "treat the low, no bolus". */}
+            {!isHypo ? (
+              <>
             {/* AI warnings */}
             {report?.warnings?.length
               ? report.warnings.map((w, i) => (
@@ -798,6 +811,8 @@ export default function BolusScreen() {
                 );
               })()
             )}
+              </>
+            ) : null}
 
             {/* Fixed disclaimer */}
             <View style={styles.disclaimerBox}>
