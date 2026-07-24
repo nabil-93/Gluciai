@@ -1,5 +1,6 @@
 import React from 'react';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import type { TFunction } from 'i18next';
 
 import type { DayEvent } from '@/services/dayLog';
 
@@ -171,4 +172,16 @@ export function CalendarGlyph({ size = 22, color = '#fff' }: P) {
       <Path d="M4 5.5h16a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z" />
     </Svg>
   );
+}
+
+/**
+ * Localised label for a stored activity kind ('walk' | 'run' | 'bike' | 'gym'
+ * | 'other'). The raw kind was being shown straight from the record, so a
+ * French user saw "walk"/"run" in an otherwise French timeline. The labels
+ * already exist under `activityScreen.kind*`; this maps to them, falling back
+ * to the raw value for any kind that predates the list.
+ */
+export function activityKindLabel(t: TFunction, kind: string): string {
+  const cap = kind.charAt(0).toUpperCase() + kind.slice(1);
+  return t(`activityScreen.kind${cap}`, { defaultValue: kind });
 }

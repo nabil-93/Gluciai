@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { useTranslation } from 'react-i18next';
 
 import type { DayEvent } from '@/services/dayLog';
-import { logoFor } from './metricIcons';
+import { activityKindLabel, logoFor } from './metricIcons';
 
 /** Every entry the timeline shows — now including notes, status changes and
  *  settings changes, so nothing the patient did is hidden. */
@@ -116,7 +116,7 @@ export function DetailSheet({
     );
     rows.push({ label: t('journalV2.detailHour'), value: time });
     rows.push({ label: t('journalV2.detailDate'), value: date });
-    rows.push({ label: t('journalV2.mActivity'), value: event.activity.kind });
+    rows.push({ label: t('journalV2.mActivity'), value: activityKindLabel(t, event.activity.kind) });
   } else if (event.kind === 'measure') {
     title = t(`journalV2.measure_${event.measure.kind}`, t('day.measures'));
     big = (

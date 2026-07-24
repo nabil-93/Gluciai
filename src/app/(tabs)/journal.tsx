@@ -7,9 +7,10 @@ import { useTranslation } from 'react-i18next';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
+import { PastDayBanner } from '@/components/ui';
 import { CalendarSheet } from '@/components/journal/CalendarSheet';
 import { DetailSheet, type VisibleEvent } from '@/components/journal/DetailSheet';
-import { CalendarGlyph, METRIC, logoFor, type MetricKey } from '@/components/journal/metricIcons';
+import { CalendarGlyph, METRIC, activityKindLabel, logoFor, type MetricKey } from '@/components/journal/metricIcons';
 import { dayScore, periodSummaries, scoreBand } from '@/components/journal/dayScore';
 import { confirmAsync } from '@/lib/confirm';
 import { nowDate } from '@/lib/clock';
@@ -146,7 +147,7 @@ function TimelineRow({
     sub = `${event.glucose.value} mg/dL`;
   } else if (event.kind === 'activity') {
     title = t('journalV2.mActivity');
-    sub = `${event.activity.kind} · ${event.activity.duration_min} min`;
+    sub = `${activityKindLabel(t, event.activity.kind)} · ${event.activity.duration_min} min`;
   } else if (event.kind === 'measure') {
     title = t(`journalV2.measure_${event.measure.kind}`, t('day.measures'));
     sub = `${event.measure.value} ${event.measure.unit}`;
@@ -480,6 +481,16 @@ export default function JournalScreen() {
               <Text style={styles.navArrow}>›</Text>
             </Pressable>
           </View>
+        ) : null}
+
+        {/* Standing "this is not today" notice — the day tab looks identical
+            whatever day is selected, and its figures read as current. */}
+        {isDay && !sameDate(selectedDay, today) ? (
+          <PastDayBanner
+            date={selectedDay}
+            onToday={() => setSelectedDay(today)}
+            style={{ marginBottom: 12 }}
+          />
         ) : null}
 
         {/* ── Score card ── */}
