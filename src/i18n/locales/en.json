@@ -1128,7 +1128,9 @@
     "sportDurQ": "How long?",
     "sportTimingQ": "When?",
     "timing_done": "Already done",
-    "timing_planned": "Planned after the meal"
+    "timing_planned": "Planned after the meal",
+    "calcTitle": "How this number was reached",
+    "calcTotal": "Total dose"
   },
   "day": {
     "emptyTitle": "Nothing that day",

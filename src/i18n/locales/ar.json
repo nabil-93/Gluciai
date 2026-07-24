@@ -1128,7 +1128,9 @@
     "sportDurQ": "كم المدة؟",
     "sportTimingQ": "متى؟",
     "timing_done": "قمت به",
-    "timing_planned": "مقرر بعد الوجبة"
+    "timing_planned": "مقرر بعد الوجبة",
+    "calcTitle": "كيف تم حساب هذا الرقم",
+    "calcTotal": "الجرعة الإجمالية"
   },
   "day": {
     "emptyTitle": "لا شيء في ذلك اليوم",

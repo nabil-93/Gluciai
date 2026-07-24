@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView, Spinner } from '@/components/ui';
+import { DoseHero } from '@/components/bolus/DoseHero';
 import {
   checkModifiedDoseAI,
   requestBolusReport,
@@ -553,106 +554,95 @@ export default function BolusScreen() {
         {/* ════════ PHASE: REPORT ════════ */}
         {phase === 'report' && engine ? (
           <FadeInView>
-            {/* Dose hero */}
-            <View style={[styles.doseCard, isHypo && { backgroundColor: '#B3261E' }]}>
-              <Text style={styles.doseLabel}>
-                {isHypo ? t('bolus.hypoNoDose') : t('bolus.recommended')}
-              </Text>
-              <View style={styles.doseRow}>
-                <Text style={styles.doseValue}>{fmtU(engine.total)}</Text>
-                <Text style={styles.doseUnit}>U</Text>
-              </View>
-              {!isHypo && engine.total > 0 && engine.bolusInsulinName ? (
-                <Text style={styles.injectWith}>
-                  💉 {t('bolus.injectWith', { name: engine.bolusInsulinName })} ·{' '}
-                  {t(`bolus.meal_${engine.mealTime}`)}
-                </Text>
-              ) : null}
-              <View style={styles.breakdown}>
-                {engine.mealBolus > 0 ? (
-                  <View style={styles.breakRow}>
-                    <Text style={styles.breakLabel}>
-                      🍽️ {t('bolus.brMeal', { carbs: engine.carbs, ratio: engine.ratio })}
-                    </Text>
-                    <Text style={styles.breakValue}>+{fmtU(engine.mealBolus)} U</Text>
-                  </View>
-                ) : null}
-                {engine.correction > 0 ? (
-                  <View style={styles.breakRow}>
-                    <Text style={styles.breakLabel}>
-                      🩸 {t('bolus.brCorrection', { glucose: engine.glucose, target: engine.targetMid })}
-                    </Text>
-                    <Text style={styles.breakValue}>+{fmtU(engine.correction)} U</Text>
-                  </View>
-                ) : null}
-                {engine.iob > 0.1 ? (
-                  <View style={styles.breakRow}>
-                    <Text style={styles.breakLabel}>💉 {t('bolus.brIob')}</Text>
-                    <Text style={styles.breakValue}>−{fmtU(engine.iob)} U</Text>
-                  </View>
-                ) : null}
-                {engine.activityFactor < 1 ? (
-                  <View style={styles.breakRow}>
-                    <Text style={styles.breakLabel}>
-                      🏃 {t('bolus.brActivity')}
-                      {engine.recentActivity
-                        ? ` — ${kindLabel(t, engine.recentActivity.kind)}${
-                            engine.recentActivity.minutes > 0
-                              ? ` ${engine.recentActivity.minutes} min`
-                              : ''
-                          }`
-                        : ''}
-                    </Text>
-                    <Text style={styles.breakValue}>
-                      −{Math.round((1 - engine.activityFactor) * 100)}%
-                    </Text>
-                  </View>
-                ) : null}
-                {engine.trendFactor !== 1 ? (
-                  <View style={styles.breakRow}>
-                    <Text style={styles.breakLabel}>
-                      {engine.trendFactor < 1 ? '📉' : '📈'} {t('bolus.brTrend')}
-                    </Text>
-                    <Text style={styles.breakValue}>
-                      {engine.trendFactor < 1 ? '−' : '+'}
-                      {Math.round(Math.abs(1 - engine.trendFactor) * 100)}%
-                    </Text>
-                  </View>
-                ) : null}
-                {engine.sickFactor > 1 ? (
-                  <View style={styles.breakRow}>
-                    <Text style={styles.breakLabel}>🤒 {t('bolus.brSick')}</Text>
-                    <Text style={styles.breakValue}>
-                      +{Math.round((engine.sickFactor - 1) * 100)}%
-                    </Text>
-                  </View>
-                ) : null}
-                {engine.stressFactor > 1 ? (
-                  <View style={styles.breakRow}>
-                    <Text style={styles.breakLabel}>😰 {t('bolus.brStress')}</Text>
-                    <Text style={styles.breakValue}>
-                      +{Math.round((engine.stressFactor - 1) * 100)}%
-                    </Text>
-                  </View>
-                ) : null}
-                {engine.statusFactor > 1 ? (
-                  <View style={styles.breakRow}>
-                    <Text style={styles.breakLabel}>🩹 {t('bolus.brLowActivity')}</Text>
-                    <Text style={styles.breakValue}>
-                      +{Math.round((engine.statusFactor - 1) * 100)}%
-                    </Text>
-                  </View>
-                ) : null}
-                {engine.alcoholFactor < 1 ? (
-                  <View style={styles.breakRow}>
-                    <Text style={styles.breakLabel}>🍷 {t('bolus.brAlcohol')}</Text>
-                    <Text style={styles.breakValue}>
-                      −{Math.round((1 - engine.alcoholFactor) * 100)}%
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
+            {/* Dose hero — the recommended dose over the insulin-pen photo */}
+            <DoseHero
+              dose={engine.total}
+              unit="U"
+              label={t('bolus.recommended')}
+              hypoLabel={t('bolus.hypoNoDose')}
+              isHypo={!!isHypo}
+              format={fmtU}
+              injectLine={
+                !isHypo && engine.total > 0 && engine.bolusInsulinName
+                  ? `💉 ${t('bolus.injectWith', { name: engine.bolusInsulinName })} · ${t(`bolus.meal_${engine.mealTime}`)}`
+                  : null
+              }
+            />
+
+            {/* How the number was reached — a clean ledger of every + and −.
+                Lifted out of the hero so the hero stays cinematic and this
+                stays readable. */}
+            {!isHypo
+              ? (() => {
+                  const rows: { icon: string; label: string; value: string; positive: boolean }[] = [];
+                  if (engine.mealBolus > 0)
+                    rows.push({
+                      icon: '🍽️',
+                      label: t('bolus.brMeal', { carbs: engine.carbs, ratio: engine.ratio }),
+                      value: `+${fmtU(engine.mealBolus)} U`,
+                      positive: true,
+                    });
+                  if (engine.correction > 0)
+                    rows.push({
+                      icon: '🩸',
+                      label: t('bolus.brCorrection', { glucose: engine.glucose, target: engine.targetMid }),
+                      value: `+${fmtU(engine.correction)} U`,
+                      positive: true,
+                    });
+                  if (engine.iob > 0.1)
+                    rows.push({ icon: '💉', label: t('bolus.brIob'), value: `−${fmtU(engine.iob)} U`, positive: false });
+                  if (engine.activityFactor < 1)
+                    rows.push({
+                      icon: '🏃',
+                      label:
+                        t('bolus.brActivity') +
+                        (engine.recentActivity
+                          ? ` — ${kindLabel(t, engine.recentActivity.kind)}${
+                              engine.recentActivity.minutes > 0 ? ` ${engine.recentActivity.minutes} min` : ''
+                            }`
+                          : ''),
+                      value: `−${Math.round((1 - engine.activityFactor) * 100)}%`,
+                      positive: false,
+                    });
+                  if (engine.trendFactor !== 1)
+                    rows.push({
+                      icon: engine.trendFactor < 1 ? '📉' : '📈',
+                      label: t('bolus.brTrend'),
+                      value: `${engine.trendFactor < 1 ? '−' : '+'}${Math.round(Math.abs(1 - engine.trendFactor) * 100)}%`,
+                      positive: engine.trendFactor > 1,
+                    });
+                  if (engine.sickFactor > 1)
+                    rows.push({ icon: '🤒', label: t('bolus.brSick'), value: `+${Math.round((engine.sickFactor - 1) * 100)}%`, positive: true });
+                  if (engine.stressFactor > 1)
+                    rows.push({ icon: '😰', label: t('bolus.brStress'), value: `+${Math.round((engine.stressFactor - 1) * 100)}%`, positive: true });
+                  if (engine.statusFactor > 1)
+                    rows.push({ icon: '🩹', label: t('bolus.brLowActivity'), value: `+${Math.round((engine.statusFactor - 1) * 100)}%`, positive: true });
+                  if (engine.alcoholFactor < 1)
+                    rows.push({ icon: '🍷', label: t('bolus.brAlcohol'), value: `−${Math.round((1 - engine.alcoholFactor) * 100)}%`, positive: false });
+                  if (rows.length === 0) return null;
+                  return (
+                    <View style={styles.calcCard}>
+                      <View style={styles.calcHead}>
+                        <Text style={styles.calcHeadIcon}>🧾</Text>
+                        <Text style={styles.calcHeadText}>{t('bolus.calcTitle')}</Text>
+                      </View>
+                      {rows.map((r, i) => (
+                        <View key={i} style={[styles.calcRow, i > 0 && styles.calcRowBorder]}>
+                          <Text style={styles.calcRowIcon}>{r.icon}</Text>
+                          <Text style={styles.calcRowLabel} numberOfLines={2}>{r.label}</Text>
+                          <Text style={[styles.calcRowValue, { color: r.positive ? '#0e7a4d' : '#B45309' }]}>
+                            {r.value}
+                          </Text>
+                        </View>
+                      ))}
+                      <View style={styles.calcTotalRow}>
+                        <Text style={styles.calcTotalLabel}>{t('bolus.calcTotal')}</Text>
+                        <Text style={styles.calcTotalValue}>{fmtU(engine.total)} U</Text>
+                      </View>
+                    </View>
+                  );
+                })()
+              : null}
 
             {/* What the engine used FROM THE PATIENT'S PROFILE — full
                 transparency: every value that fed the dose, before the AI's
@@ -982,12 +972,6 @@ const styles = StyleSheet.create({
   },
   durUnit: { fontFamily: F600, fontSize: 11.5, color: '#98A2B3' },
   ratioNote: { marginTop: 10, fontFamily: F600, fontSize: 12, color: GREEN },
-  injectWith: {
-    marginTop: 6,
-    fontFamily: F600,
-    fontSize: 12.5,
-    color: 'rgba(255,255,255,0.85)',
-  },
 
   ctxCard: {
     backgroundColor: '#f3f0ff',
@@ -1031,28 +1015,33 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  /* Dose hero */
-  doseCard: {
-    backgroundColor: INK,
-    borderRadius: 24,
-    padding: 20,
+  /* Calc receipt — how the dose was reached (light card under the hero) */
+  calcCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 16,
     marginBottom: 12,
-    ...shadows.floating,
+    ...shadows.card,
   },
-  doseLabel: { fontFamily: F600, fontSize: 13.5, color: 'rgba(255,255,255,0.65)' },
-  doseRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 2 },
-  doseValue: { fontFamily: F800, fontSize: 54, color: '#fff', letterSpacing: -1 },
-  doseUnit: { fontFamily: F700, fontSize: 22, color: 'rgba(255,255,255,0.7)' },
-  breakdown: {
-    marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.14)',
-    paddingTop: 10,
-    gap: 7,
+  calcHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  calcHeadIcon: { fontSize: 15 },
+  calcHeadText: { fontFamily: F800, fontSize: 14, color: INK },
+  calcRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11 },
+  calcRowBorder: { borderTopWidth: 1, borderTopColor: '#F1F5F2' },
+  calcRowIcon: { fontSize: 15, width: 22, textAlign: 'center' },
+  calcRowLabel: { flex: 1, fontFamily: F500, fontSize: 12.5, lineHeight: 17, color: '#41505f' },
+  calcRowValue: { fontFamily: F800, fontSize: 13.5 },
+  calcTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1.5,
+    borderTopColor: '#EAF3EE',
   },
-  breakRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  breakLabel: { flex: 1, fontFamily: F500, fontSize: 12.5, color: 'rgba(255,255,255,0.65)' },
-  breakValue: { fontFamily: F700, fontSize: 13, color: '#fff' },
+  calcTotalLabel: { fontFamily: F800, fontSize: 13.5, color: INK },
+  calcTotalValue: { fontFamily: F800, fontSize: 18, color: GREEN, letterSpacing: -0.3 },
 
   hypoCard: { backgroundColor: '#fdecec', borderRadius: 18, padding: 16, marginBottom: 12 },
   hypoTitle: { fontFamily: F700, fontSize: 15, color: '#B3261E' },

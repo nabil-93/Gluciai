@@ -1128,7 +1128,9 @@
     "sportDurQ": "Wie lange?",
     "sportTimingQ": "Wann?",
     "timing_done": "Schon gemacht",
-    "timing_planned": "Geplant nach dem Essen"
+    "timing_planned": "Geplant nach dem Essen",
+    "calcTitle": "So wurde diese Zahl berechnet",
+    "calcTotal": "Gesamtdosis"
   },
   "day": {
     "emptyTitle": "Nichts an diesem Tag",
