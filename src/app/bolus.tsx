@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -94,10 +94,14 @@ export default function BolusScreen() {
   const [report, setReport] = useState<BolusAIReport | null>(null);
   const [editing, setEditing] = useState(false);
   const [editDose, setEditDose] = useState(0);
+  /* The dose editor keeps a string mirror so the patient can type freely —
+     including a comma decimal — while `editDose` stays the numeric truth. */
+  const [editStr, setEditStr] = useState('');
   const [checking, setChecking] = useState(false);
   const [alert, setAlert] = useState<{ risk: DoseRisk; message: string; dose: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const editInputRef = useRef<TextInput>(null);
 
   /* Context the engine will use — shown as chips before calculating */
   const preview = useMemo(
@@ -236,6 +240,42 @@ export default function BolusScreen() {
 
   const fmtU = (v: number) => v.toLocaleString(i18n.language, { maximumFractionDigits: 1 });
   const isHypo = engine?.flags.includes('hypo');
+
+  /* Jump to the medical section of the profile — where the ratio, correction
+     factor, target and insulin names live. Any "fill this in your profile"
+     note on this page routes here so the fix is one tap away. */
+  const goMedical = () => router.push('/profile-edit?section=medical' as any);
+
+  /* A warning that asks the patient to complete their profile becomes a
+     shortcut to it. Detected by the word "profile" (fr/en/de all share the
+     stem) or the Arabic "الملف". */
+  const isProfileWarn = (w: string) => /profil|profile|الملف|بروفايل/i.test(w);
+
+  /* Open the dose editor seeded with the recommended dose (numeric truth +
+     its editable string). */
+  const openEditor = () => {
+    if (!engine) return;
+    setEditing(true);
+    setEditDose(engine.total);
+    setEditStr(fmtU(engine.total));
+  };
+
+  /* Nudge the dose by ±0.1 U — the real granularity of an insulin pen — and
+     keep the typed string in sync so both controls agree. */
+  const stepDose = (delta: number) => {
+    const next = Math.max(0, Math.round((editDose + delta) * 10) / 10);
+    setEditDose(next);
+    setEditStr(fmtU(next));
+  };
+
+  /* Free typing: sanitise (digits + one comma/dot), mirror it, and parse the
+     numeric value the save will actually use. */
+  const onEditType = (v: string) => {
+    const s = sanitizeDecimal(v);
+    setEditStr(s);
+    const n = parseDecimal(s);
+    if (n != null) setEditDose(n);
+  };
 
   // Deterministic "why this dose + what to do" — built from the engine, so
   // the page ALWAYS explains and advises, even when the online AI report
@@ -738,7 +778,10 @@ export default function BolusScreen() {
                         </View>
                       ))}
                       {engine.ratioSource === 'default' ? (
-                        <Text style={styles.paramWarn}>⚠️ {t('bolus.paramDefaultWarn')}</Text>
+                        <Pressable onPress={goMedical} style={styles.paramWarnRow}>
+                          <Text style={styles.paramWarn}>⚠️ {t('bolus.paramDefaultWarn')}</Text>
+                          <Text style={styles.fixLink}>{t('bolus.fixInProfile')} →</Text>
+                        </Pressable>
                       ) : null}
                     </View>
                   );
@@ -758,14 +801,25 @@ export default function BolusScreen() {
                 the only safe message is "treat the low, no bolus". */}
             {!isHypo ? (
               <>
-            {/* AI warnings */}
+            {/* AI warnings — a warning that asks the patient to fill in their
+                profile becomes a tap-through shortcut to the medical section. */}
             {report?.warnings?.length
-              ? report.warnings.map((w, i) => (
-                  <View key={i} style={styles.warnRow}>
-                    <Text style={{ fontSize: 15 }}>⚠️</Text>
-                    <Text style={styles.warnText}>{w}</Text>
-                  </View>
-                ))
+              ? report.warnings.map((w, i) =>
+                  isProfileWarn(w) ? (
+                    <Pressable key={i} onPress={goMedical} style={[styles.warnRow, styles.warnRowLink]}>
+                      <Text style={{ fontSize: 15 }}>⚠️</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.warnText}>{w}</Text>
+                        <Text style={styles.fixLink}>{t('bolus.fixInProfile')} →</Text>
+                      </View>
+                    </Pressable>
+                  ) : (
+                    <View key={i} style={styles.warnRow}>
+                      <Text style={{ fontSize: 15 }}>⚠️</Text>
+                      <Text style={styles.warnText}>{w}</Text>
+                    </View>
+                  )
+                )
               : null}
 
             {/* AI report sections */}
@@ -845,10 +899,7 @@ export default function BolusScreen() {
                 ) : null}
                 {!isHypo ? (
                   <Pressable
-                    onPress={() => {
-                      setEditing(true);
-                      setEditDose(engine.total);
-                    }}
+                    onPress={openEditor}
                     style={styles.ghostBtn}
                     disabled={saving || saved}
                   >
@@ -859,21 +910,28 @@ export default function BolusScreen() {
             ) : (
               <View style={styles.editCard}>
                 <Text style={styles.editTitle}>{t('bolus.editTitle')}</Text>
+                <Text style={styles.editHint}>{t('bolus.editHint')}</Text>
                 <View style={styles.stepperRow}>
-                  <Pressable
-                    onPress={() => setEditDose((d) => Math.max(0, Math.round((d - 0.5) * 10) / 10))}
-                    style={styles.stepBtn}
-                  >
+                  <Pressable onPress={() => stepDose(-0.1)} style={styles.stepBtn}>
                     <Text style={styles.stepBtnText}>−</Text>
                   </Pressable>
-                  <View style={{ alignItems: 'center', minWidth: 110 }}>
-                    <Text style={styles.editValue}>{fmtU(editDose)}</Text>
-                    <Text style={styles.editUnit}>U</Text>
-                  </View>
                   <Pressable
-                    onPress={() => setEditDose((d) => Math.round((d + 0.5) * 10) / 10)}
-                    style={styles.stepBtn}
+                    style={styles.editValueWrap}
+                    onPress={() => editInputRef.current?.focus()}
                   >
+                    <TextInput
+                      ref={editInputRef}
+                      value={editStr}
+                      onChangeText={onEditType}
+                      keyboardType="decimal-pad"
+                      selectTextOnFocus
+                      placeholder="0"
+                      placeholderTextColor="#c2cad6"
+                      style={styles.editValueInput}
+                    />
+                    <Text style={styles.editUnit}>U</Text>
+                  </Pressable>
+                  <Pressable onPress={() => stepDose(0.1)} style={styles.stepBtn}>
                     <Text style={styles.stepBtnText}>+</Text>
                   </Pressable>
                 </View>
@@ -1182,6 +1240,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   warnText: { flex: 1, fontFamily: F600, fontSize: 12.5, lineHeight: 18, color: '#8a5a10' },
+  warnRowLink: { borderWidth: 1.5, borderColor: '#ecd08f' },
+  fixLink: { fontFamily: F800, fontSize: 12, color: '#a25a06', marginTop: 6 },
 
   sectionHead: { fontFamily: F800, fontSize: 15.5, color: INK, marginTop: 8, marginBottom: 10 },
 
@@ -1209,7 +1269,15 @@ const styles = StyleSheet.create({
   paramValWrap: { alignItems: 'flex-end', maxWidth: '52%' },
   paramVal: { fontFamily: F800, fontSize: 13, color: INK },
   paramNote: { fontFamily: F500, fontSize: 9.5, color: '#9AA7A0', marginTop: 1 },
-  paramWarn: { fontFamily: F600, fontSize: 11, lineHeight: 15, color: '#B45309', marginTop: 10 },
+  paramWarnRow: {
+    marginTop: 12,
+    backgroundColor: '#fff8ec',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#f2e0bd',
+    padding: 11,
+  },
+  paramWarn: { fontFamily: F600, fontSize: 11, lineHeight: 15, color: '#B45309' },
 
   /* ── Deterministic "why this dose" explanation (AI-report fallback) ── */
   whySummary: { fontFamily: F700, fontSize: 13.5, lineHeight: 20, color: INK },
@@ -1262,23 +1330,53 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   editTitle: { fontFamily: F700, fontSize: 14.5, color: INK, textAlign: 'center' },
+  editHint: {
+    fontFamily: F500,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: '#8A98A7',
+    textAlign: 'center',
+    marginTop: 5,
+  },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
-    marginTop: 14,
+    gap: 16,
+    marginTop: 16,
   },
   stepBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#eef1f6',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepBtnText: { fontFamily: F800, fontSize: 22, color: INK },
+  stepBtnText: { fontFamily: F800, fontSize: 24, color: INK },
   editValue: { fontFamily: F800, fontSize: 40, color: INK, letterSpacing: -1 },
+  /* Tap-to-type dose field: reads like the big number, but it's an input. */
+  editValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#f4f7fb',
+    borderWidth: 1.5,
+    borderColor: '#e3e8f0',
+  },
+  editValueInput: {
+    fontFamily: F800,
+    fontSize: 40,
+    color: INK,
+    letterSpacing: -1,
+    textAlign: 'center',
+    width: 104,
+    padding: 0,
+  },
   editUnit: { fontFamily: F600, fontSize: 14, color: '#98A2B3' },
   editDelta: {
     fontFamily: F600,

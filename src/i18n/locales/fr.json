@@ -1087,6 +1087,8 @@
     "saveDose": "Enregistrer {{dose}} U",
     "modify": "Modifier la dose",
     "editTitle": "Ajuster la dose",
+    "editHint": "Touche le nombre pour l'écrire (virgule autorisée), ou ajuste par pas de 0,1 U.",
+    "fixInProfile": "Compléter le profil",
     "editDelta": "Différent de la recommandation ({{rec}} U) — l’IA vérifiera avant d’enregistrer.",
     "verifySave": "Vérifier et enregistrer",
     "checking": "Vérification…",

@@ -1087,6 +1087,8 @@
     "saveDose": "Save {{dose}} U",
     "modify": "Modify the dose",
     "editTitle": "Adjust the dose",
+    "editHint": "Tap the number to type it (comma allowed), or nudge it in 0.1 U steps.",
+    "fixInProfile": "Complete profile",
     "editDelta": "Differs from the recommendation ({{rec}} U) — the AI will verify before saving.",
     "verifySave": "Verify and save",
     "checking": "Checking…",

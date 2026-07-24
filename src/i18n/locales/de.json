@@ -1087,6 +1087,8 @@
     "saveDose": "{{dose}} E speichern",
     "modify": "Dosis ändern",
     "editTitle": "Dosis anpassen",
+    "editHint": "Tippe die Zahl an, um sie einzugeben (Komma erlaubt), oder ändere in 0,1-E-Schritten.",
+    "fixInProfile": "Profil vervollständigen",
     "editDelta": "Weicht von der Empfehlung ({{rec}} E) ab — die KI prüft vor dem Speichern.",
     "verifySave": "Prüfen und speichern",
     "checking": "Prüfung…",
