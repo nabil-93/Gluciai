@@ -104,7 +104,8 @@
     "offline": "Du bist offline. Daten werden bei Verbindung synchronisiert.",
     "error": "Etwas ist schiefgelaufen",
     "demoBadge": "Demo-Modus — verbinde Supabase, um Daten zu speichern",
-    "close": "Schließen"
+    "close": "Schließen",
+    "viewPhoto": "Foto ansehen"
   },
   "language": {
     "title": "Wähle deine Sprache",
@@ -1595,7 +1596,8 @@
     "aiError": "Ich konnte nicht antworten, versuch es erneut.",
     "calTitle": "Gespritztes Insulin",
     "calCaption": "Ein Ringdrittel pro Insulinart",
-    "calHint": "Grau = diese Art wurde an dem Tag nicht gespritzt."
+    "calHint": "Grau = diese Art wurde an dem Tag nicht gespritzt.",
+    "totalDay": "Gesamt an diesem Tag"
   },
   "foodsPage": {
     "title": "Marokkanische Küche",
@@ -1708,7 +1710,8 @@
     "calCaption": "Ziel: {{goal}} g Kohlenhydrate / Tag",
     "calGoalOk": "Im Ziel",
     "calGoalOver": "Ziel überschritten",
-    "calHint": "Der Ring füllt sich mit den Kohlenhydraten des Tages."
+    "calHint": "Der Ring füllt sich mit den Kohlenhydraten des Tages.",
+    "mealsTitleDay": "Mahlzeiten an diesem Tag"
   },
   "menuScanPage": {
     "title": "Restaurantmenü",
@@ -1903,5 +1906,12 @@
     "legendPctMid": "40–70 %",
     "legendPctLow": "< 40 %",
     "legendRingHint": "Der Ring füllt sich mit dem Anteil deiner Werte im Zielbereich."
+  },
+  "pastDay": {
+    "title": "Du siehst {{date}}",
+    "subtitle": "Das ist nicht heute — diese Werte gehören zu diesem Tag.",
+    "backToToday": "Heute",
+    "yesterday": "gestern",
+    "mealsNote": "Das sind die Mahlzeiten vom {{date}}, nicht die von heute."
   }
 }

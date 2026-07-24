@@ -26,7 +26,13 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
+import {
+  AnimatedRobot,
+  ChevronLeft,
+  FadeInView,
+  PastDayBanner,
+  useSelectedDay,
+} from '@/components/ui';
 import { CoachChatModal } from '@/components/CoachChatModal';
 import { DayPickerSheet } from '@/components/calendar/DayPickerSheet';
 import type { DayRing } from '@/components/calendar/RingCalendar';
@@ -405,7 +411,9 @@ export default function GlucoseScreen() {
   const high = profile?.target_high ?? 180;
   const firstName = (profile?.name || '').trim().split(/\s+/)[0] || '';
 
-  const [dayOffset, setDayOffset] = useState(0);
+  /* The day comes in from whoever opened the page (`?date=`), so a reading
+   * tapped from an older day on the home screen opens on THAT day. */
+  const { dayOffset, selectedDate, selectDate, isToday, backToToday } = useSelectedDay();
   const [pickerOpen, setPickerOpen] = useState(false);
   /** Which in-page sheet is open (grows from its card to the centre). */
   const [sheet, setSheet] = useState<null | 'trend' | 'measures' | 'coach'>(null);
@@ -418,20 +426,6 @@ export default function GlucoseScreen() {
   const toUnit = (v: number) => (chartUnit === 'g' ? v / 100 : v);
   const fmtVal = (v: number) => (chartUnit === 'g' ? toUnit(v).toFixed(2) : String(Math.round(v)));
   const unitLabel = chartUnit === 'g' ? 'g/L' : 'mg/dL';
-  const selectedDate = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - dayOffset);
-    return d;
-  }, [dayOffset]);
-
-  /** The calendar hands back a Date; the page tracks a day offset. */
-  const selectDate = (d: Date) => {
-    const a = new Date();
-    a.setHours(0, 0, 0, 0);
-    const b = new Date(d);
-    b.setHours(0, 0, 0, 0);
-    setDayOffset(Math.max(0, Math.round((a.getTime() - b.getTime()) / 86_400_000)));
-  };
 
   /** Per-day time-in-range — how far each calendar ring fills, and its color. */
   const tirByDay = useMemo(() => {
@@ -657,6 +651,16 @@ export default function GlucoseScreen() {
               </Pressable>
             </View>
           </View>
+
+          {/* Standing "this is not today" notice — above every reading, so a
+              past day can never be mistaken for the current one. */}
+          {!isToday ? (
+            <PastDayBanner
+              date={selectedDate}
+              onToday={backToToday}
+              style={{ marginHorizontal: 20, marginTop: 12 }}
+            />
+          ) : null}
 
           {/* Greeting */}
           <FadeInView delay={30} style={{ paddingHorizontal: 22, marginTop: 12 }}>

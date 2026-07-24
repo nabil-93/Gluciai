@@ -14,7 +14,13 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
+import {
+  AnimatedRobot,
+  ChevronLeft,
+  FadeInView,
+  PastDayBanner,
+  useSelectedDay,
+} from '@/components/ui';
 import { CoachChatModal } from '@/components/CoachChatModal';
 import { DayPickerSheet } from '@/components/calendar/DayPickerSheet';
 import type { DayRing } from '@/components/calendar/RingCalendar';
@@ -208,29 +214,15 @@ export default function InsulinScreen() {
     mixed: t('insulinPage.mixed'),
   };
 
-  /* Selected day (0 = today), the picker, and the chart toggles/modals. */
-  const [dayOffset, setDayOffset] = useState(0);
+  /* Selected day (0 = today), seeded from `?date=` so an injection tapped
+   * from an older day on the home screen opens on THAT day. */
+  const { dayOffset, selectedDate, selectDate, isToday, backToToday } = useSelectedDay();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [typeModal, setTypeModal] = useState<InsulinType | null>(null);
   const [recentModal, setRecentModal] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [chartRange, setChartRange] = useState<'week' | 'day'>('week');
   const [chartUnit, setChartUnit] = useState<'U' | '%'>('U');
-
-  const selectedDate = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - dayOffset);
-    return d;
-  }, [dayOffset]);
-
-  /** The calendar hands back a Date; the page tracks a day offset. */
-  const selectDate = (d: Date) => {
-    const a = new Date();
-    a.setHours(0, 0, 0, 0);
-    const b = new Date(d);
-    b.setHours(0, 0, 0, 0);
-    setDayOffset(Math.max(0, Math.round((a.getTime() - b.getTime()) / 86_400_000)));
-  };
 
   /** Which insulin types were injected on a given day — one ring arc each. */
   const typesByDay = useMemo(() => {
@@ -400,6 +392,16 @@ export default function InsulinScreen() {
             </Pressable>
           </View>
 
+          {/* Standing "this is not today" notice — doses on screen must never
+              read as the ones already taken today. */}
+          {!isToday ? (
+            <PastDayBanner
+              date={selectedDate}
+              onToday={backToToday}
+              style={{ marginHorizontal: 20, marginTop: 12 }}
+            />
+          ) : null}
+
           {/* Greeting */}
           <FadeInView delay={30} style={{ paddingHorizontal: 22, marginTop: 12 }}>
             <Text style={styles.hello}>
@@ -420,7 +422,11 @@ export default function InsulinScreen() {
             style={styles.totalCard}
           >
             <View style={styles.totalLabelRow}>
-              <Text style={styles.totalLabel}>{t('insulinPage.totalToday')}</Text>
+              {/* "Total today" over another day's doses would be a lie the
+                  patient could act on. */}
+              <Text style={styles.totalLabel}>
+                {t(isToday ? 'insulinPage.totalToday' : 'insulinPage.totalDay')}
+              </Text>
               <InfoIcon />
             </View>
             <View style={styles.totalMid}>

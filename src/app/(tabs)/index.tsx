@@ -36,6 +36,7 @@ import {
   FadeInView,
   PressableScale,
   RotaryDial,
+  dateParam,
   useReduceMotion,
 } from '@/components/ui';
 import { LastMealCard } from '@/components/LastMealCard';
@@ -1507,6 +1508,13 @@ export default function HomeScreen() {
     });
   }, [selectedDate, t, i18n.language]);
 
+  /* Every link out of this screen carries the day being viewed, so a meal,
+   * reading or injection tapped from an older day opens a page showing THAT
+   * day — not today with the tapped entry nowhere to be found. Today needs no
+   * param, which keeps the usual URLs clean. */
+  const dayHref = (path: string) =>
+    (isViewingToday ? path : `${path}?date=${dateParam(selectedDate)}`) as any;
+
   const mealDefs = [
     {
       key: 'breakfast' as const,
@@ -1895,7 +1903,7 @@ export default function HomeScreen() {
                   rightLabel={t('home.glyHigh')}
                   addLabel={t('home.addMeal')}
                   detailHint={t('home.tapForDetail')}
-                  onOpen={() => router.push('/nutrition')}
+                  onOpen={() => router.push(dayHref('/nutrition'))}
                   onAdd={() => router.push('/scan')}
                 />,
                 <MetricPage
@@ -1915,7 +1923,7 @@ export default function HomeScreen() {
                   rightLabel={t('home.glyHigh')}
                   addLabel={t('home.addMeasure')}
                   detailHint={t('home.tapForDetail')}
-                  onOpen={() => router.push('/glucose')}
+                  onOpen={() => router.push(dayHref('/glucose'))}
                   onAdd={() => router.push('/log-glucose')}
                 />,
                 <MetricPage
@@ -1935,7 +1943,7 @@ export default function HomeScreen() {
                   rightLabel={t('home.glyHigh')}
                   addLabel={t('home.addInjection')}
                   detailHint={t('home.tapForDetail')}
-                  onOpen={() => router.push('/insulin')}
+                  onOpen={() => router.push(dayHref('/insulin'))}
                   onAdd={() => router.push('/log-insulin')}
                 />,
               ].map((node, index) => {
@@ -2032,7 +2040,7 @@ export default function HomeScreen() {
                 ? `${inRangeCount} / ${dayGlucose.length}`
                 : '– / –'
             }
-            onPress={() => router.push('/glucose')}
+            onPress={() => router.push(dayHref('/glucose'))}
             animateDelay={0}
           />
           <RingCard
@@ -2041,7 +2049,7 @@ export default function HomeScreen() {
             hasData={totalCarbs > 0}
             label={t('home.ringCarbs')}
             sub={`${Math.round(totalCarbs)}g / ${CARB_GOAL}g`}
-            onPress={() => router.push('/nutrition')}
+            onPress={() => router.push(dayHref('/nutrition'))}
             animateDelay={140}
           />
           <RingCard
@@ -2050,7 +2058,7 @@ export default function HomeScreen() {
             hasData={totalInsulin > 0}
             label={t('home.ringInsulin')}
             sub={`${totalInsulin}U`}
-            onPress={() => router.push('/insulin')}
+            onPress={() => router.push(dayHref('/insulin'))}
             animateDelay={280}
           />
         </View>
@@ -2153,7 +2161,7 @@ export default function HomeScreen() {
                 key={d.key}
                 containerStyle={styles.mealCardWrap}
                 style={styles.mealCard}
-                onPress={() => router.push(d.route as any)}
+                onPress={() => router.push(dayHref(d.route))}
                 accessibilityLabel={d.label}
               >
                 <View style={styles.mealCardHead}>
@@ -2238,7 +2246,7 @@ export default function HomeScreen() {
               <View style={styles.chronLine} />
               <Pressable
                 style={styles.chronCta}
-                onPress={() => router.push('/nutrition' as any)}
+                onPress={() => router.push(dayHref('/nutrition'))}
               >
                 <Text style={styles.chronCtaText}>{t('home.viewFullHistory')}</Text>
               </Pressable>
@@ -2260,7 +2268,7 @@ export default function HomeScreen() {
         {/* ── Injections row ── */}
         <PressableScale
           style={styles.injRow}
-          onPress={() => router.push('/insulin')}
+          onPress={() => router.push(dayHref('/insulin'))}
           accessibilityLabel={t('home.injections')}
         >
           <Image source={SYRINGE} style={{ width: 30, height: 30 }} />

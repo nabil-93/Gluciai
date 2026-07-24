@@ -20,7 +20,7 @@ import type { TFunction } from 'i18next';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { AddedSugarCard, SUGAR_SEARCH_NAME } from '@/components/AddedSugarCard';
-import { AnimatedRobot, GlycemicBar, RotaryDial, glycemicTone } from '@/components/ui';
+import { AnimatedRobot, GlycemicBar, ImageLightbox, RotaryDial, glycemicTone } from '@/components/ui';
 import { MealAssistant } from '@/components/MealAssistant';
 import { MealEditModal } from '@/components/MealEditModal';
 import { MEAL_TYPES, MealTypeModal } from '@/components/MealTypeModal';
@@ -374,6 +374,8 @@ export default function ScanResultScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [editStartNew, setEditStartNew] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  /** Full-screen view of the scanned photo (the header only shows a strip). */
+  const [lightbox, setLightbox] = useState(false);
 
   // "Scan réussi" badge: show the text for ~1s, then collapse it into the
   // check logo, leaving only the logo.
@@ -841,7 +843,16 @@ export default function ScanResultScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.photo}>
+          {/* The header crops the photo to a strip; tapping opens it whole, so
+              the patient can check what the AI actually read before trusting
+              the carbs underneath it. */}
+          <Pressable
+            style={styles.photo}
+            onPress={() => imageUri && setLightbox(true)}
+            disabled={!imageUri}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.viewPhoto')}
+          >
             {imageUri ? (
               <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
             ) : (
@@ -878,7 +889,15 @@ export default function ScanResultScreen() {
                 </Animated.Text>
               ) : null}
             </View>
-          </View>
+            {imageUri ? (
+              <View style={styles.zoomBadge} pointerEvents="none">
+                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.6} strokeLinecap="round">
+                  <Circle cx={11} cy={11} r={8} />
+                  <Path d="M21 21l-4.3-4.3M11 8v6M8 11h6" />
+                </Svg>
+              </View>
+            ) : null}
+          </Pressable>
 
           {/* Nutri-Score — under the photo, above the calories card */}
           <View style={styles.scoreBarBelow}>
@@ -1299,6 +1318,13 @@ export default function ScanResultScreen() {
       />
 
       <SaveConfirmModal open={saveModalOpen} onDone={goHome} />
+
+      <ImageLightbox
+        uri={imageUri}
+        visible={lightbox}
+        onClose={() => setLightbox(false)}
+        caption={result.food_name}
+      />
     </View>
   );
 }
@@ -1409,6 +1435,18 @@ const styles = StyleSheet.create({
   photoPh: { alignItems: 'center', justifyContent: 'center' },
   photoPhText: { color: '#8b968c', fontFamily: F600, fontSize: 13 },
   photoScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 96 },
+  // Says the strip is tappable — otherwise nothing suggests it opens.
+  zoomBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(10,14,20,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scanBadge: {
     position: 'absolute',
     left: 12,

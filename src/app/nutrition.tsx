@@ -13,7 +13,14 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedRobot, ChevronLeft, FadeInView } from '@/components/ui';
+import {
+  AnimatedRobot,
+  ChevronLeft,
+  FadeInView,
+  PastDayBanner,
+  PastDayNote,
+  useSelectedDay,
+} from '@/components/ui';
 import { CoachChatModal } from '@/components/CoachChatModal';
 import { MealPeekModal } from '@/components/MealPeekModal';
 import { DayPickerSheet } from '@/components/calendar/DayPickerSheet';
@@ -250,23 +257,11 @@ export default function NutritionScreen() {
 
   const firstName = (profile?.name || '').trim().split(/\s+/)[0] || '';
 
-  const [dayOffset, setDayOffset] = useState(0);
+  /* The day comes in from whoever opened the page (`?date=`), so tapping a
+   * meal from an older day on the home screen lands on THAT day here. */
+  const { dayOffset, selectedDate, selectDate, isToday, backToToday } = useSelectedDay();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
-  const selectedDate = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - dayOffset);
-    return d;
-  }, [dayOffset]);
-
-  /** The calendar hands back a Date; the page tracks a day offset. */
-  const selectDate = (d: Date) => {
-    const a = new Date();
-    a.setHours(0, 0, 0, 0);
-    const b = new Date(d);
-    b.setHours(0, 0, 0, 0);
-    setDayOffset(Math.max(0, Math.round((a.getTime() - b.getTime()) / 86_400_000)));
-  };
 
   /** Carbs eaten per day — drives how far each calendar ring fills. */
   const carbsByDay = useMemo(() => {
@@ -393,6 +388,16 @@ export default function NutritionScreen() {
             </Pressable>
           </View>
 
+          {/* Standing "this is not today" notice — high on the page, before
+              any figure the patient could mistake for the current day. */}
+          {!isToday ? (
+            <PastDayBanner
+              date={selectedDate}
+              onToday={backToToday}
+              style={{ marginHorizontal: 20, marginTop: 12 }}
+            />
+          ) : null}
+
           {/* Greeting */}
           <FadeInView delay={30} style={{ paddingHorizontal: 22, marginTop: 14 }}>
             <Text style={styles.hello}>
@@ -509,11 +514,24 @@ export default function NutritionScreen() {
 
         {/* ── Repas du jour ── */}
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>{t('nutritionPage.mealsTitle')}</Text>
+          {/* The default heading says "today" in every language — which would
+              contradict the note right under it on a past day. */}
+          <Text style={styles.sectionTitle}>
+            {t(isToday ? 'nutritionPage.mealsTitle' : 'nutritionPage.mealsTitleDay')}
+          </Text>
           <Text style={styles.sectionCount}>
             {t('nutritionPage.mealsAdded', { count: todayMeals.length })}
           </Text>
         </View>
+
+        {/* Between the heading and the first slot: says whose day these meals
+            are, right where the patient starts reading them. */}
+        {!isToday ? (
+          <PastDayNote
+            date={selectedDate}
+            style={{ marginHorizontal: 20, marginBottom: 10 }}
+          />
+        ) : null}
 
         <FadeInView delay={200} style={{ paddingHorizontal: 20 }}>
           <View style={styles.mealsCard}>
@@ -830,9 +848,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // German runs long here ("Mahlzeiten an diesem Tag"): without a gap and a
+    // shrinkable count the title wraps straight into it.
+    gap: 10,
   },
-  sectionTitle: { fontFamily: F800, fontSize: 19, color: INK },
-  sectionCount: { fontFamily: F700, fontSize: 14, color: GREEN },
+  sectionTitle: { flex: 1, minWidth: 0, fontFamily: F800, fontSize: 19, color: INK },
+  sectionCount: { flexShrink: 0, fontFamily: F700, fontSize: 14, color: GREEN, textAlign: 'right' },
 
   mealsCard: {
     marginTop: 12,

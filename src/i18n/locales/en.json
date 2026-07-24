@@ -104,7 +104,8 @@
     "offline": "You are offline. Data will sync when you reconnect.",
     "error": "Something went wrong",
     "demoBadge": "Demo mode — connect Supabase to save data",
-    "close": "Close"
+    "close": "Close",
+    "viewPhoto": "View photo"
   },
   "language": {
     "title": "Choose your language",
@@ -1595,7 +1596,8 @@
     "aiError": "I couldn't reply, please try again.",
     "calTitle": "Insulin injected",
     "calCaption": "One third of the ring per insulin type",
-    "calHint": "Grey = that type was not injected that day."
+    "calHint": "Grey = that type was not injected that day.",
+    "totalDay": "Total that day"
   },
   "foodsPage": {
     "title": "Moroccan cuisine",
@@ -1708,7 +1710,8 @@
     "calCaption": "Goal: {{goal}} g of carbs / day",
     "calGoalOk": "Within goal",
     "calGoalOver": "Over goal",
-    "calHint": "The ring fills with the carbs eaten that day."
+    "calHint": "The ring fills with the carbs eaten that day.",
+    "mealsTitleDay": "Meals that day"
   },
   "menuScanPage": {
     "title": "Restaurant menu",
@@ -1903,5 +1906,12 @@
     "legendPctMid": "40–70%",
     "legendPctLow": "< 40%",
     "legendRingHint": "The ring fills with the share of your readings inside target."
+  },
+  "pastDay": {
+    "title": "You are viewing {{date}}",
+    "subtitle": "This is not today — these figures belong to that day.",
+    "backToToday": "Today",
+    "yesterday": "yesterday",
+    "mealsNote": "These are the meals of {{date}}, not today’s."
   }
 }

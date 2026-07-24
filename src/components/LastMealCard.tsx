@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useTranslation } from 'react-i18next';
 import Svg, { Circle, Path } from 'react-native-svg';
 
-import { AnimatedRobot } from '@/components/ui';
+import { AnimatedRobot, ImageLightbox, ZoomableThumb } from '@/components/ui';
 import { scoreMeal } from '@/services/nutrition/mealScore';
 import type { MealScan } from '@/types';
 
@@ -86,6 +86,7 @@ function MacroLine({ color, label, value }: { color: string; label: string; valu
  */
 export function LastMealCard({ meal, onPress }: { meal: MealScan; onPress: () => void }) {
   const { t, i18n } = useTranslation();
+  const [lightbox, setLightbox] = useState(false);
   const r = meal.result;
 
   const P = Math.round(r.protein);
@@ -150,15 +151,18 @@ export function LastMealCard({ meal, onPress }: { meal: MealScan; onPress: () =>
         </Pressable>
       </View>
 
-      {/* Photo + name + macros */}
+      {/* Photo + name + macros. The thumbnail is 62 px — too small to check
+          the meal against the numbers beside it — so it opens full-screen. */}
       <View style={styles.body}>
-        <View style={styles.photo}>
-          {meal.image_url ? (
+        {meal.image_url ? (
+          <ZoomableThumb style={styles.photo} onPress={() => setLightbox(true)} label={r.food_name}>
             <Image source={{ uri: meal.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
-          ) : (
+          </ZoomableThumb>
+        ) : (
+          <View style={styles.photo}>
             <Text style={{ fontSize: 24 }}>🍽️</Text>
-          )}
-        </View>
+          </View>
+        )}
         <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
           <Text style={styles.mealName} numberOfLines={2}>
             {r.food_name}
@@ -206,6 +210,13 @@ export function LastMealCard({ meal, onPress }: { meal: MealScan; onPress: () =>
           </Text>
         </View>
       ) : null}
+
+      <ImageLightbox
+        uri={meal.image_url}
+        visible={lightbox}
+        onClose={() => setLightbox(false)}
+        caption={r.food_name}
+      />
     </View>
   );
 }

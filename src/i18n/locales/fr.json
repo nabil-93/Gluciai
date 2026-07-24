@@ -104,7 +104,8 @@
     "offline": "Vous êtes hors ligne. Les données se synchroniseront à la reconnexion.",
     "error": "Une erreur est survenue",
     "demoBadge": "Mode démo — connectez Supabase pour enregistrer vos données",
-    "close": "Fermer"
+    "close": "Fermer",
+    "viewPhoto": "Voir la photo"
   },
   "language": {
     "title": "Choisissez votre langue",
@@ -1595,7 +1596,8 @@
     "aiError": "Je n'ai pas pu répondre, réessaie.",
     "calTitle": "Insuline injectée",
     "calCaption": "Un tiers d'anneau par type d'insuline",
-    "calHint": "Gris = ce type n'a pas été injecté ce jour-là."
+    "calHint": "Gris = ce type n'a pas été injecté ce jour-là.",
+    "totalDay": "Total ce jour-là"
   },
   "foodsPage": {
     "title": "Cuisine marocaine",
@@ -1708,7 +1710,8 @@
     "calCaption": "Objectif : {{goal}} g de glucides / jour",
     "calGoalOk": "Dans l'objectif",
     "calGoalOver": "Objectif dépassé",
-    "calHint": "L'anneau se remplit selon les glucides mangés ce jour-là."
+    "calHint": "L'anneau se remplit selon les glucides mangés ce jour-là.",
+    "mealsTitleDay": "Repas de ce jour-là"
   },
   "menuScanPage": {
     "title": "Menu restaurant",
@@ -1903,5 +1906,12 @@
     "legendPctMid": "40–70 %",
     "legendPctLow": "< 40 %",
     "legendRingHint": "L'anneau se remplit selon la part de tes glycémies dans la cible."
+  },
+  "pastDay": {
+    "title": "Vous consultez le {{date}}",
+    "subtitle": "Ce n'est pas aujourd'hui — ces chiffres sont ceux de ce jour-là.",
+    "backToToday": "Aujourd'hui",
+    "yesterday": "hier",
+    "mealsNote": "Voici les repas du {{date}}, pas ceux d’aujourd’hui."
   }
 }
