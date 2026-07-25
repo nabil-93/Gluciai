@@ -96,7 +96,7 @@ export default function ProgramManageScreen() {
     try {
       await setProgramStatus(p.id, 'active');
       const loaded = await loadProgram(p.id);
-      if (loaded) {
+      if (loaded.status === 'ok') {
         setProgram(loaded.program);
         setDays(loaded.days);
       }

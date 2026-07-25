@@ -11,6 +11,7 @@ import { MealDoneModal } from '@/components/program/MealDoneModal';
 import { ProgramCalendar } from '@/components/program/ProgramCalendar';
 import { getSession, preWorkoutCheck, getExercise } from '@/data/workouts';
 import {
+  currentAuthUserId,
   currentDay,
   dayProgress,
   DEFAULT_CONSTRAINTS,
@@ -215,23 +216,41 @@ export default function ProgramScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.create]);
 
-  /* Rehydrate from the server: the parcours belongs to the account, not to
-     this phone's local storage. What the device did offline wins per day. */
+  /* Claim the store for whoever is signed in, then rehydrate from the
+     server: the parcours belongs to the ACCOUNT, not to this phone's local
+     storage. On a shared device this is what stops one account's program
+     from appearing under another's. What the device did offline wins per
+     day — but only within the same account. */
   useEffect(() => {
     if (params.create === '1') return;
     let alive = true;
     void (async () => {
+      const uid = await currentAuthUserId();
+      if (!alive) return;
+      // First, and before any network call: a parcours belonging to another
+      // account must never be on screen, not even for a moment.
+      useProgramStore.getState().adoptUser(uid);
+
       const remote = await loadProgram();
-      if (!alive || !remote) return;
+      if (!alive) return;
+
+      if (remote.status === 'none') {
+        // The server answered: this account has no live parcours. Anything
+        // still held locally was deleted or belongs elsewhere.
+        if (useProgramStore.getState().program) useProgramStore.getState().reset();
+        return;
+      }
+      // Unreachable server: keep what the device has. Offline is not a
+      // reason to erase someone's month.
+      if (remote.status !== 'ok') return;
+
       const state = useProgramStore.getState();
       const sameProgram = state.program?.id === remote.program.id;
       // A different active program on the account replaces this device's copy
       // wholesale — mixing days from two parcours would produce a history
       // that never happened.
-      if (!state.program || sameProgram || state.program.id === 'local') {
-        setProgram(remote.program);
-        setDays(sameProgram ? mergeDays(state.days, remote.days) : remote.days);
-      }
+      setProgram(remote.program);
+      setDays(sameProgram ? mergeDays(state.days, remote.days) : remote.days);
     })();
     return () => {
       alive = false;

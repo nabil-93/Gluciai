@@ -1,5 +1,6 @@
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
+import { useProgramStore } from '@/store/useProgramStore';
 import { saveProfile } from './data';
 
 /* ────────────────────────────────────────────────────────────
@@ -104,6 +105,9 @@ export async function signOut(): Promise<void> {
     if (!isDemoMode && supabase) await supabase.auth.signOut();
   } finally {
     useAppStore.getState().resetAll();
+    // The parcours lives in its own store, so resetAll() does not reach it.
+    // Leaving it behind showed the next account this one's program.
+    useProgramStore.getState().adoptUser(null);
   }
 }
 
@@ -117,6 +121,7 @@ export async function signOut(): Promise<void> {
 export async function deleteAccount(): Promise<ActionResult> {
   if (isDemoMode || !supabase) {
     useAppStore.getState().resetAll();
+    useProgramStore.getState().adoptUser(null);
     return { ok: true };
   }
   try {
@@ -124,6 +129,7 @@ export async function deleteAccount(): Promise<ActionResult> {
     if (error) return { ok: false, error: error.message };
     await supabase.auth.signOut().catch(() => {});
     useAppStore.getState().resetAll();
+    useProgramStore.getState().adoptUser(null);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: String(e) };

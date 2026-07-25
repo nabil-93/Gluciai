@@ -1,5 +1,6 @@
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
+import { useProgramStore } from '@/store/useProgramStore';
 import type {
   ActivityLog,
   AiReminder,
@@ -223,6 +224,11 @@ export async function hydrateFromServer(): Promise<boolean> {
   const prevState = useAppStore.getState();
   const switched =
     prevState.accountUserId !== null && prevState.accountUserId !== uid;
+
+  // "Mon Programme" keeps its own store, so it is not covered by the hydrate
+  // below. Claim it for this user first: on a shared phone the previous
+  // account's parcours must be gone before anything renders, not after.
+  useProgramStore.getState().adoptUser(uid);
 
   try {
     const [prof, glu, ins, meals, act, meas, chat, rem, evts, labs] = await Promise.all([

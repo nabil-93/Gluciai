@@ -13,6 +13,16 @@ import type { PlannedMeal, Program, ProgramDay } from '@/services/program';
  * ──────────────────────────────────────────────────────────── */
 
 interface ProgramState {
+  /**
+   * The auth user this persisted parcours belongs to.
+   *
+   * Without it, a phone shared between accounts (a family, a doctor showing
+   * the app, one person with two logins) showed EVERY account the first
+   * account's program — someone else's meals, someone else's carb budget,
+   * feeding someone else's insulin doses. The parcours is medical data: it
+   * is owned, and it never crosses an account boundary.
+   */
+  accountUserId: string | null;
   program: Program | null;
   days: ProgramDay[];
   /** Set while the coach is composing the plan. */
@@ -34,6 +44,12 @@ interface ProgramState {
   setDayWorkout: (date: string, workoutId: string | null) => void;
   /** The patient closed the day; this is what unlocks the next one. */
   confirmDay: (date: string) => void;
+  /**
+   * Claim the persisted parcours for `uid`, wiping it if it belonged to
+   * anybody else. Call it before reading the store on any screen and on
+   * every sign-in / sign-out — it is the guard, not a convenience.
+   */
+  adoptUser: (uid: string | null) => void;
   reset: () => void;
 }
 
@@ -46,6 +62,7 @@ function statusOf(d: ProgramDay): ProgramDay['status'] {
 export const useProgramStore = create<ProgramState>()(
   persist(
     (set) => ({
+      accountUserId: null,
       program: null,
       days: [],
       generating: false,
@@ -121,6 +138,16 @@ export const useProgramStore = create<ProgramState>()(
             };
           }),
         })),
+
+      adoptUser: (uid) =>
+        set((s) => {
+          if (s.accountUserId === uid) return s;
+          // Anything already here belongs to someone else — or to an owner we
+          // cannot name, which is no better. Both cases wipe. A parcours that
+          // really belongs to this user is re-read from the server by
+          // `loadProgram()` immediately afterwards; nothing real is lost.
+          return { accountUserId: uid, program: null, days: [], generating: false };
+        }),
 
       reset: () => set({ program: null, days: [], generating: false }),
     }),

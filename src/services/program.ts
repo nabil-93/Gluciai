@@ -742,21 +742,46 @@ export async function saveDays(programId: string, days: ProgramDay[]): Promise<b
  * reinstall the app, change device, and a month of history was gone. The
  * store stays the source of truth for the session; this rehydrates it.
  */
+/**
+ * Why this is three outcomes and not two.
+ *
+ * "The server says this account has no parcours" and "I could not reach the
+ * server" look identical to a caller that only gets null — and acting on
+ * that confusion means wiping a patient's month of history because their
+ * train went into a tunnel. Only `none` is permission to clear anything.
+ */
+export type LoadResult =
+  | { status: 'ok'; program: Program; days: ProgramDay[] }
+  | { status: 'none' }
+  | { status: 'unavailable' };
+
+/** The signed-in user's id, or null when signed out / in demo mode. */
+export async function currentAuthUserId(): Promise<string | null> {
+  if (isDemoMode || !supabase) return null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadProgram(
   /** A specific parcours; omitted, the live one. */
   id?: string
-): Promise<{ program: Program; days: ProgramDay[] } | null> {
-  if (isDemoMode || !supabase) return null;
+): Promise<LoadResult> {
+  if (isDemoMode || !supabase) return { status: 'unavailable' };
   const { data: auth } = await supabase.auth.getUser();
   const uid = auth?.user?.id;
-  if (!uid) return null;
+  if (!uid) return { status: 'unavailable' };
 
   const query = supabase.from('programs').select('*').eq('user_id', uid);
   const { data: row, error } = await (id
     ? query.eq('id', id)
     : query.eq('status', 'active')
   ).maybeSingle();
-  if (error || !row) return null;
+  if (error) return { status: 'unavailable' };
+  if (!row) return { status: 'none' };
 
   const targets = computeProgramTargets({
     profile: useAppStore.getState().profile,
@@ -814,7 +839,7 @@ export async function loadProgram(
     adaptationNote: d.adaptation_note ?? null,
   }));
 
-  return { program, days };
+  return { status: 'ok', program, days };
 }
 
 /* ── Managing the programs themselves ────────────────────────
