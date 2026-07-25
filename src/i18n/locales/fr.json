@@ -1565,7 +1565,8 @@
     "measures": "Poids & mesures",
     "labs": "Mes analyses",
     "report": "Rapport médecin",
-    "emergency": "Urgence SOS"
+    "emergency": "Urgence SOS",
+    "program": "Mon Programme"
   },
   "insulinPage": {
     "title": "Insuline",

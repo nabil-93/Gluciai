@@ -106,6 +106,12 @@ const ITEMS: Item[] = [
     href: '/healthy-foods',
     icon: <Text style={{ fontSize: 22 }}>🥗</Text>,
   },
+  /* "Mon Programme" — on trial; this entry is its only door into the app. */
+  {
+    labelKey: 'program',
+    href: '/program',
+    icon: <Text style={{ fontSize: 22 }}>🎯</Text>,
+  },
   {
     labelKey: 'worldDishes',
     href: '/world-recipes',

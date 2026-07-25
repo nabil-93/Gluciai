@@ -1565,7 +1565,8 @@
     "measures": "الوزن والقياسات",
     "labs": "تحاليلي",
     "report": "تقرير الطبيب",
-    "emergency": "طوارئ SOS"
+    "emergency": "طوارئ SOS",
+    "program": "برنامجي"
   },
   "insulinPage": {
     "title": "الأنسولين",

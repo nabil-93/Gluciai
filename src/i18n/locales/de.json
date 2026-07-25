@@ -1565,7 +1565,8 @@
     "measures": "Gewicht & Messwerte",
     "labs": "Meine Analysen",
     "report": "Arztbericht",
-    "emergency": "Notfall SOS"
+    "emergency": "Notfall SOS",
+    "program": "Mein Programm"
   },
   "insulinPage": {
     "title": "Insulin",
