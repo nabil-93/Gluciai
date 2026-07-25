@@ -2031,7 +2031,6 @@
     "ateIt": "J’ai mangé ça",
     "myDose": "Ma dose",
     "allEaten": "✅ Tous les repas du jour sont faits. Beau travail.",
-    "planPending": "Le plan du jour arrive dès que tu es en ligne — ton budget, lui, est déjà calculé.",
     "todayMeals": "Ta journée",
     "adapt_trimmed": "Tu as pris un peu d’avance sur ton budget — j’allège ce repas à {{carbs}} g de glucides.",
     "adapt_roomLeft": "Il te reste de la marge — je remonte un peu ce repas, sans tout rattraper d’un coup.",
@@ -2057,6 +2056,12 @@
     "postWorkout": "Après l'effort, ta glycémie peut continuer à baisser plusieurs heures. Recontrôle et garde du sucre rapide sur toi.",
     "finishSession": "Terminer la séance",
     "sessionSaved": "Séance enregistrée",
-    "blockedCta": "Corrige ta glycémie d'abord"
+    "blockedCta": "Corrige ta glycémie d'abord",
+    "composing": "Je compose ta journée…",
+    "retry": "Réessayer",
+    "err_offline": "Pas de connexion — je ne peux pas composer ta journée maintenant.",
+    "err_ai": "L'IA n'a pas réussi à écrire ta journée. Réessaie, ça passe presque toujours au deuxième essai.",
+    "err_quota": "Tu as atteint ta limite d'utilisation IA. Réessaie plus tard.",
+    "err_unknown": "Quelque chose a coincé pendant la création de ta journée. Réessaie."
   }
 }

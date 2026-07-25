@@ -45,8 +45,9 @@ Deno.serve(async (req) => {
       meal = null,
       dayJournal = '',
       program = null,
-      startDate = '',
-      days = 7,
+      date = '',
+      dayIndex = 0,
+      history = [],
     } = await req.json();
     if (!GEMINI_API_KEY) {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
@@ -279,15 +280,25 @@ outdoor_walk. Never invent an id, never write a URL.
 PATIENT CONTEXT (live from their app):
 ${healthData || 'none'}
 
-Start at date ${startDate}. Produce exactly ${days} consecutive days.
+YOU ARE COMPOSING ONE SINGLE DAY: ${date} (day ${dayIndex + 1} of the program).
 
-Reply ONLY valid JSON (no markdown fences):
-{"days":[{"date":"YYYY-MM-DD","dayIndex":0,"status":"planned","workoutId":null,
-"meals":[{"slot":"breakfast","title":"...","emoji":"🥣","why":"one short line on why this suits THEM",
+WHAT YOU ALREADY SERVED THEM (do not repeat these dishes — vary the
+proteins, the vegetables, the grains and the cooking methods; a patient who
+eats the same thing twice in three days abandons the program):
+${(history as string[]).length ? (history as string[]).join('\n') : 'nothing yet — this is the first day'}
+
+Do NOT choose the workout: the app decides the training days itself.
+
+Reply ONLY valid JSON (no markdown fences), for this ONE day:
+{"meals":[{"slot":"breakfast","title":"...","emoji":"🥣",
+"why":"one short line on why this suits THEM",
 "ingredients":[{"name":"...","search_name":"generic english food","grams":120}],
-"recipe":["step","step"],"kcal":0,"carbs":0,"sugar":0,"protein":0,"fat":0,"fiber":0}]}]}
+"recipe":["short step","short step","short step"],
+"kcal":0,"carbs":0,"sugar":0,"protein":0,"fat":0,"fiber":0}]}
 
-slot is one of breakfast, lunch, snack, dinner — all four, every day.`;
+Exactly four meals, slots breakfast, lunch, snack, dinner. Keep "recipe" to
+at most 3 short steps and "ingredients" to at most 6 items — brevity here
+matters more than detail.`;
 
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
@@ -298,8 +309,9 @@ slot is one of breakfast, lunch, snack, dinner — all four, every day.`;
             contents: [{ role: 'user', parts: [{ text: planPrompt }] }],
             generationConfig: {
               responseMimeType: 'application/json',
-              // A full week of four meals is a lot of structured output.
-              maxOutputTokens: 16000,
+              // One day of four meals. Generous room so the JSON is never cut
+              // mid-object the way a whole week was.
+              maxOutputTokens: 6000,
               // Enough freedom to genuinely vary the cooking, not enough to
               // drift from the budget.
               temperature: 0.9,

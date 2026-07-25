@@ -2031,7 +2031,6 @@
     "ateIt": "I ate this",
     "myDose": "My dose",
     "allEaten": "✅ Every meal today is done. Nice work.",
-    "planPending": "Today’s plan arrives as soon as you are online — your budget is already computed.",
     "todayMeals": "Your day",
     "adapt_trimmed": "You are a little ahead of your budget — I am trimming this meal to {{carbs}} g of carbs.",
     "adapt_roomLeft": "You have room left — I am raising this meal a little, without catching everything up at once.",
@@ -2057,6 +2056,12 @@
     "postWorkout": "After exercise your glucose can keep falling for hours. Check again and keep fast sugar on you.",
     "finishSession": "Finish the session",
     "sessionSaved": "Session saved",
-    "blockedCta": "Fix your glucose first"
+    "blockedCta": "Fix your glucose first",
+    "composing": "Composing your day…",
+    "retry": "Try again",
+    "err_offline": "No connection — I cannot compose your day right now.",
+    "err_ai": "The AI could not write your day. Try again, it almost always works on the second attempt.",
+    "err_quota": "You have reached your AI usage limit. Try again later.",
+    "err_unknown": "Something went wrong while building your day. Try again."
   }
 }

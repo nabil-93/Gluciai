@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,13 +10,15 @@ import { ChevronLeft, FadeInView, Spinner } from '@/components/ui';
 import { getSession, preWorkoutCheck, videoUrl, getExercise } from '@/data/workouts';
 import {
   DEFAULT_CONSTRAINTS,
-  generateDays,
+  generateDay,
   nextSlot,
   previewTargets,
   retargetNextMeal,
   saveDays,
   saveProgram,
   todayBudget,
+  workoutForDay,
+  type GenerateError,
   type Program,
   type ProgramConstraints,
 } from '@/services/program';
@@ -72,11 +74,39 @@ export default function ProgramScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const { profile } = useAppStore();
-  const { program, days, generating, setProgram, setDays, setGenerating, markEaten } =
+  const { program, days, generating, setProgram, setDays, upsertDay, setGenerating, markEaten } =
     useProgramStore();
+  const [genError, setGenError] = useState<GenerateError | null>(null);
 
   const today = new Date().toISOString().slice(0, 10);
   const todayPlan = useMemo(() => days.find((d) => d.date === today) ?? null, [days, today]);
+
+  /** Compose today from scratch, remembering the days already served. */
+  const planToday = useCallback(
+    async (p: Program) => {
+      setGenerating(true);
+      setGenError(null);
+      const dayIndex = Math.max(
+        0,
+        Math.round((new Date(today).getTime() - new Date(p.startDate).getTime()) / 86400000)
+      );
+      const res = await generateDay({
+        program: p,
+        date: new Date(),
+        dayIndex,
+        history: useProgramStore.getState().days,
+        language: i18n.language,
+      });
+      if ('day' in res) {
+        upsertDay(res.day);
+        await saveDays(p.id, [res.day]);
+      } else {
+        setGenError(res.error);
+      }
+      setGenerating(false);
+    },
+    [today, i18n.language, upsertDay, setGenerating]
+  );
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -124,31 +154,29 @@ export default function ProgramScreen() {
       constraints,
     };
 
-    setGenerating(true);
     const saved = (await saveProgram(draft)) ?? { ...draft, id: 'local' };
     setProgram(saved);
-
-    // Ask the coach for the first week. If it cannot be reached the program
-    // still exists with its budget — the plan fills in on the next try.
-    const generated = await generateDays({
-      program: saved,
-      profile,
-      startDate: new Date(),
-      days: 7,
-      language: i18n.language,
-    });
-    if (generated?.length) {
-      setDays(generated);
-      await saveDays(saved.id, generated);
-    }
-    setGenerating(false);
-  }, [params, profile, today, i18n.language, setProgram, setDays, setGenerating]);
+    setDays([]);
+    // Only TODAY is composed now. Each following day is written when it
+    // arrives, with the previous ones in mind — one small call instead of a
+    // week-sized one that used to overrun the model and lose everything.
+    await planToday(saved);
+  }, [params, profile, today, setProgram, setDays, planToday]);
 
   useEffect(() => {
     if (params.create === '1' && !program) void createFromParams();
     // Creation runs once, on the hand-off from the wizard.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.create]);
+
+  /* A new day with no plan writes itself the moment the patient opens the
+     screen — that is what "the coach follows you day by day" means. */
+  useEffect(() => {
+    if (!program || todayPlan || generating || genError) return;
+    if (params.create === '1') return; // creation already handles today
+    void planToday(program);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program?.id, todayPlan, generating, genError]);
 
   /* ── Empty state ── */
   if (!program && !generating) {
@@ -233,7 +261,11 @@ export default function ProgramScreen() {
   );
   const weekIndex = Math.min(program.weeks, Math.floor(dayIndex / 7) + 1);
 
-  const session = todayPlan?.workoutId ? getSession(todayPlan.workoutId) : null;
+  // Computed from the program, not from the meal plan: the training rhythm
+  // the patient signed up for shows even on a day the coach has not written
+  // the food for yet.
+  const workoutId = todayPlan?.workoutId ?? workoutForDay(program, dayIndex);
+  const session = workoutId ? getSession(workoutId) : null;
   const glucoseNow = useAppStore
     .getState()
     .glucoseLogs.find((g) => new Date(g.created_at).toDateString() === new Date().toDateString());
@@ -376,11 +408,29 @@ export default function ProgramScreen() {
                 </Pressable>
               </View>
             </View>
+          ) : todayPlan ? (
+            <View style={styles.pendingCard}>
+              <Text style={styles.pendingText}>{t('program.allEaten')}</Text>
+            </View>
           ) : (
+            /* No plan for today. Say WHY — the old copy blamed the network
+               even when the patient was online, which was simply untrue. */
             <View style={styles.pendingCard}>
               <Text style={styles.pendingText}>
-                {todayPlan ? t('program.allEaten') : t('program.planPending')}
+                {generating ? t('program.composing') : t(`program.err_${genError ?? 'unknown'}`)}
               </Text>
+              {!generating ? (
+                <Pressable
+                  style={styles.retryBtn}
+                  onPress={() => program && planToday(program)}
+                >
+                  <Text style={styles.retryBtnText}>↻ {t('program.retry')}</Text>
+                </Pressable>
+              ) : (
+                <View style={{ marginTop: 12 }}>
+                  <Spinner size={22} color={GREEN} />
+                </View>
+              )}
             </View>
           )}
         </FadeInView>
@@ -659,6 +709,16 @@ const styles = StyleSheet.create({
     color: '#667085',
     textAlign: 'center',
   },
+  retryBtn: {
+    marginTop: 14,
+    height: 42,
+    paddingHorizontal: 22,
+    borderRadius: 13,
+    backgroundColor: GREEN,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retryBtnText: { fontFamily: F700, fontSize: 13, color: '#ffffff' },
 
   /* Day list */
   mealRow: {

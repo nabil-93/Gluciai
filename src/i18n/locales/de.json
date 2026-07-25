@@ -2031,7 +2031,6 @@
     "ateIt": "Das habe ich gegessen",
     "myDose": "Meine Dosis",
     "allEaten": "✅ Alle Mahlzeiten von heute sind erledigt. Gut gemacht.",
-    "planPending": "Der Tagesplan kommt, sobald du online bist — dein Budget steht bereits.",
     "todayMeals": "Dein Tag",
     "adapt_trimmed": "Du bist deinem Budget etwas voraus — ich kürze diese Mahlzeit auf {{carbs}} g Kohlenhydrate.",
     "adapt_roomLeft": "Du hast noch Spielraum — ich erhöhe diese Mahlzeit etwas, ohne alles auf einmal nachzuholen.",
@@ -2057,6 +2056,12 @@
     "postWorkout": "Nach dem Training kann dein Blutzucker noch stundenlang fallen. Miss erneut und trage schnellen Zucker bei dir.",
     "finishSession": "Einheit beenden",
     "sessionSaved": "Einheit gespeichert",
-    "blockedCta": "Korrigiere erst deinen Blutzucker"
+    "blockedCta": "Korrigiere erst deinen Blutzucker",
+    "composing": "Ich stelle deinen Tag zusammen…",
+    "retry": "Erneut versuchen",
+    "err_offline": "Keine Verbindung — ich kann deinen Tag gerade nicht zusammenstellen.",
+    "err_ai": "Die KI konnte deinen Tag nicht schreiben. Versuch es nochmal, beim zweiten Mal klappt es fast immer.",
+    "err_quota": "Du hast dein KI-Nutzungslimit erreicht. Versuch es später.",
+    "err_unknown": "Beim Erstellen deines Tages ist etwas schiefgelaufen. Versuch es nochmal."
   }
 }

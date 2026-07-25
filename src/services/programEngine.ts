@@ -51,6 +51,10 @@ const KCAL_PER_KG = 7700;
 /** Carbs are the insulin lever: going lower than this without medical
  *  supervision changes basal needs, so we floor it and warn instead. */
 const CARBS_FLOOR_G = 120;
+/** Least protein that still protects lean mass in a deficit (g per kg). */
+const PROTEIN_FLOOR_PER_KG = 1.0;
+/** Least fat the body needs for hormones and fat-soluble vitamins (g/kg). */
+const FAT_FLOOR_PER_KG = 0.5;
 /** A single meal above this spikes glucose no matter how good the insulin
  *  timing is — the plan spreads carbs instead of stacking them. On a
  *  high-carb day the cap scales up (see `mealCarbCap`), because forcing a
@@ -210,20 +214,45 @@ export function computeProgramTargets(input: ProgramInput): ProgramTargets {
   if (goal === 'sport' && (input.trainingDaysPerWeek ?? 0) >= 4) {
     dailyKcal = Math.round(dailyKcal * 1.05);
   }
-  const dailyDelta = dailyKcal - tdee;
-
   /* ── Macros ──
    * Protein first (protects lean mass in a deficit, builds it in a surplus),
    * then fat as a share of calories, and carbs take whatever is left. */
   const proteinPerKg = goal === 'lose' || goal === 'gain' || goal === 'sport' ? 1.6 : 1.2;
-  const proteinG = Math.round(weight * proteinPerKg);
-  const fatG = Math.max(Math.round(weight * 0.8), Math.round((dailyKcal * 0.28) / 9));
-
+  let proteinG = Math.round(weight * proteinPerKg);
+  let fatG = Math.max(Math.round(weight * 0.8), Math.round((dailyKcal * 0.28) / 9));
   let carbsG = Math.round((dailyKcal - proteinG * 4 - fatG * 9) / 4);
+
   if (carbsG < CARBS_FLOOR_G) {
+    /* The carb floor is a safety rule, so it wins — but raising carbs without
+     * giving anything back would make the three macros add up to MORE than the
+     * daily budget the patient was shown. Re-fit protein and fat inside what
+     * is left: fat yields first (it is the least structural), protein only
+     * after, and never below the levels that protect the body. */
     carbsG = CARBS_FLOOR_G;
     warnings.push('carbsFloored');
+
+    const left = dailyKcal - carbsG * 4;
+    const fatFloor = Math.max(30, Math.round(weight * FAT_FLOOR_PER_KG));
+    const proteinFloor = Math.max(60, Math.round(weight * PROTEIN_FLOOR_PER_KG));
+
+    if (proteinG * 4 + fatG * 9 > left) {
+      fatG = Math.max(fatFloor, Math.floor((left - proteinG * 4) / 9));
+    }
+    if (proteinG * 4 + fatG * 9 > left) {
+      proteinG = Math.max(proteinFloor, Math.floor((left - fatG * 9) / 4));
+    }
+    // Still impossible: the budget cannot hold even the safe minimums, so the
+    // budget is what has to move — never the minimums.
+    const needed = proteinG * 4 + fatG * 9 + carbsG * 4;
+    if (needed > dailyKcal) {
+      dailyKcal = needed;
+      if (!warnings.includes('kcalFloored')) warnings.push('kcalFloored');
+    }
   }
+
+  // Measured only now: re-fitting the macros above can lift the budget, and a
+  // stale delta would contradict the calories printed next to it.
+  const dailyDelta = dailyKcal - tdee;
 
   // Anyone on insulin must hear this before they start: fewer carbs on the
   // plate means smaller boluses, and keeping the old doses causes hypos.
@@ -427,3 +456,23 @@ export function adaptMeal(args: {
 
 /** Why a meal was re-targeted — the UI turns this into a translated line. */
 export type ProgramAdaptReason = 'trimmed' | 'roomLeft' | 'overBudget' | 'highGlucose';
+
+/**
+ * Is this day of the program a training day?
+ *
+ * Decided here rather than by the model: the patient asked for a number of
+ * sessions per week and that promise should not depend on whether an AI
+ * remembered it. Sessions are spread evenly through the week (never four in
+ * a row followed by three rest days) and the last day of each week is kept
+ * free, because recovery is part of the plan.
+ */
+export function isTrainingDay(dayIndex: number, daysPerWeek: number): boolean {
+  const n = Math.max(0, Math.min(7, Math.round(daysPerWeek)));
+  if (n === 0) return false;
+  if (n >= 7) return true;
+  const inWeek = ((dayIndex % 7) + 7) % 7;
+  // Spread n sessions evenly over 7 slots, starting ON day one: someone who
+  // just built their program should not be told to rest on the first day.
+  // 3 a week lands on days 1, 4 and 6, with rest in between.
+  return ((inWeek * n) % 7) < n;
+}

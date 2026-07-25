@@ -1,3 +1,4 @@
+import { pickSessions, type WorkoutLevel } from '@/data/workouts';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { buildDayEvents, dayTotals } from '@/services/dayLog';
 import { aggregateItems, resolveFood } from '@/services/nutrition/engine';
@@ -5,6 +6,7 @@ import {
   adaptMeal,
   computeProgramTargets,
   dayBudget,
+  isTrainingDay,
   MEAL_SLOTS,
   type ActivityLevel,
   type DayBudget,
@@ -223,23 +225,40 @@ export async function resolveMealMacros(meal: PlannedMeal): Promise<PlannedMeal>
 
 /* ── AI generation ──────────────────────────────────────────── */
 
+/** Why a generation attempt failed, so the screen can say something true
+ *  instead of blaming the network. */
+export type GenerateError = 'offline' | 'ai' | 'quota' | 'unknown';
+
 /**
- * Ask the coach to compose a day (or several) from scratch for THIS patient.
+ * Compose ONE day from scratch for THIS patient.
  *
- * The prompt hands over the exact budget it must respect; the model chooses
- * the food. Whatever comes back is then re-priced by `resolveMealMacros`, so
- * a model that is optimistic about a tagine's carbs cannot mislead the dose
- * calculator.
+ * Day by day, never a whole week in one call. Asking for seven days at once
+ * overran the model's output limit, the JSON came back cut in half and the
+ * whole plan was lost — a single day is small, fast, and if it ever fails
+ * the patient loses one day instead of the week.
+ *
+ * The model is handed the days already planned so it keeps continuity and
+ * stops repeating itself. The budget comes from the engine; the food is its
+ * own; and the macros are re-priced from the food databases afterwards,
+ * because those carb grams end up in an insulin dose.
  */
-export async function generateDays(args: {
+export async function generateDay(args: {
   program: Program;
-  profile: Profile | null;
-  startDate: Date;
-  days: number;
+  date: Date;
+  dayIndex: number;
+  /** Days already composed — the model's memory of the plan so far. */
+  history: ProgramDay[];
   language: string;
-}): Promise<ProgramDay[] | null> {
-  if (isDemoMode || !supabase) return null;
-  const { program, startDate, days, language } = args;
+}): Promise<{ day: ProgramDay } | { error: GenerateError }> {
+  if (isDemoMode || !supabase) return { error: 'offline' };
+  const { program, date, dayIndex, history, language } = args;
+  const iso = date.toISOString().slice(0, 10);
+
+  // Only what the model needs to avoid repeating: the dishes it already
+  // served, most recent first. Cheap to send, and it is the whole memory.
+  const alreadyServed = history
+    .slice(-7)
+    .map((d) => `${d.date}: ${d.meals.map((m) => m.title).join(' · ')}`);
 
   try {
     const { data, error } = await supabase.functions.invoke('ai-chat', {
@@ -264,26 +283,55 @@ export async function generateDays(args: {
             kcalPerMeal: program.targets.kcalPerMeal,
           },
         },
-        startDate: startDate.toISOString().slice(0, 10),
-        days,
+        date: iso,
+        dayIndex,
+        history: alreadyServed,
       },
     });
-    if (error || !Array.isArray(data?.result?.days)) return null;
 
-    const raw = data.result.days as ProgramDay[];
-    // Re-price every dish against the food databases before it is stored.
+    if (error) {
+      const msg = String((error as { message?: string }).message ?? '');
+      return { error: /quota|limit|429/i.test(msg) ? 'quota' : 'ai' };
+    }
+    const meals = data?.result?.meals;
+    if (!Array.isArray(meals) || meals.length === 0) return { error: 'ai' };
+
     const priced = await Promise.all(
-      raw.map(async (d) => ({
-        ...d,
-        meals: await Promise.all(
-          (d.meals ?? []).map((m) => resolveMealMacros({ ...m, resolved: false }))
-        ),
-      }))
+      meals.map((m: PlannedMeal) => resolveMealMacros({ ...m, resolved: false }))
     );
-    return priced;
+
+    return {
+      day: {
+        date: iso,
+        dayIndex,
+        meals: priced,
+        // The session is OURS to decide: the patient asked for N days a week
+        // and that promise must not depend on the model remembering it.
+        workoutId: workoutForDay(program, dayIndex),
+        status: 'planned',
+      },
+    };
   } catch {
-    return null;
+    return { error: 'unknown' };
   }
+}
+
+/**
+ * Which session this day of the program gets, or null on a rest day.
+ * Chosen from the curated library by the patient's place and experience —
+ * never invented, never a URL from the model.
+ */
+export function workoutForDay(program: Program, dayIndex: number): string | null {
+  if (!isTrainingDay(dayIndex, program.trainingDaysPerWeek)) return null;
+  const level: WorkoutLevel =
+    program.activityLevel === 'sedentary' || program.activityLevel === 'light'
+      ? 'beginner'
+      : 'intermediate';
+  const place = program.trainingPlace === 'mixed' ? 'mixed' : program.trainingPlace;
+  const options = pickSessions(place, level);
+  if (!options.length) return null;
+  // Rotate through what fits so the week is not the same session three times.
+  return options[Math.floor(dayIndex / 1) % options.length].id;
 }
 
 /* ── Persistence ────────────────────────────────────────────── */
@@ -294,6 +342,15 @@ export async function saveProgram(p: Omit<Program, 'id'>): Promise<Program | nul
   const { data: auth } = await supabase.auth.getUser();
   const uid = auth?.user?.id;
   if (!uid) return null;
+
+  // Only one program may be active at a time (a second live budget would
+  // contradict the first), so starting a new one retires the old one rather
+  // than failing on the unique index.
+  await supabase
+    .from('programs')
+    .update({ status: 'abandoned' })
+    .eq('user_id', uid)
+    .eq('status', 'active');
 
   const { data, error } = await supabase
     .from('programs')
