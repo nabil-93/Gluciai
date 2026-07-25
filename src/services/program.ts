@@ -419,6 +419,25 @@ export function currentDay(days: ProgramDay[]): ProgramDay | null {
   return byDate(days).find((d) => !d.confirmedAt) ?? null;
 }
 
+/**
+ * May this day be READ?
+ *
+ * The week is written ahead so the shopping list can be exact, which means
+ * days the patient has not reached yet exist in the store. They must stay
+ * shut: a parcours you can read to the end on the first evening is a menu,
+ * not a parcours. Only the day being lived and the days already closed are
+ * open — everywhere, the calendar and the day screen included.
+ */
+export function isRevealed(day: ProgramDay, days: ProgramDay[]): boolean {
+  if (day.confirmedAt) return true;
+  return currentDay(days)?.date === day.date;
+}
+
+/** The days the patient is allowed to see, oldest first. */
+export function revealedDays(days: ProgramDay[]): ProgramDay[] {
+  return byDate(days).filter((d) => isRevealed(d, days));
+}
+
 /** The most recently planned day, whatever its state. */
 export function lastDay(days: ProgramDay[]): ProgramDay | null {
   const all = byDate(days);

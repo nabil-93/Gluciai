@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { DayRingGlyph, RingCalendar, type DayRing } from '@/components/calendar/RingCalendar';
-import { dayProgress, isoDay, type ProgramDay } from '@/services/program';
+import { dayProgress, isoDay, revealedDays, type ProgramDay } from '@/services/program';
 import { shadows } from '@/theme';
 
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -45,11 +45,16 @@ export function ProgramCalendar({
   const [open, setOpen] = useState(false);
   const today = isoDay(new Date());
 
+  /* Only days the patient has reached. The week is written a week ahead so
+     the shopping list can be exact, and those unlived days must not be
+     readable here — the calendar would give away every dish to come. */
+  const visible = useMemo(() => revealedDays(days), [days]);
+
   const byDate = useMemo(() => {
     const m = new Map<string, ProgramDay>();
-    for (const d of days) m.set(d.date, d);
+    for (const d of visible) m.set(d.date, d);
     return m;
-  }, [days]);
+  }, [visible]);
 
   const ringFor = (d: Date): DayRing => {
     const day = byDate.get(isoDay(d));
@@ -67,11 +72,11 @@ export function ProgramCalendar({
   // Last seven written days, newest first — the strip shown when the grid is
   // closed, so the recent past is always one glance away.
   const recent = useMemo(
-    () => [...days].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7).reverse(),
-    [days]
+    () => [...visible].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7).reverse(),
+    [visible]
   );
 
-  const doneCount = days.filter((d) => dayProgress(d).complete).length;
+  const doneCount = visible.filter((d) => dayProgress(d).complete).length;
 
   return (
     <View style={styles.card}>
@@ -79,7 +84,7 @@ export function ProgramCalendar({
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>📅 {t('program.historyTitle')}</Text>
           <Text style={styles.sub}>
-            {t('program.historySub', { done: doneCount, total: days.length })}
+            {t('program.historySub', { done: doneCount, total: visible.length })}
           </Text>
         </View>
         <Text style={styles.toggle}>{open ? '✕' : t('program.seeAll')}</Text>

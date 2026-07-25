@@ -9,7 +9,7 @@ import { DayRingGlyph } from '@/components/calendar/RingCalendar';
 import { ChevronLeft, FadeInView } from '@/components/ui';
 import { getSession } from '@/data/workouts';
 import { buildDayEvents, dayTotals } from '@/services/dayLog';
-import { budgetForDate, dayProgress, isoDay } from '@/services/program';
+import { budgetForDate, dayProgress, isoDay, isRevealed } from '@/services/program';
 import { MEAL_SLOTS } from '@/services/programEngine';
 import { useProgramStore } from '@/store/useProgramStore';
 import { shadows } from '@/theme';
@@ -45,7 +45,13 @@ export default function ProgramDayScreen() {
   const { program, days } = useProgramStore();
 
   const iso = String(date ?? isoDay(new Date())).slice(0, 10);
-  const day = useMemo(() => days.find((d) => d.date === iso) ?? null, [days, iso]);
+  /* A day the patient has not reached is treated as if it did not exist —
+     the week is written ahead, and this screen must not be the back door
+     that shows them what is coming. */
+  const day = useMemo(() => {
+    const hit = days.find((d) => d.date === iso);
+    return hit && isRevealed(hit, days) ? hit : null;
+  }, [days, iso]);
   const progress = dayProgress(day);
 
   const dateObj = useMemo(() => new Date(`${iso}T12:00:00`), [iso]);

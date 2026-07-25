@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { PlannedMeal, Program, ProgramDay } from '@/services/program';
+import type { ShoppingWeek } from '@/services/programShopping';
 
 /* ────────────────────────────────────────────────────────────
  * "Mon Programme" state, deliberately kept in its OWN store rather than
@@ -25,11 +26,21 @@ interface ProgramState {
   accountUserId: string | null;
   program: Program | null;
   days: ProgramDay[];
+  /** One shopping list per week of the parcours. */
+  shoppingWeeks: ShoppingWeek[];
   /** Set while the coach is composing the plan. */
   generating: boolean;
   setProgram: (p: Program | null) => void;
   setDays: (d: ProgramDay[]) => void;
   upsertDay: (d: ProgramDay) => void;
+  /** Store a whole week at once, without seven separate renders. */
+  upsertDays: (d: ProgramDay[]) => void;
+  setShoppingWeeks: (w: ShoppingWeek[]) => void;
+  upsertShoppingWeek: (w: ShoppingWeek) => void;
+  /** Tick one line of a week's list as bought (or un-tick it). */
+  setItemBought: (weekIndex: number, key: string, bought: boolean) => void;
+  /** The patient has done the shopping: the list becomes the larder. */
+  markShopped: (weekIndex: number) => void;
   setGenerating: (v: boolean) => void;
   /**
    * Record what the patient did with one planned meal — eaten, with the
@@ -65,6 +76,7 @@ export const useProgramStore = create<ProgramState>()(
       accountUserId: null,
       program: null,
       days: [],
+      shoppingWeeks: [],
       generating: false,
 
       setProgram: (program) => set({ program }),
@@ -73,6 +85,45 @@ export const useProgramStore = create<ProgramState>()(
         set((s) => ({
           days: [...s.days.filter((x) => x.date !== d.date), d].sort((a, b) =>
             a.date.localeCompare(b.date)
+          ),
+        })),
+
+      upsertDays: (incoming) =>
+        set((s) => {
+          const dates = new Set(incoming.map((d) => d.date));
+          return {
+            days: [...s.days.filter((x) => !dates.has(x.date)), ...incoming].sort((a, b) =>
+              a.date.localeCompare(b.date)
+            ),
+          };
+        }),
+
+      setShoppingWeeks: (shoppingWeeks) => set({ shoppingWeeks }),
+
+      upsertShoppingWeek: (w) =>
+        set((s) => ({
+          shoppingWeeks: [
+            ...s.shoppingWeeks.filter((x) => x.weekIndex !== w.weekIndex),
+            w,
+          ].sort((a, b) => a.weekIndex - b.weekIndex),
+        })),
+
+      setItemBought: (weekIndex, key, bought) =>
+        set((s) => ({
+          shoppingWeeks: s.shoppingWeeks.map((w) =>
+            w.weekIndex !== weekIndex
+              ? w
+              : {
+                  ...w,
+                  items: w.items.map((it) => (it.key === key ? { ...it, bought } : it)),
+                }
+          ),
+        })),
+
+      markShopped: (weekIndex) =>
+        set((s) => ({
+          shoppingWeeks: s.shoppingWeeks.map((w) =>
+            w.weekIndex !== weekIndex ? w : { ...w, status: 'stocked' }
           ),
         })),
       setGenerating: (generating) => set({ generating }),
@@ -146,10 +197,16 @@ export const useProgramStore = create<ProgramState>()(
           // cannot name, which is no better. Both cases wipe. A parcours that
           // really belongs to this user is re-read from the server by
           // `loadProgram()` immediately afterwards; nothing real is lost.
-          return { accountUserId: uid, program: null, days: [], generating: false };
+          return {
+            accountUserId: uid,
+            program: null,
+            days: [],
+            shoppingWeeks: [],
+            generating: false,
+          };
         }),
 
-      reset: () => set({ program: null, days: [], generating: false }),
+      reset: () => set({ program: null, days: [], shoppingWeeks: [], generating: false }),
     }),
     {
       name: 'glucoai-program',

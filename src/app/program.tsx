@@ -15,12 +15,10 @@ import {
   currentDay,
   dayProgress,
   DEFAULT_CONSTRAINTS,
-  generateDay,
   isoDay,
   loadProgram,
   logPlannedMeal,
   mergeDays,
-  nextDayDate,
   nextSlot,
   plannedMealResult,
   previewTargets,
@@ -34,6 +32,14 @@ import {
   type Program,
   type ProgramConstraints,
 } from '@/services/program';
+import {
+  loadShoppingWeeks,
+  planWeek,
+  saveShoppingWeek,
+  stockFor,
+  weekBounds,
+  type WeekPlanProgress,
+} from '@/services/programShopping';
 import { MEAL_SLOTS, type ActivityLevel, type ProgramGoal } from '@/services/programEngine';
 import { useAppStore } from '@/store/useAppStore';
 import { useProgramStore } from '@/store/useProgramStore';
@@ -96,9 +102,12 @@ export default function ProgramScreen() {
     program,
     days,
     generating,
+    shoppingWeeks,
     setProgram,
     setDays,
-    upsertDay,
+    upsertDays,
+    setShoppingWeeks,
+    upsertShoppingWeek,
     setGenerating,
     patchMeal,
     skipWorkout,
@@ -108,6 +117,8 @@ export default function ProgramScreen() {
   const [genError, setGenError] = useState<GenerateError | null>(null);
   const [confirming, setConfirming] = useState<PlannedMeal | null>(null);
   const [advancing, setAdvancing] = useState(false);
+  /** Which day of the week the coach is on while it writes it. */
+  const [weekProgress, setWeekProgress] = useState<WeekPlanProgress | null>(null);
 
   const today = isoDay(new Date());
 
@@ -131,28 +142,54 @@ export default function ProgramScreen() {
     []
   );
 
-  /** Compose one day from scratch, with every earlier day in mind. */
-  const planDay = useCallback(
-    async (p: Program, date: string, dayIndex: number) => {
+  /**
+   * Write a whole week, then the shopping list it implies.
+   *
+   * The week has to exist before the patient can shop for it — you cannot
+   * buy 600 g of chicken for meals nobody has composed yet. The seven days
+   * are stored but only the one being lived is ever shown, so the list can
+   * be exact without telling them what Thursday holds.
+   */
+  const prepareWeek = useCallback(
+    async (p: Program, weekIndex: number) => {
       setGenerating(true);
       setGenError(null);
-      const res = await generateDay({
+      setWeekProgress({ done: 0, total: 7 });
+
+      const res = await planWeek({
         program: p,
-        date: new Date(`${date}T12:00:00`),
-        dayIndex,
+        weekIndex,
         history: useProgramStore.getState().days,
         language: i18n.language,
+        onProgress: setWeekProgress,
       });
-      if ('day' in res) {
-        upsertDay(res.day);
-        await saveDays(p.id, [res.day]);
-      } else {
+
+      if ('error' in res) {
         setGenError(res.error);
+        setGenerating(false);
+        setWeekProgress(null);
+        return false;
       }
+
+      upsertDays(res.days);
+      await saveDays(p.id, res.days);
+
+      const { startDate, endDate, shopDate } = weekBounds(p, weekIndex);
+      const saved = await saveShoppingWeek(p.id, {
+        weekIndex,
+        startDate,
+        endDate,
+        shopDate,
+        status: 'planned',
+        items: res.items,
+      });
+      if (saved) upsertShoppingWeek(saved);
+
       setGenerating(false);
-      return 'day' in res;
+      setWeekProgress(null);
+      return true;
     },
-    [i18n.language, upsertDay, setGenerating]
+    [i18n.language, upsertDays, upsertShoppingWeek, setGenerating]
   );
 
   const close = () => {
@@ -204,11 +241,10 @@ export default function ProgramScreen() {
     const saved = (await saveProgram(draft)) ?? { ...draft, id: 'local' };
     setProgram(saved);
     setDays([]);
-    // Only TODAY is composed now. Each following day is written when the
-    // patient has finished the one before it — one small call instead of a
-    // week-sized one that used to overrun the model and lose everything.
-    await planDay(saved, today, 0);
-  }, [params, profile, today, setProgram, setDays, planDay]);
+    setShoppingWeeks([]);
+    // The first week, and the shopping that goes with it.
+    await prepareWeek(saved, 0);
+  }, [params, profile, today, setProgram, setDays, setShoppingWeeks, prepareWeek]);
 
   useEffect(() => {
     if (params.create === '1' && !program) void createFromParams();
@@ -251,6 +287,9 @@ export default function ProgramScreen() {
       // that never happened.
       setProgram(remote.program);
       setDays(sameProgram ? mergeDays(state.days, remote.days) : remote.days);
+
+      const weeks = await loadShoppingWeeks(remote.program.id);
+      if (alive && weeks.length) setShoppingWeeks(weeks);
     })();
     return () => {
       alive = false;
@@ -258,15 +297,29 @@ export default function ProgramScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* A program with no day at all (creation half-failed, or a fresh install
-     that just pulled the program row) writes its first day on open. Days
-     after the first are NEVER auto-written — they are earned. */
+  /* The week the calendar says we are in. Weeks are anchored to the program
+     start, because shopping is a calendar act: "this week's list" has to
+     mean the same thing to the patient and to the fridge. */
+  const liveWeekIndex = useMemo(() => {
+    if (!program) return 0;
+    const diff =
+      (new Date(`${today}T12:00:00`).getTime() -
+        new Date(`${program.startDate}T12:00:00`).getTime()) /
+      86400000;
+    return Math.max(0, Math.min(program.weeks - 1, Math.floor(diff / 7)));
+  }, [program, today]);
+
+  const weekReady = shoppingWeeks.some((w) => w.weekIndex === liveWeekIndex);
+
+  /* A week with nothing written for it gets written on open — that covers a
+     creation that half-failed, a fresh install, and the roll into a new
+     week. Individual days are never written on their own any more. */
   useEffect(() => {
-    if (!program || days.length > 0 || generating || genError) return;
+    if (!program || weekReady || generating || genError) return;
     if (params.create === '1') return;
-    void planDay(program, today, 0);
+    void prepareWeek(program, liveWeekIndex);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [program?.id, days.length, generating, genError]);
+  }, [program?.id, weekReady, liveWeekIndex, generating, genError]);
 
   /* ── Actions ── */
 
@@ -339,17 +392,13 @@ export default function ProgramScreen() {
         confirmDay(d.date);
         await persist(d.date);
       }
-      const fresh = useProgramStore.getState().days;
-      // The invariant the whole feature rests on: never write a new day while
-      // one is still open. Closing an abandoned day can reveal a day already
-      // waiting — that one becomes the current day, and nothing is generated.
-      if (currentDay(fresh)) return;
-      if (fresh.length >= program.weeks * 7) return; // parcours complete
-      await planDay(program, nextDayDate(fresh), fresh.length);
+      // The next day was written with its week and is simply revealed now.
+      // A new week is only ever written by the effect above, once the
+      // calendar has actually moved into it.
     } finally {
       setAdvancing(false);
     }
-  }, [program, day, days, today, advancing, confirmDay, persist, planDay]);
+  }, [program, day, days, today, advancing, confirmDay, persist]);
 
   /* ── Empty state ── */
   if (!program && !generating) {
@@ -413,8 +462,26 @@ export default function ProgramScreen() {
     return (
       <View style={[styles.root, styles.center]}>
         <Spinner size={30} color={GREEN} />
-        <Text style={styles.genTitle}>{t('program.generating')}</Text>
+        <Text style={styles.genTitle}>{t('program.generatingWeek')}</Text>
         <Text style={styles.genSub}>{t('program.generatingSub')}</Text>
+        {weekProgress ? (
+          <>
+            <View style={styles.genTrack}>
+              <View
+                style={[
+                  styles.genFill,
+                  { width: `${(weekProgress.done / weekProgress.total) * 100}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.genStep}>
+              {t('program.generatingDay', {
+                a: Math.max(1, weekProgress.done),
+                b: weekProgress.total,
+              })}
+            </Text>
+          </>
+        ) : null}
       </View>
     );
   }
@@ -433,6 +500,17 @@ export default function ProgramScreen() {
   const weekIndex = Math.min(program.weeks, Math.floor(dayIndex / 7) + 1);
   const confirmedCount = days.filter((d) => d.confirmedAt).length;
   const finished = !day && days.length >= totalDays;
+
+  /* The larder for the week being lived — a summary on the hub, the detail
+     is a screen of its own. */
+  const liveWeek = shoppingWeeks.find((w) => w.weekIndex === liveWeekIndex) ?? null;
+  const stockLeftPct = (() => {
+    if (!liveWeek) return 0;
+    const lines = stockFor(liveWeek, days);
+    const total = lines.reduce((s, l) => s + l.grams, 0);
+    const left = lines.reduce((s, l) => s + l.left, 0);
+    return total > 0 ? Math.round((left / total) * 100) : 0;
+  })();
 
   const workoutId = day?.workoutId ?? null;
   const session = workoutId ? getSession(workoutId) : null;
@@ -500,6 +578,38 @@ export default function ProgramScreen() {
             </Text>
           </LinearGradient>
         </FadeInView>
+
+        {/* ── This week's shopping, and what is left of it ── */}
+        {liveWeek ? (
+          <FadeInView delay={30}>
+            <Pressable
+              style={styles.shopCard}
+              onPress={() => router.push('/program-shopping' as any)}
+            >
+              <Text style={styles.shopEmoji}>🛒</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.shopTitle}>
+                  {liveWeek.status === 'planned'
+                    ? t('shopping.cardToShop', { n: liveWeek.items.length })
+                    : t('shopping.cardStock', { pct: stockLeftPct })}
+                </Text>
+                <Text style={styles.shopSub}>
+                  {liveWeek.status === 'planned'
+                    ? liveWeek.shopDate === today
+                      ? t('shopping.shopToday')
+                      : t('shopping.shopOn', {
+                          date: new Date(`${liveWeek.shopDate}T12:00:00`).toLocaleDateString(
+                            i18n.language,
+                            { weekday: 'long', day: 'numeric', month: 'long' }
+                          ),
+                        })
+                    : t('shopping.cardStockSub')}
+                </Text>
+              </View>
+              <Text style={styles.shopArrow}>→</Text>
+            </Pressable>
+          </FadeInView>
+        ) : null}
 
         {/* ── The parcours, day by day ── */}
         {days.length ? (
@@ -711,7 +821,7 @@ export default function ProgramScreen() {
               <Text style={styles.pendingText}>{t(`program.err_${genError ?? 'unknown'}`)}</Text>
               <Pressable
                 style={styles.retryBtn}
-                onPress={() => planDay(program, nextDayDate(days), days.length)}
+                onPress={() => prepareWeek(program, liveWeekIndex)}
               >
                 <Text style={styles.retryBtnText}>↻ {t('program.retry')}</Text>
               </Pressable>
@@ -945,6 +1055,17 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: 'center',
   },
+  genTrack: {
+    width: '80%',
+    maxWidth: 260,
+    height: 6,
+    borderRadius: 4,
+    backgroundColor: '#e4e8ef',
+    marginTop: 18,
+    overflow: 'hidden',
+  },
+  genFill: { height: 6, borderRadius: 4, backgroundColor: GREEN },
+  genStep: { fontFamily: F700, fontSize: 12, color: '#8a98a7', marginTop: 8 },
 
   /* Hero */
   hero: {
@@ -987,6 +1108,24 @@ const styles = StyleSheet.create({
   budgetValue: { fontFamily: F800, fontSize: 15, color: INK, marginTop: 1 },
 
   sectionHead: { fontFamily: F800, fontSize: 15, color: INK, marginTop: 22, marginBottom: 10 },
+
+  /* This week's shopping */
+  shopCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 15,
+    marginTop: 12,
+    borderWidth: 1.5,
+    borderColor: '#fde9c8',
+    ...shadows.card,
+  },
+  shopEmoji: { fontSize: 24 },
+  shopTitle: { fontFamily: F800, fontSize: 13.5, color: INK },
+  shopSub: { fontFamily: F600, fontSize: 11.5, lineHeight: 16, color: '#8a98a7', marginTop: 2 },
+  shopArrow: { fontFamily: F800, fontSize: 16, color: '#c2ccd8' },
 
   /* Day closed / parcours closed */
   celebrate: {
