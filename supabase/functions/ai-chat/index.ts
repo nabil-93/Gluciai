@@ -44,6 +44,9 @@ Deno.serve(async (req) => {
       generate = false,
       meal = null,
       dayJournal = '',
+      program = null,
+      startDate = '',
+      days = 7,
     } = await req.json();
     if (!GEMINI_API_KEY) {
       return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
@@ -205,6 +208,129 @@ BEFORE injecting this modified dose.`;
         await logUsage({
           user_id: uid,
           kind: 'bolus',
+          model: MODEL,
+          input_tokens: inTok,
+          output_tokens: outTok,
+          cost_usd: flashCost(inTok, outTok),
+        });
+      }
+
+      return json({ result: parsed });
+    }
+
+    /* ── Program planner: compose a personalised parcours.
+       The app has ALREADY computed the budget (calories, macros, per-meal
+       carbs) with published formulas. The model's job is the FOOD — dishes
+       invented for this exact patient — never the arithmetic, and never a
+       pick from a fixed catalogue. Whatever it returns is re-priced against
+       real nutrition databases on the client before it is stored, because
+       those carb grams end up in an insulin dose. ── */
+    if (mode === 'program_plan') {
+      const t = program?.targets ?? {};
+      const c = program?.constraints ?? {};
+      const planPrompt = `You are GluciAI's coach, writing a personalised food and training plan for
+ONE diabetic patient. Reply in ${langName}.
+
+THE MOST IMPORTANT RULE — INVENT, DO NOT PICK.
+Every dish must be composed FROM SCRATCH for THIS patient, using their
+goal, their tastes, their budget, their cooking time and their culture
+(Moroccan home cooking is the default reference unless the patient's data
+says otherwise). Never output a generic "chicken and rice" template
+repeated across days, and never copy a catalogue. Two different patients
+must never receive the same week. Vary the dishes across the ${days} days —
+no dish repeats more than twice in the whole stretch.
+
+THE BUDGET IS NOT YOURS TO CHANGE.
+These numbers were computed medically. Compose dishes that LAND on them:
+- ${t.dailyKcal} kcal per day
+- ${t.carbsG} g carbohydrate, ${t.proteinG} g protein, ${t.fatG} g fat
+- carbohydrate per meal: ${JSON.stringify(t.carbsPerMeal ?? {})}
+- calories per meal: ${JSON.stringify(t.kcalPerMeal ?? {})}
+Aim within 10 % of each per-meal carb figure. Do NOT restate or "correct"
+the budget, and do NOT add commentary about calories being wrong.
+
+YOU DO NOT DECIDE THE NUTRITION FACTS.
+For each dish give the INGREDIENT LIST with realistic cooked grams per
+person. The app looks every ingredient up in USDA / Open Food Facts /
+Moroccan food databases and computes the true macros. So:
+- "search_name" MUST be a simple GENERIC ENGLISH food name that a
+  nutrition database will match: "chicken breast", "brown rice",
+  "olive oil", "zucchini", "chickpeas", "whole wheat bread", "lentils".
+  Never a recipe name, never a brand, never a compound like
+  "chicken tagine with olives".
+- "name" is what the patient reads, in ${langName}.
+- Give kcal/carbs as your best estimate anyway (the app overwrites them).
+
+PATIENT GOAL: ${program?.goal}. Target ${program?.startWeight ?? '?'} kg →
+${program?.targetWeight ?? '?'} kg.
+NEVER PROPOSE (allergies and dislikes — absolute): ${(c.avoid ?? []).join(', ') || 'nothing'}
+LIKES: ${(c.likes ?? []).join(', ') || 'not specified'}
+COOKING TIME available per meal: ${c.cookMinutes ?? 30} minutes.
+GROCERY BUDGET: ${c.budget ?? 'medium'} — "low" means cheap staples
+(eggs, lentils, sardines, seasonal vegetables), not luxury cuts.
+${c.fasting ? 'THE PATIENT IS FASTING (Ramadan): put all the food in ftour (sunset) and shour (pre-dawn) ONLY. No daytime meals — use the "breakfast" slot for shour and "dinner" for ftour, "snack" for between them at night.' : ''}
+
+TRAINING: the patient trains ${program?.trainingDaysPerWeek ?? 3} days a week,
+place "${program?.trainingPlace ?? 'home'}". On training days set "workoutId"
+to ONE of these EXACT ids, matching their place, otherwise null (rest day):
+home_full_beg, home_full_int, home_cardio_beg, gym_full_beg, gym_full_int,
+outdoor_walk. Never invent an id, never write a URL.
+
+PATIENT CONTEXT (live from their app):
+${healthData || 'none'}
+
+Start at date ${startDate}. Produce exactly ${days} consecutive days.
+
+Reply ONLY valid JSON (no markdown fences):
+{"days":[{"date":"YYYY-MM-DD","dayIndex":0,"status":"planned","workoutId":null,
+"meals":[{"slot":"breakfast","title":"...","emoji":"🥣","why":"one short line on why this suits THEM",
+"ingredients":[{"name":"...","search_name":"generic english food","grams":120}],
+"recipe":["step","step"],"kcal":0,"carbs":0,"sugar":0,"protein":0,"fat":0,"fiber":0}]}]}
+
+slot is one of breakfast, lunch, snack, dinner — all four, every day.`;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: planPrompt }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              // A full week of four meals is a lot of structured output.
+              maxOutputTokens: 16000,
+              // Enough freedom to genuinely vary the cooking, not enough to
+              // drift from the budget.
+              temperature: 0.9,
+            },
+          }),
+        }
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        return json({ error: 'AI provider error', detail }, 502);
+      }
+      const data = await response.json();
+      const text = (data.candidates?.[0]?.content?.parts ?? [])
+        .map((p: { text?: string }) => p.text ?? '')
+        .join('')
+        .trim();
+
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return json({ error: 'AI returned invalid JSON', raw: text }, 502);
+      }
+
+      const um = data.usageMetadata ?? {};
+      const inTok = um.promptTokenCount ?? 0;
+      const outTok = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
+      if (uid && (inTok || outTok)) {
+        await logUsage({
+          user_id: uid,
+          kind: 'program',
           model: MODEL,
           input_tokens: inTok,
           output_tokens: outTok,
