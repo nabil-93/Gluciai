@@ -238,8 +238,8 @@ goal, their tastes, their budget, their cooking time and their culture
 (Moroccan home cooking is the default reference unless the patient's data
 says otherwise). Never output a generic "chicken and rice" template
 repeated across days, and never copy a catalogue. Two different patients
-must never receive the same week. Vary the dishes across the ${days} days —
-no dish repeats more than twice in the whole stretch.
+must never receive the same week, and no patient should meet the same dish
+twice in a few days — see the history below and cook something else.
 
 THE BUDGET IS NOT YOURS TO CHANGE.
 These numbers were computed medically. Compose dishes that LAND on them:
