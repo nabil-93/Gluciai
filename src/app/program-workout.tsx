@@ -8,7 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, FadeInView, Spinner } from '@/components/ui';
 import { getExercise, getSession, preWorkoutCheck, videoUrl } from '@/data/workouts';
 import { saveActivity } from '@/services/data';
+import { saveDays } from '@/services/program';
 import { useAppStore } from '@/store/useAppStore';
+import { useProgramStore } from '@/store/useProgramStore';
 import { shadows } from '@/theme';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -23,8 +25,9 @@ export default function ProgramWorkoutScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, date } = useLocalSearchParams<{ id?: string; date?: string }>();
   const { glucoseLogs } = useAppStore();
+  const markWorkoutDone = useProgramStore((s) => s.markWorkoutDone);
 
   const [done, setDone] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
@@ -73,6 +76,16 @@ export default function ProgramWorkoutScreen() {
         session.level === 'beginner' ? 'low' : 'medium',
         title
       );
+
+      // …and it also closes the sport half of the program day. Without this
+      // the day could never be completed, so the next one never unlocked.
+      if (date) {
+        markWorkoutDone(String(date));
+        const { program, days } = useProgramStore.getState();
+        const fresh = days.find((d) => d.date === String(date));
+        if (program && fresh) await saveDays(program.id, [fresh]);
+      }
+
       setSaved(true);
       setTimeout(close, 1000);
     } finally {

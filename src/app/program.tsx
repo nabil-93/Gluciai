@@ -7,18 +7,28 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChevronLeft, FadeInView, Spinner } from '@/components/ui';
-import { getSession, preWorkoutCheck, videoUrl, getExercise } from '@/data/workouts';
+import { MealDoneModal } from '@/components/program/MealDoneModal';
+import { ProgramCalendar } from '@/components/program/ProgramCalendar';
+import { getSession, preWorkoutCheck, getExercise } from '@/data/workouts';
 import {
+  currentDay,
+  dayProgress,
   DEFAULT_CONSTRAINTS,
   generateDay,
+  isoDay,
+  loadProgram,
+  logPlannedMeal,
+  mergeDays,
+  nextDayDate,
   nextSlot,
+  plannedMealResult,
   previewTargets,
   retargetNextMeal,
   saveDays,
   saveProgram,
   todayBudget,
-  workoutForDay,
   type GenerateError,
+  type PlannedMeal,
   type Program,
   type ProgramConstraints,
 } from '@/services/program';
@@ -68,31 +78,63 @@ function BudgetRing({ pct, size = 118 }: { pct: number; size?: number }) {
   );
 }
 
+/** Snap a ratio to the portions the confirmation sheet actually offers. */
+function snapPortion(ratio: number): number {
+  const steps = [0.5, 0.75, 1, 1.25, 1.5];
+  return steps.reduce((best, s) => (Math.abs(s - ratio) < Math.abs(best - ratio) ? s : best), 1);
+}
+
 export default function ProgramScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const { profile } = useAppStore();
-  const { program, days, generating, setProgram, setDays, upsertDay, setGenerating, markEaten } =
-    useProgramStore();
+  const {
+    program,
+    days,
+    generating,
+    setProgram,
+    setDays,
+    upsertDay,
+    setGenerating,
+    patchMeal,
+    confirmDay,
+  } = useProgramStore();
   const [genError, setGenError] = useState<GenerateError | null>(null);
+  const [confirming, setConfirming] = useState<PlannedMeal | null>(null);
+  const [advancing, setAdvancing] = useState(false);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const todayPlan = useMemo(() => days.find((d) => d.date === today) ?? null, [days, today]);
+  const today = isoDay(new Date());
 
-  /** Compose today from scratch, remembering the days already served. */
-  const planToday = useCallback(
-    async (p: Program) => {
+  /* The day the patient is living: the oldest one they have not closed.
+     Tomorrow simply does not exist until this one is closed. */
+  const day = useMemo(() => currentDay(days), [days]);
+  const progress = useMemo(() => dayProgress(day), [day]);
+  const isToday = day?.date === today;
+  const isAhead = !!day && day.date > today; // already unlocked, starts later
+  const isStale = !!day && day.date < today; // left unfinished on a past date
+
+  /* ── Persistence ── */
+
+  /** Push one day's current state to the server (fire and forget on error). */
+  const persist = useCallback(
+    async (date: string) => {
+      const p = useProgramStore.getState().program;
+      const fresh = useProgramStore.getState().days.find((d) => d.date === date);
+      if (p && fresh) await saveDays(p.id, [fresh]);
+    },
+    []
+  );
+
+  /** Compose one day from scratch, with every earlier day in mind. */
+  const planDay = useCallback(
+    async (p: Program, date: string, dayIndex: number) => {
       setGenerating(true);
       setGenError(null);
-      const dayIndex = Math.max(
-        0,
-        Math.round((new Date(today).getTime() - new Date(p.startDate).getTime()) / 86400000)
-      );
       const res = await generateDay({
         program: p,
-        date: new Date(),
+        date: new Date(`${date}T12:00:00`),
         dayIndex,
         history: useProgramStore.getState().days,
         language: i18n.language,
@@ -104,8 +146,9 @@ export default function ProgramScreen() {
         setGenError(res.error);
       }
       setGenerating(false);
+      return 'day' in res;
     },
-    [today, i18n.language, upsertDay, setGenerating]
+    [i18n.language, upsertDay, setGenerating]
   );
 
   const close = () => {
@@ -157,11 +200,11 @@ export default function ProgramScreen() {
     const saved = (await saveProgram(draft)) ?? { ...draft, id: 'local' };
     setProgram(saved);
     setDays([]);
-    // Only TODAY is composed now. Each following day is written when it
-    // arrives, with the previous ones in mind — one small call instead of a
+    // Only TODAY is composed now. Each following day is written when the
+    // patient has finished the one before it — one small call instead of a
     // week-sized one that used to overrun the model and lose everything.
-    await planToday(saved);
-  }, [params, profile, today, setProgram, setDays, planToday]);
+    await planDay(saved, today, 0);
+  }, [params, profile, today, setProgram, setDays, planDay]);
 
   useEffect(() => {
     if (params.create === '1' && !program) void createFromParams();
@@ -169,14 +212,98 @@ export default function ProgramScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.create]);
 
-  /* A new day with no plan writes itself the moment the patient opens the
-     screen — that is what "the coach follows you day by day" means. */
+  /* Rehydrate from the server: the parcours belongs to the account, not to
+     this phone's local storage. What the device did offline wins per day. */
   useEffect(() => {
-    if (!program || todayPlan || generating || genError) return;
-    if (params.create === '1') return; // creation already handles today
-    void planToday(program);
+    if (params.create === '1') return;
+    let alive = true;
+    void (async () => {
+      const remote = await loadProgram();
+      if (!alive || !remote) return;
+      const state = useProgramStore.getState();
+      const sameProgram = state.program?.id === remote.program.id;
+      // A different active program on the account replaces this device's copy
+      // wholesale — mixing days from two parcours would produce a history
+      // that never happened.
+      if (!state.program || sameProgram || state.program.id === 'local') {
+        setProgram(remote.program);
+        setDays(sameProgram ? mergeDays(state.days, remote.days) : remote.days);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [program?.id, todayPlan, generating, genError]);
+  }, []);
+
+  /* A program with no day at all (creation half-failed, or a fresh install
+     that just pulled the program row) writes its first day on open. Days
+     after the first are NEVER auto-written — they are earned. */
+  useEffect(() => {
+    if (!program || days.length > 0 || generating || genError) return;
+    if (params.create === '1') return;
+    void planDay(program, today, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program?.id, days.length, generating, genError]);
+
+  /* ── Actions ── */
+
+  /** The patient confirms they ate a planned meal: it enters the journal. */
+  const onConfirmMeal = useCallback(
+    async (portion: number, dose: boolean) => {
+      const meal = confirming;
+      if (!meal || !day) return;
+
+      // THIS is what makes the day's numbers move: a real journal entry,
+      // filed under its slot, exactly like a scanned plate. The budget ring,
+      // the home screen, the timeline and the bolus advisor all read it.
+      const scan = await logPlannedMeal(meal, portion);
+      patchMeal(day.date, meal.slot, {
+        eatenAt: scan?.created_at ?? new Date().toISOString(),
+        mealId: scan?.id ?? null,
+        portion,
+      });
+      await persist(day.date);
+      setConfirming(null);
+
+      if (dose) {
+        router.push({
+          pathname: '/bolus',
+          params: {
+            carbs: String(Math.round(plannedMealResult(meal, portion).carbohydrates)),
+            meal: meal.slot,
+          },
+        } as any);
+      }
+    },
+    [confirming, day, patchMeal, persist, router]
+  );
+
+  /** Close the day and unlock the next — the only way the parcours advances. */
+  const advance = useCallback(async () => {
+    if (!program || !day || advancing) return;
+    setAdvancing(true);
+    try {
+      // Restarting after a break closes EVERY day left open behind us in one
+      // go. Making the patient tap through each abandoned day one at a time
+      // would be a punishment for having had a hard week.
+      const stale = days.filter((d) => !d.confirmedAt && d.date < today);
+      const toClose = stale.length ? stale : [day];
+      for (const d of toClose) {
+        confirmDay(d.date);
+        await persist(d.date);
+      }
+      const fresh = useProgramStore.getState().days;
+      // The invariant the whole feature rests on: never write a new day while
+      // one is still open. Closing an abandoned day can reveal a day already
+      // waiting — that one becomes the current day, and nothing is generated.
+      if (currentDay(fresh)) return;
+      if (fresh.length >= program.weeks * 7) return; // parcours complete
+      await planDay(program, nextDayDate(fresh), fresh.length);
+    } finally {
+      setAdvancing(false);
+    }
+  }, [program, day, days, today, advancing, confirmDay, persist, planDay]);
 
   /* ── Empty state ── */
   if (!program && !generating) {
@@ -249,27 +376,30 @@ export default function ProgramScreen() {
   if (!program) return null;
 
   const budget = todayBudget(program.targets);
-  const slot = nextSlot(todayPlan);
-  const nextMeal = todayPlan?.meals.find((m) => m.slot === slot) ?? null;
-  const retarget = todayPlan ? retargetNextMeal(program, todayPlan) : null;
+  const slot = isToday ? nextSlot(day) : null;
+  const nextMeal = day?.meals.find((m) => m.slot === slot) ?? null;
+  const retarget = day && isToday ? retargetNextMeal(program, day) : null;
 
-  const dayIndex = Math.max(
-    0,
-    Math.round(
-      (new Date(today).getTime() - new Date(program.startDate).getTime()) / 86400000
-    )
-  );
+  // Where the patient is in the parcours: counted in days LIVED, not in days
+  // elapsed. Someone who paused for a week resumes at day 5, not day 12.
+  const dayIndex = day?.dayIndex ?? days.length;
+  const totalDays = program.weeks * 7;
   const weekIndex = Math.min(program.weeks, Math.floor(dayIndex / 7) + 1);
+  const confirmedCount = days.filter((d) => d.confirmedAt).length;
+  const finished = !day && days.length >= totalDays;
 
-  // Computed from the program, not from the meal plan: the training rhythm
-  // the patient signed up for shows even on a day the coach has not written
-  // the food for yet.
-  const workoutId = todayPlan?.workoutId ?? workoutForDay(program, dayIndex);
+  const workoutId = day?.workoutId ?? null;
   const session = workoutId ? getSession(workoutId) : null;
   const glucoseNow = useAppStore
     .getState()
     .glucoseLogs.find((g) => new Date(g.created_at).toDateString() === new Date().toDateString());
   const pre = preWorkoutCheck(glucoseNow?.value);
+
+  const dayLabel = new Date(`${day?.date ?? today}T12:00:00`).toLocaleDateString(i18n.language, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
 
   return (
     <View style={styles.root}>
@@ -305,17 +435,30 @@ export default function ProgramScreen() {
               <View
                 style={[
                   styles.heroBarFill,
-                  { width: `${Math.min(100, ((dayIndex + 1) / (program.weeks * 7)) * 100)}%` },
+                  { width: `${Math.min(100, (confirmedCount / totalDays) * 100)}%` },
                 ]}
               />
             </View>
-            {program.startWeight && program.targetWeight ? (
-              <Text style={styles.heroWeights}>
-                {program.startWeight} kg → {program.targetWeight} kg
-              </Text>
-            ) : null}
+            <Text style={styles.heroWeights}>
+              {t('program.daysDone', { done: confirmedCount, total: totalDays })}
+              {program.startWeight && program.targetWeight
+                ? ` · ${program.startWeight} kg → ${program.targetWeight} kg`
+                : ''}
+            </Text>
           </LinearGradient>
         </FadeInView>
+
+        {/* ── The parcours, day by day ── */}
+        {days.length ? (
+          <FadeInView delay={40}>
+            <ProgramCalendar
+              days={days}
+              onOpenDay={(date) =>
+                router.push({ pathname: '/program-day', params: { date } } as any)
+              }
+            />
+          </FadeInView>
+        ) : null}
 
         {/* ── Today's budget ── */}
         <FadeInView delay={60}>
@@ -348,103 +491,179 @@ export default function ProgramScreen() {
           </View>
         </FadeInView>
 
-        {/* ── The next meal — the heart of the feature ── */}
-        <FadeInView delay={120}>
-          <Text style={styles.sectionHead}>🍽️ {t('program.nextMealTitle')}</Text>
-          {nextMeal ? (
-            <View style={styles.nextCard}>
-              <View style={styles.nextHead}>
-                <Text style={styles.nextEmoji}>{nextMeal.emoji || SLOT_EMOJI[nextMeal.slot]}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.nextSlot}>{t(`bolus.meal_${nextMeal.slot}`)}</Text>
-                  <Text style={styles.nextTitle}>{nextMeal.title}</Text>
-                </View>
-              </View>
-
-              {/* Why the numbers moved since the plan was written */}
-              {retarget?.reason ? (
-                <View style={styles.adaptBox}>
-                  <Text style={styles.adaptText}>
-                    ⚡ {t(`program.adapt_${retarget.reason}`, {
-                      kcal: retarget.kcal,
-                      carbs: retarget.carbs,
-                    })}
-                  </Text>
-                </View>
-              ) : null}
-
-              <View style={styles.macroLine}>
-                <Text style={styles.macroChip}>
-                  🍞 {retarget?.carbs ?? nextMeal.carbs} g
-                </Text>
-                <Text style={styles.macroChip}>🔥 {retarget?.kcal ?? nextMeal.kcal} kcal</Text>
-                {nextMeal.gi ? <Text style={styles.macroChip}>IG {nextMeal.gi}</Text> : null}
-                {!nextMeal.resolved ? (
-                  <Text style={[styles.macroChip, styles.macroChipWarn]}>
-                    ~ {t('program.estimated')}
-                  </Text>
-                ) : null}
-              </View>
-
-              {nextMeal.why ? <Text style={styles.whyText}>{nextMeal.why}</Text> : null}
-
-              <View style={styles.actionRow}>
-                <Pressable
-                  style={styles.primaryAction}
-                  onPress={() => markEaten(today, nextMeal.slot)}
-                >
-                  <Text style={styles.primaryActionText}>✓ {t('program.ateIt')}</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.ghostAction}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/bolus',
-                      params: { carbs: String(retarget?.carbs ?? nextMeal.carbs) },
-                    } as any)
-                  }
-                >
-                  <Text style={styles.ghostActionText}>💉 {t('program.myDose')}</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : todayPlan ? (
-            <View style={styles.pendingCard}>
-              <Text style={styles.pendingText}>{t('program.allEaten')}</Text>
-            </View>
-          ) : (
-            /* No plan for today. Say WHY — the old copy blamed the network
-               even when the patient was online, which was simply untrue. */
-            <View style={styles.pendingCard}>
-              <Text style={styles.pendingText}>
-                {generating ? t('program.composing') : t(`program.err_${genError ?? 'unknown'}`)}
+        {/* ── The parcours is over ── */}
+        {finished ? (
+          <FadeInView delay={100}>
+            <LinearGradient
+              colors={['#2ec983', '#159a57']}
+              start={{ x: 0.1, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={styles.celebrate}
+            >
+              <Text style={styles.celebrateEmoji}>🏆</Text>
+              <Text style={styles.celebrateTitle}>{t('program.finishedTitle')}</Text>
+              <Text style={styles.celebrateSub}>
+                {t('program.finishedSub', { weeks: program.weeks })}
               </Text>
-              {!generating ? (
-                <Pressable
-                  style={styles.retryBtn}
-                  onPress={() => program && planToday(program)}
-                >
-                  <Text style={styles.retryBtnText}>↻ {t('program.retry')}</Text>
-                </Pressable>
-              ) : (
-                <View style={{ marginTop: 12 }}>
-                  <Spinner size={22} color={GREEN} />
-                </View>
-              )}
+            </LinearGradient>
+          </FadeInView>
+        ) : null}
+
+        {/* ── Day finished: the congratulation, then tomorrow ── */}
+        {day && progress.complete && !progress.confirmed ? (
+          <FadeInView delay={100}>
+            <LinearGradient
+              colors={['#2ec983', '#159a57']}
+              start={{ x: 0.1, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={styles.celebrate}
+            >
+              <Text style={styles.celebrateEmoji}>🎉</Text>
+              <Text style={styles.celebrateTitle}>{t('program.dayDoneTitle')}</Text>
+              <Text style={styles.celebrateSub}>
+                {t('program.dayDoneSub', {
+                  meals: progress.mealsDone,
+                  n: dayIndex + 1,
+                })}
+              </Text>
+              <Pressable onPress={advance} disabled={advancing} style={styles.celebrateCta}>
+                {advancing ? (
+                  <Spinner size={20} color="#159a57" />
+                ) : (
+                  <Text style={styles.celebrateCtaText}>{t('program.toTomorrow')} →</Text>
+                )}
+              </Pressable>
+            </LinearGradient>
+          </FadeInView>
+        ) : null}
+
+        {/* ── An unfinished day left behind ── */}
+        {isStale && !progress.complete ? (
+          <FadeInView delay={100}>
+            <View style={styles.staleCard}>
+              <Text style={styles.staleTitle}>⏳ {t('program.staleTitle', { date: dayLabel })}</Text>
+              <Text style={styles.staleText}>{t('program.staleSub')}</Text>
+              <Pressable onPress={advance} disabled={advancing} style={styles.staleCta}>
+                {advancing ? (
+                  <Spinner size={18} color="#8a5a10" />
+                ) : (
+                  <Text style={styles.staleCtaText}>{t('program.resumeToday')} →</Text>
+                )}
+              </Pressable>
             </View>
-          )}
-        </FadeInView>
+          </FadeInView>
+        ) : null}
+
+        {/* ── Tomorrow is written and waiting ── */}
+        {isAhead ? (
+          <FadeInView delay={120}>
+            <View style={styles.aheadCard}>
+              <Text style={styles.aheadTitle}>🔓 {t('program.tomorrowReadyTitle')}</Text>
+              <Text style={styles.aheadText}>
+                {t('program.tomorrowReadySub', { date: dayLabel })}
+              </Text>
+            </View>
+          </FadeInView>
+        ) : null}
+
+        {/* ── The next meal — the heart of the feature ── */}
+        {isToday ? (
+          <FadeInView delay={140}>
+            <Text style={styles.sectionHead}>🍽️ {t('program.nextMealTitle')}</Text>
+            {nextMeal ? (
+              <View style={styles.nextCard}>
+                <View style={styles.nextHead}>
+                  <Text style={styles.nextEmoji}>{nextMeal.emoji || SLOT_EMOJI[nextMeal.slot]}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.nextSlot}>{t(`bolus.meal_${nextMeal.slot}`)}</Text>
+                    <Text style={styles.nextTitle}>{nextMeal.title}</Text>
+                  </View>
+                </View>
+
+                {/* Why the numbers moved since the plan was written */}
+                {retarget?.reason ? (
+                  <View style={styles.adaptBox}>
+                    <Text style={styles.adaptText}>
+                      ⚡ {t(`program.adapt_${retarget.reason}`, {
+                        kcal: retarget.kcal,
+                        carbs: retarget.carbs,
+                      })}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.macroLine}>
+                  <Text style={styles.macroChip}>🍞 {nextMeal.carbs} g</Text>
+                  <Text style={styles.macroChip}>🔥 {nextMeal.kcal} kcal</Text>
+                  {nextMeal.gi ? <Text style={styles.macroChip}>IG {nextMeal.gi}</Text> : null}
+                  {!nextMeal.resolved ? (
+                    <Text style={[styles.macroChip, styles.macroChipWarn]}>
+                      ~ {t('program.estimated')}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {nextMeal.why ? <Text style={styles.whyText}>{nextMeal.why}</Text> : null}
+
+                <View style={styles.actionRow}>
+                  <Pressable style={styles.primaryAction} onPress={() => setConfirming(nextMeal)}>
+                    <Text style={styles.primaryActionText}>✓ {t('program.ateIt')}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.ghostAction}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/bolus',
+                        params: { carbs: String(nextMeal.carbs), meal: nextMeal.slot },
+                      } as any)
+                    }
+                  >
+                    <Text style={styles.ghostActionText}>💉 {t('program.myDose')}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.pendingCard}>
+                <Text style={styles.pendingText}>{t('program.allEaten')}</Text>
+              </View>
+            )}
+          </FadeInView>
+        ) : null}
+
+        {/* ── The next day could not be written ──
+            Say WHY: the old copy blamed the network even when the patient
+            was online, which was simply untrue. */}
+        {!day && !finished ? (
+          <FadeInView delay={140}>
+            <View style={[styles.pendingCard, { marginTop: 22 }]}>
+              <Text style={styles.pendingText}>{t(`program.err_${genError ?? 'unknown'}`)}</Text>
+              <Pressable
+                style={styles.retryBtn}
+                onPress={() => planDay(program, nextDayDate(days), days.length)}
+              >
+                <Text style={styles.retryBtnText}>↻ {t('program.retry')}</Text>
+              </Pressable>
+            </View>
+          </FadeInView>
+        ) : null}
 
         {/* ── The whole day ── */}
-        {todayPlan?.meals?.length ? (
+        {day?.meals?.length ? (
           <FadeInView delay={180}>
-            <Text style={styles.sectionHead}>📋 {t('program.todayMeals')}</Text>
+            <Text style={styles.sectionHead}>
+              📋 {isToday ? t('program.todayMeals') : t('program.dayMeals', { date: dayLabel })}
+            </Text>
             {MEAL_SLOTS.map((s) => {
-              const m = todayPlan.meals.find((x) => x.slot === s);
+              const m = day.meals.find((x) => x.slot === s);
               if (!m) return null;
               const done = !!m.eatenAt;
               return (
-                <View key={s} style={[styles.mealRow, done && styles.mealRowDone]}>
+                <Pressable
+                  key={s}
+                  disabled={done || !isToday}
+                  onPress={() => setConfirming(m)}
+                  style={[styles.mealRow, done && styles.mealRowDone]}
+                >
                   <Text style={styles.mealEmoji}>{m.emoji || SLOT_EMOJI[s]}</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.mealSlot}>{t(`bolus.meal_${s}`)}</Text>
@@ -452,38 +671,50 @@ export default function ProgramScreen() {
                   </View>
                   <Text style={styles.mealCarbs}>{m.carbs} g</Text>
                   {done ? <Text style={styles.mealCheck}>✓</Text> : null}
-                </View>
+                </Pressable>
               );
             })}
           </FadeInView>
         ) : null}
 
-        {/* ── Today's training ── */}
+        {/* ── The day's training ── */}
+        {day ? (
         <FadeInView delay={240}>
-          <Text style={styles.sectionHead}>🏋️ {t('program.workoutTitle')}</Text>
+          {/* "Your session TODAY" only when it IS today — this block also
+              shows a day left behind and a day not started yet. */}
+          <Text style={styles.sectionHead}>
+            🏋️ {isToday ? t('program.workoutTitle') : t('program.workoutSection')}
+          </Text>
           {session ? (
             <View style={styles.workoutCard}>
-              <Text style={styles.workoutTitle}>
-                {i18n.language.startsWith('ar')
-                  ? session.title_ar
-                  : i18n.language.startsWith('en')
-                    ? session.title_en
-                    : session.title_fr}
-              </Text>
+              <View style={styles.workoutHead}>
+                <Text style={{ flex: 1 }}>
+                  <Text style={styles.workoutTitle}>
+                    {i18n.language.startsWith('ar')
+                      ? session.title_ar
+                      : i18n.language.startsWith('en')
+                        ? session.title_en
+                        : session.title_fr}
+                  </Text>
+                </Text>
+                {progress.workoutDone ? <Text style={styles.workoutDone}>✓</Text> : null}
+              </View>
               <Text style={styles.workoutMeta}>
                 ⏱️ {session.minutes} min · 🔥 ~{session.estKcal} kcal
               </Text>
 
               {/* Glucose comes BEFORE the first rep, always. */}
-              <View
-                style={[
-                  styles.preBox,
-                  pre.verdict === 'stop' && styles.preStop,
-                  pre.verdict === 'fuel' && styles.preFuel,
-                ]}
-              >
-                <Text style={styles.preText}>{t(`program.${pre.key}`)}</Text>
-              </View>
+              {isToday ? (
+                <View
+                  style={[
+                    styles.preBox,
+                    pre.verdict === 'stop' && styles.preStop,
+                    pre.verdict === 'fuel' && styles.preFuel,
+                  ]}
+                >
+                  <Text style={styles.preText}>{t(`program.${pre.key}`)}</Text>
+                </View>
+              ) : null}
 
               {session.blocks.slice(0, 4).map((b, i) => {
                 const ex = getExercise(b.exerciseId);
@@ -500,17 +731,19 @@ export default function ProgramScreen() {
                 );
               })}
 
-              <Pressable
-                style={styles.workoutCta}
-                onPress={() =>
-                  router.push({
-                    pathname: '/program-workout',
-                    params: { id: session.id },
-                  } as any)
-                }
-              >
-                <Text style={styles.workoutCtaText}>{t('program.openWorkout')} →</Text>
-              </Pressable>
+              {isToday && !progress.workoutDone ? (
+                <Pressable
+                  style={styles.workoutCta}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/program-workout',
+                      params: { id: session.id, date: day?.date ?? today },
+                    } as any)
+                  }
+                >
+                  <Text style={styles.workoutCtaText}>{t('program.openWorkout')} →</Text>
+                </Pressable>
+              ) : null}
             </View>
           ) : (
             <View style={styles.pendingCard}>
@@ -518,11 +751,25 @@ export default function ProgramScreen() {
             </View>
           )}
         </FadeInView>
+        ) : null}
 
         <View style={styles.disclaimerBox}>
           <Text style={styles.disclaimerText}>🛡️ {t('program.disclaimer')}</Text>
         </View>
       </ScrollView>
+
+      {confirming ? (
+        <MealDoneModal
+          meal={confirming}
+          suggestedPortion={
+            retarget?.reason && retarget.slot === confirming.slot && confirming.carbs > 0
+              ? snapPortion(retarget.carbs / confirming.carbs)
+              : 1
+          }
+          onClose={() => setConfirming(null)}
+          onConfirm={onConfirmMeal}
+        />
+      ) : null}
     </View>
   );
 }
@@ -632,6 +879,85 @@ const styles = StyleSheet.create({
 
   sectionHead: { fontFamily: F800, fontSize: 15, color: INK, marginTop: 22, marginBottom: 10 },
 
+  /* Day closed / parcours closed */
+  celebrate: {
+    borderRadius: 22,
+    padding: 20,
+    alignItems: 'center',
+    marginTop: 12,
+    shadowColor: GREEN,
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+  },
+  celebrateEmoji: { fontSize: 40 },
+  celebrateTitle: {
+    fontFamily: F800,
+    fontSize: 18,
+    color: '#ffffff',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  celebrateSub: {
+    fontFamily: F500,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.92)',
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  celebrateCta: {
+    height: 46,
+    paddingHorizontal: 26,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  celebrateCtaText: { fontFamily: F800, fontSize: 13.5, color: '#159a57' },
+
+  /* Left behind */
+  staleCard: {
+    backgroundColor: '#fff8ec',
+    borderRadius: 18,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#f2e0bd',
+  },
+  staleTitle: { fontFamily: F800, fontSize: 13.5, color: '#8a5a10' },
+  staleText: {
+    fontFamily: F600,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#8a5a10',
+    marginTop: 5,
+    opacity: 0.9,
+  },
+  staleCta: {
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: '#fdf0d8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  staleCtaText: { fontFamily: F800, fontSize: 12.5, color: '#8a5a10' },
+
+  /* Unlocked, starts later */
+  aheadCard: {
+    backgroundColor: '#eafaf1',
+    borderRadius: 18,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#c8ecd9',
+  },
+  aheadTitle: { fontFamily: F800, fontSize: 13.5, color: '#0f7a42' },
+  aheadText: { fontFamily: F600, fontSize: 12, lineHeight: 17, color: '#0f7a42', marginTop: 5 },
+
   /* Next meal */
   nextCard: {
     backgroundColor: '#ffffff',
@@ -674,18 +1000,29 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  /* minHeight, not height: German and Arabic wrap these labels onto a second
+     line, and a fixed height pushed the text outside the button. */
   primaryAction: {
     flex: 1,
-    height: 46,
+    minHeight: 46,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: 14,
     backgroundColor: GREEN,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryActionText: { fontFamily: F700, fontSize: 13.5, color: '#ffffff' },
+  primaryActionText: {
+    fontFamily: F700,
+    fontSize: 13.5,
+    color: '#ffffff',
+    textAlign: 'center',
+  },
   ghostAction: {
     flex: 1,
-    height: 46,
+    minHeight: 46,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#d6dbe4',
@@ -693,7 +1030,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ghostActionText: { fontFamily: F700, fontSize: 13.5, color: '#41505f' },
+  ghostActionText: {
+    fontFamily: F700,
+    fontSize: 13.5,
+    color: '#41505f',
+    textAlign: 'center',
+  },
 
   pendingCard: {
     backgroundColor: '#ffffff',
@@ -746,7 +1088,9 @@ const styles = StyleSheet.create({
     padding: 16,
     ...shadows.card,
   },
+  workoutHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   workoutTitle: { fontFamily: F800, fontSize: 15, color: INK },
+  workoutDone: { fontFamily: F800, fontSize: 16, color: GREEN },
   workoutMeta: { fontFamily: F600, fontSize: 11.5, color: '#8a98a7', marginTop: 3 },
   preBox: {
     backgroundColor: '#eef4ff',

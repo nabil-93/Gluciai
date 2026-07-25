@@ -131,11 +131,12 @@ function RootLayout() {
             <Stack.Screen name="healthy-food" />
             <Stack.Screen name="world-recipes" />
             <Stack.Screen name="world-recipe" />
-            {/* "Mon Programme" — on trial; these three lines and the
+            {/* "Mon Programme" — on trial; these four lines and the
                 program* files are the whole footprint. */}
             <Stack.Screen name="program" />
             <Stack.Screen name="program-setup" />
             <Stack.Screen name="program-workout" />
+            <Stack.Screen name="program-day" />
             <Stack.Screen
               name="consent-detail"
               options={{ presentation: 'modal' }}

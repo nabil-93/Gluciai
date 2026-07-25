@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import type { Program, ProgramDay } from '@/services/program';
+import type { PlannedMeal, Program, ProgramDay } from '@/services/program';
 
 /* ────────────────────────────────────────────────────────────
  * "Mon Programme" state, deliberately kept in its OWN store rather than
@@ -21,9 +21,22 @@ interface ProgramState {
   setDays: (d: ProgramDay[]) => void;
   upsertDay: (d: ProgramDay) => void;
   setGenerating: (v: boolean) => void;
-  /** Mark one meal of a day as actually eaten. */
-  markEaten: (date: string, slot: string) => void;
+  /**
+   * Record what the patient did with one planned meal — eaten, with the
+   * journal entry it produced and the portion they actually had.
+   */
+  patchMeal: (date: string, slot: string, patch: Partial<PlannedMeal>) => void;
+  /** The day's session was completed. */
+  markWorkoutDone: (date: string) => void;
+  /** The patient closed the day; this is what unlocks the next one. */
+  confirmDay: (date: string) => void;
   reset: () => void;
+}
+
+/** planned → partial → done, derived from the meals rather than declared. */
+function statusOf(d: ProgramDay): ProgramDay['status'] {
+  if (d.confirmedAt) return 'done';
+  return d.meals.some((m) => m.eatenAt) || d.workoutDoneAt ? 'partial' : 'planned';
 }
 
 export const useProgramStore = create<ProgramState>()(
@@ -43,18 +56,33 @@ export const useProgramStore = create<ProgramState>()(
         })),
       setGenerating: (generating) => set({ generating }),
 
-      markEaten: (date, slot) =>
+      patchMeal: (date, slot, patch) =>
+        set((s) => ({
+          days: s.days.map((d) => {
+            if (d.date !== date) return d;
+            const next: ProgramDay = {
+              ...d,
+              meals: d.meals.map((m) => (m.slot !== slot ? m : { ...m, ...patch })),
+            };
+            return { ...next, status: statusOf(next) };
+          }),
+        })),
+
+      markWorkoutDone: (date) =>
+        set((s) => ({
+          days: s.days.map((d) => {
+            if (d.date !== date || d.workoutDoneAt) return d;
+            const next: ProgramDay = { ...d, workoutDoneAt: new Date().toISOString() };
+            return { ...next, status: statusOf(next) };
+          }),
+        })),
+
+      confirmDay: (date) =>
         set((s) => ({
           days: s.days.map((d) =>
-            d.date !== date
+            d.date !== date || d.confirmedAt
               ? d
-              : {
-                  ...d,
-                  meals: d.meals.map((m) =>
-                    m.slot !== slot ? m : { ...m, eatenAt: new Date().toISOString() }
-                  ),
-                  status: 'partial',
-                }
+              : { ...d, confirmedAt: new Date().toISOString(), status: 'done' }
           ),
         })),
 

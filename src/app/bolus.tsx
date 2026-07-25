@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -61,6 +61,11 @@ function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
 }
 
+/** Narrow a route param to a real meal slot before trusting it. */
+function isMealType(v: unknown): v is MealType {
+  return v === 'breakfast' || v === 'lunch' || v === 'dinner' || v === 'snack';
+}
+
 type Phase = 'input' | 'loading' | 'report';
 
 export default function BolusScreen() {
@@ -73,14 +78,27 @@ export default function BolusScreen() {
   const lastGlucose = glucoseLogs.find((g) => isToday(g.created_at));
   const lastMeal = meals.find((m) => isToday(m.created_at));
 
+  /* Another screen can hand this one the plate it is about to cover — the
+     program's "my dose" button sends the exact carbs of the meal it just
+     confirmed. An explicit hand-off always beats guessing from history. */
+  const handoff = useLocalSearchParams<{ carbs?: string; meal?: string }>();
+
   const [carbs, setCarbs] = useState(
-    lastMeal ? String(Math.round(lastMeal.result.carbohydrates)) : ''
+    handoff.carbs
+      ? String(Math.round(Number(handoff.carbs)))
+      : lastMeal
+        ? String(Math.round(lastMeal.result.carbohydrates))
+        : ''
   );
   const [glucose, setGlucose] = useState(lastGlucose ? String(lastGlucose.value) : '');
   /* The context the patient declares for THIS dose — meal moment (picks the
      per-meal ratio), sport, and current state. Sick is pre-checked from the
      account status so the patient never has to remember to re-declare it. */
-  const [mealTime, setMealTime] = useState<MealType>(() => guessMealTime(new Date()));
+  const [mealTime, setMealTime] = useState<MealType>(() =>
+    // The slot the caller named wins: it decides which per-meal ratio the
+    // engine uses, and the program knows the meal better than the clock.
+    isMealType(handoff.meal) ? handoff.meal : guessMealTime(new Date())
+  );
   const [sport, setSport] = useState<ActivityIntensity | 'none'>('none');
   /* Details revealed once a sport intensity is picked */
   const [sportKind, setSportKind] = useState<ActivityKind>('walk');
