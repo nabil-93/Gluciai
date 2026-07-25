@@ -26,6 +26,7 @@ import {
   retargetNextMeal,
   saveDays,
   saveProgram,
+  sessionOptions,
   todayBudget,
   type GenerateError,
   type PlannedMeal,
@@ -99,6 +100,8 @@ export default function ProgramScreen() {
     upsertDay,
     setGenerating,
     patchMeal,
+    skipWorkout,
+    setDayWorkout,
     confirmDay,
   } = useProgramStore();
   const [genError, setGenError] = useState<GenerateError | null>(null);
@@ -279,6 +282,30 @@ export default function ProgramScreen() {
     [confirming, day, patchMeal, persist, router]
   );
 
+  /**
+   * Move today's session — a different place, or simply another session of
+   * the same place. Called with the current place, it cycles to the next
+   * option; called with a new one, it lands on that place's first session.
+   */
+  const swapSession = useCallback(
+    (place: Program['trainingPlace']) => {
+      if (!program || !day || day.workoutDoneAt) return;
+      const opts = sessionOptions(place, program.activityLevel);
+      if (!opts.length) return;
+      const i = opts.findIndex((o) => o.id === day.workoutId);
+      setDayWorkout(day.date, opts[(i + 1) % opts.length].id);
+      void persist(day.date);
+    },
+    [program, day, setDayWorkout, persist]
+  );
+
+  /** "I could not train today" — settles the session without faking it. */
+  const onSkipWorkout = useCallback(async () => {
+    if (!day) return;
+    skipWorkout(day.date);
+    await persist(day.date);
+  }, [day, skipWorkout, persist]);
+
   /** Close the day and unlock the next — the only way the parcours advances. */
   const advance = useCallback(async () => {
     if (!program || !day || advancing) return;
@@ -390,6 +417,7 @@ export default function ProgramScreen() {
 
   const workoutId = day?.workoutId ?? null;
   const session = workoutId ? getSession(workoutId) : null;
+  const sessionPlace = session?.place ?? program.trainingPlace;
   const glucoseNow = useAppStore
     .getState()
     .glucoseLogs.find((g) => new Date(g.created_at).toDateString() === new Date().toDateString());
@@ -416,7 +444,13 @@ export default function ProgramScreen() {
             <ChevronLeft size={16} />
           </Pressable>
           <Text style={styles.headTitle}>{t('program.title')}</Text>
-          <View style={{ width: 36 }} />
+          <Pressable
+            onPress={() => router.push('/program-manage' as any)}
+            style={styles.backBtn}
+            accessibilityLabel={t('program.manageTitle')}
+          >
+            <Text style={styles.gear}>⚙️</Text>
+          </Pressable>
         </View>
 
         {/* ── Hero: where the patient is in the parcours ── */}
@@ -534,6 +568,25 @@ export default function ProgramScreen() {
                 )}
               </Pressable>
             </LinearGradient>
+          </FadeInView>
+        ) : null}
+
+        {/* ── Every meal eaten, but the session was not trained ──
+            No celebration for a day that was only half kept — but no dead
+            end either. A missed session must never lock the parcours. */}
+        {day && progress.closable && !progress.complete && !progress.confirmed ? (
+          <FadeInView delay={100}>
+            <View style={styles.settleCard}>
+              <Text style={styles.settleTitle}>🍽️ {t('program.mealsAllDoneTitle')}</Text>
+              <Text style={styles.settleText}>{t('program.mealsAllDoneSub')}</Text>
+              <Pressable onPress={advance} disabled={advancing} style={styles.settleCta}>
+                {advancing ? (
+                  <Spinner size={18} color="#41505f" />
+                ) : (
+                  <Text style={styles.settleCtaText}>{t('program.closeDayAnyway')} →</Text>
+                )}
+              </Pressable>
+            </View>
           </FadeInView>
         ) : null}
 
@@ -731,18 +784,54 @@ export default function ProgramScreen() {
                 );
               })}
 
+              {/* Where the patient is training TODAY. Life moves: home one
+                  day, the park the next, the gym on Saturday — and the
+                  session has to follow, without re-doing the whole program. */}
               {isToday && !progress.workoutDone ? (
-                <Pressable
-                  style={styles.workoutCta}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/program-workout',
-                      params: { id: session.id, date: day?.date ?? today },
-                    } as any)
-                  }
-                >
-                  <Text style={styles.workoutCtaText}>{t('program.openWorkout')} →</Text>
-                </Pressable>
+                <>
+                  <Text style={styles.placeLabel}>{t('program.trainingToday')}</Text>
+                  <View style={styles.placeRow}>
+                    {(['home', 'gym', 'outdoor'] as const).map((pl) => {
+                      const on = sessionPlace === pl;
+                      return (
+                        <Pressable
+                          key={pl}
+                          onPress={() => swapSession(pl)}
+                          style={[styles.placeChip, on && styles.placeChipOn]}
+                        >
+                          <Text style={[styles.placeChipText, on && styles.placeChipTextOn]}>
+                            {t(`program.place_${pl}`)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  <View style={styles.workoutActions}>
+                    <Pressable
+                      style={styles.workoutCta}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/program-workout',
+                          params: { id: session.id, date: day?.date ?? today },
+                        } as any)
+                      }
+                    >
+                      <Text style={styles.workoutCtaText}>{t('program.openWorkout')} →</Text>
+                    </Pressable>
+                    <Pressable style={styles.shuffleBtn} onPress={() => swapSession(sessionPlace)}>
+                      <Text style={styles.shuffleText}>🔀</Text>
+                    </Pressable>
+                  </View>
+
+                  {progress.workoutSkipped ? (
+                    <Text style={styles.skipNote}>{t('program.sessionSkipped')}</Text>
+                  ) : (
+                    <Pressable onPress={onSkipWorkout} style={styles.skipBtn}>
+                      <Text style={styles.skipBtnText}>{t('program.cantTrain')}</Text>
+                    </Pressable>
+                  )}
+                </>
               ) : null}
             </View>
           ) : (
@@ -793,6 +882,7 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   headTitle: { fontFamily: F800, fontSize: 17, color: INK },
+  gear: { fontSize: 15 },
 
   /* Empty state */
   emptyWrap: { gap: 16 },
@@ -917,6 +1007,87 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   celebrateCtaText: { fontFamily: F800, fontSize: 13.5, color: '#159a57' },
+
+  /* Day kept only in part */
+  settleCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1.5,
+    borderColor: '#e4e8ef',
+  },
+  settleTitle: { fontFamily: F800, fontSize: 13.5, color: INK },
+  settleText: {
+    fontFamily: F600,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#667085',
+    marginTop: 5,
+  },
+  settleCta: {
+    minHeight: 42,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 13,
+    backgroundColor: '#f1f4f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  settleCtaText: { fontFamily: F800, fontSize: 12.5, color: '#41505f', textAlign: 'center' },
+
+  /* Training place chooser */
+  placeLabel: { fontFamily: F600, fontSize: 11, color: '#8a98a7', marginTop: 14 },
+  placeRow: { flexDirection: 'row', gap: 7, marginTop: 7 },
+  placeChip: {
+    flex: 1,
+    minHeight: 36,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#e4e8ef',
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  placeChipOn: { borderColor: GREEN, backgroundColor: '#eafaf1' },
+  placeChipText: {
+    fontFamily: F700,
+    fontSize: 11,
+    color: '#8a98a7',
+    textAlign: 'center',
+  },
+  placeChipTextOn: { color: '#0f7a42' },
+  workoutActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  shuffleBtn: {
+    width: 44,
+    minHeight: 44,
+    borderRadius: 13,
+    backgroundColor: '#f1f4f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shuffleText: { fontSize: 16 },
+  skipBtn: { minHeight: 34, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  skipBtnText: {
+    fontFamily: F600,
+    fontSize: 11.5,
+    color: '#8a98a7',
+    textDecorationLine: 'underline',
+    textAlign: 'center',
+  },
+  skipNote: {
+    fontFamily: F600,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: '#8a5a10',
+    backgroundColor: '#fff8ec',
+    borderRadius: 11,
+    padding: 10,
+    marginTop: 10,
+  },
 
   /* Left behind */
   staleCard: {

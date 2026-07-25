@@ -1,15 +1,23 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChevronLeft, FadeInView } from '@/components/ui';
+import { ChevronLeft, FadeInView, Spinner } from '@/components/ui';
 import { parseDecimal, sanitizeDecimal } from '@/lib/num';
-import { DEFAULT_CONSTRAINTS, previewTargets, type ProgramConstraints } from '@/services/program';
+import {
+  DEFAULT_CONSTRAINTS,
+  previewTargets,
+  saveDays,
+  sessionOptions,
+  updateProgram,
+  type ProgramConstraints,
+} from '@/services/program';
 import type { ActivityLevel, ProgramGoal } from '@/services/programEngine';
 import { useAppStore } from '@/store/useAppStore';
+import { useProgramStore } from '@/store/useProgramStore';
 import { shadows } from '@/theme';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -52,16 +60,32 @@ export default function ProgramSetupScreen() {
   const insets = useSafeAreaInsets();
   const { profile } = useAppStore();
 
+  /* The same wizard writes a new parcours and edits the live one. Editing
+     re-asks every question with the current answers already filled in, so the
+     patient sees the whole picture instead of a stripped-down settings list —
+     and the recap re-computes the budget before anything is saved. */
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const isEdit = edit === '1';
+  const { program, days, setProgram, setDayWorkout } = useProgramStore();
+  const live = isEdit ? program : null;
+
   const [step, setStep] = useState<Step>('goal');
-  const [goal, setGoal] = useState<ProgramGoal>('lose');
-  const [weight, setWeight] = useState(profile?.weight ? String(profile.weight) : '');
-  const [targetWeight, setTargetWeight] = useState('');
-  const [rate, setRate] = useState(0.5);
-  const [level, setLevel] = useState<ActivityLevel>('light');
-  const [place, setPlace] = useState<(typeof PLACES)[number]>('home');
-  const [trainingDays, setTrainingDays] = useState(3);
-  const [constraints, setConstraints] = useState<ProgramConstraints>(DEFAULT_CONSTRAINTS);
+  const [goal, setGoal] = useState<ProgramGoal>(live?.goal ?? 'lose');
+  const [weight, setWeight] = useState(
+    live?.startWeight ? String(live.startWeight) : profile?.weight ? String(profile.weight) : ''
+  );
+  const [targetWeight, setTargetWeight] = useState(
+    live?.targetWeight ? String(live.targetWeight) : ''
+  );
+  const [rate, setRate] = useState(live?.targets.ratePerWeek || 0.5);
+  const [level, setLevel] = useState<ActivityLevel>(live?.activityLevel ?? 'light');
+  const [place, setPlace] = useState<(typeof PLACES)[number]>(live?.trainingPlace ?? 'home');
+  const [trainingDays, setTrainingDays] = useState(live?.trainingDaysPerWeek ?? 3);
+  const [constraints, setConstraints] = useState<ProgramConstraints>(
+    live?.constraints ?? DEFAULT_CONSTRAINTS
+  );
   const [avoidText, setAvoidText] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const wantsWeight = goal === 'lose' || goal === 'gain';
 
@@ -115,6 +139,56 @@ export default function ProgramSetupScreen() {
       avoid: c.avoid.includes(key) ? c.avoid.filter((a) => a !== key) : [...c.avoid, key],
     }));
 
+  const allAvoid = () => [
+    ...constraints.avoid,
+    ...avoidText
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ];
+
+  /**
+   * Save the edits onto the live parcours.
+   *
+   * The days already written keep the plan they were written with — they are
+   * history. What changes is the budget from here on, and the session of the
+   * day currently open when the patient has moved to another place: they
+   * said they are at the gym today, so the gym is where today's session is.
+   */
+  const saveEdits = async () => {
+    if (!live || saving) return;
+    setSaving(true);
+    try {
+      const next = {
+        ...live,
+        goal,
+        startWeight: parseDecimal(weight) ?? live.startWeight,
+        targetWeight: parseDecimal(targetWeight) ?? null,
+        activityLevel: level,
+        trainingDaysPerWeek: trainingDays,
+        trainingPlace: place,
+        targets,
+        constraints: { ...constraints, avoid: allAvoid() },
+      };
+      setProgram(next);
+      await updateProgram(next);
+
+      // Re-place the open day's session if it no longer matches.
+      if (place !== live.trainingPlace) {
+        const open = days.find((d) => !d.confirmedAt && !d.workoutDoneAt && d.workoutId);
+        const opts = sessionOptions(place, level);
+        if (open && opts.length && !opts.some((o) => o.id === open.workoutId)) {
+          setDayWorkout(open.date, opts[0].id);
+          const fresh = useProgramStore.getState().days.find((d) => d.date === open.date);
+          if (fresh) await saveDays(next.id, [fresh]);
+        }
+      }
+      close();
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const create = () => {
     // Hand the whole setup to the program screen, which creates the row and
     // asks the coach for the first week.
@@ -129,16 +203,7 @@ export default function ProgramSetupScreen() {
         level,
         place,
         trainingDays: String(trainingDays),
-        constraints: JSON.stringify({
-          ...constraints,
-          avoid: [
-            ...constraints.avoid,
-            ...avoidText
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean),
-          ],
-        }),
+        constraints: JSON.stringify({ ...constraints, avoid: allAvoid() }),
       },
     } as any);
   };
@@ -157,7 +222,9 @@ export default function ProgramSetupScreen() {
           <Pressable onPress={back} style={styles.backBtn}>
             <ChevronLeft size={16} />
           </Pressable>
-          <Text style={styles.headTitle}>{t('program.setupTitle')}</Text>
+          <Text style={styles.headTitle}>
+            {isEdit ? t('program.editTitle') : t('program.setupTitle')}
+          </Text>
           <View style={{ width: 36 }} />
         </View>
 
@@ -503,6 +570,14 @@ export default function ProgramSetupScreen() {
                 </View>
               ) : null}
 
+              {/* Editing changes what comes NEXT, never what already
+                  happened — say so before they commit. */}
+              {isEdit ? (
+                <View style={styles.infoBox}>
+                  <Text style={styles.infoText}>ℹ️ {t('program.editRecapNote')}</Text>
+                </View>
+              ) : null}
+
               {/* Safety notices from the engine — never optional reading. */}
               {targets.warnings.map((w) => (
                 <View key={w} style={styles.warnCard}>
@@ -519,20 +594,30 @@ export default function ProgramSetupScreen() {
 
         {/* CTA */}
         <Pressable
-          onPress={step === 'recap' ? create : next}
-          disabled={!canContinue()}
+          onPress={step !== 'recap' ? next : isEdit ? saveEdits : create}
+          disabled={!canContinue() || saving}
           style={{ marginTop: 20 }}
         >
           <LinearGradient
             colors={['#2ec983', '#1fbc78']}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
-            style={[styles.cta, !canContinue() && { opacity: 0.5 }]}
+            style={[styles.cta, (!canContinue() || saving) && { opacity: 0.5 }]}
           >
-            <Text style={styles.ctaText}>
-              {step === 'recap' ? `✨ ${t('program.createCta')}` : t('common.next')}
-            </Text>
-            <Text style={styles.ctaArrow}>→</Text>
+            {saving ? (
+              <Spinner size={22} color="#ffffff" />
+            ) : (
+              <>
+                <Text style={styles.ctaText}>
+                  {step !== 'recap'
+                    ? t('common.next')
+                    : isEdit
+                      ? `💾 ${t('program.saveChanges')}`
+                      : `✨ ${t('program.createCta')}`}
+                </Text>
+                <Text style={styles.ctaArrow}>→</Text>
+              </>
+            )}
           </LinearGradient>
         </Pressable>
       </ScrollView>

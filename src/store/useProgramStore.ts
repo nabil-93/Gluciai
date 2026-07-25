@@ -28,6 +28,10 @@ interface ProgramState {
   patchMeal: (date: string, slot: string, patch: Partial<PlannedMeal>) => void;
   /** The day's session was completed. */
   markWorkoutDone: (date: string) => void;
+  /** The patient could not train today — the day may still be closed. */
+  skipWorkout: (date: string) => void;
+  /** Swap the day's session (a different place, or simply another one). */
+  setDayWorkout: (date: string, workoutId: string | null) => void;
   /** The patient closed the day; this is what unlocks the next one. */
   confirmDay: (date: string) => void;
   reset: () => void;
@@ -72,18 +76,50 @@ export const useProgramStore = create<ProgramState>()(
         set((s) => ({
           days: s.days.map((d) => {
             if (d.date !== date || d.workoutDoneAt) return d;
-            const next: ProgramDay = { ...d, workoutDoneAt: new Date().toISOString() };
+            const next: ProgramDay = {
+              ...d,
+              workoutDoneAt: new Date().toISOString(),
+              workoutSkippedAt: null,
+            };
             return { ...next, status: statusOf(next) };
           }),
         })),
 
-      confirmDay: (date) =>
+      skipWorkout: (date) =>
         set((s) => ({
           days: s.days.map((d) =>
-            d.date !== date || d.confirmedAt
+            d.date !== date || d.workoutDoneAt
               ? d
-              : { ...d, confirmedAt: new Date().toISOString(), status: 'done' }
+              : { ...d, workoutSkippedAt: new Date().toISOString() }
           ),
+        })),
+
+      setDayWorkout: (date, workoutId) =>
+        set((s) => ({
+          days: s.days.map((d) =>
+            // Swapping is only meaningful while the session is still ahead —
+            // rewriting a session already trained would falsify the history.
+            d.date !== date || d.workoutDoneAt
+              ? d
+              : { ...d, workoutId, workoutSkippedAt: null }
+          ),
+        })),
+
+      confirmDay: (date) =>
+        set((s) => ({
+          days: s.days.map((d) => {
+            if (d.date !== date || d.confirmedAt) return d;
+            // A day closed with meals missed or the session skipped is
+            // recorded as "skipped", not "done". The patient's history has to
+            // be able to tell a finished day from a settled one.
+            const ateAll = d.meals.length > 0 && d.meals.every((m) => m.eatenAt);
+            const trained = !d.workoutId || !!d.workoutDoneAt;
+            return {
+              ...d,
+              confirmedAt: new Date().toISOString(),
+              status: ateAll && trained ? 'done' : 'skipped',
+            };
+          }),
         })),
 
       reset: () => set({ program: null, days: [], generating: false }),

@@ -84,6 +84,12 @@ export interface ProgramDay {
   /** Set when the session was completed (or the rest day acknowledged). */
   workoutDoneAt?: string | null;
   /**
+   * Set when the patient told us they could not train. It does NOT count as
+   * training — the ring stays honest — but it lets the day be closed, which
+   * a missed session must never block.
+   */
+  workoutSkippedAt?: string | null;
+  /**
    * Set when the patient closed the day themselves. This is what unlocks the
    * NEXT day — never the calendar. A day the patient has not closed stays
    * open, and no future day exists to be peeked at.
@@ -344,10 +350,17 @@ export interface DayProgress {
   /** False on a rest day: nothing to do, nothing to tick. */
   workoutRequired: boolean;
   workoutDone: boolean;
+  /** The patient said they could not train — settled, but not done. */
+  workoutSkipped: boolean;
   /** 0…1 — what the calendar ring draws. */
   ratio: number;
   /** Everything on the day is done: the congratulation is earned. */
   complete: boolean;
+  /**
+   * Every meal is eaten and the session is either done or explicitly given
+   * up on. The day can be closed — with or without a celebration.
+   */
+  closable: boolean;
   /** The patient closed the day, which unlocked the next one. */
   confirmed: boolean;
 }
@@ -359,8 +372,10 @@ export function dayProgress(day: ProgramDay | null): DayProgress {
       mealsTotal: 0,
       workoutRequired: false,
       workoutDone: false,
+      workoutSkipped: false,
       ratio: 0,
       complete: false,
+      closable: false,
       confirmed: false,
     };
   }
@@ -368,19 +383,24 @@ export function dayProgress(day: ProgramDay | null): DayProgress {
   const mealsDone = day.meals.filter((m) => m.eatenAt).length;
   const workoutRequired = !!day.workoutId;
   const workoutDone = !!day.workoutDoneAt;
+  const workoutSkipped = !workoutDone && !!day.workoutSkippedAt;
 
   // The workout counts as one more "task" of the day, so a patient who ate
-  // everything but skipped the session is not shown a full ring.
+  // everything but skipped the session is not shown a full ring. Giving up on
+  // the session settles it; it never colours it in.
   const total = mealsTotal + (workoutRequired ? 1 : 0);
   const done = mealsDone + (workoutRequired && workoutDone ? 1 : 0);
+  const ateAll = mealsTotal > 0 && mealsDone >= mealsTotal;
 
   return {
     mealsDone,
     mealsTotal,
     workoutRequired,
     workoutDone,
+    workoutSkipped,
     ratio: total > 0 ? done / total : 0,
     complete: total > 0 && done >= total,
+    closable: ateAll && (!workoutRequired || workoutDone || workoutSkipped),
     confirmed: !!day.confirmedAt,
   };
 }
@@ -484,8 +504,23 @@ function planHistory(history: ProgramDay[]): string[] {
  * function's prompt covers the budget and the "invent, never pick" rule;
  * this is what the FOOD has to respect for someone who injects insulin.
  */
-function plannerSafetyBrief(program: Program): string {
+function plannerSafetyBrief(program: Program, workoutId: string | null): string {
   const capPerMeal = program.targets.carbsPerMeal;
+  const session = workoutId ? getSession(workoutId) : null;
+
+  // The day's effort is decided by the app, not the model — but the model
+  // has to eat around it. Training lowers glucose for hours afterwards, so
+  // the meal that follows a session is a clinical decision, not a garnish.
+  const training = session
+    ? [
+        `TODAY'S SESSION (already decided by the app): "${session.title_en}" —`,
+        `${session.focus}, ${session.minutes} min, about ${session.estKcal} kcal burned.`,
+        '- Build the meal AFTER the effort with slow carbohydrate and protein:',
+        '  exercise keeps lowering glucose for hours, and that is when hypos',
+        '  happen. Say so in that meal\'s "why".',
+      ].join('\n')
+    : 'TODAY IS A REST DAY (decided by the app): no extra carbohydrate for effort.';
+
   return [
     'RULES FOR THIS PLAN (the patient injects insulin — the carbohydrates you',
     'compose become an insulin dose, so treat them as a prescription):',
@@ -500,6 +535,9 @@ function plannerSafetyBrief(program: Program): string {
     '- If the context above shows glucose running high, or a hypo, lean the',
     '  day on protein, vegetables and slow carbs rather than raising carbs.',
     '- Vary constantly: no dish, and no main protein, twice in three days.',
+    '  Change the cooking method too — grilled, steamed, tagine, oven, raw.',
+    '',
+    training,
   ].join('\n');
 }
 
@@ -527,6 +565,10 @@ export async function generateDay(args: {
   if (isDemoMode || !supabase) return { error: 'offline' };
   const { program, date, dayIndex, history, language } = args;
   const iso = isoDay(date);
+
+  // Decided BEFORE the model is asked, so the food can be written around the
+  // effort: a 300 kcal gym day and a rest day are not the same day to eat.
+  const workoutId = workoutForDay(program, dayIndex);
 
   try {
     const { data, error } = await supabase.functions.invoke('ai-chat', {
@@ -558,7 +600,7 @@ export async function generateDay(args: {
         // ratios, today's and the week's glucose, doses already taken, meals
         // logged. The planner composes carbs that turn into boluses, so it
         // must see the same picture the bolus advisor sees.
-        healthData: `${buildHealthContext()}\n\n${plannerSafetyBrief(program)}`,
+        healthData: `${buildHealthContext()}\n\n${plannerSafetyBrief(program, workoutId)}`,
       },
     });
 
@@ -580,7 +622,7 @@ export async function generateDay(args: {
         meals: priced,
         // The session is OURS to decide: the patient asked for N days a week
         // and that promise must not depend on the model remembering it.
-        workoutId: workoutForDay(program, dayIndex),
+        workoutId,
         status: 'planned',
       },
     };
@@ -682,6 +724,7 @@ export async function saveDays(programId: string, days: ProgramDay[]): Promise<b
     workout: {
       sessionId: d.workoutId ?? null,
       doneAt: d.workoutDoneAt ?? null,
+      skippedAt: d.workoutSkippedAt ?? null,
       confirmedAt: d.confirmedAt ?? null,
     },
     status: d.status,
@@ -699,18 +742,20 @@ export async function saveDays(programId: string, days: ProgramDay[]): Promise<b
  * reinstall the app, change device, and a month of history was gone. The
  * store stays the source of truth for the session; this rehydrates it.
  */
-export async function loadProgram(): Promise<{ program: Program; days: ProgramDay[] } | null> {
+export async function loadProgram(
+  /** A specific parcours; omitted, the live one. */
+  id?: string
+): Promise<{ program: Program; days: ProgramDay[] } | null> {
   if (isDemoMode || !supabase) return null;
   const { data: auth } = await supabase.auth.getUser();
   const uid = auth?.user?.id;
   if (!uid) return null;
 
-  const { data: row, error } = await supabase
-    .from('programs')
-    .select('*')
-    .eq('user_id', uid)
-    .eq('status', 'active')
-    .maybeSingle();
+  const query = supabase.from('programs').select('*').eq('user_id', uid);
+  const { data: row, error } = await (id
+    ? query.eq('id', id)
+    : query.eq('status', 'active')
+  ).maybeSingle();
   if (error || !row) return null;
 
   const targets = computeProgramTargets({
@@ -763,12 +808,159 @@ export async function loadProgram(): Promise<{ program: Program; days: ProgramDa
     meals: Array.isArray(d.meals) ? d.meals : [],
     workoutId: d.workout?.sessionId ?? null,
     workoutDoneAt: d.workout?.doneAt ?? null,
+    workoutSkippedAt: d.workout?.skippedAt ?? null,
     confirmedAt: d.workout?.confirmedAt ?? null,
     status: d.status,
     adaptationNote: d.adaptation_note ?? null,
   }));
 
   return { program, days };
+}
+
+/* ── Managing the programs themselves ────────────────────────
+ *
+ * A patient's life changes: they trained at home, then outdoors, then at the
+ * gym; the goal moves; a parcours is abandoned and another one started. All
+ * of that has to be possible WITHOUT throwing away the history, so programs
+ * are never silently overwritten — they are edited, closed, or replaced.
+ */
+
+export interface ProgramSummary {
+  id: string;
+  goal: ProgramGoal;
+  status: Program['status'];
+  startDate: string;
+  weeks: number;
+  dailyKcal: number;
+  startWeight: number | null;
+  targetWeight: number | null;
+  /** Days written, and how many of them the patient actually closed. */
+  daysWritten: number;
+  daysDone: number;
+}
+
+/** Every parcours on the account, newest first. */
+export async function listPrograms(): Promise<ProgramSummary[]> {
+  if (isDemoMode || !supabase) return [];
+  const { data: auth } = await supabase.auth.getUser();
+  const uid = auth?.user?.id;
+  if (!uid) return [];
+
+  const { data: rows } = await supabase
+    .from('programs')
+    .select('id, goal, status, start_date, weeks, daily_kcal, start_weight, target_weight')
+    .eq('user_id', uid)
+    .order('created_at', { ascending: false });
+  if (!rows?.length) return [];
+
+  // One query for every day of every program, counted client-side — cheaper
+  // than a round trip per program and the volume is a few dozen rows.
+  const { data: dayRows } = await supabase
+    .from('program_days')
+    .select('program_id, status')
+    .eq('user_id', uid);
+
+  return rows.map((r: Record<string, any>) => {
+    const mine = (dayRows ?? []).filter((d: any) => d.program_id === r.id);
+    return {
+      id: r.id,
+      goal: r.goal,
+      status: r.status,
+      startDate: String(r.start_date).slice(0, 10),
+      weeks: r.weeks,
+      dailyKcal: Math.round(r.daily_kcal ?? 0),
+      startWeight: r.start_weight,
+      targetWeight: r.target_weight,
+      daysWritten: mine.length,
+      daysDone: mine.filter((d: any) => d.status === 'done').length,
+    };
+  });
+}
+
+/**
+ * Save edited settings onto an existing parcours.
+ *
+ * The targets ride along, because changing the goal, the weight or the
+ * activity level changes the budget — and the budget is what the meals and
+ * therefore the insulin doses are built from. The days already written keep
+ * the plan they were written with; the next one uses the new numbers.
+ */
+export async function updateProgram(p: Program): Promise<boolean> {
+  if (isDemoMode || !supabase || p.id === 'local') return true;
+  const { error } = await supabase
+    .from('programs')
+    .update({
+      goal: p.goal,
+      start_weight: p.startWeight,
+      target_weight: p.targetWeight,
+      activity_level: p.activityLevel,
+      training_days_per_week: p.trainingDaysPerWeek,
+      training_place: p.trainingPlace,
+      bmr: p.targets.bmr,
+      tdee: p.targets.tdee,
+      daily_kcal: p.targets.dailyKcal,
+      protein_g: p.targets.proteinG,
+      fat_g: p.targets.fatG,
+      carbs_g: p.targets.carbsG,
+      carbs_per_meal: p.targets.carbsPerMeal,
+      rate_per_week: p.targets.ratePerWeek,
+      warnings: p.targets.warnings,
+      constraints: p.constraints,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', p.id);
+  return !error;
+}
+
+/**
+ * Close a parcours, or bring an old one back.
+ *
+ * Reactivating retires whatever is active first: two live programs would
+ * mean two contradictory calorie budgets on the same day, which the unique
+ * index refuses anyway.
+ */
+export async function setProgramStatus(
+  id: string,
+  status: Program['status']
+): Promise<boolean> {
+  if (isDemoMode || !supabase || id === 'local') return true;
+  const { data: auth } = await supabase.auth.getUser();
+  const uid = auth?.user?.id;
+  if (!uid) return false;
+
+  if (status === 'active') {
+    await supabase
+      .from('programs')
+      .update({ status: 'abandoned' })
+      .eq('user_id', uid)
+      .eq('status', 'active')
+      .neq('id', id);
+  }
+  const { error } = await supabase.from('programs').update({ status }).eq('id', id);
+  return !error;
+}
+
+/** Erase a parcours and every day of it (the FK cascades). */
+export async function deleteProgram(id: string): Promise<boolean> {
+  if (isDemoMode || !supabase || id === 'local') return true;
+  const { error } = await supabase.from('programs').delete().eq('id', id);
+  return !error;
+}
+
+/**
+ * The sessions on offer for a place — what the day's session chooser shows
+ * when the patient is at the gym today instead of at home.
+ */
+export function sessionOptions(
+  place: Program['trainingPlace'],
+  level: ActivityLevel
+): { id: string; minutes: number }[] {
+  const wl: WorkoutLevel =
+    level === 'sedentary' || level === 'light' ? 'beginner' : 'intermediate';
+  return pickSessions(place === 'mixed' ? 'mixed' : place, wl).map((s) => ({
+    id: s.id,
+    minutes: s.minutes,
+  }));
 }
 
 /**
