@@ -308,9 +308,13 @@ matters more than detail.`;
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: planPrompt }] }],
             generationConfig: {
+              // Thinking tokens are billed against maxOutputTokens on this
+              // model, so leaving it on let the model spend the entire budget
+              // reasoning and return truncated JSON — every other mode in this
+              // file disables it for exactly that reason.
+              thinkingConfig: { thinkingBudget: 0 },
               responseMimeType: 'application/json',
-              // One day of four meals. Generous room so the JSON is never cut
-              // mid-object the way a whole week was.
+              // One day of four meals.
               maxOutputTokens: 6000,
               // Enough freedom to genuinely vary the cooking, not enough to
               // drift from the budget.
@@ -333,6 +337,15 @@ matters more than detail.`;
       try {
         parsed = JSON.parse(text);
       } catch {
+        // Leave a trace in the function logs: a silent 502 told us nothing
+        // last time, and "why did the plan fail" is the question that matters.
+        console.error('program_plan: unparsable output', {
+          finishReason: data.candidates?.[0]?.finishReason,
+          chars: text.length,
+          thoughts: data.usageMetadata?.thoughtsTokenCount ?? 0,
+          output: data.usageMetadata?.candidatesTokenCount ?? 0,
+          head: text.slice(0, 200),
+        });
         return json({ error: 'AI returned invalid JSON', raw: text }, 502);
       }
 
