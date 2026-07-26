@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { Spinner } from '@/components/ui';
+import { DoctorLinkCard } from '@/components/DoctorLinkCard';
 import { SUPPORTED_LANGUAGES, setAppLanguage, type LanguageCode } from '@/i18n';
 import { changePassword, deleteAccount } from '@/services/account';
 import { saveProfile } from '@/services/data';
@@ -409,23 +410,9 @@ export default function ProfileEditScreen() {
                 onChangeText={(v) => set('doctor_phone', v)}
                 keyboardType="phone-pad"
               />
-              <Pressable
-                onPress={() => router.push('/doctor-code' as any)}
-                style={({ pressed }) => [styles.linkCard, pressed && { opacity: 0.7 }]}
-              >
-                <View style={styles.linkIcon}>
-                  <Text style={{ fontSize: 18 }}>🩺</Text>
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.linkTitle}>{t('coupon.rowTitle')}</Text>
-                  <Text style={styles.linkSub} numberOfLines={2}>
-                    {draft.doctor_name
-                      ? `${t('coupon.doctorPrefix')} ${draft.doctor_name}`
-                      : t('coupon.rowSub')}
-                  </Text>
-                </View>
-                <Text style={styles.linkArrow}>›</Text>
-              </Pressable>
+              {/* The code that decides who follows you belongs on the page
+                  that says who follows you — not one screen further on. */}
+              <DoctorLinkCard />
             </>
           ) : null}
 
@@ -728,26 +715,6 @@ const styles = StyleSheet.create({
   pwMsg: { fontFamily: F600, fontSize: 13 },
   pwOk: { color: '#0FA968' },
   pwErr: { color: '#D64545' },
-
-  linkCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#F4F7F5',
-    borderRadius: 16,
-    padding: 13,
-  },
-  linkIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    backgroundColor: '#EFEDFB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  linkTitle: { fontFamily: F800, fontSize: 13.5, color: INK },
-  linkSub: { fontFamily: F600, fontSize: 11.5, color: MUTED, marginTop: 2 },
-  linkArrow: { fontSize: 22, fontFamily: F700, color: '#B8C4BE' },
 
   primaryBtn: {
     marginTop: 18,

@@ -1362,7 +1362,12 @@
     "seeGlucose": "Deine Blutzuckerwerte",
     "seeInsulin": "Deine Insulingaben",
     "seeReport": "Deinen Tagesbericht",
-    "privacyNote": "Dein Arzt kann diese Daten nur einsehen, um dich zu begleiten. Du behältst die Kontrolle."
+    "privacyNote": "Dein Arzt kann diese Daten nur einsehen, um dich zu begleiten. Du behältst die Kontrolle.",
+    "unlink": "Entfernen",
+    "unlinkTitle": "Arzt entfernen?",
+    "unlinkBody": "Dein Arzt hat dann keinen Zugriff mehr auf deine Gesundheitsdaten. Der Rabatt aus seinem Code entfällt ebenfalls. Du kannst ihn jederzeit wieder mit seinem Code verknüpfen.",
+    "unlinkConfirm": "Entfernen",
+    "unlinkFailed": "Verknüpfung konnte nicht entfernt werden. Bitte erneut versuchen."
   },
   "labs": {
     "title": "Meine Analysen",

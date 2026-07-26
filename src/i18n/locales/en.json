@@ -1362,7 +1362,12 @@
     "seeGlucose": "Your glucose readings",
     "seeInsulin": "Your insulin doses",
     "seeReport": "Your daily report",
-    "privacyNote": "Your doctor can only view this data to support you. You stay in control."
+    "privacyNote": "Your doctor can only view this data to support you. You stay in control.",
+    "unlink": "Remove",
+    "unlinkTitle": "Remove your doctor?",
+    "unlinkBody": "Your doctor will no longer have access to your health data. The discount from their code is removed too. You can link them again any time with their code.",
+    "unlinkConfirm": "Remove",
+    "unlinkFailed": "Could not remove the link. Try again."
   },
   "labs": {
     "title": "My lab results",

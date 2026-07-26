@@ -1362,7 +1362,12 @@
     "seeGlucose": "Vos glycémies",
     "seeInsulin": "Vos injections d’insuline",
     "seeReport": "Votre rapport du jour",
-    "privacyNote": "Votre médecin ne peut que consulter ces données pour vous accompagner. Vous gardez le contrôle."
+    "privacyNote": "Votre médecin ne peut que consulter ces données pour vous accompagner. Vous gardez le contrôle.",
+    "unlink": "Retirer",
+    "unlinkTitle": "Retirer votre médecin ?",
+    "unlinkBody": "Votre médecin n’aura plus accès à vos données de santé. La réduction liée à son code sera aussi retirée. Vous pourrez le relier à tout moment avec son code.",
+    "unlinkConfirm": "Retirer",
+    "unlinkFailed": "Impossible de retirer le lien. Réessayez."
   },
   "labs": {
     "title": "Mes analyses",

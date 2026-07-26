@@ -122,14 +122,50 @@ function modal(html) {
   return ov;
 }
 
+/* Privileged calls go through the admin-ops edge function (service-role key
+   stays server-side). This NEVER throws: every failure comes back as
+   { ok:false, error } so the caller can show it and re-enable its button.
+   It used to throw on an expired session (session.access_token on null) and
+   on any non-JSON response — which left "Création…" on screen forever with
+   no message, and looked exactly like the feature being broken. */
 async function adminOp(payload) {
-  const { data: { session } } = await db.auth.getSession();
-  const r = await fetch(`${SUPABASE_URL}/functions/v1/admin-ops`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: ANON_KEY, Authorization: `Bearer ${session.access_token}` },
-    body: JSON.stringify(payload),
-  });
-  return r.json();
+  let session = null;
+  try {
+    ({ data: { session } } = await db.auth.getSession());
+  } catch { /* fall through to the same message */ }
+
+  if (!session?.access_token) {
+    return { ok: false, error: 'Session expirée — reconnecte-toi.' };
+  }
+
+  let r;
+  try {
+    r = await fetch(`${SUPABASE_URL}/functions/v1/admin-ops`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: ANON_KEY,
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    return { ok: false, error: 'Réseau indisponible — ' + (e?.message || e) };
+  }
+
+  const raw = await r.text();
+  let body = null;
+  try { body = raw ? JSON.parse(raw) : null; } catch { /* not JSON */ }
+
+  if (!body) {
+    // A gateway error or an HTML error page: say what came back rather than
+    // swallowing it, so the cause is visible instead of guessed at.
+    return { ok: false, error: `Erreur ${r.status} — ${raw.slice(0, 140) || 'réponse vide'}` };
+  }
+  if (!r.ok && body.ok !== false) {
+    return { ok: false, error: body.error || body.message || `Erreur ${r.status}` };
+  }
+  return body;
 }
 
 /* ── Badges ── */
@@ -639,16 +675,24 @@ function addUserModal(kind, doctors, onDone, forcedDoctorId) {
     <div class="modal-foot"><button class="btn btn-ghost" data-close>Annuler</button><button class="btn btn-primary" id="mGo">Créer le compte</button></div>`);
   ov.querySelector('#mGo').addEventListener('click', async () => {
     const btn = ov.querySelector('#mGo');
+    const done = (msg) => { toast(msg, true); btn.disabled = false; btn.textContent = 'Créer le compte'; };
+
+    const email = ov.querySelector('#mEmail').value.trim();
+    const password = ov.querySelector('#mPass').value;
+    // Checked here so the reason is on screen instead of a silent 400.
+    if (!email) return done('Entre un email.');
+    if (password.length < 6) return done('Le mot de passe doit faire au moins 6 caractères.');
+
     btn.disabled = true; btn.textContent = 'Création…';
     const res = await adminOp({
       action: 'create_user',
-      email: ov.querySelector('#mEmail').value,
-      password: ov.querySelector('#mPass').value,
+      email,
+      password,
       name: ov.querySelector('#mName').value,
       role: isDoc ? 'doctor' : 'patient',
       doctor_id: forcedDoctorId || ov.querySelector('#mDoctor')?.value || null,
     });
-    if (!res.ok) { toast(res.error || 'Erreur', true); btn.disabled = false; btn.textContent = 'Créer le compte'; return; }
+    if (!res.ok) return done(res.error || 'Erreur inconnue');
     ov.remove(); toast(isDoc ? 'Médecin créé ✓' : 'Patient créé ✓'); onDone?.();
   });
 }
@@ -1587,8 +1631,16 @@ function passwordModal(uid) {
     <div class="modal-body"><div class="field"><label>Mot de passe (min. 6 caractères)</label><input id="npw" type="text" placeholder="Nouveau mot de passe" /></div></div>
     <div class="modal-foot"><button class="btn btn-ghost" data-close>Annuler</button><button class="btn btn-primary" id="npwGo">Changer</button></div>`);
   ov.querySelector('#npwGo').addEventListener('click', async () => {
-    const res = await adminOp({ action: 'set_password', user_id: uid, password: ov.querySelector('#npw').value });
-    if (!res.ok) return toast(res.error || 'Erreur', true);
+    const btn = ov.querySelector('#npwGo');
+    const pw = ov.querySelector('#npw').value;
+    if (pw.length < 6) return toast('Le mot de passe doit faire au moins 6 caractères.', true);
+
+    btn.disabled = true; btn.textContent = 'Changement…';
+    const res = await adminOp({ action: 'set_password', user_id: uid, password: pw });
+    if (!res.ok) {
+      btn.disabled = false; btn.textContent = 'Changer';
+      return toast(res.error || 'Erreur inconnue', true);
+    }
     ov.remove(); toast('Mot de passe changé ✓');
   });
 }
