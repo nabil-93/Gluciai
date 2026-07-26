@@ -1,18 +1,11 @@
 import React, { useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Spinner } from '@/components/ui/Spinner';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppButton, BevelCard, ChevronLeft } from '@/components/ui';
+import { AppButton, BevelCard, FadeInView, HeroScreen, HERO_INK, HERO_MUTED } from '@/components/ui';
 import { analyzeMenu } from '@/services/ai';
 import { saveMeal } from '@/services/data';
 import { sourceLabel } from '@/services/nutrition/engine';
@@ -28,7 +21,6 @@ interface ScoredDish {
 export default function MenuScanScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
-  const insets = useSafeAreaInsets();
   const [analyzing, setAnalyzing] = useState(false);
   const [dishes, setDishes] = useState<ScoredDish[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,39 +94,31 @@ export default function MenuScanScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingTop: insets.top + 14,
-          paddingHorizontal: 16,
-          paddingBottom: 60,
-        }}
-      >
-        <View style={styles.headRow}>
-          <Pressable onPress={close} style={styles.backBtn}>
-            <ChevronLeft size={16} />
-          </Pressable>
-          <Text style={styles.headTitle}>{t('menuScanPage.title')}</Text>
-          <View style={{ width: 36 }} />
-        </View>
+    <HeroScreen
+      title={t('menuScanPage.title')}
+      glyph="menu"
+      tint="#6D5EF9"
+      onClose={close}
+      height={210}
+    >
 
         {!dishes && !analyzing ? (
-          <View style={styles.introWrap}>
-            <Text style={{ fontSize: 56 }}>📋</Text>
-            <Text style={styles.introTitle}>{t('menuScanPage.introTitle')}</Text>
-            <Text style={styles.introSub}>{t('menuScanPage.introSub')}</Text>
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            <AppButton
-              label={t('menuScanPage.photograph')}
-              onPress={pickAndAnalyze}
-              style={{ alignSelf: 'stretch', marginTop: 10 }}
-            />
-          </View>
+          <FadeInView>
+            <View style={styles.introCard}>
+              <Text style={styles.introTitle}>{t('menuScanPage.introTitle')}</Text>
+              <Text style={styles.introSub}>{t('menuScanPage.introSub')}</Text>
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              <AppButton
+                label={t('menuScanPage.photograph')}
+                onPress={pickAndAnalyze}
+                style={{ alignSelf: 'stretch', marginTop: 16 }}
+              />
+            </View>
+          </FadeInView>
         ) : null}
 
         {analyzing ? (
-          <View style={styles.introWrap}>
+          <View style={styles.loadingWrap}>
             <Spinner size={34} color={colors.ink} />
             <Text style={styles.introSub}>{t('menuScanPage.reading')}</Text>
           </View>
@@ -228,8 +212,7 @@ export default function MenuScanScreen() {
             />
           </>
         ) : null}
-      </ScrollView>
-    </View>
+    </HeroScreen>
   );
 }
 
@@ -260,17 +243,26 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   headTitle: { fontSize: 19, fontWeight: '750' as any, color: colors.text },
-  introWrap: { alignItems: 'center', gap: 14, paddingVertical: 44, paddingHorizontal: 8 },
+  introCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 26,
+    padding: 22,
+    alignItems: 'center',
+    gap: 8,
+    ...shadows.card,
+  },
+  loadingWrap: { alignItems: 'center', gap: 14, paddingVertical: 44 },
   introTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.text,
+    fontFamily: 'PlusJakartaSans_800ExtraBold',
+    fontSize: 19,
+    color: HERO_INK,
     textAlign: 'center',
   },
   introSub: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.textSecondary,
+    fontFamily: 'PlusJakartaSans_500Medium',
+    fontSize: 13.5,
+    lineHeight: 20,
+    color: HERO_MUTED,
     textAlign: 'center',
   },
   error: { fontSize: 14, lineHeight: 20, color: colors.danger, textAlign: 'center' },

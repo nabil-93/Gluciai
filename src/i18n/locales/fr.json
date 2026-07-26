@@ -1639,7 +1639,8 @@
     "added": "✓ Ajouté",
     "add": "Ajouter",
     "noResults": "Aucun plat trouvé.",
-    "highGiWarning": "Index glycémique élevé — mesurez votre glycémie 2 h après."
+    "highGiWarning": "Index glycémique élevé — mesurez votre glycémie 2 h après.",
+    "count": "{{n}} plats"
   },
   "integrations": {
     "title": "Capteurs & santé",

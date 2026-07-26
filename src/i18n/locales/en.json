@@ -1639,7 +1639,8 @@
     "added": "✓ Added",
     "add": "Add",
     "noResults": "No dish found.",
-    "highGiWarning": "High glycemic index — check your glucose 2 h after eating."
+    "highGiWarning": "High glycemic index — check your glucose 2 h after eating.",
+    "count": "{{n}} dishes"
   },
   "integrations": {
     "title": "Sensors & health",

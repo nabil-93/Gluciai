@@ -1639,7 +1639,8 @@
     "added": "✓ Hinzugefügt",
     "add": "Hinzufügen",
     "noResults": "Kein Gericht gefunden.",
-    "highGiWarning": "Hoher glykämischer Index — miss deinen Blutzucker 2 h nach dem Essen."
+    "highGiWarning": "Hoher glykämischer Index — miss deinen Blutzucker 2 h nach dem Essen.",
+    "count": "{{n}} Gerichte"
   },
   "integrations": {
     "title": "Sensoren & Gesundheit",

@@ -1,16 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppButton, BevelCard, ChevronLeft } from '@/components/ui';
+import { LinearGradient } from 'expo-linear-gradient';
+
+import {
+  AppButton,
+  FadeInView,
+  HeroScreen,
+  HERO_INK,
+  HERO_MUTED,
+} from '@/components/ui';
 import { SOURCE_LABEL } from '@/services/nutrition/engine';
 import { nowMs } from '@/lib/clock';
 import { getWeeklySummary } from '@/services/weeklyReport';
@@ -28,7 +29,6 @@ const TYPE_FR: Record<string, string> = {
 
 export default function ReportScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { profile, glucoseLogs, insulinLogs, meals, activityLogs } =
     useAppStore();
   const [generating, setGenerating] = useState(false);
@@ -219,31 +219,24 @@ export default function ReportScreen() {
     }
   };
 
+  const tirGood = stats.tir !== null && stats.tir >= 70;
+
   return (
-    <View style={styles.root}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingTop: insets.top + 14,
-          paddingHorizontal: 16,
-          paddingBottom: 40,
-        }}
-      >
-        <View style={styles.headRow}>
-          <Pressable onPress={close} style={styles.backBtn}>
-            <ChevronLeft size={16} />
-          </Pressable>
-          <Text style={styles.headTitle}>Rapport médecin</Text>
-          <View style={{ width: 36 }} />
-        </View>
-
-        <Text style={styles.subtitle}>
-          Résumé des {DAYS} derniers jours — imprimez-le ou enregistrez-le en
-          PDF pour votre consultation.
-        </Text>
-
-        {/* eA1c highlight */}
-        <View style={styles.ea1cCard}>
+    <HeroScreen
+      title="Rapport médecin"
+      glyph="report"
+      tint="#4E6B87"
+      onClose={close}
+      height={210}
+    >
+      {/* ── The one figure a consultation opens on ── */}
+      <FadeInView>
+        <LinearGradient
+          colors={['#3C5670', '#22374B']}
+          start={{ x: 0.1, y: 0 }}
+          end={{ x: 0.95, y: 1 }}
+          style={styles.ea1cCard}
+        >
           <Text style={styles.ea1cLabel}>HbA1c estimée</Text>
           <View style={styles.ea1cRow}>
             <Text style={styles.ea1cValue}>
@@ -252,26 +245,77 @@ export default function ReportScreen() {
             <Text style={styles.ea1cUnit}>%</Text>
           </View>
           <Text style={styles.ea1cHint}>
-            Calculée depuis votre moyenne glycémique ({stats.avg ?? '—'} mg/dL)
-            — indicative, ne remplace pas l'analyse de laboratoire.
+            Calculée depuis votre moyenne glycémique ({stats.avg ?? '—'} mg/dL) —
+            indicative, elle ne remplace pas l&apos;analyse de laboratoire.
+          </Text>
+        </LinearGradient>
+        <Text style={styles.subtitle}>
+          Résumé des {DAYS} derniers jours — imprimez-le ou enregistrez-le en PDF
+          pour votre consultation.
+        </Text>
+      </FadeInView>
+
+      {/* ── Time in range, given the room it deserves ── */}
+      <FadeInView delay={70}>
+        <View style={styles.tirCard}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.tirLabel}>Temps dans la cible</Text>
+            <Text style={styles.tirHint}>
+              {stats.count} mesures sur {DAYS} jours
+            </Text>
+          </View>
+          <Text
+            style={[
+              styles.tirValue,
+              { color: tirGood ? colors.glucoseInRange : colors.glucoseHigh },
+            ]}
+          >
+            {stats.tir !== null ? `${stats.tir}%` : '—'}
           </Text>
         </View>
+        {stats.tir !== null ? (
+          <View style={styles.tirTrack}>
+            <View
+              style={[
+                styles.tirFill,
+                {
+                  width: `${Math.min(100, stats.tir)}%`,
+                  backgroundColor: tirGood ? colors.glucoseInRange : colors.glucoseHigh,
+                },
+              ]}
+            />
+          </View>
+        ) : null}
+      </FadeInView>
 
-        {/* Stats grid */}
+      {/* ── Everything else ── */}
+      <FadeInView delay={130}>
         <View style={styles.grid}>
-          <Stat label="Temps dans la cible" value={stats.tir !== null ? `${stats.tir}%` : '—'} color={stats.tir !== null && stats.tir >= 70 ? colors.glucoseInRange : colors.glucoseHigh} />
-          <Stat label="Mesures" value={String(stats.count)} color={colors.ai} />
           <Stat label="Hypoglycémies" value={String(stats.lows)} color={colors.glucoseLow} />
           <Stat label="Hyperglycémies" value={String(stats.highs)} color={colors.glucoseHigh} />
-          <Stat label="Insuline / jour" value={stats.avgInsulinPerDay !== null ? `${stats.avgInsulinPerDay} U` : '—'} color={colors.ai} />
-          <Stat label="Glucides / jour" value={stats.avgCarbsPerDay !== null ? `${stats.avgCarbsPerDay} g` : '—'} color={colors.carbs} />
+          <Stat
+            label="Insuline / jour"
+            value={stats.avgInsulinPerDay !== null ? `${stats.avgInsulinPerDay} U` : '—'}
+            color={colors.ai}
+          />
+          <Stat
+            label="Glucides / jour"
+            value={stats.avgCarbsPerDay !== null ? `${stats.avgCarbsPerDay} g` : '—'}
+            color={colors.carbs}
+          />
           <Stat label="Repas suivis" value={String(stats.mealsCount)} color={colors.protein} />
-          <Stat label="Activité totale" value={`${stats.totalActivityMin} min`} color={colors.primary} />
+          <Stat
+            label="Activité totale"
+            value={`${stats.totalActivityMin} min`}
+            color={colors.primary}
+          />
         </View>
+      </FadeInView>
 
-        {/* Weekly AI summary */}
+      {/* ── What the week said ── */}
+      <FadeInView delay={190}>
         <Text style={styles.weeklyTitle}>Résumé IA de la semaine</Text>
-        <BevelCard>
+        <View style={styles.weeklyCard}>
           {weekly.observations.map((o, i) => (
             <Text key={`o${i}`} style={styles.weeklyLine}>
               📋 {o}
@@ -287,7 +331,7 @@ export default function ReportScreen() {
               💡 {p}
             </Text>
           ))}
-        </BevelCard>
+        </View>
 
         <AppButton
           label="📄 Générer le PDF / Imprimer"
@@ -299,97 +343,124 @@ export default function ReportScreen() {
           Le rapport inclut vos informations médicales, statistiques et les 60
           dernières mesures.
         </Text>
-      </ScrollView>
+      </FadeInView>
+    </HeroScreen>
+  );
+}
+
+function Stat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel} numberOfLines={2}>
+        {label}
+      </Text>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
     </View>
   );
 }
 
-function Stat({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <BevelCard style={styles.stat}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-    </BevelCard>
-  );
-}
+const F500 = 'PlusJakartaSans_500Medium';
+const F600 = 'PlusJakartaSans_600SemiBold';
+const F700 = 'PlusJakartaSans_700Bold';
+const F800 = 'PlusJakartaSans_800ExtraBold';
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
-  headRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.card,
-  },
-  headTitle: { fontSize: 19, fontWeight: '750' as any, color: colors.text },
   subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.textSecondary,
-    marginBottom: 16,
-    marginHorizontal: 2,
-  },
-  ea1cCard: {
-    backgroundColor: colors.ink,
-    borderRadius: 24,
-    padding: 20,
-    ...shadows.floating,
-  },
-  ea1cLabel: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.6)' },
-  ea1cRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2 },
-  ea1cValue: { fontSize: 52, fontWeight: '800', color: '#fff', letterSpacing: -1 },
-  ea1cUnit: { fontSize: 24, fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
-  ea1cHint: {
-    marginTop: 8,
+    fontFamily: F500,
     fontSize: 12.5,
     lineHeight: 18,
-    color: 'rgba(255,255,255,0.5)',
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 12,
-  },
-  stat: { flexBasis: '47%', flexGrow: 1, paddingVertical: 14 },
-  statLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
-  statValue: { marginTop: 6, fontSize: 22, fontWeight: '800' },
-  weeklyTitle: {
-    fontSize: 20,
-    fontWeight: '750' as any,
-    color: colors.text,
-    marginTop: 24,
-    marginBottom: 12,
+    color: HERO_MUTED,
+    marginTop: 14,
     marginHorizontal: 2,
   },
+
+  /* The headline figure a consultation opens on. */
+  ea1cCard: {
+    borderRadius: 26,
+    padding: 20,
+    shadowColor: '#22374B',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 20,
+    elevation: 7,
+  },
+  ea1cLabel: { fontFamily: F600, fontSize: 12.5, color: 'rgba(255,255,255,0.82)' },
+  ea1cRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2 },
+  ea1cValue: { fontFamily: F800, fontSize: 52, color: '#fff', letterSpacing: -1.5 },
+  ea1cUnit: { fontFamily: F700, fontSize: 23, color: 'rgba(255,255,255,0.85)' },
+  ea1cHint: {
+    marginTop: 10,
+    fontFamily: F500,
+    fontSize: 11.5,
+    lineHeight: 16.5,
+    color: 'rgba(255,255,255,0.78)',
+  },
+
+  /* Time in range earns a row of its own — it is the number a doctor
+     reads first, and a tile in a grid of eight buries it. */
+  tirCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 22,
+    ...shadows.card,
+  },
+  tirLabel: { fontFamily: F700, fontSize: 13.5, color: HERO_INK },
+  tirHint: { fontFamily: F500, fontSize: 11.5, color: HERO_MUTED, marginTop: 2 },
+  tirValue: { fontFamily: F800, fontSize: 30, letterSpacing: -1 },
+  tirTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E7EDE9',
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  tirFill: { height: 8, borderRadius: 4 },
+
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 12 },
+  stat: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    minWidth: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    ...shadows.card,
+  },
+  statLabel: { fontFamily: F600, fontSize: 11.5, lineHeight: 15, color: HERO_MUTED },
+  statValue: { fontFamily: F800, fontSize: 21, marginTop: 6, letterSpacing: -0.5 },
+
+  weeklyTitle: {
+    fontFamily: F800,
+    fontSize: 15,
+    color: HERO_INK,
+    marginTop: 24,
+    marginBottom: 10,
+    marginHorizontal: 2,
+  },
+  weeklyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    ...shadows.card,
+  },
   weeklyLine: {
-    fontSize: 13.5,
-    lineHeight: 21,
-    color: '#3E3E44',
-    marginBottom: 6,
+    fontFamily: F600,
+    fontSize: 12.5,
+    lineHeight: 19,
+    color: '#3E4A44',
+    marginBottom: 7,
   },
   footHint: {
     marginTop: 12,
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: colors.textTertiary,
+    fontFamily: F500,
+    fontSize: 11.5,
+    lineHeight: 17,
+    color: '#9AA8A0',
     textAlign: 'center',
   },
 });

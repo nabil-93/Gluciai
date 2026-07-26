@@ -1,22 +1,25 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BevelCard, ChevronLeft, SearchGlyph } from '@/components/ui';
+import {
+  FadeInView,
+  HeroScreen,
+  HERO_INK,
+  HERO_MUTED,
+  SearchGlyph,
+} from '@/components/ui';
 import i18n from '@/i18n';
 import { filterMoroccanFoods, type MoroccanFood } from '@/data/moroccanFoods';
 import { saveMeal } from '@/services/data';
 import { colors, shadows } from '@/theme';
 import type { NutritionResult } from '@/types';
+
+const F500 = 'PlusJakartaSans_500Medium';
+const F600 = 'PlusJakartaSans_600SemiBold';
+const F700 = 'PlusJakartaSans_700Bold';
+const F800 = 'PlusJakartaSans_800ExtraBold';
 
 const PORTIONS = [
   { label: '½', factor: 0.5 },
@@ -64,10 +67,16 @@ function toResult(food: MoroccanFood, factor: number): NutritionResult {
   };
 }
 
+/** Green under 55, amber to 65, orange above — the patient's own scale. */
+function giTone(gi: number) {
+  if (gi > 65) return { color: colors.glucoseLow, bg: '#FFF1E6' };
+  if (gi > 55) return { color: '#B8860B', bg: '#FEF6E7' };
+  return { color: colors.glucoseInRange, bg: '#E9FBF2' };
+}
+
 export default function FoodsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [factor, setFactor] = useState(1);
@@ -94,43 +103,43 @@ export default function FoodsScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingTop: insets.top + 14,
-          paddingHorizontal: 16,
-          paddingBottom: 60,
-        }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.headRow}>
-          <Pressable onPress={close} style={styles.backBtn}>
-            <ChevronLeft size={16} />
-          </Pressable>
-          <Text style={styles.headTitle}>{t('foodsPage.title')}</Text>
-          <View style={{ width: 36 }} />
-        </View>
-
+    <HeroScreen
+      title={t('foodsPage.title')}
+      photo={require('../assets/nutrition/hero-bg.jpg')}
+      onClose={close}
+      height={220}
+    >
+      {/* ── Search ── */}
+      <FadeInView>
         <Text style={styles.subtitle}>{t('foodsPage.subtitle')}</Text>
-
         <View style={styles.search}>
           <SearchGlyph />
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder={t('foodsPage.searchPlaceholder')}
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor="#AFBAB3"
             style={styles.searchInput}
           />
+          {query ? (
+            <Pressable onPress={() => setQuery('')} hitSlop={8}>
+              <Text style={styles.clear}>✕</Text>
+            </Pressable>
+          ) : null}
         </View>
+        <Text style={styles.count}>{t('foodsPage.count', { n: list.length })}</Text>
+      </FadeInView>
 
-        <View style={{ gap: 10, marginTop: 16 }}>
+      {/* ── The dishes ── */}
+      <FadeInView delay={70}>
+        <View style={{ gap: 9 }}>
           {list.map((f) => {
             const isOpen = openId === f.id;
             const scaled = toResult(f, factor);
+            const gi = f.glycemic_index ?? 0;
+            const tone = giTone(gi);
             return (
-              <BevelCard key={f.id} noPadding style={styles.card}>
+              <View key={f.id} style={[styles.card, isOpen && styles.cardOpen]}>
                 <Pressable
                   style={styles.cardHead}
                   onPress={() => {
@@ -139,103 +148,117 @@ export default function FoodsScreen() {
                     setSavedId(null);
                   }}
                 >
-                  <Text style={{ fontSize: 26 }}>{f.emoji}</Text>
+                  <View style={styles.emojiWrap}>
+                    <Text style={{ fontSize: 24 }}>{f.emoji}</Text>
+                  </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.foodName}>{f.name_fr}</Text>
-                    <Text style={styles.foodAr}>{f.name_ar}</Text>
-                    <Text style={styles.foodPortion}>{f.serving_size}</Text>
+                    <Text style={styles.foodName} numberOfLines={1}>
+                      {f.name_fr}
+                    </Text>
+                    <Text style={styles.foodAr} numberOfLines={1}>
+                      {f.name_ar}
+                    </Text>
+                    {/* Arabic text carries its own direction, so without an
+                        explicit alignment it drifts to the right edge of a
+                        French-primary row. */}
+                    <Text style={styles.foodPortion} numberOfLines={1}>
+                      {f.serving_size}
+                    </Text>
                   </View>
                   <View style={styles.carbsBadge}>
-                    <Text style={styles.carbsBadgeValue}>{f.carbs}g</Text>
-                    <Text style={styles.carbsBadgeLabel}>{t('foodsPage.carbs')}</Text>
+                    <Text style={styles.carbsValue}>{f.carbs}</Text>
+                    <Text style={styles.carbsUnit}>g</Text>
                   </View>
                 </Pressable>
 
                 {isOpen ? (
                   <View style={styles.detail}>
-                    {/* Portion selector */}
+                    {/* Portion */}
                     <View style={styles.portionRow}>
                       <Text style={styles.portionLabel}>{t('foodsPage.portion')}</Text>
-                      {PORTIONS.map((p) => (
-                        <Pressable
-                          key={p.label}
-                          onPress={() => setFactor(p.factor)}
-                          style={[
-                            styles.portionChip,
-                            factor === p.factor && styles.portionChipOn,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.portionChipText,
-                              factor === p.factor && { color: '#fff' },
-                            ]}
-                          >
-                            {p.label}
-                          </Text>
-                        </Pressable>
-                      ))}
+                      <View style={styles.portionChips}>
+                        {PORTIONS.map((p) => {
+                          const on = factor === p.factor;
+                          return (
+                            <Pressable
+                              key={p.label}
+                              onPress={() => setFactor(p.factor)}
+                              style={[styles.portionChip, on && styles.portionChipOn]}
+                            >
+                              <Text
+                                style={[styles.portionText, on && styles.portionTextOn]}
+                              >
+                                {p.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
                     </View>
 
-                    {/* Scaled macros */}
+                    {/* What that portion actually is */}
                     <View style={styles.macroRow}>
                       <Macro value={scaled.calories} unit="kcal" color={colors.warning} />
-                      <Macro value={scaled.carbohydrates} unit={t('foodsPage.unitCarbs')} color={colors.carbs} />
-                      <Macro value={scaled.sugar} unit={t('foodsPage.unitSugar')} color={colors.protein} />
                       <Macro
-                        value={f.glycemic_index ?? 0}
-                        unit="IG"
-                        color={
-                          (f.glycemic_index ?? 0) > 65
-                            ? colors.glucoseLow
-                            : (f.glycemic_index ?? 0) > 55
-                              ? colors.glucoseHigh
-                              : colors.glucoseInRange
-                        }
+                        value={scaled.carbohydrates}
+                        unit={t('foodsPage.unitCarbs')}
+                        color={colors.carbs}
                       />
+                      <Macro
+                        value={scaled.sugar}
+                        unit={t('foodsPage.unitSugar')}
+                        color={colors.protein}
+                      />
+                      <Macro value={gi} unit="IG" color={tone.color} />
                     </View>
+
+                    {gi > 65 ? (
+                      <View style={[styles.warn, { backgroundColor: tone.bg }]}>
+                        <Text style={[styles.warnText, { color: tone.color }]}>
+                          ⚡ {t('foodsPage.highGiWarning')}
+                        </Text>
+                      </View>
+                    ) : null}
 
                     <View style={styles.actionsRow}>
                       <Pressable
                         style={[styles.actionBtn, styles.actionPrimary]}
                         onPress={() => add(f, false)}
                       >
-                        <Text style={styles.actionPrimaryText}>
-                          {savedId === f.id ? t('foodsPage.added') : t('foodsPage.add')}
+                        <Text style={styles.actionPrimaryText} numberOfLines={1}>
+                          {savedId === f.id
+                            ? `✓ ${t('foodsPage.added')}`
+                            : t('foodsPage.add')}
                         </Text>
                       </Pressable>
                       <Pressable
                         style={[styles.actionBtn, styles.actionSecondary]}
                         onPress={() => add(f, true)}
                       >
-                        <Text style={styles.actionSecondaryText}>
-                          + Bolus
+                        <Text style={styles.actionSecondaryText} numberOfLines={1}>
+                          💉 Bolus
                         </Text>
                       </Pressable>
                     </View>
                   </View>
                 ) : null}
-              </BevelCard>
+              </View>
             );
           })}
+
           {list.length === 0 ? (
-            <Text style={styles.noResults}>{t('foodsPage.noResults')}</Text>
+            <View style={styles.empty}>
+              <Text style={styles.emptyEmoji}>🍽️</Text>
+              <Text style={styles.emptyText}>{t('foodsPage.noResults')}</Text>
+            </View>
           ) : null}
         </View>
-      </ScrollView>
-    </View>
+      </FadeInView>
+    </HeroScreen>
   );
 }
 
-function Macro({
-  value,
-  unit,
-  color,
-}: {
-  value: number;
-  unit: string;
-  color: string;
-}) {
+function Macro({ value, unit, color }: { value: number; unit: string; color: string }) {
   return (
     <View style={styles.macro}>
       <Text style={[styles.macroValue, { color }]}>{value}</Text>
@@ -245,94 +268,134 @@ function Macro({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
-  headRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.card,
-  },
-  headTitle: { fontSize: 19, fontWeight: '750' as any, color: colors.text },
   subtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 14,
-    marginHorizontal: 2,
+    fontFamily: F500,
+    fontSize: 13,
+    lineHeight: 18,
+    color: HERO_MUTED,
+    marginBottom: 12,
   },
+
   search: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#E5E5EA',
-    borderRadius: 14,
-    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
     paddingHorizontal: 14,
+    paddingVertical: 13,
+    ...shadows.card,
   },
-  searchInput: { flex: 1, fontSize: 16, color: colors.text, padding: 0 },
-  card: { overflow: 'hidden' },
-  cardHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: F600,
+    fontSize: 15,
+    color: HERO_INK,
+    padding: 0,
   },
-  foodName: { fontSize: 15.5, fontWeight: '700', color: colors.text },
-  foodAr: { marginTop: 1, fontSize: 13, color: colors.textSecondary },
-  foodPortion: { marginTop: 2, fontSize: 12, color: colors.textTertiary },
-  carbsBadge: {
-    alignItems: 'center',
-    backgroundColor: `${colors.carbs}18`,
-    borderRadius: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+  clear: { fontFamily: F700, fontSize: 13, color: '#AFBAB3' },
+  count: {
+    fontFamily: F600,
+    fontSize: 11.5,
+    color: HERO_MUTED,
+    marginTop: 10,
+    marginLeft: 2,
   },
-  carbsBadgeValue: { fontSize: 16, fontWeight: '800', color: colors.carbs },
-  carbsBadgeLabel: { fontSize: 10, color: colors.carbs },
-  detail: {
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F3',
-    padding: 14,
+
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    ...shadows.card,
   },
-  portionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  portionLabel: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
-  portionChip: {
-    width: 40,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: colors.surface2,
+  cardOpen: { borderWidth: 1.5, borderColor: '#DFF3E8' },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13 },
+  emojiWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: '#F3F7F4',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  portionChipOn: { backgroundColor: colors.ink },
-  portionChipText: { fontSize: 14, fontWeight: '700', color: colors.textSecondary },
-  macroRow: { flexDirection: 'row', marginTop: 14 },
+  foodName: { fontFamily: F800, fontSize: 14, color: HERO_INK },
+  foodAr: {
+    fontFamily: F600,
+    fontSize: 12,
+    color: HERO_MUTED,
+    marginTop: 1,
+    textAlign: 'left',
+  },
+  foodPortion: { fontFamily: F500, fontSize: 11, color: '#9AA8A0', marginTop: 2 },
+  carbsBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 52,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    backgroundColor: '#F4F2FF',
+  },
+  carbsValue: { fontFamily: F800, fontSize: 16, color: colors.carbs, lineHeight: 19 },
+  carbsUnit: { fontFamily: F700, fontSize: 10, color: colors.carbs, opacity: 0.75 },
+
+  detail: {
+    borderTopWidth: 1,
+    borderTopColor: '#EEF3F0',
+    paddingHorizontal: 13,
+    paddingTop: 13,
+    paddingBottom: 14,
+    gap: 13,
+  },
+  portionRow: { gap: 8 },
+  portionLabel: { fontFamily: F700, fontSize: 11.5, color: HERO_MUTED },
+  portionChips: { flexDirection: 'row', gap: 7 },
+  portionChip: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: '#E4EBE7',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  portionChipOn: { backgroundColor: '#E9FBF2', borderColor: colors.glucoseInRange },
+  portionText: { fontFamily: F800, fontSize: 14, color: HERO_MUTED },
+  portionTextOn: { color: '#0F7A42' },
+
+  macroRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FBF9',
+    borderRadius: 14,
+    paddingVertical: 11,
+  },
   macro: { flex: 1, alignItems: 'center' },
-  macroValue: { fontSize: 18, fontWeight: '800' },
-  macroUnit: { marginTop: 2, fontSize: 11, color: colors.textSecondary },
-  actionsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  macroValue: { fontFamily: F800, fontSize: 15.5 },
+  macroUnit: { fontFamily: F600, fontSize: 10, color: '#9AA8A0', marginTop: 1 },
+
+  warn: { borderRadius: 12, paddingVertical: 9, paddingHorizontal: 11 },
+  warnText: { fontFamily: F600, fontSize: 11.5, lineHeight: 16 },
+
+  actionsRow: { flexDirection: 'row', gap: 9 },
   actionBtn: {
     flex: 1,
+    minHeight: 46,
+    paddingHorizontal: 10,
     borderRadius: 14,
-    paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  actionPrimary: { backgroundColor: colors.ink },
-  actionPrimaryText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  actionSecondary: { backgroundColor: colors.surface2 },
-  actionSecondaryText: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  noResults: {
-    marginTop: 30,
-    textAlign: 'center',
-    fontSize: 15,
-    color: colors.textTertiary,
+  actionPrimary: { backgroundColor: colors.glucoseInRange },
+  actionPrimaryText: { fontFamily: F700, fontSize: 13.5, color: '#FFFFFF' },
+  actionSecondary: { borderWidth: 1.5, borderColor: '#D6DEDA', backgroundColor: '#FFFFFF' },
+  actionSecondaryText: { fontFamily: F700, fontSize: 13.5, color: HERO_INK },
+
+  empty: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 10,
   },
+  emptyEmoji: { fontSize: 34 },
+  emptyText: { fontFamily: F600, fontSize: 13, color: HERO_MUTED, textAlign: 'center' },
 });

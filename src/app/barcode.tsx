@@ -2,7 +2,6 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,9 +11,8 @@ import { Image } from 'expo-image';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppButton, BevelCard, ChevronLeft, Spinner } from '@/components/ui';
+import { AppButton, BevelCard, HeroScreen, Spinner } from '@/components/ui';
 import {
   WebBarcodeScanner,
   webBarcodeSupported,
@@ -34,7 +32,6 @@ const PORTIONS = [30, 50, 100, 150, 250];
 export default function BarcodeScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [manualCode, setManualCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -187,23 +184,13 @@ export default function BarcodeScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingTop: insets.top + 14,
-          paddingHorizontal: 16,
-          paddingBottom: 40,
-        }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.headRow}>
-          <Pressable onPress={close} style={styles.backBtn}>
-            <ChevronLeft size={16} />
-          </Pressable>
-          <Text style={styles.headTitle}>{t('barcode.title')}</Text>
-          <View style={{ width: 36 }} />
-        </View>
+    <HeroScreen
+      title={t('barcode.title')}
+      glyph="barcode"
+      tint="#F2A93B"
+      onClose={close}
+      height={190}
+    >
 
         {!product ? (
           <>
@@ -466,8 +453,7 @@ export default function BarcodeScreen() {
             </View>
           </>
         )}
-      </ScrollView>
-    </View>
+    </HeroScreen>
   );
 }
 
