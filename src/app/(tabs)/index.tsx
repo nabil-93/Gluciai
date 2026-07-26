@@ -2159,7 +2159,11 @@ export default function HomeScreen() {
             today's — same slots, same layout. Say whose day it is, right
             above the cards it applies to. */}
         {!isViewingToday ? (
-          <PastDayNote date={selectedDate} style={{ marginBottom: 10 }} />
+          <PastDayNote
+            date={selectedDate}
+            onToday={() => setSelectedDate(new Date())}
+            style={{ marginBottom: 10 }}
+          />
         ) : null}
 
         <View style={styles.mealsRow}>

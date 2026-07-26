@@ -529,6 +529,7 @@ export default function NutritionScreen() {
         {!isToday ? (
           <PastDayNote
             date={selectedDate}
+            onToday={backToToday}
             style={{ marginHorizontal: 20, marginBottom: 10 }}
           />
         ) : null}

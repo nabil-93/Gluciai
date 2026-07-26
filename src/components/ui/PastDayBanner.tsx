@@ -134,8 +134,22 @@ export function PastDayBanner({
   );
 }
 
-/** The same notice, sized for the inside of a card or a section header. */
-export function PastDayNote({ date, style }: { date: Date; style?: any }) {
+/**
+ * The same notice, sized for the inside of a card or a section header.
+ *
+ * `onToday` gives it the way back the full banner has always had. Telling
+ * someone they are reading the wrong day and leaving them to work out how to
+ * return is the half of the message that was missing.
+ */
+export function PastDayNote({
+  date,
+  onToday,
+  style,
+}: {
+  date: Date;
+  onToday?: () => void;
+  style?: any;
+}) {
   const { t, i18n } = useTranslation();
   const label = useMemo(() => {
     const yesterday = new Date();
@@ -149,10 +163,17 @@ export function PastDayNote({ date, style }: { date: Date; style?: any }) {
   }, [date, t, i18n.language]);
 
   return (
-    <View style={[styles.noteWrap, style]}>
-      <Text style={styles.noteText} numberOfLines={3}>
+    <View style={[styles.noteWrap, onToday && styles.noteWrapRow, style]}>
+      <Text style={[styles.noteText, onToday && { flex: 1, minWidth: 0 }]} numberOfLines={3}>
         {t('pastDay.mealsNote', { date: label })}
       </Text>
+      {onToday ? (
+        <Pressable style={styles.btn} onPress={onToday} hitSlop={6} accessibilityRole="button">
+          <Text style={styles.btnText} numberOfLines={1}>
+            {t('pastDay.backToToday')}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -198,5 +219,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 11,
   },
+  noteWrapRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   noteText: { fontFamily: F700, fontSize: 11.5, lineHeight: 15.5, color: AMBER_INK },
 });
