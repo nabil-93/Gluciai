@@ -37,3 +37,5 @@ export {
   useReduceMotion,
 } from './motion';
 export * from './icons';
+export { ActionGlyph, type ActionGlyphName } from './ActionGlyphs';
+export { HeroScreen, HERO_CANVAS, HERO_INK, HERO_MUTED } from './HeroScreen';

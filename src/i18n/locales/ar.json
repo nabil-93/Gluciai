@@ -831,7 +831,17 @@
     "insulinDose": "الجرعة (وحدات)",
     "insulinType": "نوع الأنسولين",
     "notes": "ملاحظات (اختياري)",
-    "saved": "تم الحفظ!"
+    "saved": "تم الحفظ!",
+    "targetRange": "الهدف {{low}}–{{high}} ملغ/دل",
+    "quickPick": "بسرعة",
+    "notesHint": "على الريق، من بعد الماكلة، رياضة…",
+    "sinceLast": "مقارنة بالأخير",
+    "lastReading": "الأخير: {{value}} ملغ/دل، {{when}}",
+    "minutesAgo": "هادي {{n}} دقيقة",
+    "hoursAgo": "هادي {{n}} ساعة",
+    "daysAgo": "هادي {{n}} يام",
+    "notesHintInsulin": "بلاصة الحقنة، السياق…",
+    "todayTotal": "{{total}} وحدة {{type}} اليوم"
   },
   "tabs": {
     "home": "الرئيسية",

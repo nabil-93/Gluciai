@@ -831,7 +831,17 @@
     "insulinDose": "Dose (units)",
     "insulinType": "Insulin type",
     "notes": "Notes (optional)",
-    "saved": "Saved!"
+    "saved": "Saved!",
+    "targetRange": "Target {{low}}–{{high}} mg/dL",
+    "quickPick": "Quick",
+    "notesHint": "Fasting, after a meal, sport…",
+    "sinceLast": "vs last",
+    "lastReading": "Last: {{value}} mg/dL, {{when}}",
+    "minutesAgo": "{{n}} min ago",
+    "hoursAgo": "{{n}} h ago",
+    "daysAgo": "{{n}} d ago",
+    "notesHintInsulin": "Injection site, context…",
+    "todayTotal": "{{total}} U of {{type}} today"
   },
   "tabs": {
     "home": "Home",
