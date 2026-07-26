@@ -1566,7 +1566,8 @@
     "labs": "Meine Analysen",
     "report": "Arztbericht",
     "emergency": "Notfall SOS",
-    "program": "Mein Programm"
+    "program": "Mein Programm",
+    "scanHint": "Foto machen, ich zähle die Kohlenhydrate"
   },
   "insulinPage": {
     "title": "Insulin",

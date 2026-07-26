@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 
 import { isRTL } from '@/i18n';
 import { colors } from '@/theme';
+import { setTabFabAnchor } from './tabFabAnchor';
 import { useTabBarScroll } from './TabBarVisibility';
 
 /**
@@ -140,8 +141,14 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
   };
 
   const fabScale = useRef(new Animated.Value(1)).current;
+  const fabRef = useRef<View>(null);
   const onPressAdd = () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Put the bar back to its full size first. The add menu draws its close
+    // button exactly over this +, so a settled (shrunk, sunk) bar would leave
+    // the two a few pixels apart — and the illusion of one button turning
+    // into a cross only survives if it is the same pixels.
+    expand();
     router.push('/add-menu');
   };
 
@@ -288,7 +295,17 @@ export function BevelTabBar({ state, navigation }: BevelTabBarProps) {
               accessibilityRole="button"
               accessibilityLabel={t('tabs.add')}
             >
-              <Animated.View style={[styles.fab, { transform: [{ scale: fabScale }] }]}>
+              <Animated.View
+                ref={fabRef}
+                // Publish where this button really sits, so the add menu can
+                // put its close button on exactly the same pixels.
+                onLayout={() =>
+                  fabRef.current?.measureInWindow((x, y, w) =>
+                    setTabFabAnchor({ x, y, size: w })
+                  )
+                }
+                style={[styles.fab, { transform: [{ scale: fabScale }] }]}
+              >
                 <Svg width={20} height={20} viewBox="0 0 24 24">
                   <Path d="M12 5v14M5 12h14" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" />
                 </Svg>

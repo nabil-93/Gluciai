@@ -1566,7 +1566,8 @@
     "labs": "Mes analyses",
     "report": "Rapport médecin",
     "emergency": "Urgence SOS",
-    "program": "Mon Programme"
+    "program": "Mon Programme",
+    "scanHint": "Prends ta photo, je compte les glucides"
   },
   "insulinPage": {
     "title": "Insuline",

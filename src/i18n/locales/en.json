@@ -1566,7 +1566,8 @@
     "labs": "My lab results",
     "report": "Doctor report",
     "emergency": "Emergency SOS",
-    "program": "My Program"
+    "program": "My Program",
+    "scanHint": "Take the photo, I count the carbs"
   },
   "insulinPage": {
     "title": "Insulin",
