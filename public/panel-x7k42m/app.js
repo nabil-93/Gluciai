@@ -9,10 +9,22 @@ const SUPABASE_URL = 'https://ftqyzpkzqeudzfztataz.supabase.co';
 const ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ0cXl6cGt6cWV1ZHpmenRhdGF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzNjA1NDgsImV4cCI6MjA5ODkzNjU0OH0.5h0C4vlYiZ6TgBH5UqfsAscBmwOSnZcUKzTZZFhLZGM';
 
-const db = createClient(SUPABASE_URL, ANON_KEY);
+/* The panel and the patient app are served from the SAME origin, and
+   supabase-js stores its session in localStorage under a key derived only
+   from the project ref. Signing into the app therefore overwrote the
+   panel's session in place: the sidebar kept showing "Administrateur" from
+   the `me` read at load, while every new request went out carrying a
+   patient's token — so promo_codes came back empty, creating one failed
+   with "violates row-level security policy", and admin-ops answered
+   unauthorized. A dedicated key keeps the two sessions apart. */
+const db = createClient(SUPABASE_URL, ANON_KEY, {
+  auth: { storageKey: 'gluciai-panel-auth' },
+});
 const app = document.getElementById('app');
 
 let me = null; // { id, role: 'admin'|'doctor', name, email }
+/** Dashboard "derniers patients" ordering: 'activity' | 'connexion'. */
+let dashSort = 'activity';
 
 /* ── Icons (lucide-style, inline) ── */
 const I = {
@@ -301,6 +313,17 @@ async function boot() {
     return renderLogin('Accès réservé aux médecins et administrateurs.');
   }
   me = { id: session.user.id, role: prof.role, name: prof.name || '', email: prof.email || session.user.email };
+
+  /* If the signed-in user ever changes under us, `me` — and the whole
+     sidebar — would keep describing someone who is no longer sending the
+     requests. That mismatch is what made the panel look broken rather than
+     signed-out: it claimed "Administrateur" while the database saw a
+     patient. Reload on any change so what is on screen is who is asking. */
+  db.auth.onAuthStateChange((_event, s) => {
+    if (!s) { me = null; return renderLogin(); }
+    if (me && s.user?.id !== me.id) location.reload();
+  });
+
   const go = new URLSearchParams(location.search).get('go');
   if (go) {
     history.replaceState(null, '', location.pathname);
@@ -443,11 +466,30 @@ async function route() {
 }
 window.addEventListener('hashchange', route);
 
-/* ── Data fetchers ── */
-const fetchPatients = async () =>
-  (await db.from('patient_overview').select('*').order('created_at', { ascending: false })).data ?? [];
-const fetchDoctors = async () =>
-  (await db.from('doctor_overview').select('*').order('created_at', { ascending: false })).data ?? [];
+/* ── Data fetchers ──
+   `.data ?? []` used to hide every failure: an RLS rejection, an expired
+   token or a network drop all rendered as a tidy empty page, which is why
+   the panel looked like it had "lots of bugs" instead of one cause. Errors
+   are now said out loud; the caller still gets [] so the page renders. */
+async function fetchOrToast(query, what) {
+  const { data, error } = await query;
+  if (error) {
+    toast(`${what} : ${error.message}`, true);
+    return [];
+  }
+  return data ?? [];
+}
+
+const fetchPatients = () =>
+  fetchOrToast(
+    db.from('patient_overview').select('*').order('created_at', { ascending: false }),
+    'Patients'
+  );
+const fetchDoctors = () =>
+  fetchOrToast(
+    db.from('doctor_overview').select('*').order('created_at', { ascending: false }),
+    'Médecins'
+  );
 
 /* ════════════════ OVERVIEW ════════════════ */
 async function pageOverview() {
@@ -492,9 +534,18 @@ async function pageOverview() {
   scans14.forEach((r) => { const k = new Date(r.created_at).toDateString(); if (byKey[k]) byKey[k].scans++; });
   gly14.forEach((r) => { const k = new Date(r.created_at).toDateString(); if (byKey[k]) byKey[k].gly++; });
 
-  const recent = [...patients]
-    .sort((a, b) => new Date(b.last_activity || b.created_at || 0) - new Date(a.last_activity || a.created_at || 0))
-    .slice(0, 6);
+  /* "Dernière activité" and "dernière connexion" answer different
+     questions — who is using the app, and who merely opened it — so the
+     card lets you pick which one orders the list. */
+  const recentKey = (p) =>
+    dashSort === 'connexion'
+      ? p.last_seen_at || p.created_at
+      : p.last_activity || p.created_at;
+  const recentRows = () =>
+    [...patients]
+      .sort((a, b) => new Date(recentKey(b) || 0) - new Date(recentKey(a) || 0))
+      .slice(0, 6);
+  const recent = recentRows();
 
   page.innerHTML = `
     <div style="display:grid;gap:16px">
@@ -518,10 +569,31 @@ async function pageOverview() {
       </div>
 
       <div class="card fade-up" style="animation-delay:.15s">
-        <div class="card-head"><h3>Derniers patients actifs</h3><a href="#/patients" style="font-size:12px;font-weight:700;color:var(--primary)">Tout voir ›</a></div>
-        ${patientTable(recent)}
+        <div class="card-head">
+          <h3>Derniers patients ${dashSort === 'connexion' ? 'connectés' : 'actifs'}</h3>
+          <div style="display:flex;align-items:center;gap:12px">
+            <select id="dashSort" style="font-size:12px;font-weight:600">
+              <option value="activity"${dashSort === 'activity' ? ' selected' : ''}>Dernière activité</option>
+              <option value="connexion"${dashSort === 'connexion' ? ' selected' : ''}>Dernière connexion</option>
+            </select>
+            <a href="#/patients" style="font-size:12px;font-weight:700;color:var(--primary)">Tout voir ›</a>
+          </div>
+        </div>
+        <div id="recentWrap">${patientTable(recent)}</div>
       </div>
     </div>`;
+
+  /* Re-sorts in place — the patients are already loaded, so switching must
+     not cost another round trip. */
+  document.getElementById('dashSort').addEventListener('change', (e) => {
+    dashSort = e.target.value;
+    const head = document.querySelector('.card-head h3');
+    if (head) head.textContent = `Derniers patients ${dashSort === 'connexion' ? 'connectés' : 'actifs'}`;
+    const wrap = document.getElementById('recentWrap');
+    wrap.innerHTML = patientTable(recentRows());
+    bindPatientRows(wrap);
+  });
+
   bindPatientRows(page);
 }
 
@@ -1873,6 +1945,7 @@ async function pagePromos() {
     db.from('promo_codes').select('*').order('created_at', { ascending: false }),
     me.role === 'admin' ? fetchDoctors() : Promise.resolve([]),
   ]);
+  if (codesRes.error) toast(`Codes promo : ${codesRes.error.message}`, true);
   const codes = codesRes.data ?? [];
   if (me.role === 'admin') {
     const dmap = Object.fromEntries(doctors.map((d) => [d.user_id, d.name || d.email]));
