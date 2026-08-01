@@ -1,0 +1,46 @@
+{
+  "$comment": "Known lint findings, recorded deliberately. CI fails if this set GROWS. Regenerate only as part of an authorized change: node scripts/ci/lint-ratchet.mjs --update",
+  "generatedFrom": "npm run lint (expo lint)",
+  "counts": {
+    "errors": 4,
+    "warnings": 2
+  },
+  "findings": [
+    {
+      "file": "src/app/(tabs)/index.tsx",
+      "line": 99,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "severity": "warning"
+    },
+    {
+      "file": "src/app/ai-chat.tsx",
+      "line": 489,
+      "rule": "react-hooks/set-state-in-effect",
+      "severity": "error"
+    },
+    {
+      "file": "src/app/program.tsx",
+      "line": 333,
+      "rule": "react-hooks/set-state-in-effect",
+      "severity": "error"
+    },
+    {
+      "file": "src/app/wizard.tsx",
+      "line": 448,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "severity": "warning"
+    },
+    {
+      "file": "src/components/InstallPrompt.tsx",
+      "line": 117,
+      "rule": "react-hooks/set-state-in-effect",
+      "severity": "error"
+    },
+    {
+      "file": "src/components/ui/PastDayBanner.tsx",
+      "line": 59,
+      "rule": "react-hooks/set-state-in-effect",
+      "severity": "error"
+    }
+  ]
+}

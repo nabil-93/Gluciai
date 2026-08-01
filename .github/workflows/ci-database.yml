@@ -1,0 +1,116 @@
+name: CI · database & security
+
+# The expensive half: it boots the full local Supabase stack (12 containers,
+# ~10 min of image pulls on a cold runner), so it is path-filtered rather than
+# run on every commit.
+#
+# ISOLATION — this workflow can only ever touch the LOCAL stack:
+#   * it declares no `secrets:` and reads none, so no hosted credential exists
+#     in the environment to reach a real project with;
+#   * every Supabase command is explicitly `--local`;
+#   * `db push`, `--linked`, `link` and remote SQL are never invoked;
+#   * the security suite's own guard (tests-security/globalSetup.ts) refuses to
+#     run against a non-loopback host or a database holding accounts it did not
+#     create, and fails closed before it writes anything.
+#
+# The two path lists are duplicated on purpose: the Actions workflow parser
+# does not support YAML anchors, so an alias here would not expand.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/**'
+      - 'tests-security/**'
+      - 'vitest.security.config.ts'
+      - 'scripts/ci/**'
+      - '.github/workflows/ci-database.yml'
+      - 'package-lock.json'
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'tests-security/**'
+      - 'vitest.security.config.ts'
+      - 'scripts/ci/**'
+      - '.github/workflows/ci-database.yml'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-db-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database:
+    name: migrations · privileges · RLS
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Pinned rather than floating: the CLI is not a package.json dependency,
+      # so an unpinned `npx supabase` would silently track latest.
+      - name: Start the LOCAL Supabase stack
+        run: npx --yes supabase@2.110.0 start
+
+      # The rebuild that Blocker 2 was about: all 30 migrations against an
+      # empty database. Before the 0005 fix this aborted at 5 of 30.
+      - name: Rebuild the local database from scratch
+        run: npx --yes supabase@2.110.0 db reset --local
+
+      - name: Assert all 30 migrations applied
+        run: |
+          set -euo pipefail
+          npx --yes supabase@2.110.0 migration list --local > migrations.txt
+          cat migrations.txt
+          count=$(grep -o '"local":"[0-9]\+"' migrations.txt | wc -l)
+          echo "migrations applied: $count"
+          test "$count" -eq 30
+
+      # Blocker 3: the chain used to apply cleanly and leave a database the API
+      # roles could not read. This asserts parity with the measured hosted
+      # baseline, including the deliberate revokes from 0018 / 0020 / 0029.
+      - name: Verify privilege parity
+        run: |
+          set -euo pipefail
+          docker exec -i supabase_db_glucoai \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - \
+            < scripts/ci/verify-privileges.sql
+
+      # 90 passing, 1 documented skip (server-side feature-lock enforcement,
+      # which needs provider secrets we deliberately do not put in CI).
+      # Counts are asserted because vitest exits 0 when tests are DELETED —
+      # silently losing a boundary check would otherwise look like success.
+      - name: Security suite
+        run: |
+          set -euo pipefail
+          npm run test:security -- --reporter=json --outputFile="${{ runner.temp }}/security.json"
+          node -e '
+            const r = require(process.argv[1]);
+            const { numPassedTests: p, numFailedTests: f, numPendingTests: s } = r;
+            console.log(`security: ${p} passed, ${f} failed, ${s} skipped`);
+            if (f > 0) { console.error("FAIL — failing security tests"); process.exit(1); }
+            if (p < 90) {
+              console.error(`FAIL — coverage floor: expected >= 90 passing, got ${p}.`);
+              process.exit(1);
+            }
+            if (s > 1) {
+              console.error(`FAIL — ${s} skipped, only 1 is documented (feature-lock enforcement).`);
+              console.error("See tests-security/functions/authBoundary.test.ts.");
+              process.exit(1);
+            }
+          ' "${{ runner.temp }}/security.json"
+
+      - name: Stop the stack
+        if: always()
+        run: npx --yes supabase@2.110.0 stop --no-backup

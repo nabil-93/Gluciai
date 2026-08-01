@@ -52,10 +52,12 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@types/node": "26.1.2",
     "@types/react": "~19.2.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "4.1.10"
   },
   "scripts": {
     "start": "expo start",
@@ -63,7 +65,16 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:ci": "vitest run",
+    "test:security": "vitest run --config vitest.security.config.ts"
   },
+  "engines": {
+    "node": "^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0",
+    "npm": ">=10"
+  },
+  "packageManager": "npm@11.12.1",
   "private": true
 }

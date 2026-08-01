@@ -1,0 +1,61 @@
+name: CI
+
+# Fast checks. No Docker, no database, no network beyond the npm registry, and
+# no secrets — this workflow declares none and reads none.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck · tests · lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      # The clinical and domain golden baselines. These characterize today's
+      # behaviour, including known-bad behaviour — a diff here means behaviour
+      # changed, which is exactly the signal we want.
+      # A floor, not an exact count: adding tests is fine, losing them is not.
+      # `vitest run` exits 0 when tests are DELETED, so the count is asserted.
+      - name: Unit and golden tests
+        run: |
+          set -euo pipefail
+          npm run test:ci -- --reporter=json --outputFile="${{ runner.temp }}/unit.json"
+          node -e '
+            const r = require(process.argv[1]);
+            const { numPassedTests: p, numFailedTests: f } = r;
+            console.log(`unit: ${p} passed, ${f} failed`);
+            if (f > 0) { console.error("FAIL — failing tests"); process.exit(1); }
+            if (p < 322) {
+              console.error(`FAIL — coverage floor: expected >= 322 passing, got ${p}.`);
+              console.error("Tests were removed or skipped. Lower the floor deliberately if intended.");
+              process.exit(1);
+            }
+          ' "${{ runner.temp }}/unit.json"
+
+      # Not a zero-error gate: five errors and two warnings pre-date this
+      # pipeline (see docs/LINT-BASELINE.md). Fails only if the set grows.
+      - name: Lint ratchet
+        run: node scripts/ci/lint-ratchet.mjs
