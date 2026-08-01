@@ -8,6 +8,8 @@ import { useTranslation } from 'react-i18next';
 import { AppButton, BevelCard, FadeInView, HeroScreen, HERO_INK, HERO_MUTED } from '@/components/ui';
 import { analyzeMenu } from '@/services/ai';
 import { saveMeal } from '@/services/data';
+import { giBand, qualityClaimSupported } from '@/services/nutrition/advice';
+import { isCarbKnown } from '@/services/nutrition/carbProvenance';
 import { sourceLabel } from '@/services/nutrition/engine';
 import { scoreMeal, type MealScore } from '@/services/nutrition/mealScore';
 import { colors, shadows } from '@/theme';
@@ -16,6 +18,8 @@ import type { FoodItemResult } from '@/types';
 interface ScoredDish {
   item: FoodItemResult;
   score: MealScore;
+  /** False when the dish carries nothing a verdict could rest on (Step 22A). */
+  rated: boolean;
 }
 
 export default function MenuScanScreen() {
@@ -25,6 +29,9 @@ export default function MenuScanScreen() {
   const [dishes, setDishes] = useState<ScoredDish[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
+  /** The AI's answer was cut off: dishes it had listed are missing from the
+   *  list below, so it must not be presented as the whole menu. */
+  const [incomplete, setIncomplete] = useState(false);
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -33,6 +40,7 @@ export default function MenuScanScreen() {
 
   const pickAndAnalyze = async () => {
     setError(null);
+    setIncomplete(false);
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       base64: true,
@@ -43,11 +51,15 @@ export default function MenuScanScreen() {
 
     setAnalyzing(true);
     try {
-      const items = await analyzeMenu(asset.base64, i18n.language);
+      const { dishes: items, incomplete: cutOff } = await analyzeMenu(
+        asset.base64,
+        i18n.language
+      );
       if (items.length === 0) {
         setError(t('menuScanPage.unreadable'));
         return;
       }
+      setIncomplete(cutOff);
       const scored: ScoredDish[] = items
         .map((item) => ({
           item,
@@ -61,8 +73,19 @@ export default function MenuScanScreen() {
             sodium: item.sodium,
             glycemic_index: item.glycemic_index,
           }),
+          // A dish the model returned no figures for scores 100 out of sheer
+          // absence — and this list is SORTED by that score, so it took the top
+          // slot and the "best choice" badge (Step 22A). Unrated dishes keep
+          // their place in the menu but carry no number and rank last.
+          rated: qualityClaimSupported({
+            calories: item.calories,
+            carbs_known: isCarbKnown(item),
+          }),
         }))
-        .sort((a, b) => b.score.score - a.score.score);
+        .sort((a, b) => {
+          if (a.rated !== b.rated) return a.rated ? -1 : 1;
+          return b.score.score - a.score.score;
+        });
       setDishes(scored);
     } catch {
       setError(t('menuScanPage.analysisError'));
@@ -85,6 +108,9 @@ export default function MenuScanScreen() {
       glycemic_index: d.item.glycemic_index ?? 0,
       confidence: d.item.detection_confidence,
       nutrition_confidence: d.item.nutrition_confidence,
+      // One dish, resolved through the provider chain: the plate's provenance
+      // is exactly that dish's.
+      carbs_known: isCarbKnown(d.item),
       source: d.item.source,
       items: [d.item],
       warnings: [],
@@ -129,13 +155,16 @@ export default function MenuScanScreen() {
             <Text style={styles.resultCount}>
               {t('menuScanPage.resultCount', { count: dishes.length })}
             </Text>
+            {incomplete ? (
+              <Text style={styles.incomplete}>{t('menuScanPage.incomplete')}</Text>
+            ) : null}
             <View style={{ gap: 12 }}>
               {dishes.map((d, i) => (
                 <BevelCard
                   key={`${d.item.name}-${i}`}
                   noPadding
                   style={
-                    i === 0
+                    i === 0 && d.rated
                       ? [
                           styles.dishCard,
                           { borderWidth: 2, borderColor: d.score.color },
@@ -143,7 +172,7 @@ export default function MenuScanScreen() {
                       : styles.dishCard
                   }
                 >
-                  {i === 0 ? (
+                  {i === 0 && d.rated ? (
                     <View style={[styles.bestBadge, { backgroundColor: d.score.color }]}>
                       <Text style={styles.bestBadgeText}>
                         {t('menuScanPage.bestChoice')}
@@ -159,11 +188,21 @@ export default function MenuScanScreen() {
                       </Text>
                     </View>
                     <View style={styles.scoreWrap}>
-                      <Text style={[styles.scoreNum, { color: d.score.color }]}>
-                        {d.score.score}
+                      <Text
+                        style={[
+                          styles.scoreNum,
+                          { color: d.rated ? d.score.color : colors.textTertiary },
+                        ]}
+                      >
+                        {d.rated ? d.score.score : '—'}
                       </Text>
-                      <Text style={[styles.scoreLbl, { color: d.score.color }]}>
-                        {d.score.label}
+                      <Text
+                        style={[
+                          styles.scoreLbl,
+                          { color: d.rated ? d.score.color : colors.textTertiary },
+                        ]}
+                      >
+                        {d.rated ? d.score.label : t('analysis.scoreUnavailable')}
                       </Text>
                     </View>
                   </View>
@@ -176,17 +215,21 @@ export default function MenuScanScreen() {
                     <Macro
                       v={d.item.glycemic_index ?? '—'}
                       u="IG"
+                      /* The app's ONE glycemic-index classification (Step 22A).
+                         This chip used to redden from 66, where the shared
+                         GI meter on every other screen still reads "moderate";
+                         the colours and their order are unchanged. */
                       c={
-                        (d.item.glycemic_index ?? 0) > 65
-                          ? colors.glucoseLow
-                          : (d.item.glycemic_index ?? 0) > 55
-                            ? colors.glucoseHigh
-                            : colors.glucoseInRange
+                        {
+                          high: colors.glucoseLow,
+                          medium: colors.glucoseHigh,
+                          low: colors.glucoseInRange,
+                        }[giBand(d.item.glycemic_index ?? 0)]
                       }
                     />
                   </View>
                   <Text style={styles.dishReason}>
-                    {d.score.reasons[0]}
+                    {d.rated ? d.score.reasons[0] : t('analysis.scoreUnavailableNoData')}
                   </Text>
                   <Pressable
                     onPress={() => saveDish(d)}
@@ -269,6 +312,14 @@ const styles = StyleSheet.create({
   resultCount: {
     fontSize: 13.5,
     color: colors.textSecondary,
+    marginBottom: 12,
+    marginHorizontal: 2,
+  },
+  incomplete: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.warning,
+    marginTop: -6,
     marginBottom: 12,
     marginHorizontal: 2,
   },

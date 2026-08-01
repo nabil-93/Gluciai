@@ -1073,7 +1073,7 @@ async function pagePatient(pid, initTab) {
   /* data tabs */
   const panel = document.getElementById('dataPanel');
   const tabRenders = {
-    meals: () => meals.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Photo</th><th>Date</th><th>Repas</th><th>Kcal</th><th>Glucides</th><th>Sucre</th><th>IG</th><th>Score</th></tr></thead><tbody>
+    meals: () => meals.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Photo</th><th>Date</th><th>Repas</th><th>Kcal</th><th>Glucides</th><th>Sucre</th><th>IG</th><th>Repère GluciAI</th></tr></thead><tbody>
       ${meals.map((m) => {
         const r = m.result || {};
         const names = r.food_name || (r.items || []).map((i) => i.name).join(', ') || '—';
@@ -1082,7 +1082,11 @@ async function pagePatient(pid, initTab) {
           ? `<img class="meal-thumb" src="${esc(m.image_url)}" data-photo="${esc(m.image_url)}" data-cap="${esc(names)}" loading="lazy" alt="" />`
           : `<div class="meal-thumb ph">🍽️</div>`;
         return `<tr><td style="width:52px">${photo}</td><td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(m.created_at)}</td><td style="max-width:240px"><b>${esc(names)}</b></td><td>${Math.round(m.calories ?? r.calories ?? 0)}</td><td><b>${Math.round(m.carbs ?? r.carbohydrates ?? 0)} g</b></td><td>${Math.round(m.sugar ?? r.sugar ?? 0)} g</td><td>${m.glycemic_index ?? r.glycemic_index ?? '—'}</td><td>${r.meal_score != null ? `<span class="badge ${r.meal_score >= 70 ? 'green' : r.meal_score >= 45 ? 'amber' : 'red'}">${r.meal_score}/100</span>` : '—'}</td></tr>`;
-      }).join('')}</tbody></table></div>` : emptyData('🍽️', 'Aucun repas scanné'),
+      }).join('')}</tbody></table>
+      <p style="color:var(--muted);font-size:11.5px;line-height:1.5;margin:8px 2px 0">
+        Repère calculé par l'application à partir des valeurs du repas ; ni une mesure
+        clinique, ni un score nutritionnel validé.
+      </p></div>` : emptyData('🍽️', 'Aucun repas scanné'),
     gly: () => glys.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Valeur</th><th>Source</th><th>Notes</th></tr></thead><tbody>
       ${glys.map((g) => `<tr><td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(g.created_at)}</td><td>${glyBadge(g.value)}</td><td style="color:var(--muted)">${esc(g.source || 'manuel')}</td><td style="color:var(--muted)">${esc(g.notes || '—')}</td></tr>`).join('')}</tbody></table></div>` : emptyData('🩸', 'Aucune mesure de glycémie'),
     insu: () => insus.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Type</th><th>Dose</th><th>Notes</th></tr></thead><tbody>

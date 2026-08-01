@@ -26,6 +26,12 @@ import { MealPeekModal } from '@/components/MealPeekModal';
 import { DayPickerSheet } from '@/components/calendar/DayPickerSheet';
 import type { DayRing } from '@/components/calendar/RingCalendar';
 import { deleteMeal } from '@/services/data';
+import {
+  carbDisplay,
+  carbText,
+  carbUnit,
+  plateCarbStatus,
+} from '@/services/nutrition/carbProvenance';
 import { getRecommendations } from '@/services/recommendations';
 import { setPendingScan } from '@/services/scanSession';
 import { useAppStore } from '@/store/useAppStore';
@@ -348,6 +354,27 @@ export default function NutritionScreen() {
   const carbsPct = Math.min(1, totals.carbs / GOALS.carbs);
   const remaining = Math.max(0, GOALS.carbs - Math.round(totals.carbs));
 
+  /* ── Is the day's carbohydrate a TOTAL or a floor? (finding NUTR-A9) ──
+     The analysis screen has said so since Step 10; this page summed the same
+     meals and printed the result as a complete figure, so one unknown food
+     anywhere in the day disappeared here. A day with nothing logged is an
+     honest 0 — that patient really did record no carbohydrate. Nothing is
+     recomputed: `totals.carbs` is the same sum it always was. */
+  const dayCarbs = carbDisplay(
+    todayMeals.length === 0 ? 'known' : plateCarbStatus(todayMeals.map((m) => m.result)),
+    Math.round(totals.carbs)
+  );
+
+  /** One meal-moment row's subtitle. The unit lives in the sentence, so a slot
+   *  with nothing usable gets its own wording rather than "— g", which reads
+   *  like a quantity. */
+  const slotCarbSummary = (info: { count: number; carbs: number; items: MealScan[] }) => {
+    const view = carbDisplay(plateCarbStatus(info.items.map((m) => m.result)), info.carbs);
+    return view.kind === 'unknown'
+      ? t('nutritionPage.mealSummaryUnknown', { count: info.count })
+      : t('nutritionPage.mealSummary', { count: info.count, carbs: carbText(view) });
+  };
+
   const close = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
@@ -416,8 +443,18 @@ export default function NutritionScreen() {
             >
               <Text style={styles.carbsLabel}>{t('nutritionPage.carbsToday')}</Text>
               <View style={styles.carbsRow}>
-                <Text style={styles.carbsValue}>{Math.round(totals.carbs)}</Text>
-                <Text style={styles.carbsUnit}>g</Text>
+                {/* The "≥" is its own smaller glyph rather than part of the
+                    50 px number: inside "≥ 125" the figure no longer fits the
+                    card beside the ring, and truncating a carbohydrate total
+                    to "≥ 1…" is worse than the problem being fixed. The RULE is
+                    still `carbDisplay`'s — this only lays its answer out. */}
+                {dayCarbs.kind === 'atLeast' ? (
+                  <Text style={styles.carbsAtLeast}>≥</Text>
+                ) : null}
+                <Text style={styles.carbsValue} numberOfLines={1}>
+                  {dayCarbs.kind === 'unknown' ? '—' : dayCarbs.grams}
+                </Text>
+                <Text style={styles.carbsUnit}>{carbUnit(dayCarbs)}</Text>
               </View>
               <Text style={styles.carbsGoal}>/ {GOALS.carbs} g</Text>
               <View style={styles.carbsTrack}>
@@ -427,6 +464,11 @@ export default function NutritionScreen() {
               <Text style={styles.carbsRemaining}>
                 {t('nutritionPage.remaining', { n: remaining })}
               </Text>
+              {/* Why the number carries a "≥": said once, under the figure it
+                  qualifies, rather than left for the patient to infer. */}
+              {dayCarbs.kind !== 'exact' ? (
+                <Text style={styles.carbsFloorNote}>{t('nutritionPage.carbsFloor')}</Text>
+              ) : null}
             </LinearGradient>
 
             <View style={styles.ringWrap}>
@@ -551,7 +593,7 @@ export default function NutritionScreen() {
                       <Text style={styles.mealName}>{t(`nutritionPage.mt.${slot}`)}</Text>
                       <Text style={styles.mealSub} numberOfLines={1}>
                         {info.count > 0
-                          ? t('nutritionPage.mealSummary', { count: info.count, carbs: info.carbs })
+                          ? slotCarbSummary(info)
                           : t(`nutritionPage.mtAdd.${slot}`)}
                       </Text>
                     </View>
@@ -729,6 +771,8 @@ const styles = StyleSheet.create({
   carbsLabel: { fontFamily: F600, fontSize: 15, color: 'rgba(255,255,255,0.95)' },
   carbsRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginTop: 6 },
   carbsValue: { fontFamily: F800, fontSize: 50, color: '#fff', lineHeight: 52 },
+  /** "≥" beside the total — smaller, so the figure keeps its size. */
+  carbsAtLeast: { fontFamily: F800, fontSize: 28, color: 'rgba(255,255,255,0.95)' },
   carbsUnit: { fontFamily: F700, fontSize: 22, color: '#fff' },
   carbsGoal: { fontFamily: F600, fontSize: 16, color: 'rgba(255,255,255,0.92)', marginTop: 6 },
   carbsTrack: {
@@ -754,6 +798,15 @@ const styles = StyleSheet.create({
     marginLeft: 9,
   },
   carbsRemaining: { fontFamily: F600, fontSize: 14, color: 'rgba(255,255,255,0.92)', marginTop: 12 },
+  /* On the green gradient, so it keeps a high-contrast white; wraps freely
+     because the sentence is long in German and Arabic. */
+  carbsFloorNote: {
+    fontFamily: F500,
+    fontSize: 11,
+    lineHeight: 15,
+    color: 'rgba(255,255,255,0.88)',
+    marginTop: 8,
+  },
 
   ringWrap: {
     width: RING,

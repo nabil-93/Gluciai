@@ -472,7 +472,7 @@ export default function WizardScreen() {
       default:
         return true;
     }
-  }, [key, diabetesType, ratioBreakfast, ratioLunch, ratioDinner, targetLow, targetHigh, allConsented]);
+  }, [key, num, diabetesType, ratioBreakfast, ratioLunch, ratioDinner, targetLow, targetHigh, allConsented]);
 
   const toggleInsulin = (type: InsulinType) => {
     setInsulinTypes((prev) =>

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
+import { giBand } from '@/services/nutrition/advice';
+
 import { useReduceMotion } from './motion';
 
 const F600 = 'PlusJakartaSans_600SemiBold';
@@ -43,10 +45,19 @@ function zoneColorAt(p: number): string {
  * white, so small labels and the explanation sentence use the darker twins to
  * clear the 4.5:1 WCAG AA floor without changing what the colours MEAN.
  */
+const TONE = {
+  low: { color: '#0f9d58', textColor: '#0B7A44' },
+  medium: { color: '#d97706', textColor: '#B45309' },
+  high: { color: '#dc2626', textColor: '#C81E1E' },
+} as const;
+
 export function glycemicTone(value: number) {
-  if (value <= 55) return { key: 'low' as const, color: '#0f9d58', textColor: '#0B7A44' };
-  if (value <= 69) return { key: 'medium' as const, color: '#d97706', textColor: '#B45309' };
-  return { key: 'high' as const, color: '#dc2626', textColor: '#C81E1E' };
+  // The BANDS live in the nutrition domain (`giBand`) so that one function
+  // classifies a glycemic index for the whole app — this component only picks
+  // the colours. The boundaries are the same ones this file always used, so
+  // nothing on any screen changes tone (Step 22A).
+  const key = giBand(value);
+  return { key, ...TONE[key] };
 }
 
 /** Scale-word colours under the bar — same three meanings, readable at 9.5 px. */

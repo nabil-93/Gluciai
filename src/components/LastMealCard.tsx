@@ -5,6 +5,13 @@ import { useTranslation } from 'react-i18next';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { AnimatedRobot, ImageLightbox, ZoomableThumb } from '@/components/ui';
+import { displayableHighlights, qualityClaimSupported } from '@/services/nutrition/advice';
+import {
+  carbDisplay,
+  carbStatus,
+  carbText,
+  carbUnit,
+} from '@/services/nutrition/carbProvenance';
 import { scoreMeal } from '@/services/nutrition/mealScore';
 import type { MealScan } from '@/types';
 
@@ -93,6 +100,9 @@ export function LastMealCard({ meal, onPress }: { meal: MealScan; onPress: () =>
   const C = Math.round(r.carbohydrates);
   const F = Math.round(r.fat);
   const kcal = Math.round(r.calories);
+  /** How that carbohydrate may be shown: a value, a floor, or nothing at all.
+   *  `C` itself is untouched — the ring below still uses the same number. */
+  const carbView = carbDisplay(carbStatus(r), C);
 
   // Same scorer the analysis page uses, so the number never disagrees.
   const quality = useMemo(
@@ -111,11 +121,23 @@ export function LastMealCard({ meal, onPress }: { meal: MealScan; onPress: () =>
   );
 
   // The engine's stored highlight KEYS, localized here (positives come first).
-  const summary = (r.highlights ?? [])
+  //
+  // Filtered first (finding P8-005): a plate nothing could be resolved for
+  // arrives as zeros, and zeros satisfy every "good" threshold — so an
+  // unidentified meal used to compliment itself with "Low sugar · Low glycemic
+  // load" beside its 0 kcal. The stored keys are left exactly as they were
+  // written; they are simply not shown when the plate cannot support them.
+  const summary = displayableHighlights(r.highlights, r)
     .slice(0, 2)
     .map((k) => t(`insights.highlights.${k}`))
     .join(' · ');
-  const tip = quality.reasons[0] ?? summary;
+
+  // The VERDICT rides on the same evidence as those badges (Step 22A): a plate
+  // with no energy, or whose carbohydrate is only a floor, scores 100 out of
+  // sheer absence. It shows a dash and the reason instead — the numbers above
+  // are untouched, and `scoreMeal` still ran.
+  const rated = qualityClaimSupported(r);
+  const tip = rated ? (quality.reasons[0] ?? summary) : t('analysis.scoreUnavailableFix');
 
   const time = new Date(meal.created_at).toLocaleTimeString(i18n.language, {
     hour: '2-digit',
@@ -175,7 +197,14 @@ export function LastMealCard({ meal, onPress }: { meal: MealScan; onPress: () =>
       </View>
 
       <View style={styles.macroGrid}>
-        <MacroLine color={CARBS} label={t('result.carbs')} value={`${C} g`} />
+        {/* The home card printed the placeholder as "0 g" for a plate whose
+            carbohydrate was never known — the one figure the whole app is
+            most careful about elsewhere (finding NUTR-A9). */}
+        <MacroLine
+          color={CARBS}
+          label={t('result.carbs')}
+          value={`${carbText(carbView)}${carbUnit(carbView) ? ` ${carbUnit(carbView)}` : ''}`}
+        />
         <MacroLine color={PROTEIN} label={t('result.protein')} value={`${P} g`} />
         <MacroLine color={LIPIDS} label={t('result.fat')} value={`${F} g`} />
         <MacroLine color={KCAL} label={t('result.calories')} value={`${kcal} kcal`} />
@@ -184,13 +213,24 @@ export function LastMealCard({ meal, onPress }: { meal: MealScan; onPress: () =>
       {/* Score + calorie ring */}
       <View style={styles.statsRow}>
         <View style={styles.scoreBox}>
-          <View style={styles.scoreValRow}>
-            <Text style={[styles.scoreVal, { color: quality.textColor }]}>{quality.score}</Text>
-            <Text style={styles.scoreDenom}>/100</Text>
-          </View>
-          <Text style={[styles.scoreLabel, { color: quality.textColor }]} numberOfLines={1}>
-            {quality.label}
+          {/* STEP 22D PHASE 2 — the indicator is named, and the WORD leads the
+              figure instead of following it. Same colours, same number, same
+              threshold: only the order and the sizes changed. */}
+          <Text style={styles.scoreTitle} numberOfLines={1}>
+            {t('analysis.scoreTitle')}
           </Text>
+          <Text
+            style={[styles.scoreLabel, { color: rated ? quality.textColor : MUTED }]}
+            numberOfLines={1}
+          >
+            {rated ? quality.label : t('analysis.scoreUnavailable')}
+          </Text>
+          <View style={styles.scoreValRow}>
+            <Text style={[styles.scoreVal, { color: rated ? quality.textColor : MUTED }]}>
+              {rated ? quality.score : '—'}
+            </Text>
+            {rated ? <Text style={styles.scoreDenom}>/100</Text> : null}
+          </View>
           {summary ? (
             <Text style={styles.scoreSummary} numberOfLines={2}>
               {summary}
@@ -296,9 +336,14 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   scoreValRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
-  scoreVal: { fontSize: 26, fontFamily: F800, letterSpacing: -0.6 },
-  scoreDenom: { fontSize: 11, fontFamily: F700, color: MUTED },
-  scoreLabel: { fontSize: 12, fontFamily: F800 },
+  /** Demoted in Phase 2: the figure was 26 px above the word, it is now the
+   *  smaller of the two. The colour is unchanged. */
+  scoreVal: { fontSize: 17, fontFamily: F800, letterSpacing: -0.4 },
+  scoreDenom: { fontSize: 10, fontFamily: F700, color: MUTED },
+  /** Promoted in Phase 2 — the word now leads. */
+  scoreLabel: { fontSize: 17, fontFamily: F800, letterSpacing: -0.3 },
+  /** Whose indicator this is (Phase 2 interim name). */
+  scoreTitle: { fontSize: 9.5, fontFamily: F600, color: MUTED, marginBottom: 1 },
   scoreSummary: { fontSize: 10.5, lineHeight: 14.5, fontFamily: F500, color: MUTED, marginTop: 2 },
 
   ringCenter: {

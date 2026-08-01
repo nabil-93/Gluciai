@@ -1,4 +1,5 @@
 import { buildDayEvents, dayTotals, type DayEvent, type DayTotals } from '@/services/dayLog';
+import { qualityClaimSupported } from '@/services/nutrition/advice';
 
 /**
  * A 0–100 quality score for a day, blending glucose time-in-range (how much of
@@ -21,6 +22,14 @@ export function dayScore(events: DayEvent[], low: number, high: number): number 
 
   const scores = events
     .filter((e): e is Extract<DayEvent, { kind: 'meal' }> => e.kind === 'meal')
+    // A meal whose plate could not support a verdict is not evidence about the
+    // day either (Step 22A): `meal_score` is stored for every scan, and an
+    // unidentified plate stores 100 — which used to pull the day badge UP
+    // towards "Excellent" precisely because nothing was known about it. Such
+    // meals are excluded, exactly as the analysis screen withholds their score;
+    // a day with only unrated meals and no readings returns null and the badge
+    // hides rather than inventing a number.
+    .filter((e) => qualityClaimSupported(e.meal.result))
     .map((e) => e.meal.result.meal_score)
     .filter((s): s is number => typeof s === 'number');
   if (scores.length) mealAvg = scores.reduce((a, b) => a + b, 0) / scores.length;

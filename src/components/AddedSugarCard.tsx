@@ -17,6 +17,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { parseDecimal, sanitizeDecimal } from '@/lib/num';
 import { capturePhoto } from '@/services/imageInput';
 import { sendMealEdit } from '@/services/mealEdit';
+import { PORTION_MAX } from '@/services/nutrition/plausibility';
 import type { FoodItemResult } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -114,8 +115,14 @@ export function AddedSugarCard({
   };
 
   const commit = (grams: number) => {
-    onSetGrams(grams);
-    setAddedGrams(grams > 0 ? grams : null);
+    // The declared sugar becomes a real food row on the plate (100 g of carbs
+    // per 100 g), so it obeys the same UPPER portion bound as any other food —
+    // the four-digit field otherwise accepted 9 999 g of pure sugar, i.e.
+    // 9 999 g of carbohydrate to dose against. The 5 g floor deliberately does
+    // NOT apply: 1 g of declared sugar is legitimate, and 0 removes the row.
+    const bounded = Math.min(PORTION_MAX, Math.round(grams));
+    onSetGrams(bounded);
+    setAddedGrams(bounded > 0 ? bounded : null);
     setEditing(false);
   };
 
@@ -141,7 +148,7 @@ export function AddedSugarCard({
   // can adjust before adding.
   const onEstimate = (grams: number) => {
     setUnit('grams');
-    setAmount(String(Math.max(1, Math.round(grams))));
+    setAmount(String(Math.min(PORTION_MAX, Math.max(1, Math.round(grams)))));
   };
 
   // ── Compact "added" state ──

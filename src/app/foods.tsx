@@ -45,6 +45,8 @@ function toResult(food: MoroccanFood, factor: number): NutritionResult {
     glycemic_index: gi,
     confidence: 1,
     nutrition_confidence: 0.92,
+    // Straight out of our own dish table, where `carbs` is a required number.
+    carbs_known: true,
     source: 'moroccan_db',
     items: [
       {
@@ -61,6 +63,7 @@ function toResult(food: MoroccanFood, factor: number): NutritionResult {
         source: 'moroccan_db',
         detection_confidence: 1,
         nutrition_confidence: 0.92,
+        carbs_known: true,
       },
     ],
     warnings: gi > 65 ? [i18n.t('foodsPage.highGiWarning')] : [],

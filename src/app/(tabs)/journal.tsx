@@ -500,6 +500,12 @@ export default function JournalScreen() {
               {dateLabel}
             </Text>
             <Text style={styles.scoreLabel}>{scoreTitle}</Text>
+            {/* STEP 22D PHASE 2 — this badge is NOT a meal score: it blends
+                time-in-range with the mean meal quality, then borrows the meal
+                vocabulary. The blend itself is RU-3 D13; naming its two inputs
+                needs no decision and stops the word being read as a verdict on
+                the food alone. */}
+            <Text style={styles.scoreInputs}>{t('journalV2.scoreInputs')}</Text>
             {score != null ? (
               <View style={styles.scoreValRow}>
                 <Text style={styles.scoreValue}>{score}%</Text>
@@ -785,6 +791,15 @@ const styles = StyleSheet.create({
   },
   scoreDate: { fontFamily: F700, fontSize: 15, color: 'rgba(255,255,255,0.92)', textTransform: 'capitalize' },
   scoreLabel: { fontFamily: F600, fontSize: 13, color: 'rgba(255,255,255,0.95)', marginTop: 8 },
+  /* On the coloured header, so it keeps a light tint; wraps freely because the
+     German and Arabic sentences are longer than the French one. */
+  scoreInputs: {
+    fontFamily: F600,
+    fontSize: 10,
+    lineHeight: 13.5,
+    color: 'rgba(255,255,255,0.72)',
+    marginTop: 3,
+  },
   scoreValRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 2, flexWrap: 'wrap' },
   scoreValue: { fontFamily: F800, fontSize: 42, color: '#fff', letterSpacing: -1.5 },
   scoreEmpty: { fontFamily: F800, fontSize: 34, color: 'rgba(255,255,255,0.6)', marginTop: 2 },

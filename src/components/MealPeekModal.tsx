@@ -3,6 +3,12 @@ import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Svg, { Path } from 'react-native-svg';
 
+import {
+  carbDisplay,
+  carbStatus,
+  carbText,
+  carbUnit,
+} from '@/services/nutrition/carbProvenance';
 import type { MealScan, MealType } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -99,7 +105,15 @@ export function MealPeekModal({
                 </View>
 
                 <View style={styles.macroRow}>
-                  <Macro label={t('result.carbs')} value={Math.round(r.carbohydrates)} color={ORANGE} />
+                  {/* A meal whose carbohydrate was never known printed its
+                      placeholder here as "0 g" — the same figure the analysis
+                      screen refuses to show as a value (finding NUTR-A9). */}
+                  <Macro
+                    label={t('result.carbs')}
+                    value={carbText(carbDisplay(carbStatus(r), Math.round(r.carbohydrates)))}
+                    unit={carbUnit(carbDisplay(carbStatus(r), Math.round(r.carbohydrates)))}
+                    color={ORANGE}
+                  />
                   <Macro label={t('result.protein')} value={Math.round(r.protein)} color={GREEN} />
                   <Macro label={t('result.fat')} value={Math.round(r.fat)} color={PURPLE} />
                 </View>
@@ -136,13 +150,24 @@ export function MealPeekModal({
   );
 }
 
-function Macro({ label, value, color }: { label: string; value: number; color: string }) {
+function Macro({
+  label,
+  value,
+  color,
+  /** Omitted by the macros that always have one; a dash carries no unit. */
+  unit = 'g',
+}: {
+  label: string;
+  value: number | string;
+  color: string;
+  unit?: string;
+}) {
   return (
     <View style={styles.macroCol}>
       <View style={[styles.macroDot, { backgroundColor: color }]} />
       <Text style={styles.macroValue}>
         {value}
-        <Text style={styles.macroG}> g</Text>
+        {unit ? <Text style={styles.macroG}> {unit}</Text> : null}
       </Text>
       <Text style={styles.macroLabel} numberOfLines={1}>
         {label}

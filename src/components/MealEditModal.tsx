@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Spinner } from '@/components/ui/Spinner';
 import { reidentifyItem, rescaleItem, resolveFood } from '@/services/nutrition/engine';
+import { clampPortionGrams } from '@/services/nutrition/plausibility';
 import type { FoodCategory, FoodItemResult } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -61,7 +62,6 @@ const newKey = () => `r${(_rowSeq += 1)}`;
 const makeEmptyRow = (): Row => ({ key: newKey(), origin: null, name: '', grams: '100' });
 
 const GRAM_STEP = 10;
-const MIN_GRAMS = 5;
 
 /**
  * Centered modal to edit the scanned plate: rename a food, correct a portion,
@@ -118,7 +118,11 @@ export function MealEditModal({
       rs.map((r) => {
         if (r.key !== key) return r;
         const current = Math.round(Number(r.grams) || 0);
-        const next = Math.max(MIN_GRAMS, current + delta);
+        // Bounded to a portion a person could eat (5–2000 g, the same range
+        // `analyze-meal` applies to the vision estimate). The four-digit field
+        // previously accepted 9999 g, and every macro — including the one the
+        // dose is computed from — scales linearly with this number.
+        const next = clampPortionGrams(current + delta);
         return { ...r, grams: String(next) };
       })
     );
@@ -137,7 +141,7 @@ export function MealEditModal({
       const out: FoodItemResult[] = [];
       for (const r of rows) {
         const name = r.name.trim();
-        const grams = Math.max(MIN_GRAMS, Math.round(Number(r.grams) || 0));
+        const grams = clampPortionGrams(Number(r.grams) || 0);
         if (!name) continue;
         if (r.origin) {
           let item = r.origin;

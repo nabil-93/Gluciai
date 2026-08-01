@@ -21,7 +21,21 @@ const REDIRECT_MS = 5000;
  * over 5 s and auto-redirects home — or they tap "Go to home" to leave now.
  * `onDone` fires exactly once (bar completes OR button pressed).
  */
-export function SaveConfirmModal({ open, onDone }: { open: boolean; onDone: () => void }) {
+export function SaveConfirmModal({
+  open,
+  onDone,
+  stateKey,
+}: {
+  open: boolean;
+  onDone: () => void;
+  /**
+   * What actually happened to the write (DATA-1). The window used to state
+   * "your plate is safely in your journal" for a save the server had refused;
+   * this line says which of the three it was. Optional so the window keeps
+   * working for a caller that has no outcome to report.
+   */
+  stateKey?: string;
+}) {
   const { t } = useTranslation();
   const progress = useRef(new Animated.Value(0)).current;
   const doneRef = useRef(false);
@@ -72,6 +86,7 @@ export function SaveConfirmModal({ open, onDone }: { open: boolean; onDone: () =
 
           <Text style={styles.title}>{t('analysis.savedTitle')}</Text>
           <Text style={styles.body}>{t('analysis.savedBody')}</Text>
+          {stateKey ? <Text style={styles.syncState}>{t(stateKey)}</Text> : null}
 
           <View style={styles.track}>
             <Animated.View style={[styles.fill, { width }]} />
@@ -135,6 +150,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 20,
+  },
+  // Where the plate actually went (DATA-1). Muted and small: it qualifies the
+  // sentence above rather than competing with it.
+  syncState: {
+    fontFamily: F600,
+    fontSize: 11.5,
+    lineHeight: 15,
+    color: MUTED,
+    textAlign: 'center',
+    marginTop: -12,
+    marginBottom: 18,
   },
   track: {
     width: '100%',

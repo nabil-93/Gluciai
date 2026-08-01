@@ -24,17 +24,30 @@ import { AnimatedRobot, GlycemicBar, ImageLightbox, RotaryDial, glycemicTone } f
 import { MealAssistant } from '@/components/MealAssistant';
 import { MealEditModal } from '@/components/MealEditModal';
 import { MEAL_TYPES, MealTypeModal } from '@/components/MealTypeModal';
-import { NutriScoreBar } from '@/components/NutriScoreBar';
 import { SaveConfirmModal } from '@/components/SaveConfirmModal';
-import { saveMeal, updateMealType } from '@/services/data';
+import { savedStateKey, saveMeal, updateMealType } from '@/services/data';
+import { qualityEvidence } from '@/services/nutrition/advice';
+import {
+  carbDisplay,
+  carbStatus,
+  carbText as carbTextOf,
+  carbUnit as carbUnitOf,
+  plateCarbStatus,
+} from '@/services/nutrition/carbProvenance';
 import { aggregateItems } from '@/services/nutrition/engine';
-import { nutriGrade, scoreMeal } from '@/services/nutrition/mealScore';
+import { scoreMeal } from '@/services/nutrition/mealScore';
 import {
   estimateMealWaterMl,
   estimateMicros,
   microAverage,
+  microProvenance,
   waterGoalMl,
 } from '@/services/nutrition/micros';
+import {
+  NUTRIENT_KEYS,
+  nutritionCompleteness,
+  type NutrientKey,
+} from '@/services/nutrition/nutrientProvenance';
 import { clearPendingScan, getPendingScan } from '@/services/scanSession';
 import { useAppStore } from '@/store/useAppStore';
 import type { FoodCategory, FoodItemResult, MealType, NutritionResult } from '@/types';
@@ -66,6 +79,17 @@ const LABEL = '#5C6860';
 const GREEN_TXT = '#0F7A42';
 const ORANGE_TXT = '#B45309';
 const PURPLE_TXT = '#7C3AED';
+
+/** The seven nutrients, in the words the rest of the screen already uses. */
+const NUTRIENT_LABEL: Record<NutrientKey, string> = {
+  calories: 'result.calories',
+  carbs: 'result.carbs',
+  sugar: 'result.sugar',
+  protein: 'result.protein',
+  fat: 'result.fat',
+  fiber: 'result.fiber',
+  sodium: 'result.sodium',
+};
 
 /*
  * NOTE — the meal is deliberately NOT pre-filled from the clock.
@@ -104,8 +128,25 @@ function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
 }
 
-/** Rough daily calorie target from the profile (Mifflin-St Jeor × light
- *  activity), falling back to 2000 kcal when the body metrics are unknown. */
+/**
+ * Rough daily calorie target from the profile (Mifflin-St Jeor × light
+ * activity), falling back to 2000 kcal when the body metrics are unknown.
+ *
+ * STEP 22C AUDIT (finding NUTR-A6) — Mifflin-St Jeor is a published, validated
+ * BMR equation, so the `10·kg + 6.25·cm − 5·age + s` half is defensible. Three
+ * things around it are not measurements and were presented as if they were:
+ *
+ *   · the **1.45 activity factor** is assumed for every patient, whatever they
+ *     do. Published multipliers run ~1.2 (sedentary) to ~1.9 (very active);
+ *     one fixed value can be wrong by 30 % in either direction.
+ *   · **age 30** is assumed when no birth date is stored.
+ *   · **2000 kcal** is returned outright when weight or height is missing —
+ *     a population default, not this patient's requirement, and the screen
+ *     then prints "X % of YOUR daily calories" against it.
+ *
+ * Unchanged here for the same reason as the burn divisors: any of the three is
+ * a nutrition-policy choice (RU-3). The card now says which case it is in.
+ */
 function dailyCalorieGoal(
   weight?: number,
   height?: number,
@@ -177,8 +218,24 @@ function calorieTone(pct: number) {
   return { key: 'analysis.calVeryHigh', dot: '#ef4444', bg: '#fdeceb', text: '#B3261E' };
 }
 
-/** Minutes of each activity needed to burn `cal` kcal (moderate intensity,
- *  ~70 kg reference). Illustrative — for motivation, not a prescription. */
+/**
+ * Minutes of each activity needed to burn `cal` kcal (moderate intensity,
+ * ~70 kg reference). Illustrative — for motivation, not a prescription.
+ *
+ * STEP 22C AUDIT (finding NUTR-A10) — these four divisors are the ENTIRE
+ * model. They are kcal-per-minute constants for one hypothetical 70 kg adult
+ * at one unstated intensity: they ignore the patient's weight (the app knows
+ * it — `profile.weight` is two lines away and drives the water goal), their
+ * sex, their age, their fitness and the MET value of the activity. A 50 kg and
+ * a 110 kg patient are told the same number of minutes for the same plate,
+ * and the true figure differs by more than a factor of two between them.
+ *
+ * The constants are NOT changed here: replacing them with a MET × weight model
+ * would move every minute shown on the screen and in the meal PDF, which is a
+ * nutrition-policy change for RU-3, not an engineering one. What Step 22C does
+ * is stop presenting them as facts — the card and the PDF now say what they
+ * rest on, in the vocabulary Step 17 gave the other estimates.
+ */
 function burnMinutes(cal: number) {
   return {
     walk: Math.max(1, Math.round(cal / 5)),
@@ -209,6 +266,9 @@ function itemsForEdit(result: NutritionResult, items: FoodItemResult[]): FoodIte
       source: result.source ?? 'ai_estimate',
       detection_confidence: result.confidence ?? 0.8,
       nutrition_confidence: result.nutrition_confidence ?? 0.6,
+      // This row IS the plate, so it inherits the plate's provenance rather
+      // than being minted as a known value by the act of synthesizing it.
+      carbs_known: result.carbs_known,
     },
   ];
 }
@@ -238,6 +298,9 @@ function makeSugarItem(grams: number, label: string): FoodItemResult {
     is_estimated: true,
     detection_confidence: 1,
     nutrition_confidence: 0.6,
+    // Pure sucrose: 100 g of carbohydrate per 100 g, by definition. The
+    // patient declared the grams, so this row is as known as it gets.
+    carbs_known: true,
   };
 }
 
@@ -369,6 +432,8 @@ export default function ScanResultScreen() {
   // page), start as "saved" so it can't be re-saved and the day isn't double
   // counted; a fresh scan starts unsaved as before.
   const [saved, setSaved] = useState(() => pending?.alreadySaved ?? false);
+  /** i18n key for what the save actually achieved (DATA-1). */
+  const [saveState, setSaveState] = useState<string | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -397,10 +462,23 @@ export default function ScanResultScreen() {
   // memoised: without this it re-ran on every render (badge animation, each
   // modal toggle) and `scoreMeal` was then computed a second time below.
   // Both hooks must sit ABOVE the early return to keep the hook order stable.
-  const result = useMemo(
-    () => (items.length > 0 ? aggregateItems(items) : pending?.result ?? null),
-    [items, pending]
-  );
+  const result = useMemo(() => {
+    if (items.length === 0) return pending?.result ?? null;
+    const agg = aggregateItems(items);
+    // `aggregateItems` re-derives every warning FROM THE ITEMS, which is what
+    // keeps the plate honest after an edit. But an incomplete plate is not a
+    // fact about any item: it means the AI's answer was cut off, so foods it
+    // had listed are absent from this list entirely. Nothing in the items can
+    // say that, so the warning is carried across the re-aggregation — without
+    // it, a plate missing foods (and therefore carbohydrate) would render
+    // exactly like a complete one.
+    const carried = (pending?.result.warnings ?? []).filter(
+      (w) => w === 'warn:plate_incomplete' && !agg.warnings.includes(w)
+    );
+    return carried.length > 0
+      ? { ...agg, warnings: [...agg.warnings, ...carried] }
+      : agg;
+  }, [items, pending]);
   const quality = useMemo(
     () =>
       result
@@ -435,10 +513,83 @@ export default function ScanResultScreen() {
   const cPct = Math.round((cCal / totCal) * 100);
   const fPct = Math.max(0, 100 - pPct - cPct);
 
-  // Front-of-pack A–E letter derived from the same quality score, shown on
-  // the photo — it moves with the food (a lean, high-fibre plate → A/B; a
-  // sugary, high-GI one → D/E).
-  const grade = nutriGrade(quality.score);
+  /* How much of the plate's carbohydrate is actually known. When a food's
+     carbohydrate is missing, `C` above still holds the sum of the ones that
+     ARE known — a floor, not a total — so it reads "≥ 62 g", and a plate with
+     nothing known says so rather than printing the placeholder as "0 g".
+     Every other figure on this screen is left exactly as it was. */
+  const carbView = carbDisplay(
+    items.length > 0 ? plateCarbStatus(items) : carbStatus(result),
+    C
+  );
+  /** The carbohydrate figure as text: "62", "≥ 62" or "—". Formatted by the
+   *  shared rule now (Step 22B), so the day total, the meal sheet and the home
+   *  card cannot drift from this screen. */
+  const carbText = carbTextOf(carbView);
+  /** Its share of the plate's calories — suppressed when the grams behind it
+   *  are not a figure we can stand behind. Protein and fat are untouched. */
+  const carbPctText = carbView.kind === 'exact' ? `${cPct}%` : '—';
+  /** No unit after a dash: "— g" reads like a quantity, which is the thing
+   *  this whole change exists to stop implying. */
+  const carbUnit = carbUnitOf(carbView);
+
+  /* ── What the numbers above REST ON (finding NUTR-A7, Step 22B) ─────────
+     `fieldsFound` was computed by every provider *"so the UI can say how
+     complete the entry is"* — and then read by nothing, so a plate whose
+     protein was a floor presented exactly like one a database had declared.
+     This is that answer, in four states and plain words. Deliberately not a
+     percentage: seven fields are not seven equal facts, so "86 % complete"
+     would be precision the data cannot support. No number changes. */
+  const completeness = nutritionCompleteness(items);
+  const missingNames = completeness.missing
+    .map((k) => t(NUTRIENT_LABEL[k]))
+    .join(', ');
+  /** Counts and grams worth naming — appended to the sentence, never alone. */
+  const dataDetail = [
+    completeness.unidentified > 0
+      ? t('analysis.dataUnidentified', { count: completeness.unidentified })
+      : null,
+    completeness.invalidPortions > 0
+      ? t('analysis.dataInvalidPortion', { count: completeness.invalidPortions })
+      : null,
+    completeness.unsureGrams > 0
+      ? t('analysis.dataWeakId', { g: completeness.unsureGrams })
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const dataMain =
+    completeness.state === 'declared'
+      ? t('analysis.dataDeclared')
+      : completeness.state === 'estimated'
+        ? t('analysis.dataEstimated')
+        : completeness.state === 'unavailable'
+          ? t('analysis.dataUnavailable')
+          : // Naming all seven is accurate but unreadable, and it is the common
+            // case: one unidentified food makes every total a floor.
+            completeness.missing.length === NUTRIENT_KEYS.length
+            ? t('analysis.dataPartialAll')
+            : missingNames
+              ? t('analysis.dataPartial', { list: missingNames })
+              : t('analysis.dataPartialFoods');
+  const dataNote = dataDetail ? `${dataMain} · ${dataDetail}` : dataMain;
+
+  /* ── May this plate be JUDGED at all? (Step 22A) ────────────────────────
+     `scoreMeal` starts at 100 and subtracts, so a plate nothing was identified
+     in — every value a placeholder 0 — takes no penalty and comes out
+     "100/100 · Excellent · A · balanced meal". The verdict is therefore gated
+     on the same evidence Step 18 already used for the badges (P8-005): the
+     plate must have energy, and its carbohydrate must be a real value rather
+     than a floor. Nothing is recomputed and no number is invented — an
+     unsupported plate simply carries no verdict, and says why. */
+  const evidence = qualityEvidence(result);
+  const rated = evidence === 'supported';
+
+  /** Why the verdict is withheld — the sentence shown in its place. */
+  const unratedWhy =
+    evidence === 'carbs_unknown'
+      ? t('analysis.scoreUnavailableCarbs')
+      : t('analysis.scoreUnavailableNoData');
 
   // Glycemic index of the whole plate (carb-weighted, from the engine) — shown
   // as a labelled chip in the calories card so the value is never a mystery.
@@ -457,6 +608,12 @@ export default function ScanResultScreen() {
 
   const micros = estimateMicros(items);
   const microAvg = microAverage(micros);
+  /* What those five bars and the hydration ring REST ON (NUTR-A2 / A3 / B3).
+     No number below changes — this only reports the share of the plate the
+     estimate could use, the grams identified without certainty that still
+     count in full, and which percentages are floors rather than matches. */
+  const microProv = microProvenance(items);
+  const estimateCoveragePct = Math.round(microProv.coverageRatio * 100);
   const burn = burnMinutes(cals);
 
   // ── Goal comparison: this meal vs the day's remaining allowance ──
@@ -466,6 +623,9 @@ export default function ScanResultScreen() {
     profile?.gender,
     profile?.birth_date
   );
+  /** Whether that goal was computed from THIS patient at all, or is the flat
+   *  2 000 kcal population default (NUTR-A6). The card says which. */
+  const goalFromProfile = Boolean(profile?.weight && profile?.height);
   const todays = meals.filter((m) => isToday(m.created_at));
   const eaten = todays.reduce((s, m) => s + (m.result.calories || 0), 0);
   const eatenP = todays.reduce((s, m) => s + (m.result.protein || 0), 0);
@@ -491,8 +651,12 @@ export default function ScanResultScreen() {
   const mealWaterMl = estimateMealWaterMl(items);
   const waterPct = Math.min(100, Math.round((mealWaterMl / waterTargetMl) * 100));
 
-  const advice =
-    quality.reasons.length > 0
+  // The written advice repeats the score's own reasons, so it inherits the
+  // gate: on an unsupported plate those reasons are "balanced meal" computed
+  // from placeholder zeros. What replaces it is the way OUT of that state.
+  const advice = !rated
+    ? `${unratedWhy} ${t('analysis.scoreUnavailableFix')}`
+    : quality.reasons.length > 0
       ? quality.reasons.slice(0, 2).join(' · ')
       : t('analysis.adviceGood');
 
@@ -519,10 +683,12 @@ export default function ScanResultScreen() {
 
     const row = (label: string, value: string) =>
       `<tr><td>${esc(label)}</td><td class="v">${esc(value)}</td></tr>`;
-    const bar = (label: string, pct: number) =>
+    // `atLeast` — the share was capped at 100 %, so the printed figure is a
+    // floor, not a match (NUTR-A2). Same "≥" the screen uses.
+    const bar = (label: string, pct: number, atLeast = false) =>
       `<div class="mrow"><span>${esc(label)}</span>
          <span class="track"><span class="fill" style="width:${Math.min(100, pct)}%"></span></span>
-         <b>${pct}%</b></div>`;
+         <b>${atLeast ? esc(t('analysis.atLeastPct', { pct })) : `${pct}%`}</b></div>`;
 
     return `<!doctype html><html lang="${i18n.language}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -592,10 +758,20 @@ export default function ScanResultScreen() {
       </span>
     </div>
     <div class="card">
-      <h2>${esc(t('analysis.healthScore'))}</h2>
+      <h2>${esc(t('analysis.scoreTitle'))}</h2>
+      ${
+        rated
+          ? /* The word first, then the figure — the same demotion as on screen,
+               and the note below says what the figure is (Phase 2). */
+            `<p class="sub" style="font-weight:700;margin-bottom:2px">${esc(quality.label)}</p>
       <div class="kcal">${quality.score}<small>/100</small></div>
-      <p class="sub" style="margin-top:4px">${esc(quality.label)}</p>
-      <p class="sub">Nutri-Score : <b>${grade}</b></p>
+      <p class="sub" style="font-size:9.5px;margin-top:4px">${esc(t('analysis.scoreNote'))}</p>`
+          : /* A document a doctor may read must not print a verdict the plate
+               cannot support — the dash and the reason go in its place. */
+            `<div class="kcal">—</div>
+      <p class="sub" style="margin-top:4px">${esc(t('analysis.scoreUnavailableTitle'))}</p>
+      <p class="sub" style="font-size:9.5px">${esc(unratedWhy)}</p>`
+      }
     </div>
   </div>
 
@@ -604,24 +780,27 @@ export default function ScanResultScreen() {
       <h2>${esc(t('analysis.distribution'))}</h2>
       <table>
         ${row(t('result.protein'), `${P} g · ${pPct}%`)}
-        ${row(t('result.carbs'), `${C} g · ${cPct}%`)}
+        ${row(t('result.carbs'), `${carbText}${carbUnit ? ` ${carbUnit}` : ''} · ${carbPctText}`)}
         ${row(t('result.fat'), `${F} g · ${fPct}%`)}
         ${row(t('result.fiber'), `${Math.round(result.fiber)} g`)}
         ${row(t('result.sugar'), `${Math.round(result.sugar)} g`)}
       </table>
+      <!-- A doctor reading this table must be able to tell a declared value
+           from a floor or an estimate, exactly as on screen (NUTR-A7). -->
+      <p class="sub" style="font-size:9.5px;margin-top:8px">${esc(dataNote)}</p>
     </div>
     <div class="card grow">
       <h2>${esc(t('analysis.giLabel'))}</h2>
       <table>
         ${row(t('analysis.giLabel'), `${gi}`)}
         ${row(t('analysis.glLabel'), `${gl} · ${t(`result.${glInfo.key}`)}`)}
-        ${row(t('analysis.hydration'), `${mealWaterMl} ml`)}
+        ${row(t('analysis.hydration'), t('analysis.waterFromMeal', { ml: mealWaterMl }))}
       </table>
       ${
         giCoveragePct < 100
           ? `<p class="sub" style="margin-top:8px">${esc(
               t('analysis.giCoverage', { pct: giCoveragePct })
-            )}</p>`
+            )}<br>${esc(t('analysis.glScope', { pct: giCoveragePct }))}</p>`
           : ''
       }
     </div>
@@ -651,11 +830,22 @@ export default function ScanResultScreen() {
   <div class="grid">
     <div class="card grow">
       <h2>${esc(t('analysis.vitamins'))}</h2>
-      ${bar(t('analysis.vitaminA'), micros.a)}
-      ${bar(t('analysis.vitaminC'), micros.c)}
-      ${bar(t('analysis.iron'), micros.fe)}
-      ${bar(t('analysis.calcium'), micros.ca)}
-      ${bar(t('analysis.potassium'), micros.k)}
+      ${bar(t('analysis.vitaminA'), micros.a, microProv.atLeast.a)}
+      ${bar(t('analysis.vitaminC'), micros.c, microProv.atLeast.c)}
+      ${bar(t('analysis.iron'), micros.fe, microProv.atLeast.fe)}
+      ${bar(t('analysis.calcium'), micros.ca, microProv.atLeast.ca)}
+      ${bar(t('analysis.potassium'), micros.k, microProv.atLeast.k)}
+      <p class="sub" style="font-size:9.5px;margin-top:8px">${esc(
+        t('analysis.estimatedFromCategories')
+      )}${
+        estimateCoveragePct < 100
+          ? ` · ${esc(t('analysis.estimateCoverage', { pct: estimateCoveragePct }))}`
+          : ''
+      }${
+        microProv.unsureGrams > 0
+          ? ` · ${esc(t('analysis.estimateLowConfidence', { g: microProv.unsureGrams }))}`
+          : ''
+      }</p>
     </div>
     <div class="card grow">
       <h2>${esc(t('analysis.toBurn'))}</h2>
@@ -665,10 +855,18 @@ export default function ScanResultScreen() {
         ${row(t('analysis.bike'), `${burn.bike} min`)}
         ${row(t('analysis.swim'), `${burn.swim} min`)}
       </table>
+      <!-- A doctor must be able to see that these minutes use no patient
+           metric at all (NUTR-A10). -->
+      <p class="sub" style="font-size:9.5px;margin-top:8px">${esc(
+        t('analysis.burnEstimated')
+      )}</p>
     </div>
     <div class="card grow">
       <h2>${esc(t('analysis.goals'))}</h2>
       <table>${row(t('analysis.ofDailyCalories'), `${mealSharePct}%`)}</table>
+      <p class="sub" style="font-size:9.5px;margin-top:6px">${esc(
+        goalFromProfile ? t('analysis.goalEstimated') : t('analysis.goalDefault')
+      )}</p>
       <p class="sub" style="margin:10px 0 2px">${esc(t('analysis.remaining'))}</p>
       <table>
         ${row('kcal', `${remainCal}`)}
@@ -726,7 +924,10 @@ export default function ScanResultScreen() {
 
   const persist = async (meal: MealType) => {
     if (saved) return;
-    await saveMeal(result, imageUri, imageBase64, undefined, meal);
+    // The confirmation window says the plate is in the journal; the row says
+    // whether the server actually has it (DATA-1). Both are now shown.
+    const row = await saveMeal(result, imageUri, imageBase64, undefined, meal);
+    setSaveState(savedStateKey(row));
     setSaved(true);
   };
 
@@ -899,10 +1100,6 @@ export default function ScanResultScreen() {
             ) : null}
           </Pressable>
 
-          {/* Nutri-Score — under the photo, above the calories card */}
-          <View style={styles.scoreBarBelow}>
-            <NutriScoreBar grade={grade} label={t('analysis.nutriScore')} />
-          </View>
         </LinearGradient>
 
         <View style={styles.body}>
@@ -940,22 +1137,58 @@ export default function ScanResultScreen() {
               </View>
 
               <View style={styles.scoreCol}>
-                <Text style={styles.scoreLabel}>{t('analysis.healthScore')}</Text>
-                <Ring size={54} pct={quality.score} color={quality.color} track="#eef0ec">
-                  <Text style={styles.scoreValue}>{quality.score}</Text>
-                  <Text style={styles.scoreDenom}>/100</Text>
-                </Ring>
-                <Text style={[styles.scoreTag, { color: quality.textColor }]} numberOfLines={1}>
-                  {quality.label}
+                {/* STEP 22D PHASE 2 — the interim name, and the WORD promoted
+                    above the ring. The number is a six-rule heuristic on a
+                    scale that never goes below 19; the word and the reasons
+                    are the part of the output that can actually be checked, so
+                    they lead and the figure follows. No colour, no threshold
+                    and no number changed — only their order and size. */}
+                <Text style={styles.scoreLabel}>{t('analysis.scoreTitle')}</Text>
+                <Text style={styles.scoreSubtitle} numberOfLines={2}>
+                  {t('analysis.scoreSubtitle')}
                 </Text>
+                {rated ? (
+                  <>
+                    <Text style={[styles.scoreWord, { color: quality.textColor }]} numberOfLines={1}>
+                      {quality.label}
+                    </Text>
+                    <Ring size={54} pct={quality.score} color={quality.color} track="#eef0ec">
+                      <Text style={styles.scoreValue}>{quality.score}</Text>
+                      <Text style={styles.scoreDenom}>/100</Text>
+                    </Ring>
+                  </>
+                ) : (
+                  /* No verdict: an empty ring with a dash, not a manufactured
+                     number. The reason sits in its own card below. */
+                  <>
+                    <Text style={[styles.scoreWord, styles.scoreNoneTag]} numberOfLines={1}>
+                      {t('analysis.scoreUnavailable')}
+                    </Text>
+                    <Ring size={54} pct={0} color="#c9cfc9" track="#eef0ec">
+                      <Text style={styles.scoreNone}>—</Text>
+                    </Ring>
+                  </>
+                )}
               </View>
             </View>
 
             <View style={styles.macroRow}>
               <MacroMini label={t('result.protein')} value={P} pct={pPct} color={GREEN} textColor={GREEN_TXT} />
-              <MacroMini label={t('result.carbs')} value={C} pct={cPct} color={ORANGE} textColor={ORANGE_TXT} />
+              <MacroMini label={t('result.carbs')} value={carbText} unit={carbUnit} pct={carbPctText} color={ORANGE} textColor={ORANGE_TXT} />
               <MacroMini label={t('result.fat')} value={F} pct={fPct} color={PURPLE} textColor={PURPLE_TXT} />
             </View>
+
+            {/* One quiet line saying where those figures come from: declared by
+                a database, partial, the model's own estimate, or unavailable
+                (NUTR-A7). It sits with the numbers it qualifies, not in a
+                separate technical panel. */}
+            <Text style={styles.dataFoot}>{dataNote}</Text>
+
+            {/* What the indicator above IS — computed by the app, from which
+                inputs, and explicitly not a clinical measure. The sentence the
+                A–E strip used to carry (Step 16's "not a Nutri-Score") is
+                superseded by this one, which says the stronger thing. */}
+            <Text style={styles.dataFoot}>{t('analysis.scoreNote')}</Text>
           </View>
 
           {/* ── Glycemic index (quality) + glycemic load (quantity) ──
@@ -998,6 +1231,24 @@ export default function ScanResultScreen() {
                   {t('analysis.giCoverage', { pct: giCoveragePct })}
                 </Text>
               ) : null}
+
+              {/* The LOAD multiplies the index by the plate's WHOLE
+                  carbohydrate, while that index was averaged over only the
+                  part of it that carries one (NUTR-A5). When those differ, the
+                  load extrapolates — said out loud rather than left in the
+                  arithmetic. */}
+              {giCoveragePct < 100 ? (
+                <Text style={styles.giFoot}>
+                  {t('analysis.glScope', { pct: giCoveragePct })}
+                </Text>
+              ) : null}
+
+              {/* The index and the health score are two different questions,
+                  and the screen shows both at once — a plate can read "IG 70 ·
+                  Élevé" beside a high score without either being wrong. Said
+                  once, here, rather than left for the patient to reconcile
+                  (Step 22A). */}
+              <Text style={styles.giFoot}>{t('analysis.giScoreScope')}</Text>
             </View>
           ) : null}
 
@@ -1062,6 +1313,15 @@ export default function ScanResultScreen() {
                           {t('analysis.unknownValues')}
                         </Text>
                       </View>
+                    ) : carbStatus(it) !== 'known' ? (
+                      /* Identified, real calories — but the source said
+                         nothing about carbohydrate. A distinct state from the
+                         one above, and the one that used to pass silently. */
+                      <View style={styles.unknownTag}>
+                        <Text style={styles.unknownTagText}>
+                          {t('analysis.carbsUnknownTag')}
+                        </Text>
+                      </View>
                     ) : (
                       <Text style={styles.foodConf}>
                         {t('result.confidence')} {Math.round((it.detection_confidence ?? 0) * 100)}%
@@ -1093,7 +1353,7 @@ export default function ScanResultScreen() {
               <MacroDonut p={pPct} c={cPct} f={fPct} />
               <View style={{ flex: 1, minWidth: 0, gap: 9 }}>
                 <LegendRow color={GREEN} label={t('result.protein')} value={P} pct={pPct} />
-                <LegendRow color={ORANGE} label={t('result.carbs')} value={C} pct={cPct} />
+                <LegendRow color={ORANGE} label={t('result.carbs')} value={carbText} unit={carbUnit} pct={carbPctText} />
                 <LegendRow color={PURPLE} label={t('result.fat')} value={F} pct={fPct} />
               </View>
             </View>
@@ -1133,12 +1393,28 @@ export default function ScanResultScreen() {
                 {microAvg >= 30 ? t('analysis.goodIntake') : t('analysis.lowIntake')}
               </Text>
               <View style={{ gap: 6, marginTop: 1 }}>
-                <MicroBar label={t('analysis.vitaminA')} pct={micros.a} />
-                <MicroBar label={t('analysis.vitaminC')} pct={micros.c} />
-                <MicroBar label={t('analysis.iron')} pct={micros.fe} />
-                <MicroBar label={t('analysis.calcium')} pct={micros.ca} />
-                <MicroBar label={t('analysis.potassium')} pct={micros.k} />
+                <MicroBar label={t('analysis.vitaminA')} pct={micros.a} atLeast={microProv.atLeast.a} />
+                <MicroBar label={t('analysis.vitaminC')} pct={micros.c} atLeast={microProv.atLeast.c} />
+                <MicroBar label={t('analysis.iron')} pct={micros.fe} atLeast={microProv.atLeast.fe} />
+                <MicroBar label={t('analysis.calcium')} pct={micros.ca} atLeast={microProv.atLeast.ca} />
+                <MicroBar label={t('analysis.potassium')} pct={micros.k} atLeast={microProv.atLeast.k} />
               </View>
+              {/* No provider publishes micronutrients, so every bar above is a
+                  category density × the grams on the plate. Said in the same
+                  words the GI chip already uses, rather than left to look like
+                  the declared macros two cards up (NUTR-A2 / NUTR-B3). */}
+              <Text style={styles.estimateFoot}>{t('analysis.estimatedFromCategories')}</Text>
+              {estimateCoveragePct < 100 || microProv.unsureGrams > 0 ? (
+                <Text style={styles.estimateFoot}>
+                  {estimateCoveragePct < 100
+                    ? t('analysis.estimateCoverage', { pct: estimateCoveragePct })
+                    : ''}
+                  {estimateCoveragePct < 100 && microProv.unsureGrams > 0 ? ' · ' : ''}
+                  {microProv.unsureGrams > 0
+                    ? t('analysis.estimateLowConfidence', { g: microProv.unsureGrams })
+                    : ''}
+                </Text>
+              ) : null}
             </View>
 
             {/* Goal comparison */}
@@ -1157,6 +1433,12 @@ export default function ScanResultScreen() {
                 </Ring>
               </View>
               <Text style={styles.goalCaption}>{t('analysis.ofDailyCalories')}</Text>
+              {/* Whose calories, exactly? An estimate from the profile, or the
+                  flat 2 000 kcal default when the profile cannot answer
+                  (NUTR-A6). Said here rather than left implied by "your". */}
+              <Text style={styles.estimateFoot}>
+                {goalFromProfile ? t('analysis.goalEstimated') : t('analysis.goalDefault')}
+              </Text>
               <Text style={styles.remainTitle}>{t('analysis.remaining')}</Text>
               <View style={{ gap: 4 }}>
                 <RemainRow color={ORANGE} value={`${remainCal}`} unit="kcal" />
@@ -1181,6 +1463,10 @@ export default function ScanResultScreen() {
                 <BurnRow emoji="🏊" label={t('analysis.swim')} min={burn.swim} />
               </View>
               <Text style={styles.miniFoot}>{t('analysis.basedOn', { cal: cals })}</Text>
+              {/* Fixed kcal-per-minute divisors for a ~70 kg adult — they do
+                  not use this patient's weight, sex, age or the activity's MET
+                  (NUTR-A10). The minutes are unchanged; the claim is not. */}
+              <Text style={styles.estimateFoot}>{t('analysis.burnEstimated')}</Text>
             </View>
 
             {/* Hydration */}
@@ -1199,7 +1485,9 @@ export default function ScanResultScreen() {
               <Text style={styles.goalCaption}>{t('analysis.ofWaterNeeds')}</Text>
               {/* The ring is this MEAL's contribution to the daily goal, not how
                   hydrated the patient is — spelled out so a low ring doesn't
-                  read as a failure. */}
+                  read as a failure. The millilitres themselves are inferred
+                  from each food's category, never measured, so the line now
+                  says "≈ … estimated" and the foot says from what (NUTR-A3). */}
               <Text style={styles.waterFromMeal}>
                 {t('analysis.waterFromMeal', { ml: mealWaterMl })}
               </Text>
@@ -1208,6 +1496,12 @@ export default function ScanResultScreen() {
                 <Text style={styles.waterStatUnit}>· {t('analysis.glasses', { n: waterGlasses })}</Text>
               </View>
               <Text style={styles.waterHint}>{t('analysis.drinkReminder')}</Text>
+              <Text style={styles.estimateFoot}>
+                {t('analysis.estimatedFromCategories')}
+                {estimateCoveragePct < 100
+                  ? ` · ${t('analysis.estimateCoverage', { pct: estimateCoveragePct })}`
+                  : ''}
+              </Text>
             </View>
           </View>
 
@@ -1317,7 +1611,7 @@ export default function ScanResultScreen() {
         }}
       />
 
-      <SaveConfirmModal open={saveModalOpen} onDone={goHome} />
+      <SaveConfirmModal open={saveModalOpen} onDone={goHome} stateKey={saveState ?? undefined} />
 
       <ImageLightbox
         uri={imageUri}
@@ -1333,7 +1627,10 @@ export default function ScanResultScreen() {
 
 /** `color` paints the dot (a graphic), `textColor` the percentage (type) — the
  *  bright chart colours are unreadable at 11 px on white. */
-function MacroMini({ label, value, pct, color, textColor }: { label: string; value: number; pct: number; color: string; textColor: string }) {
+/* `value`, `unit` and `pct` are pre-formatted strings rather than numbers so
+   a macro with no trustworthy figure can render "—" (and no unit) instead of
+   a zero. Protein and fat always pass plain numbers and read as they did. */
+function MacroMini({ label, value, unit = 'g', pct, color, textColor }: { label: string; value: number | string; unit?: string; pct: number | string; color: string; textColor: string }) {
   return (
     <View style={styles.macroCol}>
       <View style={styles.macroTop}>
@@ -1342,33 +1639,42 @@ function MacroMini({ label, value, pct, color, textColor }: { label: string; val
       </View>
       <View style={styles.macroValRow}>
         <Text style={styles.macroVal}>{value}</Text>
-        <Text style={styles.macroG}>g</Text>
+        {unit ? <Text style={styles.macroG}>{unit}</Text> : null}
       </View>
-      <Text style={[styles.macroPct, { color: textColor }]}>{pct}%</Text>
-    </View>
-  );
-}
-
-function LegendRow({ color, label, value, pct }: { color: string; label: string; value: number; pct: number }) {
-  return (
-    <View style={styles.legendRow}>
-      <View style={[styles.legendDot, { backgroundColor: color }]} />
-      <Text style={styles.legendLabel}>{label}</Text>
-      <Text style={styles.legendVal}>
-        {value} g <Text style={styles.legendPct}>({pct}%)</Text>
+      <Text style={[styles.macroPct, { color: textColor }]}>
+        {typeof pct === 'number' ? `${pct}%` : pct}
       </Text>
     </View>
   );
 }
 
-function MicroBar({ label, pct }: { label: string; pct: number }) {
+function LegendRow({ color, label, value, unit = 'g', pct }: { color: string; label: string; value: number | string; unit?: string; pct: number | string }) {
+  return (
+    <View style={styles.legendRow}>
+      <View style={[styles.legendDot, { backgroundColor: color }]} />
+      <Text style={styles.legendLabel}>{label}</Text>
+      <Text style={styles.legendVal}>
+        {value}{unit ? ` ${unit}` : ''}{' '}
+        <Text style={styles.legendPct}>({typeof pct === 'number' ? `${pct}%` : pct})</Text>
+      </Text>
+    </View>
+  );
+}
+
+/** `atLeast`: the plate's real share went past the daily reference and the
+ *  percentage was capped at 100 — so the bar is full and the number is a FLOOR.
+ *  Printed "≥ 100 %", the same idiom a partially known carbohydrate uses. */
+function MicroBar({ label, pct, atLeast }: { label: string; pct: number; atLeast?: boolean }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.microRow}>
       <Text style={styles.microLabel} numberOfLines={1}>{label}</Text>
       <View style={styles.microTrack}>
         <View style={[styles.microFill, { width: `${pct}%` }]} />
       </View>
-      <Text style={styles.microPct}>{pct}%</Text>
+      <Text style={styles.microPct}>
+        {atLeast ? t('analysis.atLeastPct', { pct }) : `${pct}%`}
+      </Text>
     </View>
   );
 }
@@ -1463,8 +1769,6 @@ const styles = StyleSheet.create({
   scanBadgeText: { color: '#0F7A42', fontSize: 12.5, fontFamily: F700 },
   // Once the text has gathered into the check, the pill shrinks to the logo.
   scanBadgeCollapsed: { paddingLeft: 8, paddingRight: 8, gap: 0 },
-  // Nutri-Score now lives under the photo (was overlaid on it).
-  scoreBarBelow: { marginHorizontal: 14, marginTop: 12 },
 
   body: { paddingHorizontal: 14, paddingTop: 13, gap: 12 },
   card: {
@@ -1522,6 +1826,17 @@ const styles = StyleSheet.create({
   glTag: { borderRadius: 999, paddingVertical: 3.5, paddingHorizontal: 9 },
   glTagText: { fontSize: 10, fontFamily: F800, color: '#fff' },
   giFoot: { fontSize: 10, color: MUTED, fontFamily: F500, marginTop: 10 },
+  /* Provenance of the totals (NUTR-A7). Wraps freely: the German and Arabic
+     sentences are long, and truncating the caveat is exactly the failure this
+     line exists to prevent. */
+  dataFoot: {
+    fontSize: 10,
+    lineHeight: 14,
+    color: MUTED,
+    fontFamily: F500,
+    marginTop: 12,
+    paddingHorizontal: 4,
+  },
 
   macroCol: { alignItems: 'flex-start', gap: 2 },
   macroTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -1537,7 +1852,15 @@ const styles = StyleSheet.create({
   ringCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scoreValue: { fontSize: 16, fontFamily: F800, color: INK, lineHeight: 18 },
   scoreDenom: { fontSize: 7, color: MUTED, fontFamily: F600 },
-  scoreTag: { fontSize: 9.5, fontFamily: F700 },
+  /** Whose indicator this is — under the title, above the word. */
+  scoreSubtitle: { fontSize: 8.5, lineHeight: 11, color: MUTED, fontFamily: F500, marginTop: 1 },
+  /** The WORD, promoted above the ring in Phase 2. Same colour as before —
+   *  only its position and size changed. */
+  scoreWord: { fontSize: 12, fontFamily: F800, marginTop: 3, marginBottom: 1 },
+  // No verdict (Step 22A): a dash where the number was, in the muted tone the
+  // rest of the screen uses for "we do not know", never a colour that grades.
+  scoreNone: { fontSize: 18, fontFamily: F800, color: MUTED, lineHeight: 20 },
+  scoreNoneTag: { color: MUTED },
 
   // Detected foods
   foodsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -1642,7 +1965,18 @@ const styles = StyleSheet.create({
   microLabel: { fontSize: 10, color: '#6b746e', fontFamily: F600, width: 62 },
   microTrack: { flex: 1, height: 6, backgroundColor: '#eef0ec', borderRadius: 3, overflow: 'hidden' },
   microFill: { height: '100%', backgroundColor: GREEN, borderRadius: 3 },
-  microPct: { fontSize: 10, color: '#4a544d', fontFamily: F700, width: 30, textAlign: 'right' },
+  // Wide enough for "≥ 100 %" (a capped share) as well as "100%" — the four
+  // locales all render that idiom, and a clipped "≥" would read as a match.
+  microPct: { fontSize: 10, color: '#4a544d', fontFamily: F700, width: 44, textAlign: 'right' },
+  // "Estimated from category and weight" under the two inferred-value cards.
+  // Same muted register as `giFoot`, which has said this for the GI all along.
+  estimateFoot: {
+    fontSize: 9,
+    lineHeight: 12,
+    color: MUTED,
+    fontFamily: F500,
+    marginTop: 6,
+  },
 
   goalPct: { fontSize: 20, fontFamily: F800, color: INK },
   goalCaption: { textAlign: 'center', fontSize: 10, color: MUTED, fontFamily: F500, lineHeight: 13 },

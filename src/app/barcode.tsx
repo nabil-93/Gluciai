@@ -18,16 +18,23 @@ import {
   webBarcodeSupported,
 } from '@/components/WebBarcodeScanner';
 import { saveMeal } from '@/services/data';
+import { sourceLabel } from '@/services/nutrition/engine';
+import { qualityClaimSupported } from '@/services/nutrition/advice';
 import { scoreMeal } from '@/services/nutrition/mealScore';
+import { sanitizePer100g } from '@/services/nutrition/plausibility';
 import {
   lookupBarcodeMulti,
   saveToCatalog,
+  type BarcodeResult,
 } from '@/services/nutrition/providers/barcodeLookup';
-import type { BarcodeProduct } from '@/services/nutrition/providers/openfoodfacts';
 import { colors, shadows } from '@/theme';
-import type { NutritionResult } from '@/types';
+import type { NutritionResult, ProductProvenance } from '@/types';
 
 const PORTIONS = [30, 50, 100, 150, 250];
+
+/** The numeric per-100 g fields the patient can type in from the packaging
+ *  (excludes the provenance flag, which is set by the act of typing). */
+type Per100gField = 'calories' | 'carbs' | 'sugar' | 'protein' | 'fat' | 'fiber' | 'sodium';
 
 export default function BarcodeScreen() {
   const router = useRouter();
@@ -36,7 +43,7 @@ export default function BarcodeScreen() {
   const [manualCode, setManualCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState<string | null>(null);
-  const [product, setProduct] = useState<BarcodeProduct | null>(null);
+  const [product, setProduct] = useState<BarcodeResult | null>(null);
   const [grams, setGrams] = useState(100);
   const [saved, setSaved] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
@@ -44,6 +51,10 @@ export default function BarcodeScreen() {
   // When a barcode is found but has NO nutrition anywhere, we still show the
   // product name and let the patient type the values from the label.
   const [nutritionKnown, setNutritionKnown] = useState(true);
+  /** True once the patient has typed at least one value off the packaging.
+   *  That act — not the database it replaces — is what makes the figures
+   *  theirs, so the saved meal is filed under their own label reading. */
+  const [labelConfirmed, setLabelConfirmed] = useState(false);
   const scannedRef = useRef(false);
 
   const isWeb = Platform.OS === 'web';
@@ -62,6 +73,7 @@ export default function BarcodeScreen() {
       if (p) {
         setProduct(p);
         setNutritionKnown(p.nutritionKnown);
+        setLabelConfirmed(false);
         // Round to match the chip that represents it, so the active portion
         // is always visibly selected rather than silently in effect.
         setGrams(p.servingGrams ? Math.round(p.servingGrams) : 100);
@@ -82,12 +94,47 @@ export default function BarcodeScreen() {
 
   // Edit one per-100g value when nutrition is unknown (patient reads the
   // label). Values stay per 100 g; the portion scaler does the rest.
-  const setPer100 = (key: keyof BarcodeProduct['per100g'], text: string) => {
+  /* An impossible typed figure (100 g of carbohydrate per 100 g IS pure sugar,
+     so 500 is nothing) is NOT rejected at the keystroke: these fields are
+     uncontrolled by design — `defaultValue`, so "1." can be typed — and
+     swallowing the digits would leave them on screen while the app silently
+     held a different number. It is taken in, and `safe` below applies the
+     shared bounds once: an impossible carbohydrate becomes UNKNOWN (never a
+     clamped 100), the saved meal carries `warn:implausible`, and no dose can be
+     seeded from it. */
+  const setPer100 = (key: Per100gField, text: string) => {
     const v = Math.max(0, parseFloat(text.replace(',', '.')) || 0);
+    // Also the ONE way an unverified catalogue figure becomes dosable: the
+    // patient checked it against the packaging in front of them.
+    setLabelConfirmed(true);
     setProduct((prev) =>
-      prev ? { ...prev, per100g: { ...prev.per100g, [key]: v } } : prev
+      prev
+        ? {
+            ...prev,
+            per100g: {
+              ...prev.per100g,
+              [key]: v,
+              // A value read off the packaging is the most authoritative
+              // source there is — better than any database. Typing it in is
+              // exactly how an unknown carbohydrate becomes a known one.
+              ...(key === 'carbs' ? { carbs_known: true } : {}),
+            },
+          }
+        : prev
     );
   };
+
+  /** What this product's numbers are worth, and where they came from. Until
+   *  Step 12 the screen printed a fixed "Open Food Facts · USDA · UPC" line and
+   *  the saved meal claimed `openfoodfacts` whatever the real origin was. */
+  const provenance: ProductProvenance | null = product
+    ? labelConfirmed
+      ? { origin: 'user_label', trusted_for_dosing: true }
+      : product.provenance
+    : null;
+  /** An unverified patient contribution: shown in full, but its carbohydrate is
+   *  not dosable until the packaging is checked. */
+  const needsLabelCheck = provenance !== null && !provenance.trusted_for_dosing;
 
   const portions = useMemo(() => {
     const serving = product?.servingGrams;
@@ -95,21 +142,34 @@ export default function BarcodeScreen() {
     return [...new Set(all)].sort((a, b) => a - b);
   }, [product?.servingGrams]);
 
+  /**
+   * This screen builds its own result instead of going through `resolveFood`,
+   * so the shared per-100 g bounds have to be applied here too — a catalogue
+   * row or an Open Food Facts entry carrying an impossible carbohydrate would
+   * otherwise reach the journal, and the bolus field, straight from a scan.
+   * The typed fields cannot produce one (see `setPer100`); a remote source can.
+   */
+  const safe = useMemo(
+    () => (product ? sanitizePer100g(product.per100g) : null),
+    [product]
+  );
+
   // Scaled values + diabetes verdict
   const scaled = useMemo(() => {
-    if (!product) return null;
+    if (!safe) return null;
+    const p = safe.per100g;
     const f = grams / 100;
     const r = (v: number) => Math.round(v * f * 10) / 10;
     return {
-      calories: Math.round(product.per100g.calories * f),
-      carbs: r(product.per100g.carbs),
-      sugar: r(product.per100g.sugar),
-      protein: r(product.per100g.protein),
-      fat: r(product.per100g.fat),
-      fiber: r(product.per100g.fiber),
-      sodium: Math.round(product.per100g.sodium * f),
+      calories: Math.round(p.calories * f),
+      carbs: r(p.carbs),
+      sugar: r(p.sugar),
+      protein: r(p.protein),
+      fat: r(p.fat),
+      fiber: r(p.fiber),
+      sodium: Math.round(p.sodium * f),
     };
-  }, [product, grams]);
+  }, [safe, grams]);
 
   const quality = useMemo(
     () =>
@@ -127,8 +187,17 @@ export default function BarcodeScreen() {
     [scaled]
   );
 
+  /** Whether this product's numbers can carry a verdict at all (Step 22A) —
+   *  the same rule the meal screen and the home card use. */
+  const rated =
+    scaled !== null &&
+    qualityClaimSupported({
+      calories: scaled.calories,
+      carbs_known: safe ? safe.per100g.carbs_known !== false : undefined,
+    });
+
   const save = async () => {
-    if (!product || !scaled) return;
+    if (!product || !scaled || !safe) return;
     const result: NutritionResult = {
       food_name: product.brand
         ? `${product.name} (${product.brand})`
@@ -144,11 +213,35 @@ export default function BarcodeScreen() {
       glycemic_index: 0,
       confidence: 1,
       nutrition_confidence: 0.85,
-      source: 'openfoodfacts',
-      warnings:
-        scaled.sugar > 15
+      // A product can be fully identified and still declare no carbohydrate,
+      // so this is about the ONE number a dose is calculated from — not about
+      // the entry as a whole. The flag alone answers it correctly in all three
+      // cases: `false` while the manual fields are still empty, `true` the
+      // moment the patient copies a figure off the packaging (the most
+      // authoritative source there is, including a declared 0), and `false`
+      // again if what they typed is physically impossible (`safe`).
+      //
+      // It used to be gated on `nutritionKnown` as well, which meant a value
+      // read off the label could never become known: the patient typed 45 g and
+      // the bolus screen still said "not confirmed".
+      carbs_known: safe.per100g.carbs_known !== false,
+      // The real origin, not a fixed label. This used to read `openfoodfacts`
+      // for every barcode meal — including a row another patient typed into the
+      // shared catalogue, and including the patient's own label reading — which
+      // put a database's name on a number no database had ever seen. The doctor
+      // PDF and the journal both print this.
+      source: provenance?.origin ?? 'user_label',
+      ...(provenance ? { product_provenance: provenance } : {}),
+      warnings: [
+        ...(scaled.sugar > 15
           ? [t('barcodePage.sugarWarning', { sugar: Math.round(scaled.sugar) })]
-          : [],
+          : []),
+        // Stored as a KEY so a persisted scan re-localizes (see
+        // scan-result's localizeWarning).
+        ...(safe.issues.length > 0
+          ? [`warn:implausible|${product.name.trim() || product.barcode}`]
+          : []),
+      ],
     };
     // The patient read these off the packaging, which outranks every remote
     // database — contribute them so the next person to scan this barcode gets
@@ -176,9 +269,17 @@ export default function BarcodeScreen() {
         fat: 0,
         fiber: 0,
         sodium: 0,
+        // Empty fields waiting for the patient to read the label — not a
+        // product that contains no carbohydrate.
+        carbs_known: false,
       },
+      nutritionKnown: false,
+      // Nothing has been read yet: the patient is the source, and nothing here
+      // is dosable until they have typed the label in.
+      provenance: { origin: 'user_label', trusted_for_dosing: false },
     });
     setNutritionKnown(false);
+    setLabelConfirmed(false);
     setNotFound(null);
     setGrams(100);
   };
@@ -334,22 +435,31 @@ export default function BarcodeScreen() {
                   <Text style={styles.productBrand}>{product.brand}</Text>
                 ) : null}
                 <Text style={styles.productSource}>
-                  {t('barcode.source')} · {product.barcode}
+                  {originText(provenance, t)} · {product.barcode}
                 </Text>
               </View>
             </BevelCard>
 
-            {/* Nutrition unknown → let the patient type it from the label */}
-            {!nutritionKnown ? (
+            {/* Nutrition unknown, OR present but not from anywhere
+                authoritative → let the patient type it from the label */}
+            {!nutritionKnown || needsLabelCheck ? (
               <View style={styles.editBanner}>
-                {/* Two ways in here: a product a database knew by name but
-                    not by numbers, or one the patient is adding from scratch
-                    because nothing had heard of the barcode. */}
+                {/* Three ways in here: a product a database knew by name but
+                    not by numbers, one the patient is adding from scratch
+                    because nothing had heard of the barcode, or one whose
+                    figures come from another patient's contribution — visible,
+                    editable, and not dosable until this patient checks them
+                    against the packaging in their hand. */}
                 <Text style={styles.editBannerTitle}>
-                  ✏️ {t(product.name ? 'barcode.noValuesTitle' : 'barcode.newProductTitle')}
+                  ✏️{' '}
+                  {nutritionKnown
+                    ? t('barcode.checkLabelTitle')
+                    : t(product.name ? 'barcode.noValuesTitle' : 'barcode.newProductTitle')}
                 </Text>
                 <Text style={styles.editBannerSub}>
-                  {t(product.name ? 'barcode.noValuesSub' : 'barcode.newProductSub')}
+                  {nutritionKnown
+                    ? t('barcode.checkLabelSub')
+                    : t(product.name ? 'barcode.noValuesSub' : 'barcode.newProductSub')}
                 </Text>
                 <View style={styles.editRow}>
                   <EditField
@@ -408,13 +518,27 @@ export default function BarcodeScreen() {
               </BevelCard>
             ) : null}
 
-            {/* Diabetes verdict */}
-            {quality ? (
+            {/* Diabetes verdict — withheld when the product cannot support one
+                (Step 22A): the score starts at 100 and subtracts, so a row with
+                nothing filled in scored "100/100 · Excellent" off its own empty
+                fields. Same evidence rule as the meal screen. */}
+            {quality && !rated ? (
+              <View style={[styles.verdict, { borderColor: '#D7DCE3' }]}>
+                <Text style={styles.verdictScore}>— · {t('analysis.scoreUnavailable')}</Text>
+                <Text style={styles.verdictReason}>
+                  {t('analysis.scoreUnavailableNoData')}
+                </Text>
+              </View>
+            ) : null}
+            {quality && rated ? (
               <View
                 style={[styles.verdict, { borderColor: quality.color }]}
               >
                 {/* border keeps the bright graphic colour, the label uses the
                     readable twin (see MealScore.textColor) */}
+                {/* Phase 2: the indicator is named here too, so the figure
+                    below it is not read as a product rating. */}
+                <Text style={styles.verdictTitle}>{t('analysis.scoreTitle')}</Text>
                 <Text style={[styles.verdictScore, { color: quality.textColor }]}>
                   {quality.score}/100 · {quality.label}
                 </Text>
@@ -455,6 +579,30 @@ export default function BarcodeScreen() {
         )}
     </HeroScreen>
   );
+}
+
+/**
+ * One line saying where these numbers actually came from.
+ *
+ * A catalogue row names the catalogue AND what fed it, because those are two
+ * different claims: "our shared catalogue, from Open Food Facts" is a database
+ * figure that arrived through us, while "our shared catalogue, another
+ * patient's label" is one person's reading. The screen used to print a fixed
+ * list of the three APIs regardless.
+ */
+function originText(
+  provenance: ProductProvenance | null,
+  t: (key: string) => string
+): string {
+  if (!provenance) return '';
+  if (provenance.origin !== 'product_catalog') return sourceLabel(provenance.origin);
+  const shared = t('sources.sharedCatalog');
+  const from = provenance.catalog_source;
+  if (from === 'openfoodfacts') return `${shared} · ${sourceLabel('openfoodfacts')}`;
+  if (from === 'usda') return `${shared} · ${sourceLabel('usda')}`;
+  if (from === 'upcitemdb') return `${shared} · UPCitemdb`;
+  // 'user' | 'label-photo' | anything unrecognized: a patient contributed it.
+  return `${shared} · ${t('sources.sharedCatalogPatient')}`;
 }
 
 function Value({
@@ -643,6 +791,8 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   verdictScore: { fontSize: 15, fontWeight: '800' },
+  /** Whose indicator the figure below is (Phase 2 interim name). */
+  verdictTitle: { fontSize: 10, fontWeight: '600', color: colors.textSecondary, marginBottom: 2 },
   verdictQ: { marginTop: 8, fontSize: 16, fontWeight: '750' as any, color: colors.text },
   verdictA: { marginTop: 4, fontSize: 14.5, lineHeight: 20, color: '#3E3E44' },
   verdictReason: { marginTop: 4, fontSize: 13, lineHeight: 18, color: colors.textSecondary },

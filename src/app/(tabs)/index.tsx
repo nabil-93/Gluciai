@@ -44,6 +44,13 @@ import { LastMealCard } from '@/components/LastMealCard';
 import { DayRingGlyph, RingCalendar, type DayRing } from '@/components/calendar/RingCalendar';
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
 import { getDailyInsight, type Insight } from '@/services/insights';
+import {
+  carbDisplay,
+  carbStatus,
+  carbText,
+  carbUnit,
+  plateCarbStatus,
+} from '@/services/nutrition/carbProvenance';
 import { setPendingScan } from '@/services/scanSession';
 import { getPlannedReminders } from '@/services/notifications';
 import { useAppStore } from '@/store/useAppStore';
@@ -1241,6 +1248,18 @@ export default function HomeScreen() {
 
   const lastGlucose = dayGlucose[dayGlucose.length - 1];
   const totalCarbs = dayMeals.reduce((s, m) => s + m.result.carbohydrates, 0);
+  /* Is that a total, or a floor? (finding NUTR-A9) One meal with an unknown
+     carbohydrate makes the day's sum a LOWER BOUND, and the Nutrition page has
+     said so since Step 22B — home printed the same figure as complete. The
+     number is untouched: this only decides how it is written. */
+  const carbView = carbDisplay(
+    dayMeals.length === 0
+      ? 'known'
+      : plateCarbStatus(dayMeals.map((m) => m.result)),
+    Math.round(totalCarbs)
+  );
+  /** "125", "≥ 125" or "—" — the same string on every home surface. */
+  const carbTotalText = carbText(carbView);
   const totalInsulin = dayInsulin.reduce((s, l) => s + l.dose, 0);
   const inRangeCount = dayGlucose.filter(
     (g) => g.value >= low && g.value <= high
@@ -1648,10 +1667,19 @@ export default function HomeScreen() {
         time: m.created_at,
         icon: 'meal' as const,
         title: t('home.tlMeal'),
-        detail: t('home.mealDetail', {
-          meal: mealLabel(m),
-          carbs: Math.round(m.result.carbohydrates),
-        }),
+        // The timeline row named in NUTR-A9: a meal whose carbohydrate was
+        // never known printed its placeholder here as "0 g glucides". The
+        // unit lives in the sentence, so a meal with nothing usable gets its
+        // own wording rather than "— g".
+        detail: (() => {
+          const view = carbDisplay(
+            carbStatus(m.result),
+            Math.round(m.result.carbohydrates)
+          );
+          return view.kind === 'unknown'
+            ? t('home.mealDetailUnknown', { meal: mealLabel(m) })
+            : t('home.mealDetail', { meal: mealLabel(m), carbs: carbText(view) });
+        })(),
         dot: '#d3d6e2',
       })),
       ...dayInsulin.map((l) => ({
@@ -1894,7 +1922,7 @@ export default function HomeScreen() {
                   unit="g"
                   zone={carbZone}
                   zoneLabel={carbZone ? t(carbZone.labelKey) : ''}
-                  alertTitle={`${Math.round(totalCarbs)} g / ${CARB_GOAL} g`}
+                  alertTitle={`${carbTotalText}${carbUnit(carbView) ? ` ${carbUnit(carbView)}` : ''} / ${CARB_GOAL} g`}
                   alertDesc={carbZone ? t(carbZone.alertDescKey) : ''}
                   sliderFrac={carbSliderFrac}
                   ringWidth={glyRingW}
@@ -2046,10 +2074,10 @@ export default function HomeScreen() {
           />
           <RingCard
             progress={Math.min(1, totalCarbs / CARB_GOAL)}
-            valueText={`${Math.round(totalCarbs)}`}
+            valueText={carbTotalText}
             hasData={totalCarbs > 0}
             label={t('home.ringCarbs')}
-            sub={`${Math.round(totalCarbs)}g / ${CARB_GOAL}g`}
+            sub={`${carbTotalText}${carbUnit(carbView)} / ${CARB_GOAL}g`}
             onPress={() => router.push(dayHref('/nutrition'))}
             animateDelay={140}
           />
