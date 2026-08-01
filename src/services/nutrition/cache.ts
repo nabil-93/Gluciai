@@ -19,8 +19,11 @@ import type { ProviderHit } from './types';
  * absent today can still be found once a provider improves).
  */
 
-/** Bump this whenever provider data/logic changes to invalidate all entries. */
-const CACHE_VERSION = 1;
+/** Bump this whenever provider data/logic changes to invalidate all entries.
+ *  v2: provider hits now carry `carbs_known`. A v1 entry cached a bare `0`
+ *  with no way to tell a measured zero from a missing one, so every one of
+ *  them is dropped rather than read back under the new contract. */
+const CACHE_VERSION = 2;
 const STORAGE_KEY = `nutrition-match-cache:v${CACHE_VERSION}`;
 /** Entries older than this are treated as stale (30 days). */
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;

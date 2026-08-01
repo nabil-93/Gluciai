@@ -3,6 +3,13 @@ import type { FoodItemResult, NutritionResult, NutritionSource } from '@/types';
 
 import { buildHighlights, glycemicLoad } from './advice';
 import { getCachedMatch, setCachedMatch } from './cache';
+import { plateCarbStatus, unknownCarbNames } from './carbProvenance';
+import {
+  isUsablePortion,
+  NONE_KNOWN,
+  plateNutrientsKnown,
+} from './nutrientProvenance';
+import { implausibleNames, sanitizePer100g } from './plausibility';
 import { matchScore, normalizeSearchName } from './match';
 import { scoreMeal } from './mealScore';
 import { moroccanProvider } from './providers/moroccan';
@@ -48,12 +55,19 @@ export const SOURCE_LABEL: Record<NutritionSource, string> = {
   fatsecret: 'FatSecret',
   edamam: 'Edamam',
   ai_estimate: 'Estimation IA',
+  // Two origins that used to be filed as "Open Food Facts" whatever they were.
+  // A doctor reading the PDF has to be able to tell a public database from a
+  // figure another patient typed in.
+  product_catalog: 'Catalogue partagé',
+  user_label: 'Étiquette lue par le patient',
 };
 
 /** Localized source label for UI screens (brand names stay as-is). */
 export function sourceLabel(source: NutritionSource): string {
   if (source === 'moroccan_db') return i18n.t('sources.internalDb');
   if (source === 'ai_estimate') return i18n.t('sources.aiEstimate');
+  if (source === 'product_catalog') return i18n.t('sources.sharedCatalog');
+  if (source === 'user_label') return i18n.t('sources.userLabel');
   return SOURCE_LABEL[source];
 }
 
@@ -69,6 +83,27 @@ const MIN_DETECTION_CONFIDENCE = 0.4;
 const MIN_MATCH_SCORE = 35;
 
 function scale(per100g: Per100g, grams: number) {
+  // An unusable portion is not a small portion (finding NUTR-B2). NaN made
+  // every figure NaN — and `scoreMeal`, whose comparisons are all false against
+  // NaN, still awarded 100/100; Infinity and a negative portion did the same in
+  // their own directions. Nothing is coerced into a plausible weight: the food
+  // keeps its placeholder zeros and every nutrient is marked UNKNOWN, which is
+  // the honest answer and the one Step 22A's evidence gate already understands.
+  if (!isUsablePortion(grams)) {
+    return {
+      calories: 0,
+      carbohydrates: 0,
+      sugar: 0,
+      protein: 0,
+      fat: 0,
+      fiber: 0,
+      sodium: per100g.sodium !== undefined ? 0 : undefined,
+      carbs_known: false,
+      nutrients_known: { ...NONE_KNOWN },
+      portion_valid: false,
+    };
+  }
+
   const f = grams / 100;
   const r = (v: number) => Math.round(v * f * 10) / 10;
   return {
@@ -80,6 +115,12 @@ function scale(per100g: Per100g, grams: number) {
     fiber: r(per100g.fiber),
     sodium:
       per100g.sodium !== undefined ? Math.round(per100g.sodium * f) : undefined,
+    // Multiplying by a portion tells you nothing new about whether the source
+    // knew the value: unknown grams of unknown carbohydrate is still unknown.
+    carbs_known: per100g.carbs_known,
+    // …and the same is true of the other six (Step 22B).
+    nutrients_known: per100g.known,
+    portion_valid: true,
   };
 }
 
@@ -94,6 +135,8 @@ function baseOf(per100g: Per100g): NonNullable<FoodItemResult['per100g_base']> {
     fat: per100g.fat,
     fiber: per100g.fiber,
     sodium: per100g.sodium,
+    carbs_known: per100g.carbs_known,
+    known: per100g.known,
   };
 }
 
@@ -166,6 +209,14 @@ export async function resolveFood(
 ): Promise<FoodItemResult | null> {
   // Normalize even model-provided search names (cooking words, synonyms,
   // French→English tokens) — the nutrition databases are English-first.
+  // A portion that is not a usable quantity (NaN / Infinity / ≤ 0) is recorded
+  // as 0 g and flagged, never carried into the item as a number that would then
+  // be multiplied, summed, persisted and shown (finding NUTR-B2). `scale`
+  // returns the matching all-unknown nutrition for it.
+  const portion = isUsablePortion(detected.portion_grams)
+    ? detected.portion_grams
+    : 0;
+
   const query = normalizeSearchName(
     detected.search_name?.trim() || detected.name
   );
@@ -204,14 +255,21 @@ export async function resolveFood(
 
   if (best?.hit) {
     const { hit } = best;
-    const gi = giFor(detected.category, hit.per100g.glycemic_index);
+    // THE per-100 g INGESTION BOUNDARY. Every database hit, every cached hit
+    // and every proxied provider answer passes through here, so the physical
+    // bounds are applied once, in one place, before a portion multiplies the
+    // figure. An impossible carbohydrate becomes UNKNOWN (Step 10's channel);
+    // every other impossible figure is reported, not rewritten.
+    const safe = sanitizePer100g(hit.per100g);
+    const gi = giFor(detected.category, safe.per100g.glycemic_index);
     return {
       name: detected.name,
       search_name: query,
       category: detected.category,
-      portion_grams: detected.portion_grams,
-      ...scale(hit.per100g, detected.portion_grams),
-      per100g_base: baseOf(hit.per100g),
+      portion_grams: portion,
+      ...scale(safe.per100g, detected.portion_grams),
+      per100g_base: baseOf(safe.per100g),
+      implausible_fields: safe.issues.length > 0 ? safe.issues : undefined,
       glycemic_index: gi.gi,
       glycemic_index_estimated: gi.estimated,
       source: hit.source,
@@ -230,14 +288,18 @@ export async function resolveFood(
 
   // 6 — AI estimation, fallback only (every database missed).
   if (aiPer100g) {
-    const gi = giFor(detected.category, aiPer100g.glycemic_index);
+    // Same boundary, same rules: an estimate is allowed to be approximate, not
+    // impossible.
+    const safe = sanitizePer100g(aiPer100g);
+    const gi = giFor(detected.category, safe.per100g.glycemic_index);
     return {
       name: detected.name,
       search_name: query,
       category: detected.category,
-      portion_grams: detected.portion_grams,
-      ...scale(aiPer100g, detected.portion_grams),
-      per100g_base: baseOf(aiPer100g),
+      portion_grams: portion,
+      ...scale(safe.per100g, detected.portion_grams),
+      per100g_base: baseOf(safe.per100g),
+      implausible_fields: safe.issues.length > 0 ? safe.issues : undefined,
       glycemic_index: gi.gi,
       glycemic_index_estimated: gi.estimated,
       source: 'ai_estimate',
@@ -262,13 +324,22 @@ export async function resolveFood(
       name: detected.name,
       search_name: query,
       category: detected.category,
-      portion_grams: detected.portion_grams,
+      portion_grams: portion,
       calories: 0,
       carbohydrates: 0,
+      // The zeros above are placeholders for a food nothing could identify.
+      // `nutrition_confidence: 0` said so to the UI, but the carbohydrate
+      // still summed into the plate total and seeded a bolus as if it were a
+      // measured zero. Now it is labelled at the value itself.
+      carbs_known: false,
       sugar: 0,
       protein: 0,
       fat: 0,
       fiber: 0,
+      // Step 22B: the same is true of every other figure on this row — nothing
+      // identified the food, so nothing about it is declared.
+      nutrients_known: { ...NONE_KNOWN },
+      portion_valid: isUsablePortion(detected.portion_grams),
       source: 'ai_estimate',
       match_score: 0,
       bounding_box: detected.bounding_box,
@@ -358,7 +429,9 @@ export function rescaleItem(
   if (item.per100g_base) {
     return {
       ...item,
-      portion_grams: grams,
+      // An unusable portion is not kept as a weight either (NUTR-B2): -100 g
+      // must not survive on the item and be re-multiplied by a later edit.
+      portion_grams: isUsablePortion(grams) ? grams : 0,
       ...scale(
         {
           calories: item.per100g_base.calories,
@@ -368,13 +441,35 @@ export function rescaleItem(
           fat: item.per100g_base.fat,
           fiber: item.per100g_base.fiber,
           sodium: item.per100g_base.sodium,
+          // Items stored before the base carried provenance fall back to the
+          // item's own flag, so a rescale never upgrades an unknown.
+          carbs_known: item.per100g_base.carbs_known ?? item.carbs_known,
+          known: item.per100g_base.known ?? item.nutrients_known,
         },
         grams
       ),
     };
   }
 
-  // Legacy items (persisted before per100g_base existed) still scale linearly.
+  // Legacy items (persisted before per100g_base existed) still scale linearly —
+  // but not from an unusable portion (NUTR-B2): the same explicit unknown state
+  // as above, rather than NaN / Infinity / negative macros.
+  if (!isUsablePortion(grams)) {
+    return {
+      ...item,
+      portion_grams: 0,
+      calories: 0,
+      carbohydrates: 0,
+      sugar: 0,
+      protein: 0,
+      fat: 0,
+      fiber: 0,
+      sodium: item.sodium !== undefined ? 0 : undefined,
+      carbs_known: false,
+      nutrients_known: { ...NONE_KNOWN },
+      portion_valid: false,
+    };
+  }
   const f = grams / Math.max(1, item.portion_grams);
   const r = (v: number) => Math.round(v * f * 10) / 10;
   return {
@@ -437,16 +532,26 @@ export function aggregateItems(resolved: FoodItemResult[]): NutritionResult {
       (bySource.get(it.source) ?? 0) + it.carbohydrates + 1
     );
   }
-  const dominantSource = [...bySource.entries()].sort(
-    (a, b) => b[1] - a[1]
-  )[0][0];
+  // An EMPTY plate is a real state, not an impossible one: the resolver drops
+  // foods no database could identify, so a scan whose every food was dropped
+  // arrives here as `[]` (finding P8-006). This used to read `[0][0]` on an
+  // empty map and throw a TypeError, and the two averages below divided by
+  // zero. Nothing is invented for that case — `source` is optional on
+  // `NutritionResult`, so an empty plate simply has none, and every total is
+  // already 0 from the reduce's initial value. The carbohydrate stays
+  // `unknown` (plateCarbStatus([]) === 'unknown'), so an empty plate is never
+  // a dosable 0.
+  const sortedSources = [...bySource.entries()].sort((a, b) => b[1] - a[1]);
+  const dominantSource = sortedSources.length > 0 ? sortedSources[0][0] : undefined;
 
   const detectionConfidence =
-    resolved.reduce((s, it) => s + it.detection_confidence, 0) /
-    resolved.length;
+    resolved.length > 0
+      ? resolved.reduce((s, it) => s + it.detection_confidence, 0) / resolved.length
+      : 0;
   const nutritionConfidence =
-    resolved.reduce((s, it) => s + it.nutrition_confidence, 0) /
-    resolved.length;
+    resolved.length > 0
+      ? resolved.reduce((s, it) => s + it.nutrition_confidence, 0) / resolved.length
+      : 0;
 
   // Warnings are stored as translation KEYS ("warn:<key>|<value>") so the UI
   // localizes them to the patient's language (see scan-result localizeWarning).
@@ -460,6 +565,20 @@ export function aggregateItems(resolved: FoodItemResult[]): NutritionResult {
   const unmatched = resolved.filter((it) => it.nutrition_confidence === 0);
   if (unmatched.length > 0) {
     warnings.push(`warn:unmatched|${unmatched.map((u) => u.name).join(', ')}`);
+  }
+  // Foods whose CARBOHYDRATE specifically is missing. Not the same set as the
+  // unmatched ones: a product can be identified, carry real calories, and
+  // still declare no carbohydrate — the case that used to pass silently.
+  const carbsMissing = unknownCarbNames(resolved);
+  if (carbsMissing.length > 0) {
+    warnings.push(`warn:carbs_unknown|${carbsMissing.join(', ')}`);
+  }
+  // Foods that arrived with a physically impossible figure. Separate from both
+  // sets above: the food is identified, the carbohydrate may even be usable,
+  // and something on the record is still wrong enough to check the label for.
+  const implausible = implausibleNames(resolved);
+  if (implausible.length > 0) {
+    warnings.push(`warn:implausible|${implausible.join(', ')}`);
   }
   if (
     resolved.some(
@@ -521,6 +640,14 @@ export function aggregateItems(resolved: FoodItemResult[]): NutritionResult {
     }),
     calories: totals.calories,
     carbohydrates: totals.carbs,
+    // The number above is unchanged — unknown foods contribute their
+    // placeholder 0 exactly as before, so no correct plate moves. What the
+    // flag adds is whether that sum is a TOTAL or merely a floor.
+    carbs_known: plateCarbStatus(resolved) === 'known',
+    // Step 22B: the same question, answered for all seven. As strict as the
+    // carbohydrate — one food that did not declare a nutrient makes the plate's
+    // total for it a floor. No total moves; only what may be claimed about it.
+    nutrients_known: plateNutrientsKnown(resolved),
     sugar: totals.sugar,
     protein: totals.protein,
     fat: totals.fat,

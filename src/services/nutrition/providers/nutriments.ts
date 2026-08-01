@@ -1,3 +1,5 @@
+import { knownFrom } from '../nutrientProvenance';
+
 import type { BarcodeProduct } from './openfoodfacts';
 
 /* ────────────────────────────────────────────────────────────
@@ -15,6 +17,12 @@ import type { BarcodeProduct } from './openfoodfacts';
  *  3. A value of ZERO is a real measurement. Bottled water, sugar-free soda
  *     and tea all declare 0 kcal, so "no calories" must be told apart from
  *     "no data" by whether the KEY EXISTS, not by whether it is truthy.
+ *
+ * That third rule holds inside this reader — `n()` returns null for an absent
+ * key and 0 for a declared zero — but the per-100 g map it returns used to
+ * flatten both to 0, throwing the distinction away one line before the exit.
+ * `carbs_known` now carries it out with the value, because carbohydrate is
+ * what a bolus is calculated from.
  * ──────────────────────────────────────────────────────────── */
 
 export type Nutriments = Record<string, number | string | undefined>;
@@ -78,6 +86,13 @@ export interface ReadNutriments {
   /** How many of the seven values came from the source rather than a zero
    *  default. Lets the UI say how complete the entry is. */
   fieldsFound: number;
+  /**
+   * True when the entry declares a carbohydrate value — including a declared
+   * 0. Reported separately from `fieldsFound` because this is the one field a
+   * dose depends on: a product can be well described on six of seven values
+   * and still be undosable.
+   */
+  hasCarbs: boolean;
 }
 
 export function readNutriments(
@@ -111,9 +126,24 @@ export function readNutriments(
       fat: fat === null ? 0 : round1(fat),
       fiber: fiber === null ? 0 : round1(fiber),
       sodium: sodiumG === null ? 0 : Math.round(sodiumG * 1000),
+      // The 0 above stays — every consumer still reads a number — but it is
+      // now labelled as a placeholder rather than passing for a measurement.
+      carbs_known: carbs !== null,
+      // Step 22B: the same answer for the other six. `fieldsFound` counted them
+      // and was read by nothing; this carries the fact per nutrient instead.
+      known: knownFrom({
+        calories: energy,
+        carbs,
+        sugar,
+        protein,
+        fat,
+        fiber,
+        sodium: sodiumG,
+      }),
     },
     hasEnergy: energy !== null,
     fieldsFound: found,
+    hasCarbs: carbs !== null,
   };
 }
 

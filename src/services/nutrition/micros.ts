@@ -1,5 +1,7 @@
 import type { FoodCategory, FoodItemResult } from '@/types';
 
+import { isUsablePortion, SURE_CONFIDENCE } from './nutrientProvenance';
+
 /**
  * Portion-based micronutrient & hydration ESTIMATES for the meal-analysis
  * summary cards.
@@ -69,10 +71,21 @@ export interface MicroEstimate {
  */
 const isUnidentified = (it: FoodItemResult) => it.nutrition_confidence === 0;
 
+/**
+ * A food whose portion is not a usable quantity contributes nothing either
+ * (finding NUTR-B2). `Math.max(0, NaN)` is NaN, so one such food used to turn
+ * every vitamin bar and the hydration ring into NaN — and `coverageRatio`,
+ * whose `totalGrams > 0` test is also false against NaN, then claimed the
+ * estimate had covered the WHOLE plate.
+ */
+const isUnusable = (it: FoodItemResult) => !isUsablePortion(it.portion_grams);
+
+const skip = (it: FoodItemResult) => isUnidentified(it) || isUnusable(it);
+
 export function estimateMicros(items: FoodItemResult[]): MicroEstimate {
   const abs = { a: 0, c: 0, fe: 0, ca: 0, k: 0 };
   for (const it of items) {
-    if (isUnidentified(it)) continue;
+    if (skip(it)) continue;
     const d = MICRO_PER_100G[it.category ?? 'Unknown'] ?? MICRO_PER_100G.Unknown;
     const f = Math.max(0, it.portion_grams) / 100;
     abs.a += d.a * f;
@@ -95,6 +108,78 @@ export function estimateMicros(items: FoodItemResult[]): MicroEstimate {
 /** Average micronutrient coverage (%) — drives the "good/low intake" label. */
 export function microAverage(m: MicroEstimate): number {
   return (m.a + m.c + m.fe + m.ca + m.k) / 5;
+}
+
+/**
+ * What the estimate above RESTS ON, so a surface can say it out loud
+ * (findings NUTR-A2 / NUTR-A3 / NUTR-B3).
+ *
+ * Deliberately a second function rather than extra fields on `MicroEstimate`:
+ * not one number returned by `estimateMicros` or `estimateMealWaterMl` changes,
+ * and the fixtures that pin them are untouched. This only reports facts about
+ * the same walk over the same items:
+ *
+ *   · `coverageRatio` — the share of the plate's grams the estimate could use.
+ *     A food no database identified contributes nothing (same rule as above),
+ *     so a plate that is half unidentified yields an estimate for half a meal.
+ *   · `unsureGrams` — grams whose identification was weak (`nutrition_confidence`
+ *     below `SURE_CONFIDENCE`) but which still count IN FULL. That is NUTR-B3:
+ *     the threshold is not moved here, it is made visible.
+ *   · `atLeast` — per nutrient, true when the real share exceeded 100 % and the
+ *     percentage shown is therefore a floor, not a match. The app already has a
+ *     word for that: "≥", as used for a partially known carbohydrate.
+ */
+export interface MicroProvenance {
+  coverageRatio: number;
+  unsureGrams: number;
+  atLeast: Record<keyof MicroEstimate, boolean>;
+}
+
+/** Below this, an identification is weak enough to be worth saying so. Owned by
+ *  `nutrientProvenance` since Step 22B (one constant, two readers) and
+ *  re-exported here so Step 17's importers are unaffected. */
+export { SURE_CONFIDENCE };
+
+export function microProvenance(items: FoodItemResult[]): MicroProvenance {
+  const abs = { a: 0, c: 0, fe: 0, ca: 0, k: 0 };
+  let totalGrams = 0;
+  let countedGrams = 0;
+  let unsureGrams = 0;
+
+  for (const it of items) {
+    // An unusable portion is not part of the plate's grams either — counting it
+    // made `totalGrams` NaN, and the ratio below then reported full coverage.
+    if (isUnusable(it)) continue;
+    const grams = Math.max(0, it.portion_grams);
+    totalGrams += grams;
+    if (skip(it)) continue;
+    countedGrams += grams;
+    if ((it.nutrition_confidence ?? 1) < SURE_CONFIDENCE) unsureGrams += grams;
+
+    const d = MICRO_PER_100G[it.category ?? 'Unknown'] ?? MICRO_PER_100G.Unknown;
+    const f = grams / 100;
+    abs.a += d.a * f;
+    abs.c += d.c * f;
+    abs.fe += d.fe * f;
+    abs.ca += d.ca * f;
+    abs.k += d.k * f;
+  }
+
+  // Same rounding as `estimateMicros`, so "clamped" here means exactly the
+  // value that function had to cut down to 100 — never a disagreement of one.
+  const over = (value: number, dv: number) => Math.round((value / dv) * 100) > 100;
+
+  return {
+    coverageRatio: totalGrams > 0 ? countedGrams / totalGrams : 1,
+    unsureGrams: Math.round(unsureGrams),
+    atLeast: {
+      a: over(abs.a, DV.a),
+      c: over(abs.c, DV.c),
+      fe: over(abs.fe, DV.fe),
+      ca: over(abs.ca, DV.ca),
+      k: over(abs.k, DV.k),
+    },
+  };
 }
 
 /** Approximate water fraction (of grams) held by each food category. */
@@ -126,7 +211,7 @@ const WATER_FRACTION: Record<FoodCategory, number> = {
 export function estimateMealWaterMl(items: FoodItemResult[]): number {
   let ml = 0;
   for (const it of items) {
-    if (isUnidentified(it)) continue; // same rule as the micronutrients above
+    if (skip(it)) continue; // same rules as the micronutrients above
     const frac = WATER_FRACTION[it.category ?? 'Unknown'] ?? WATER_FRACTION.Unknown;
     ml += frac * Math.max(0, it.portion_grams);
   }

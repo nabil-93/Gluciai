@@ -2,6 +2,7 @@ import { searchMoroccanFood } from '@/data/moroccanFoods';
 import { searchCommonFood } from '@/data/commonFoods';
 import { searchHealthyFood } from '@/data/healthyFoods';
 
+import { ALL_KNOWN } from '../nutrientProvenance';
 import type { NutritionProvider, ProviderHit } from '../types';
 
 /**
@@ -15,6 +16,10 @@ import type { NutritionProvider, ProviderHit } from '../types';
  *      tables miss, so the AI never recomputes a dish that is already stored.
  * The Moroccan dish table wins when several match, so a full traditional
  * dish beats a single ingredient or a curated variant.
+ *
+ * All three tables are ours and declare `carbs` as a required number, so a
+ * hit here always carries a real carbohydrate value — `carbs_known: true` is
+ * a fact about the data files, not an assumption about a remote source.
  */
 export const moroccanProvider: NutritionProvider = {
   id: 'moroccan_db',
@@ -37,6 +42,10 @@ export const moroccanProvider: NutritionProvider = {
           fiber: per(dish.fiber),
           sodium: per(dish.sodium),
           glycemic_index: dish.glycemic_index,
+          carbs_known: true,
+          // The internal database publishes a complete record for every dish
+          // and every common food — all seven values are declared (Step 22B).
+          known: ALL_KNOWN,
         },
         source: 'moroccan_db',
         nutritionConfidence: 0.92,
@@ -57,6 +66,10 @@ export const moroccanProvider: NutritionProvider = {
           fiber: food.fiber,
           sodium: food.sodium,
           glycemic_index: food.gi,
+          carbs_known: true,
+          // The internal database publishes a complete record for every dish
+          // and every common food — all seven values are declared (Step 22B).
+          known: ALL_KNOWN,
         },
         source: 'moroccan_db',
         nutritionConfidence: 0.9,
@@ -79,6 +92,10 @@ export const moroccanProvider: NutritionProvider = {
           fiber: per(healthy.fiber),
           sodium: 0,
           glycemic_index: healthy.gi,
+          carbs_known: true,
+          // The curated dishes publish six values; the `0` above is a
+          // placeholder, not a sodium measurement, and says so (Step 22B).
+          known: { ...ALL_KNOWN, sodium: false },
         },
         source: 'moroccan_db',
         nutritionConfidence: 0.9,

@@ -1,3 +1,4 @@
+import type { ProductProvenance } from '@/types';
 import type { BarcodeProduct } from './openfoodfacts';
 import { openFoodFactsProvider } from './openfoodfacts';
 import { usdaProvider } from './usda';
@@ -18,12 +19,15 @@ import {
  * MULTI-SOURCE BARCODE LOOKUP
  *
  * Order, cheapest and most reliable first:
- *   1. Our own catalogue — anything a patient has already resolved.
+ *   1. Our own catalogue — anything a patient has already resolved, PROVIDED
+ *      somebody authoritative stands behind it (see below).
  *   2. Open Food Facts, the world database (best coverage in Europe and
  *      North Africa alike), tried on every plausible shape of the code.
  *   3. USDA branded foods, which indexes products by their GTIN/UPC.
  *   4. UPCitemdb, a barcode index that returns a NAME; that name is then
  *      resolved to real numbers through the search providers.
+ *   5. An unverified, patient-contributed catalogue row, if steps 2-4 found
+ *      nothing — clearly identified, and not dosable until confirmed.
  *
  * Anything found remotely is written back to the catalogue, so the next
  * patient to scan it is served from step 1.
@@ -32,6 +36,20 @@ import {
  * (with `nutritionKnown:false`) instead of being reported as an unknown
  * barcode — the screen can then show the product and let the patient read the
  * values off the packaging, which is the authoritative source anyway.
+ *
+ * WHY THE CATALOGUE IS NO LONGER RANK-1 UNCONDITIONAL (finding P2-003).
+ * The catalogue is writable by every signed-in patient, and it used to be
+ * consulted first and returned immediately — so a figure one patient typed
+ * became the carbohydrate every other patient's bolus was computed from, with
+ * no second opinion and nothing on screen saying where it came from. A verified
+ * row, or one the app itself wrote from Open Food Facts / USDA / UPCitemdb,
+ * still takes that fast path: it is worth what that database is worth. A row
+ * whose provenance is a patient does NOT — the public databases are asked
+ * first, and it is used only as a last-resort fallback, so a patient in a
+ * Moroccan shop with no OFF entry keeps the coverage the catalogue exists for.
+ * Its numbers stay visible and unedited; its CARBOHYDRATE arrives unknown, and
+ * the patient confirms it off the packaging (the mechanism that already exists)
+ * to make it dosable.
  * ──────────────────────────────────────────────────────────── */
 
 const EMPTY_NUTRI = {
@@ -42,9 +60,17 @@ const EMPTY_NUTRI = {
   fat: 0,
   fiber: 0,
   sodium: 0,
+  // Nothing here was read from anywhere. Every zero is a placeholder, and the
+  // carbohydrate one is the placeholder that must never reach a dose.
+  carbs_known: false,
 };
 
-export type BarcodeResult = BarcodeProduct & { nutritionKnown: boolean };
+/** Every barcode answer carries where it came from — `provenance` is required
+ *  so a new source cannot be added without saying what it is worth. */
+export type BarcodeResult = BarcodeProduct & {
+  nutritionKnown: boolean;
+  provenance: ProductProvenance;
+};
 
 function timeoutFetch(url: string, ms: number): Promise<Response | null> {
   const c = new AbortController();
@@ -110,9 +136,18 @@ async function offProduct(barcode: string, api: 'v2' | 'v0'): Promise<BarcodeRes
     name,
     brand: typeof p.brands === 'string' && p.brands.trim() ? p.brands.trim() : undefined,
     imageUrl: p.image_front_small_url || p.image_small_url || undefined,
+    // `hasEnergy` decides whether this counts as a described product at all.
+    // It does NOT vouch for the carbohydrate: plenty of Open Food Facts
+    // entries carry an energy figure and nothing else, and reading that as
+    // "0 g of carbohydrate" is how a full plate becomes a 0 U bolus.
+    // `readNutriments` reports the two separately; both are carried out.
     per100g: read.hasEnergy ? read.per100g : { ...EMPTY_NUTRI },
     servingGrams,
     nutritionKnown: read.hasEnergy,
+    // The NAME came from Open Food Facts either way. Whether anything here may
+    // be DOSED from is a different question: a name-only entry carries nothing
+    // but placeholders, and the patient is about to type the real figures.
+    provenance: { origin: 'openfoodfacts', trusted_for_dosing: read.hasEnergy },
   };
 }
 
@@ -155,13 +190,18 @@ async function usdaByGtin(barcode: string): Promise<BarcodeResult | null> {
   const calories = fdcValue(hit.foodNutrients, FDC.calories);
   if (calories === null) return null;
 
+  // A branded FDC record is only as complete as the label its manufacturer
+  // submitted; the carbohydrate row is regularly absent.
+  const carbs = fdcValue(hit.foodNutrients, FDC.carbs);
+
   return {
     barcode,
     name: String(hit.description ?? '').trim() || `Product ${barcode}`,
     brand: hit.brandOwner || hit.brandName || undefined,
     per100g: {
       calories: Math.round(calories),
-      carbs: fdcValue(hit.foodNutrients, FDC.carbs) ?? 0,
+      carbs: carbs ?? 0,
+      carbs_known: carbs !== null,
       sugar: fdcValue(hit.foodNutrients, FDC.sugar) ?? 0,
       protein: fdcValue(hit.foodNutrients, FDC.protein) ?? 0,
       fat: fdcValue(hit.foodNutrients, FDC.fat) ?? 0,
@@ -169,6 +209,7 @@ async function usdaByGtin(barcode: string): Promise<BarcodeResult | null> {
       sodium: Math.round(fdcValue(hit.foodNutrients, FDC.sodium) ?? 0),
     },
     nutritionKnown: true,
+    provenance: { origin: 'usda', trusted_for_dosing: true },
   };
 }
 
@@ -184,19 +225,38 @@ async function upcItemName(barcode: string): Promise<string | null> {
   return name && name.trim() ? name.trim() : null;
 }
 
-/** Resolve a product NAME to per-100 g nutrition via the search providers. */
-async function nutritionForName(name: string): Promise<BarcodeProduct['per100g'] | null> {
-  for (const provider of [usdaProvider, openFoodFactsProvider]) {
+/**
+ * Resolve a product NAME to per-100 g nutrition via the search providers.
+ *
+ * Reports WHICH provider answered: UPCitemdb supplies only the name, so filing
+ * the resulting meal under "UPCitemdb" — or under Open Food Facts when USDA
+ * answered — would be a provenance the numbers do not have.
+ */
+async function nutritionForName(
+  name: string
+): Promise<{ per100g: BarcodeProduct['per100g']; from: 'usda' | 'openfoodfacts' } | null> {
+  // The pairs are spelled out rather than read off `provider.id`, which is
+  // typed as the whole `NutritionSource` union: the label a meal is filed under
+  // has to be one of these two, and the compiler should say so.
+  const resolvers = [
+    { provider: usdaProvider, from: 'usda' as const },
+    { provider: openFoodFactsProvider, from: 'openfoodfacts' as const },
+  ];
+  for (const { provider, from } of resolvers) {
     const hit = await provider.search(name).catch(() => null);
     if (hit && hit.per100g.calories > 0) {
       return {
-        calories: hit.per100g.calories,
-        carbs: hit.per100g.carbs,
-        sugar: hit.per100g.sugar,
-        protein: hit.per100g.protein,
-        fat: hit.per100g.fat,
-        fiber: hit.per100g.fiber,
-        sodium: hit.per100g.sodium ?? 0,
+        from,
+        per100g: {
+          calories: hit.per100g.calories,
+          carbs: hit.per100g.carbs,
+          sugar: hit.per100g.sugar,
+          protein: hit.per100g.protein,
+          fat: hit.per100g.fat,
+          fiber: hit.per100g.fiber,
+          sodium: hit.per100g.sodium ?? 0,
+          carbs_known: hit.per100g.carbs_known,
+        },
       };
     }
   }
@@ -213,11 +273,17 @@ export async function lookupBarcodeMulti(barcode: string): Promise<BarcodeResult
   const codes = barcodeVariants(barcode);
   if (codes.length === 0) return null;
 
-  // 1 — our catalogue (instant, and works when the public APIs don't)
+  // 1 — our catalogue (instant, and works when the public APIs don't).
+  //     Trusted rows keep the fast path; a patient-contributed one is held
+  //     back as a fallback and only used if steps 2-4 come up empty (P2-003).
   const known = await findInCatalog(codes[0]);
+  let untrustedCatalogRow: BarcodeResult | null = null;
   if (known) {
-    bumpCatalogScan(known);
-    return known;
+    if (known.provenance.trusted_for_dosing) {
+      bumpCatalogScan(known);
+      return known;
+    }
+    untrustedCatalogRow = known;
   }
 
   // 2 — Open Food Facts, every API × every shape of the code. A name-only
@@ -254,8 +320,11 @@ export async function lookupBarcodeMulti(barcode: string): Promise<BarcodeResult
       const hit: BarcodeResult = {
         barcode: codes[0],
         name,
-        per100g: nutrition,
+        per100g: nutrition.per100g,
         nutritionKnown: true,
+        // The name came from UPCitemdb; the NUMBERS came from whichever search
+        // provider answered, and that is what this record is worth.
+        provenance: { origin: nutrition.from, trusted_for_dosing: true },
       };
       saveToCatalog(hit, 'upcitemdb', true);
       return hit;
@@ -266,9 +335,22 @@ export async function lookupBarcodeMulti(barcode: string): Promise<BarcodeResult
         name,
         per100g: { ...EMPTY_NUTRI },
         nutritionKnown: false,
+        // A name with no numbers: nothing here is dosable yet, and the patient
+        // is about to become the source.
+        provenance: { origin: 'user_label', trusted_for_dosing: false },
       };
       nameOnlySource = 'upcitemdb';
     }
+  }
+
+  // 5 — nothing authoritative answered. A patient-contributed catalogue row is
+  //     now the best thing available: it has this product's name AND numbers,
+  //     which beats a name-only entry with none. It comes back flagged
+  //     untrusted, with its carbohydrate unknown, so the screen asks the
+  //     patient to check the packaging before anything is dosed from it.
+  if (untrustedCatalogRow) {
+    bumpCatalogScan(untrustedCatalogRow);
+    return untrustedCatalogRow;
   }
 
   if (nameOnly) {

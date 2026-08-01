@@ -1,6 +1,7 @@
 import { useAppStore } from '@/store/useAppStore';
 import type { FoodCorrection } from '@/types';
 
+import { isPortionPlausible } from './plausibility';
 import type { DetectedFood } from './types';
 
 /**
@@ -130,6 +131,12 @@ export function getSuggestedCorrection(
 /**
  * Learned portion for a food (grams), from the user's own corrections.
  * Requires at least 2 corrections to trust the habit; returns the median.
+ *
+ * Impossible corrections are DISCARDED before the median rather than clamped
+ * after it: a stray 9 999 g typed once would otherwise drag the habit that
+ * silently replaces the vision estimate on every future scan — and the learned
+ * value bypasses the 5–2000 g bound `analyze-meal` applies to the estimate it
+ * replaces. Rejecting the outlier keeps the median honest.
  */
 export function getLearnedPortion(foodName: string): number | null {
   const key = foodKey(foodName);
@@ -137,7 +144,7 @@ export function getLearnedPortion(foodName: string): number | null {
     .getState()
     .corrections.filter((c) => c.field === 'portion' && c.food_key === key)
     .map((c) => Number(c.user_value))
-    .filter((v) => Number.isFinite(v) && v > 0)
+    .filter((v) => isPortionPlausible(v))
     .sort((a, b) => a - b);
 
   if (values.length < 2) return null;

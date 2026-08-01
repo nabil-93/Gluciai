@@ -1,3 +1,4 @@
+import { knownFrom } from '../nutrientProvenance';
 import type { NutritionProvider, ProviderHit } from '../types';
 
 /**
@@ -33,14 +34,23 @@ interface FdcFood {
   foodNutrients: FdcNutrient[];
 }
 
-function pick(nutrients: FdcNutrient[], numbers: readonly string[]): number {
+/** The value FDC published, or null when this food carries no such nutrient.
+ *  A published 0 is a measurement and comes back as 0, not null. */
+function pickOrNull(
+  nutrients: FdcNutrient[],
+  numbers: readonly string[]
+): number | null {
   for (const n of nutrients) {
     const num = n.nutrientNumber ?? String(n.nutrientId ?? '');
     if (numbers.includes(num) && typeof n.value === 'number') {
       return n.value;
     }
   }
-  return 0;
+  return null;
+}
+
+function pick(nutrients: FdcNutrient[], numbers: readonly string[]): number {
+  return pickOrNull(nutrients, numbers) ?? 0;
 }
 
 export const usdaProvider: NutritionProvider = {
@@ -65,17 +75,32 @@ export const usdaProvider: NutritionProvider = {
       const calories = pick(food.foodNutrients, NUTRIENTS.energy);
       if (calories <= 0) return null;
 
+      // Foundation and SR Legacy foods do not all carry every nutrient. An
+      // absent carbohydrate row is silence, not a zero-carb food — and since
+      // Step 22B the same is read for the other five, whose absence used to
+      // reach the patient as a measured 0 g.
+      const carbs = pickOrNull(food.foodNutrients, NUTRIENTS.carbs);
+      const sugar = pickOrNull(food.foodNutrients, NUTRIENTS.sugar);
+      const protein = pickOrNull(food.foodNutrients, NUTRIENTS.protein);
+      const fat = pickOrNull(food.foodNutrients, NUTRIENTS.fat);
+      const fiber = pickOrNull(food.foodNutrients, NUTRIENTS.fiber);
+      const sodium = pickOrNull(food.foodNutrients, NUTRIENTS.sodium);
+
       return {
         matchedName: food.description,
         foodId: food.fdcId !== undefined ? String(food.fdcId) : undefined,
         per100g: {
           calories,
-          carbs: pick(food.foodNutrients, NUTRIENTS.carbs),
-          sugar: pick(food.foodNutrients, NUTRIENTS.sugar),
-          protein: pick(food.foodNutrients, NUTRIENTS.protein),
-          fat: pick(food.foodNutrients, NUTRIENTS.fat),
-          fiber: pick(food.foodNutrients, NUTRIENTS.fiber),
-          sodium: pick(food.foodNutrients, NUTRIENTS.sodium),
+          carbs: carbs ?? 0,
+          carbs_known: carbs !== null,
+          // The values are unchanged — an absent nutrient still reads 0 for
+          // every consumer — only their provenance is now carried.
+          sugar: sugar ?? 0,
+          protein: protein ?? 0,
+          fat: fat ?? 0,
+          fiber: fiber ?? 0,
+          sodium: sodium ?? 0,
+          known: knownFrom({ calories, carbs, sugar, protein, fat, fiber, sodium }),
           // USDA does not publish glycemic index
           glycemic_index: undefined,
         },

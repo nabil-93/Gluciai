@@ -1,5 +1,7 @@
 import type { BoundingBox, FoodCategory, NutritionSource } from '@/types';
 
+import type { NutrientKnown } from './nutrientProvenance';
+
 /**
  * What the vision model reports for one food on the plate.
  *
@@ -39,6 +41,22 @@ export interface Per100g {
   /** mg per 100 g */
   sodium?: number;
   glycemic_index?: number;
+  /**
+   * Whether `carbs` is a real value from the source.
+   *
+   * `true` includes a declared 0 (water). `false` means the source said
+   * nothing and the `0` above is a placeholder that must never be displayed
+   * as a value or used to seed a bolus. Absent only on legacy data — see
+   * `carbProvenance.ts` for the single rule that reads this.
+   */
+  carbs_known?: boolean;
+  /**
+   * Which of the seven values above the source actually declared (Step 22B,
+   * finding NUTR-B1). Absent on legacy data and on producers that predate the
+   * map; `carbs` keeps answering through `carbs_known` either way, so Step 10's
+   * dosing contract has exactly one source of truth.
+   */
+  known?: NutrientKnown;
 }
 
 /** A successful database match. */

@@ -1,3 +1,4 @@
+import { knownFrom, type NutrientKnown } from '../nutrientProvenance';
 import type { NutritionProvider, ProviderHit } from '../types';
 
 /**
@@ -12,10 +13,15 @@ interface OffProduct {
   nutriments?: Record<string, number | string>;
 }
 
-function num(n: Record<string, number | string>, key: string): number {
+function numOrNull(n: Record<string, number | string>, key: string): number | null {
   const v = n[key];
-  const parsed = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
-  return Number.isFinite(parsed) ? parsed : 0;
+  if (v === undefined || v === null || v === '') return null;
+  const parsed = typeof v === 'number' ? v : parseFloat(String(v));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function num(n: Record<string, number | string>, key: string): number {
+  return numOrNull(n, key) ?? 0;
 }
 
 export interface BarcodeProduct {
@@ -31,6 +37,11 @@ export interface BarcodeProduct {
     fat: number;
     fiber: number;
     sodium: number;
+    /** Whether `carbs` was declared by the source — a declared 0 counts.
+     *  See `carbProvenance.ts`. */
+    carbs_known?: boolean;
+    /** The same answer for the other six nutrients (Step 22B). */
+    known?: NutrientKnown;
   };
   /** Product serving size in grams when declared */
   servingGrams?: number;
@@ -60,17 +71,38 @@ export const openFoodFactsProvider: NutritionProvider = {
       if (!product?.nutriments) return null;
       const n = product.nutriments;
 
+      const calories = numOrNull(n, 'energy-kcal_100g');
+      const carbs = numOrNull(n, 'carbohydrates_100g');
+      // Step 22B: read the absence of the other five too. Their VALUES are
+      // unchanged (an absent one still reads 0), but a crowd-sourced entry that
+      // simply never filled in "fibre" no longer reaches the patient as 0 g.
+      const sugar = numOrNull(n, 'sugars_100g');
+      const protein = numOrNull(n, 'proteins_100g');
+      const fat = numOrNull(n, 'fat_100g');
+      const fiber = numOrNull(n, 'fiber_100g');
+      const sodiumG = numOrNull(n, 'sodium_100g');
+
       return {
         matchedName: product.product_name || query,
         per100g: {
           calories: num(n, 'energy-kcal_100g'),
-          carbs: num(n, 'carbohydrates_100g'),
-          sugar: num(n, 'sugars_100g'),
-          protein: num(n, 'proteins_100g'),
-          fat: num(n, 'fat_100g'),
-          fiber: num(n, 'fiber_100g'),
+          carbs: carbs ?? 0,
+          carbs_known: carbs !== null,
+          sugar: sugar ?? 0,
+          protein: protein ?? 0,
+          fat: fat ?? 0,
+          fiber: fiber ?? 0,
           // OFF sodium is in g/100g → convert to mg
-          sodium: Math.round(num(n, 'sodium_100g') * 1000),
+          sodium: Math.round((sodiumG ?? 0) * 1000),
+          known: knownFrom({
+            calories,
+            carbs,
+            sugar,
+            protein,
+            fat,
+            fiber,
+            sodium: sodiumG,
+          }),
           glycemic_index: undefined,
         },
         source: 'openfoodfacts',

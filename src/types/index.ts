@@ -1,3 +1,5 @@
+import type { NutrientKnown } from '@/services/nutrition/nutrientProvenance';
+
 export type DiabetesType = 'type1' | 'type2' | 'gestational' | 'prediabetes';
 export type InsulinType = 'rapid' | 'long' | 'mixed';
 
@@ -52,7 +54,52 @@ export type NutritionSource =
   | 'openfoodfacts'
   | 'fatsecret'
   | 'edamam'
-  | 'ai_estimate';
+  | 'ai_estimate'
+  /** Our own shared barcode catalogue (`product_catalog`). Kept distinct from
+   *  the database that first supplied the row — see `ProductProvenance`. */
+  | 'product_catalog'
+  /** The patient read the figures off the packaging on this device. The most
+   *  authoritative source there is, and never to be labelled as a database. */
+  | 'user_label';
+
+/** Which `source` a `product_catalog` row was written under (migration 0026). */
+export type CatalogSource =
+  | 'openfoodfacts'
+  | 'usda'
+  | 'upcitemdb'
+  | 'user'
+  | 'label-photo';
+
+/**
+ * Where a barcode product's numbers came from, and whether that origin may be
+ * treated as authoritative for a DOSE.
+ *
+ * The shared catalogue is writable by any signed-in patient (P2-003), so "our
+ * catalogue said so" is not by itself a reason to dose from a figure. This
+ * record travels with the scan so the screen and the saved meal can both say
+ * what they actually know — the alternative, which this replaces, was filing
+ * every barcode meal as `openfoodfacts` whatever its real origin.
+ *
+ * It carries no clinical decision of its own: whether a carbohydrate may seed
+ * a bolus is still answered by `carbs_known` alone (Step 10's channel).
+ */
+export interface ProductProvenance {
+  origin: Extract<
+    NutritionSource,
+    'openfoodfacts' | 'usda' | 'product_catalog' | 'user_label'
+  >;
+  /** Present when `origin` is `product_catalog`: the row's own `source`. */
+  catalog_source?: CatalogSource;
+  /** Present when `origin` is `product_catalog`: the row's `verified` flag. */
+  verified?: boolean;
+  /**
+   * False for an unverified patient-contributed catalogue row, and for a
+   * product whose fields are still empty. The values stay visible; the
+   * carbohydrate reaches the dosing boundary UNKNOWN until the patient
+   * confirms it against the packaging.
+   */
+  trusted_for_dosing: boolean;
+}
 
 /**
  * High-level food category from the vision model. Used for grouping,
@@ -130,6 +177,34 @@ export interface FoodItemResult {
   /** How reliable the nutrition values are (0..1, DB > AI) */
   nutrition_confidence: number;
   /**
+   * Whether `carbohydrates` is a real value rather than a stand-in for
+   * missing data. `true` includes a genuine 0 (water); `false` means unknown,
+   * and the 0 must not be shown or dosed from. Absent on items persisted
+   * before this field existed — `carbProvenance.ts` owns that rule.
+   */
+  carbs_known?: boolean;
+  /**
+   * Which of the OTHER six nutrients this food actually declared (Step 22B,
+   * finding NUTR-B1). The values never move — an unknown nutrient keeps its
+   * placeholder 0 so every consumer still reads a number — this only says which
+   * of them are real. `carbs` answers through `carbs_known` above.
+   */
+  nutrients_known?: NutrientKnown;
+  /**
+   * False when this food's portion is not a usable quantity at all (NaN,
+   * Infinity, ≤ 0 — finding NUTR-B2). Its nutrition is then unknown rather than
+   * zero, and nothing derived from grams may count it.
+   */
+  portion_valid?: boolean;
+  /**
+   * Which per-100 g figures this food arrived with that are physically
+   * impossible (`'carbs'`, `'sodium'`, `'macro_sum'`…). Present so the plate
+   * can NAME the food in its warning; the figures themselves are left as they
+   * came, except the carbohydrate, which becomes unknown rather than being
+   * clamped into a smaller wrong number. See `plausibility.ts`.
+   */
+  implausible_fields?: string[];
+  /**
    * True when `glycemic_index` is a category-based ESTIMATE rather than a
    * database value (USDA/OFF/FatSecret/Edamam publish no GI). The UI must
    * label it as approximate — we never present a guess as a measurement.
@@ -148,6 +223,11 @@ export interface FoodItemResult {
     fat: number;
     fiber: number;
     sodium?: number;
+    /** Carried here too, so a portion edit cannot launder an unknown into a
+     *  value: rescaling 0 unknown grams still yields 0 unknown grams. */
+    carbs_known?: boolean;
+    /** Same reason, for the other six nutrients (Step 22B). */
+    known?: NutrientKnown;
   };
 }
 
@@ -180,8 +260,30 @@ export interface NutritionResult {
   confidence: number;
   /** Aggregated nutrition reliability (0..1) */
   nutrition_confidence?: number;
+  /**
+   * Whether the plate's `carbohydrates` total is a real total.
+   *
+   * `false` when ANY food's carbohydrate is unknown — the total is then a
+   * LOWER BOUND, not a total, and no bolus may be seeded from it. One unknown
+   * food is enough: "most of the plate is known" is not a dosable number.
+   */
+  carbs_known?: boolean;
+  /**
+   * Plate-level twin of `FoodItemResult.nutrients_known` (Step 22B): a nutrient
+   * is `true` only when EVERY food behind the total declared it — one unknown
+   * food makes the sum a floor, exactly as `carbs_known` already says for the
+   * carbohydrate. Absent on rows written before Step 22B.
+   */
+  nutrients_known?: NutrientKnown;
   /** Dominant source of the values (per-item detail in `items`) */
   source?: NutritionSource;
+  /**
+   * BARCODE path only: what `source` above is short for, and whether that
+   * origin is authoritative for a dose. A barcode meal carries no `items`, so
+   * this sits on the result — where `aggregateItems` cannot drop it (N-10).
+   * Photo-scan plates answer the same question per item, via `source`.
+   */
+  product_provenance?: ProductProvenance;
   /** Per-food breakdown when the plate contains multiple foods */
   items?: FoodItemResult[];
   /** Meal quality 0..100 for a diabetic patient (from mealScore.ts) */
@@ -209,7 +311,35 @@ export interface NutritionResult {
 /** Which meal of the day a scanned food belongs to. */
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
-export interface MealScan {
+/**
+ * A clinical event the device recorded but the server has not confirmed.
+ *
+ * CLIENT-SIDE ONLY — every insert payload is built field by field, so this is
+ * never sent anywhere. It exists because a write that FAILED used to be
+ * indistinguishable from one that succeeded (finding DATA-1): both produced a
+ * local row and a "saved" message. The row is still kept and still re-pushed by
+ * `hydrateFromServer()` — offline-first is unchanged — but now something knows.
+ *
+ * Absent on a row that is on the server, and on every row read back from it.
+ */
+export interface PendingSync {
+  pending_sync?: true;
+  /**
+   * WHY the row is pending, for the screen that just saved it (DATA-1's UI
+   * half). `pending_sync` says "the server does not have this"; this says
+   * whether it was never asked or asked and refused:
+   *
+   *   'local'   no attempt was made — demo mode, or no client configured.
+   *   'failed'  an attempt WAS made and did not confirm.
+   *
+   * LOCAL-ONLY and never persisted anywhere: `sync.ts` builds every push
+   * payload from an explicit field list, so this field is not sent to the
+   * server and no column exists for it. Absent on a confirmed row.
+   */
+  sync_state?: 'local' | 'failed';
+}
+
+export interface MealScan extends PendingSync {
   id: string;
   user_id: string;
   image_url?: string;
@@ -219,7 +349,7 @@ export interface MealScan {
   created_at: string;
 }
 
-export interface GlucoseLog {
+export interface GlucoseLog extends PendingSync {
   id: string;
   user_id: string;
   value: number;
@@ -229,7 +359,7 @@ export interface GlucoseLog {
   created_at: string;
 }
 
-export interface InsulinLog {
+export interface InsulinLog extends PendingSync {
   id: string;
   user_id: string;
   insulin_type: InsulinType;
@@ -250,7 +380,7 @@ export interface ChatMessage {
 export type ActivityKind = 'walk' | 'run' | 'bike' | 'gym' | 'other';
 export type ActivityIntensity = 'low' | 'medium' | 'high';
 
-export interface ActivityLog {
+export interface ActivityLog extends PendingSync {
   id: string;
   user_id: string;
   kind: ActivityKind;
@@ -262,7 +392,7 @@ export interface ActivityLog {
 
 export type MeasureKind = 'weight' | 'hba1c' | 'bp_systolic' | 'bp_diastolic';
 
-export interface MeasureLog {
+export interface MeasureLog extends PendingSync {
   id: string;
   user_id: string;
   kind: MeasureKind;
