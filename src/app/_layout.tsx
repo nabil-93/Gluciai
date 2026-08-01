@@ -29,18 +29,28 @@ import * as Sentry from '@sentry/react-native';
 
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { initI18n } from '@/i18n';
+import { observabilityOptions } from '@/lib/observability';
 import { colors } from '@/theme';
 
-/* Crash reporting — inert until EXPO_PUBLIC_SENTRY_DSN is set (store
- * builds). No PII: only unhandled errors and traces leave the device;
- * health data lives in the store/Supabase and is never attached. */
-const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? '';
-Sentry.init({
-  dsn: SENTRY_DSN,
-  enabled: !!SENTRY_DSN && !__DEV__,
-  sendDefaultPii: false,
-  tracesSampleRate: 0.2,
-});
+/* Expo Router wraps this layout — and therefore every route beneath it that
+ * does not export its own — in a React error boundary using this component.
+ * Without it a render error unmounts the tree to a blank screen. */
+export { ErrorBoundary } from '@/components/AppErrorBoundary';
+
+/* Crash reporting. Every option — including the two scrubbers that strip
+ * health data, identity and credentials before anything is transmitted — comes
+ * from `lib/observability`, which is pure and unit-tested (see
+ * tests/domain/observability.golden.test.ts).
+ *
+ * Inert today: no EXPO_PUBLIC_SENTRY_DSN is set in any environment, so
+ * `enabled` is false and nothing leaves the device. The scrubbers still run,
+ * so they are exercised in development rather than only in production. */
+Sentry.init(
+  observabilityOptions({
+    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
+    isDev: __DEV__,
+  })
+);
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -178,8 +188,11 @@ function RootLayout() {
   );
 }
 
-/* Sentry.wrap adds the error boundary + touch-event breadcrumbs around the
- * root — a no-op while Sentry is disabled (no DSN / dev). */
+/* Sentry.wrap composes TouchEventBoundary → Profiler → FeedbackWidgetProvider
+ * around the root: touch-event breadcrumbs and performance traces, and a no-op
+ * while Sentry is disabled (no DSN / dev). It does NOT provide an error
+ * boundary — the `ErrorBoundary` exported above is what catches render
+ * failures and shows the patient a way out. */
 export default Sentry.wrap(RootLayout);
 
 const styles = StyleSheet.create({

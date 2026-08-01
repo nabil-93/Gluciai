@@ -45,6 +45,14 @@ export type LoggerAction =
       portion?: string;
       calories: number;
       carbs: number;
+      /**
+       * Whether `carbs` above is a figure the model actually returned. The
+       * field is declared required in the tool schema, but a model is free to
+       * omit it, and `num()` turns that silence into 0 — a value the patient
+       * would then be offered as their meal's carbohydrate. False means the
+       * 0 is a placeholder.
+       */
+      carbs_known: boolean;
       sugar: number;
       protein?: number;
       fat?: number;
@@ -285,6 +293,11 @@ const num = (v: unknown, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+/** Whether the model actually supplied a numeric figure for a field.
+ *  Stricter than `num`, which happily reads `null` and `''` as 0. */
+const stated = (v: unknown): boolean =>
+  v !== undefined && v !== null && v !== '' && Number.isFinite(Number(v));
+
 /** Defensive normalization of whatever the model returned. */
 export function sanitizeAction(raw: any): LoggerAction | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -319,6 +332,7 @@ export function sanitizeAction(raw: any): LoggerAction | null {
         portion: typeof raw.portion === 'string' ? raw.portion : undefined,
         calories: Math.max(0, Math.round(num(raw.calories))),
         carbs: Math.max(0, Math.round(num(raw.carbs))),
+        carbs_known: stated(raw.carbs),
         sugar: Math.max(0, Math.round(num(raw.sugar))),
         protein: Math.max(0, Math.round(num(raw.protein))),
         fat: Math.max(0, Math.round(num(raw.fat))),
@@ -519,6 +533,7 @@ export async function applyLoggerAction(action: LoggerAction): Promise<void> {
         estimated_portion: action.portion || '1 portion',
         calories: action.calories,
         carbohydrates: action.carbs,
+        carbs_known: action.carbs_known,
         sugar: action.sugar,
         protein: action.protein ?? 0,
         fat: action.fat ?? 0,

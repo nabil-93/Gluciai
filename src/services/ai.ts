@@ -9,6 +9,7 @@ import { guessMealTime, ratioForMeal } from './bolusEngine';
 import { asQuotaError } from './usage';
 import { analyzePlate, resolveFood } from './nutrition/engine';
 import { applyPortionLearning } from './nutrition/learning';
+import { knownFrom } from './nutrition/nutrientProvenance';
 import type { DetectedFood, Per100g } from './nutrition/types';
 
 /* ────────────────────────────────────────────────────────────
@@ -27,17 +28,46 @@ interface VisionDetection extends DetectedFood {
   per100g?: Per100g;
 }
 
-/** Raw detection as returned by the edge function (before per100g mapping). */
+/**
+ * The number an edge payload actually carries, or null.
+ *
+ * Deliberately strict, and deliberately local: `null`, `undefined`, `''`,
+ * `true`, text and non-finite values are all "no number". This is the single
+ * place the client decides whether the vision function stated a nutrient — see
+ * `carbProvenance.ts` for what that decision then protects.
+ */
+function numOrNull(v: unknown): number | null {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v === 'boolean') return null;
+  const n = typeof v === 'number' ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Raw detection as returned by the edge function (before per100g mapping).
+ *
+ * Every nutrient is `number | null`: since Step 11b the function reports what
+ * the model did NOT state as `null` instead of `0`, so a missing carbohydrate
+ * arrives as missing. Older deployments send plain numbers and are read
+ * identically — `null` and a number are both handled below, which is what lets
+ * the client run against either contract without a coordinated deploy.
+ */
 interface RawDetection extends DetectedFood {
   nutrition_per_100g?: {
-    calories: number;
-    carbs: number;
-    sugar: number;
-    protein: number;
-    fat: number;
-    fiber: number;
-    sodium?: number;
+    calories: number | null;
+    carbs: number | null;
+    sugar: number | null;
+    protein: number | null;
+    fat: number | null;
+    fiber: number | null;
+    sodium?: number | null;
   };
+  /** False when the function had to default the portion (finding N-3). */
+  portion_grams_stated?: boolean;
+  /** True when a stated portion was outside the possible range and bounded. */
+  portion_grams_clamped?: boolean;
+  /** False when the function had to default the confidence (finding N-3). */
+  confidence_stated?: boolean;
 }
 
 /** Demo detections: exercises every branch of the provider chain.
@@ -110,7 +140,9 @@ const DEMO_PLATES: VisionDetection[][] = [
       portion_grams: 180,
       confidence: 0.87,
       bounding_box: { x: 0.188, y: 0.313, width: 0.344, height: 0.375 },
-      per100g: { calories: 165, carbs: 0, sugar: 0, protein: 31, fat: 3.6, fiber: 0, sodium: 74 },
+      // A genuine zero-carb food: the estimate really does say 0 g, and that
+      // must stay a usable value rather than read as missing data.
+      per100g: { calories: 165, carbs: 0, carbs_known: true, sugar: 0, protein: 31, fat: 3.6, fiber: 0, sodium: 74 },
     },
     {
       name: 'White Rice',
@@ -119,18 +151,29 @@ const DEMO_PLATES: VisionDetection[][] = [
       portion_grams: 200,
       confidence: 0.82,
       bounding_box: { x: 0.563, y: 0.375, width: 0.328, height: 0.417 },
-      per100g: { calories: 130, carbs: 28, sugar: 0, protein: 2.7, fat: 0.3, fiber: 0.4, sodium: 1, glycemic_index: 73 },
+      per100g: { calories: 130, carbs: 28, carbs_known: true, sugar: 0, protein: 2.7, fat: 0.3, fiber: 0.4, sodium: 1, glycemic_index: 73 },
     },
   ],
 ];
 
+/** What the vision step returned, plus whether the model's answer was cut off
+ *  and reassembled — an incomplete plate is missing carbohydrate, so it must
+ *  never reach the screen looking like a complete one (finding N-4). */
+interface DetectionBatch {
+  detections: VisionDetection[];
+  incomplete: boolean;
+}
+
 async function detectFoods(
   imageBase64: string,
   language: string
-): Promise<VisionDetection[]> {
+): Promise<DetectionBatch> {
   if (isDemoMode || !supabase) {
     await new Promise((r) => setTimeout(r, 1500));
-    return DEMO_PLATES[Math.floor(Math.random() * DEMO_PLATES.length)];
+    return {
+      detections: DEMO_PLATES[Math.floor(Math.random() * DEMO_PLATES.length)],
+      incomplete: false,
+    };
   }
 
   const { data, error } = await supabase.functions.invoke('analyze-meal', {
@@ -143,24 +186,74 @@ async function detectFoods(
 
   // New contract: { detections: [{ name, portion_grams, confidence, ... }] }
   if (Array.isArray(data.detections)) {
-    return (data.detections as RawDetection[]).map((d) => {
+    const detections = (data.detections as RawDetection[]).map((d) => {
       // Map the model's per-100g nutrition estimate onto `per100g`, the
       // field the engine uses ONLY as a fallback when every database misses
       // (so sauces/spices/regional foods get AI-estimated values, not 0).
       const n = d.nutrition_per_100g;
-      const per100g = n
+      // The model is asked for a carbohydrate figure but is not bound to
+      // return one. Since Step 11b the function reports that absence as
+      // `null`; before, it sent `0`, and an even older contract sent nothing
+      // at all (which used to become NaN in `scale()`). All three are read
+      // here, once, strictly: is there a number, or is there not?
+      const carbs = numOrNull(n?.carbs);
+      const carbsKnown = carbs !== null;
+      // An estimate with no energy is a record the model did not fill in, not a
+      // zero-calorie food — the function drops it for exactly that reason, and
+      // has in every version. The same rule is applied here so a payload that
+      // arrives with an all-zero object (an older contract, a proxy, a mangled
+      // response) cannot turn a placeholder into a KNOWN 0 g of carbohydrate
+      // that then seeds a bolus. Dropping it leaves the food on the plate,
+      // visible and explicitly unknown, which is what the live path already
+      // does today.
+      const calories = numOrNull(n?.calories);
+      // The sibling macros are still coerced to a number because the engine,
+      // the score and the bounds layer all take numbers — an absent sibling
+      // reads 0 exactly as before. Since Step 22B their ABSENCE travels beside
+      // them in `known`, so a field the model left out is no longer shown to
+      // the patient as a measured 0 g.
+      const sugar = numOrNull(n?.sugar);
+      const protein = numOrNull(n?.protein);
+      const fat = numOrNull(n?.fat);
+      const fiber = numOrNull(n?.fiber);
+      const sodium = numOrNull(n?.sodium);
+      const per100g = n && calories !== null && calories > 0
         ? {
-            calories: n.calories,
-            carbs: n.carbs,
-            sugar: n.sugar,
-            protein: n.protein,
-            fat: n.fat,
-            fiber: n.fiber,
-            sodium: n.sodium,
+            calories,
+            carbs: carbs ?? 0,
+            carbs_known: carbsKnown,
+            sugar: sugar ?? 0,
+            protein: protein ?? 0,
+            fat: fat ?? 0,
+            fiber: fiber ?? 0,
+            sodium: sodium ?? 0,
+            known: knownFrom({
+              calories,
+              carbs,
+              sugar,
+              protein,
+              fat,
+              fiber,
+              sodium,
+            }),
           }
         : undefined;
-      return { ...d, per100g } as VisionDetection;
+      // A portion or confidence the function had to default is not an
+      // observation of this plate, so the food is marked estimated — the flag
+      // the UI already uses for an uncertain portion. The numbers themselves
+      // are untouched: changing them would change which foods survive the
+      // engine's detection gate.
+      const inferred =
+        d.portion_grams_stated === false ||
+        d.portion_grams_clamped === true ||
+        d.confidence_stated === false;
+      return {
+        ...d,
+        per100g,
+        is_estimated: d.is_estimated === true || inferred,
+      } as VisionDetection;
     });
+    return { detections, incomplete: data.incomplete === true };
   }
 
   // Legacy contract: { result: NutritionResult } → wrap as one detection
@@ -168,24 +261,33 @@ async function detectFoods(
     const r = data.result as NutritionResult;
     const grams = 350;
     const f = 100 / grams;
-    return [
-      {
-        name: r.food_name,
-        portion_grams: grams,
-        confidence: r.confidence ?? 0.7,
-        per100g: {
-          calories: r.calories * f,
-          carbs: r.carbohydrates * f,
-          sugar: r.sugar * f,
-          protein: r.protein * f,
-          fat: r.fat * f,
-          fiber: r.fiber * f,
-          glycemic_index: r.glycemic_index,
+    const legacyCarbs = numOrNull(r.carbohydrates);
+    return {
+      detections: [
+        {
+          name: r.food_name,
+          portion_grams: grams,
+          confidence: r.confidence ?? 0.7,
+          // The 350 g is this function's own assumption, not an observation.
+          is_estimated: true,
+          per100g: {
+            calories: (numOrNull(r.calories) ?? 0) * f,
+            carbs: (legacyCarbs ?? 0) * f,
+            // The legacy shape has no provenance channel, so trust the figure
+            // only when it actually is one.
+            carbs_known: legacyCarbs !== null,
+            sugar: (numOrNull(r.sugar) ?? 0) * f,
+            protein: (numOrNull(r.protein) ?? 0) * f,
+            fat: (numOrNull(r.fat) ?? 0) * f,
+            fiber: (numOrNull(r.fiber) ?? 0) * f,
+            glycemic_index: r.glycemic_index,
+          },
         },
-      },
-    ];
+      ],
+      incomplete: data.incomplete === true,
+    };
   }
-  return [];
+  return { detections: [], incomplete: data.incomplete === true };
 }
 
 /**
@@ -222,7 +324,7 @@ export async function analyzeMealImage(
   onStage?: (stage: ScanStage) => void
 ): Promise<NutritionResult | null> {
   onStage?.('detecting');
-  const raw = await detectFoods(imageBase64, language);
+  const { detections: raw, incomplete } = await detectFoods(imageBase64, language);
   if (raw.length === 0) return null;
 
   // Learning layer: apply the user's own portion habits before scaling
@@ -238,6 +340,13 @@ export async function analyzeMealImage(
   if (result && adjusted.length > 0) {
     // Stored as a translation key (localized in scan-result localizeWarning).
     result.warnings.push(`warn:portions_adjusted|${adjusted.join(', ')}`);
+  }
+  if (result && incomplete) {
+    // The model's answer was cut off and reassembled, so foods it listed after
+    // the cut are missing from this plate — and missing foods mean missing
+    // carbohydrate. The patient has to be told the total is not the whole meal;
+    // silently showing a shorter plate as complete is what this warning stops.
+    result.warnings.push('warn:plate_incomplete');
   }
   return result;
 }
@@ -263,6 +372,14 @@ const DEMO_MENUS: string[][] = [
   ],
 ];
 
+/** What the menu scanner read, plus whether the model's answer was cut off and
+ *  reassembled — dishes listed after the cut are missing from the list, and a
+ *  short list must not look like the whole menu (finding N-4). */
+export interface MenuScanResult {
+  dishes: FoodItemResult[];
+  incomplete: boolean;
+}
+
 /**
  * Menu scanner pipeline: vision reads the dish names on the menu,
  * then EVERY dish goes through the nutrition provider chain at its
@@ -271,8 +388,9 @@ const DEMO_MENUS: string[][] = [
 export async function analyzeMenu(
   imageBase64: string,
   language: string
-): Promise<FoodItemResult[]> {
+): Promise<MenuScanResult> {
   let dishNames: string[];
+  let incomplete = false;
   if (isDemoMode || !supabase) {
     await new Promise((r) => setTimeout(r, 1700));
     dishNames = DEMO_MENUS[Math.floor(Math.random() * DEMO_MENUS.length)];
@@ -285,6 +403,7 @@ export async function analyzeMenu(
     if (error) throw error;
     if (data?.error) throw new Error(data.error);
     dishNames = Array.isArray(data.dishes) ? (data.dishes as string[]) : [];
+    incomplete = data.incomplete === true;
   }
 
   const resolved = await Promise.all(
@@ -298,7 +417,10 @@ export async function analyzeMenu(
       });
     })
   );
-  return resolved.filter((r): r is FoodItemResult => r !== null);
+  return {
+    dishes: resolved.filter((r): r is FoodItemResult => r !== null),
+    incomplete,
+  };
 }
 
 /* ──────────────────────── AI CHAT ──────────────────────── */
@@ -752,8 +874,10 @@ export async function checkModifiedDoseAI(
 
 /**
  * Informational insulin estimate from carbs + profile ratios.
- * Formula-based (never AI): carbs / ratio. The full calculation with
- * glucose correction lives in services/data.ts (computeBolus).
+ * Formula-based (never AI): carbs / ratio. The full calculation with glucose
+ * correction lives in `services/bolusEngine.ts` (`computeSmartBolus`) — the
+ * only dose calculation in this codebase since Step 14 removed a dead
+ * duplicate that used to sit in `services/data.ts`.
  * NEVER presented as a prescription — the UI always shows the disclaimer.
  */
 export function estimateInsulin(
