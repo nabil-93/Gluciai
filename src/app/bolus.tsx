@@ -9,11 +9,12 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter, type ErrorBoundaryProps } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView, Spinner } from '@/components/ui';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { ComposerHero } from '@/components/bolus/ComposerHero';
 import { DoseHero } from '@/components/bolus/DoseHero';
 import {
@@ -25,14 +26,31 @@ import {
   computeSmartBolus,
   guessMealTime,
   localDoseCheck,
+  MAX_SAFE_BOLUS,
   type BolusResult,
   type DoseRisk,
 } from '@/services/bolusEngine';
-import { saveInsulin } from '@/services/data';
+import { consumeBolusHandoff, type BolusHandoff } from '@/services/bolusHandoff';
+import { savedStateKey, saveInsulin } from '@/services/data';
+import { carbSeed, seedCarbsFromMeal } from '@/services/nutrition/carbProvenance';
 import { parseDecimal, sanitizeDecimal } from '@/lib/num';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
 import type { ActivityIntensity, ActivityKind, MealType } from '@/types';
+
+/**
+ * This route overrides the root boundary because a crash HERE is different
+ * from a crash anywhere else: an insulin action may have been in flight, and
+ * the patient is holding a device they were about to dose from.
+ *
+ * The fallback carries no dose, no glucose and no carbohydrate value — it is
+ * rendered from state that just failed, so any number it showed would be
+ * untrustworthy — and it never claims the dose was or was not recorded,
+ * because it cannot know. It points at the insulin log instead.
+ */
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <AppErrorBoundary {...props} variant="clinical" />;
+}
 
 const SPORT_KINDS: { v: ActivityKind; icon: string }[] = [
   { v: 'walk', icon: '🚶' },
@@ -80,15 +98,57 @@ export default function BolusScreen() {
 
   /* Another screen can hand this one the plate it is about to cover — the
      program's "my dose" button sends the exact carbs of the meal it just
-     confirmed. An explicit hand-off always beats guessing from history. */
-  const handoff = useLocalSearchParams<{ carbs?: string; meal?: string }>();
+     confirmed. An explicit hand-off always beats guessing from history.
 
-  const [carbs, setCarbs] = useState(
-    handoff.carbs
-      ? String(Math.round(Number(handoff.carbs)))
-      : lastMeal
-        ? String(Math.round(lastMeal.result.carbohydrates))
-        : ''
+     It arrives IN MEMORY, not in the URL (finding BOLUS-A1): a carbohydrate is
+     a dose input, and on web a route param is browser history, the `Referer` of
+     the next request and a line in an access log. Same mechanism as the
+     programme wizard's draft (Step 9).
+
+     Read once, on the first render, and kept for the life of the screen — the
+     ref guard is what makes a second render (or a double-invoked initializer)
+     hand back what was already consumed instead of an empty draft. */
+  const handoffRef = useRef<BolusHandoff | null>(null);
+  if (handoffRef.current === null) handoffRef.current = consumeBolusHandoff();
+  const handoff = handoffRef.current;
+
+  /* What the day's meal can contribute to the carb field, or null when it
+     cannot contribute anything honest. A meal whose carbohydrate was never
+     known holds a placeholder 0, and pre-filling that reads as "this plate is
+     0 g" — which computes a 0 U meal bolus for a full plate. A genuine 0 g
+     meal (water) still seeds "0"; see `carbProvenance.ts`. */
+  const mealSeed = lastMeal ? seedCarbsFromMeal(lastMeal.result) : null;
+  const mealCarbsUnusable = !!lastMeal && mealSeed === null;
+
+  /* The pre-fill rule, and WHERE the number came from (finding NUTR-C2).
+     `carbSeed` is the same rule that used to sit inline here — the programme's
+     route parameter still wins, the value is still taken verbatim, and an
+     unknown carbohydrate still seeds nothing. What is new is that the origin
+     travels with it, so the field can say whose number it is holding. Step 18
+     labels; it does not gate: whatever is seeded reaches the engine exactly as
+     before, and the confirmation question stays open (NUTR-C2, item 2). */
+  const seed = useMemo(
+    () => carbSeed(handoff.carbs, lastMeal?.result),
+    [handoff.carbs, lastMeal?.result]
+  );
+  const [carbs, setCarbs] = useState(seed.value);
+  /** True once the patient has touched the field themselves — the label then
+   *  disappears, because the value is theirs and not the app's. */
+  const [carbsTouched, setCarbsTouched] = useState(false);
+  const setCarbsByHand = (v: string) => {
+    setCarbsTouched(true);
+    setCarbs(v);
+  };
+  /** Local time of the meal the seed came from, when there is one to show. */
+  const seedMealTime = useMemo(
+    () =>
+      lastMeal
+        ? new Date(lastMeal.created_at).toLocaleTimeString(i18n.language, {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '',
+    [lastMeal, i18n.language]
   );
   const [glucose, setGlucose] = useState(lastGlucose ? String(lastGlucose.value) : '');
   /* The context the patient declares for THIS dose — meal moment (picks the
@@ -119,14 +179,41 @@ export default function BolusScreen() {
   const [alert, setAlert] = useState<{ risk: DoseRisk; message: string; dose: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  /** i18n key for what the save actually achieved (DATA-1). */
+  const [saveState, setSaveState] = useState<string | null>(null);
   const editInputRef = useRef<TextInput>(null);
+
+  /**
+   * What the two fields actually say, as the engine's input contract.
+   *
+   * Until Step 13 both call sites computed the glucose as
+   * `(parseDecimal(glucose) ?? 0) > 0 ? … : null`, which handed the engine a
+   * `null` for a typed 0 — so an engine-side fix for P7-006 would have been
+   * dead code. The parsed value is now passed through as it is, and the engine
+   * decides absent / invalid / value. An empty carb field means the
+   * carbohydrate was not stated, which is not the same as 0 g.
+   */
+  const carbsValue = parseDecimal(carbs);
+  const glucoseValue = parseDecimal(glucose);
+  /** The two fields as the engine's input contract, memoised so the preview's
+   *  dependency list stays exhaustive. */
+  const engineInput = useMemo(
+    () => ({
+      carbs: carbsValue ?? 0,
+      carbsKnown: carbsValue !== undefined,
+      glucose: glucoseValue ?? null,
+      // This screen's fields, labels and chips are all mg/dL, and `saveGlucose`
+      // stores only mg/dL — stated explicitly rather than left to a default.
+      glucoseUnit: 'mg/dL' as const,
+    }),
+    [carbsValue, glucoseValue]
+  );
 
   /* Context the engine will use — shown as chips before calculating */
   const preview = useMemo(
     () =>
       computeSmartBolus({
-        carbs: parseDecimal(carbs) ?? 0,
-        glucose: (parseDecimal(glucose) ?? 0) > 0 ? parseDecimal(glucose)! : null,
+        ...engineInput,
         profile,
         insulinLogs,
         activityLogs,
@@ -148,8 +235,7 @@ export default function BolusScreen() {
         activityStatus,
       }),
     [
-      carbs,
-      glucose,
+      engineInput,
       profile,
       insulinLogs,
       activityLogs,
@@ -174,8 +260,7 @@ export default function BolusScreen() {
 
   const calculate = async () => {
     const result = computeSmartBolus({
-      carbs: parseDecimal(carbs) ?? 0,
-      glucose: (parseDecimal(glucose) ?? 0) > 0 ? parseDecimal(glucose)! : null,
+      ...engineInput,
       profile,
       insulinLogs,
       activityLogs,
@@ -221,7 +306,11 @@ export default function BolusScreen() {
       const note = modified
         ? t('bolus.noteModified', { rec: engine.total, dose })
         : t('bolus.noteAccepted', { carbs: engine.carbs, glucose: engine.glucose ?? '—' });
-      await saveInsulin(dose, 'rapid', note);
+      // What the write actually achieved travels back with the row (DATA-1):
+      // "saved" alone was said for a dose the server had refused, which is the
+      // one the doctor's dashboard would then be missing.
+      const log = await saveInsulin(dose, 'rapid', note);
+      setSaveState(savedStateKey(log));
       setSaved(true);
       setAlert(null);
       setTimeout(close, 1100);
@@ -363,7 +452,7 @@ export default function BolusScreen() {
                   <View style={styles.inputRow}>
                     <TextInput
                       value={carbs}
-                      onChangeText={(v) => setCarbs(sanitizeDecimal(v))}
+                      onChangeText={(v) => setCarbsByHand(sanitizeDecimal(v))}
                       keyboardType="decimal-pad"
                       placeholder="0"
                       placeholderTextColor="#c2cad6"
@@ -371,18 +460,40 @@ export default function BolusScreen() {
                     />
                     <Text style={styles.unit}>g</Text>
                   </View>
+                  {/* Whose number is in the field (NUTR-C2). Shown only while
+                      it is still the app's: the moment the patient types, the
+                      value is theirs and the label goes. It changes nothing
+                      about what the engine receives. */}
+                  {!carbsTouched && seed.origin !== 'none' ? (
+                    <Text style={styles.seedNote} numberOfLines={2}>
+                      {seed.origin === 'program'
+                        ? t('bolus.seedFromProgram')
+                        : t('bolus.seedFromMeal', {
+                            food: lastMeal?.result.food_name ?? '',
+                            time: seedMealTime,
+                          })}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
 
-              {lastMeal ? (
-                <Pressable
-                  onPress={() => setCarbs(String(Math.round(lastMeal.result.carbohydrates)))}
-                  style={styles.prefillPill}
-                >
+              {/* The day's meal, offered as a one-tap fill — but only when its
+                  carbohydrate is a real figure. When it is not, the meal is
+                  still named (the patient should see we know about it) and the
+                  reason the field is empty is said out loud, instead of a
+                  fabricated 0 sitting there looking like an answer. */}
+              {lastMeal && mealSeed !== null ? (
+                <Pressable onPress={() => setCarbsByHand(mealSeed)} style={styles.prefillPill}>
                   <Text style={styles.prefillHint} numberOfLines={1}>
-                    🍽️ {lastMeal.result.food_name} · {Math.round(lastMeal.result.carbohydrates)} g
+                    🍽️ {lastMeal.result.food_name} · {mealSeed} g
                   </Text>
                 </Pressable>
+              ) : mealCarbsUnusable ? (
+                <View style={styles.carbsUnknownPill}>
+                  <Text style={styles.carbsUnknownText}>
+                    🍽️ {t('bolus.carbsNotConfirmed', { food: lastMeal!.result.food_name })}
+                  </Text>
+                </View>
               ) : null}
 
               <View style={styles.composerDivider} />
@@ -680,6 +791,29 @@ export default function BolusScreen() {
               }
             />
 
+            {/* The number above is the app's MAXIMUM, not the result of the
+                calculation (finding P7-009). The engine has always clamped at
+                MAX_SAFE_BOLUS and flagged it; until now nothing on this screen
+                read the flag, so a ceiling was displayed exactly like a
+                computed dose — the one number a patient cannot sanity-check by
+                re-reading the breakdown, because the breakdown adds up to
+                something else. The dose itself is untouched: this says what it
+                is, names the app's limit, and deliberately does NOT claim that
+                the limit is the right dose for this patient. */}
+            {!isHypo && engine.flags.includes('capped') ? (
+              <View style={styles.cappedCard}>
+                <Text style={styles.cappedTitle}>
+                  ⚠️ {t('bolus.cappedTitle', { max: fmtU(MAX_SAFE_BOLUS) })}
+                </Text>
+                <Text style={styles.cappedBody}>
+                  {t('bolus.cappedBody', {
+                    max: fmtU(MAX_SAFE_BOLUS),
+                    raw: fmtU(engine.rawTotal),
+                  })}
+                </Text>
+              </View>
+            ) : null}
+
             {/* How the number was reached — a clean ledger of every + and −.
                 Lifted out of the hero so the hero stays cinematic and this
                 stays readable. */}
@@ -771,11 +905,38 @@ export default function BolusScreen() {
                       note: t(`bolus.paramRatio_${engine.ratioSource}`),
                     });
                   if (engine.correctionFactor)
-                    rows.push({ icon: '🩸', label: t('bolus.paramCorr'), value: `${engine.correctionFactor} mg/dL · 1 U` });
-                  rows.push({ icon: '🎯', label: t('bolus.paramTarget'), value: `${engine.targetLow}–${engine.targetHigh} mg/dL` });
-                  if (engine.glucose != null)
+                    rows.push({
+                      icon: '🩸',
+                      label: t('bolus.paramCorr'),
+                      value: `${engine.correctionFactor} mg/dL · 1 U`,
+                      // A fallback 50 used to print here as if the patient had
+                      // entered it. The number is the same; the claim is not.
+                      note:
+                        engine.isfSource === 'fallback'
+                          ? t('bolus.paramCorr_fallback')
+                          : undefined,
+                    });
+                  rows.push({
+                    icon: '🎯',
+                    label: t('bolus.paramTarget'),
+                    value: `${engine.targetLow}–${engine.targetHigh} mg/dL`,
+                    note:
+                      engine.targetSource === 'fallback'
+                        ? t('bolus.paramTarget_fallback')
+                        : undefined,
+                  });
+                  // Absent and unusable are different rows, because they are
+                  // different facts: "you didn't measure" vs "what reached the
+                  // calculator could not be read".
+                  if (engine.glucoseState === 'value' && engine.glucose != null)
                     rows.push({ icon: '📊', label: t('bolus.paramGlucose'), value: `${engine.glucose} mg/dL` });
-                  if (engine.carbs > 0)
+                  else if (engine.glucoseState === 'invalid')
+                    rows.push({ icon: '📊', label: t('bolus.paramGlucose'), value: '—', note: t('bolus.paramGlucoseInvalid') });
+                  else
+                    rows.push({ icon: '📊', label: t('bolus.paramGlucose'), value: '—', note: t('bolus.paramGlucoseMissing') });
+                  if (!engine.carbsKnown)
+                    rows.push({ icon: '🍞', label: t('bolus.paramCarbs'), value: '—', note: t('bolus.paramCarbsUnknown') });
+                  else if (engine.carbs > 0)
                     rows.push({ icon: '🍞', label: t('bolus.paramCarbs'), value: `${engine.carbs} g` });
                   if (engine.bolusInsulinName)
                     rows.push({ icon: '💉', label: t('bolus.paramInsulin'), value: engine.bolusInsulinName });
@@ -810,6 +971,13 @@ export default function BolusScreen() {
                   const missing: { icon: string; text: string }[] = [];
                   if (engine.ratioSource === 'default')
                     missing.push({ icon: '🍽️', text: t('bolus.missRatio') });
+                  // The correction factor belongs in this list for exactly the
+                  // same reason as the ratio: the dose used a number the patient
+                  // never gave. It was absent until Step 13.
+                  if (engine.isfSource === 'fallback')
+                    missing.push({ icon: '🩸', text: t('bolus.missCorr') });
+                  if (engine.targetSource === 'fallback')
+                    missing.push({ icon: '🎯', text: t('bolus.missTarget') });
                   if (!engine.bolusInsulinName)
                     missing.push({ icon: '💉', text: t('bolus.missInsulin') });
                   if (missing.length === 0) return null;
@@ -1020,7 +1188,14 @@ export default function BolusScreen() {
               </View>
             )}
 
-            {saved ? <Text style={styles.savedNote}>✓ {t('bolus.savedNote')}</Text> : null}
+            {saved ? (
+              <>
+                <Text style={styles.savedNote}>✓ {t('bolus.savedNote')}</Text>
+                {saveState ? (
+                  <Text style={styles.saveStateNote}>{t(saveState)}</Text>
+                ) : null}
+              </>
+            ) : null}
           </FadeInView>
         ) : null}
       </ScrollView>
@@ -1096,6 +1271,15 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   inputLabel: { fontFamily: F600, fontSize: 13, color: '#7a8797' },
+  // "Pre-filled from …" under the carb field. Muted, two lines allowed: the
+  // German and Arabic sentences are longer than the French one.
+  seedNote: {
+    fontFamily: F600,
+    fontSize: 10.5,
+    lineHeight: 13,
+    color: '#8b97a6',
+    marginTop: 3,
+  },
   inputRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 2 },
   bigInput: { fontFamily: F800, fontSize: 36, color: INK, minWidth: 80, padding: 0 },
   unit: { fontFamily: F600, fontSize: 15, color: '#98A2B3' },
@@ -1134,6 +1318,20 @@ const styles = StyleSheet.create({
     marginLeft: 60,
     maxWidth: '80%',
   },
+  /* Same footprint as the prefill pill it replaces, in the app's caution
+     amber rather than green — it is information, not an action. Not a
+     Pressable: there is nothing here to tap, which is the whole point. */
+  carbsUnknownPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#fef6e7',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 12,
+    marginLeft: 60,
+    maxWidth: '80%',
+  },
+  carbsUnknownText: { fontFamily: F700, fontSize: 12, color: '#9a6800', lineHeight: 17 },
 
   /* ── Card header (meal / sport / state) ── */
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1471,6 +1669,32 @@ const styles = StyleSheet.create({
     color: GREEN,
     textAlign: 'center',
     marginTop: 14,
+  },
+  // Where the dose actually went (DATA-1) — under the confirmation, muted, and
+  // allowed to wrap: the "not saved to your account" sentence is the longest.
+  // "This is the app's maximum" — sits directly under the dose hero. Amber
+  // rather than red: it is a limit notice, not a hypo alarm, and the red wash
+  // is reserved for the case where injecting is the wrong action entirely.
+  cappedCard: {
+    backgroundColor: '#FFF7E8',
+    borderWidth: 1,
+    borderColor: '#F2D9A8',
+    borderRadius: 16,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+    gap: 3,
+  },
+  cappedTitle: { fontFamily: F700, fontSize: 13, color: '#8A5310', lineHeight: 17 },
+  cappedBody: { fontFamily: F600, fontSize: 11.5, color: '#8A6416', lineHeight: 16 },
+  saveStateNote: {
+    fontFamily: F600,
+    fontSize: 11.5,
+    lineHeight: 15,
+    color: '#8b97a6',
+    textAlign: 'center',
+    marginTop: 4,
+    paddingHorizontal: 12,
   },
 
   /* Alert modal */

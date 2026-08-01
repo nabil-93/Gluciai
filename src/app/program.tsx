@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -40,6 +40,8 @@ import {
   weekBounds,
   type WeekPlanProgress,
 } from '@/services/programShopping';
+import { setBolusHandoff } from '@/services/bolusHandoff';
+import { consumeProgramDraft, type ProgramSetupDraft } from '@/services/programDraft';
 import { MEAL_SLOTS, type ActivityLevel, type ProgramGoal } from '@/services/programEngine';
 import { useAppStore } from '@/store/useAppStore';
 import { useProgramStore } from '@/store/useProgramStore';
@@ -197,20 +199,29 @@ export default function ProgramScreen() {
     else router.replace('/(tabs)');
   };
 
+  /* The wizard's answers arrive in memory rather than as route params, so body
+     weight and dietary avoidances never reach the URL (see programDraft.ts).
+     Consumed ONCE, on the first render, and held in a ref: the creation effect
+     below can run more than once, and re-reading a one-shot source there would
+     hand it an empty draft on the second pass. */
+  const setupDraft = useRef<ProgramSetupDraft | null>(null);
+  if (setupDraft.current === null) setupDraft.current = consumeProgramDraft();
+
   /* ── Creation, handed over by the setup wizard ── */
   const createFromParams = useCallback(async () => {
-    const goal = (params.goal as ProgramGoal) || 'lose';
-    const level = (params.level as ActivityLevel) || 'light';
-    const weight = Number(params.weight) || profile?.weight || null;
-    const targetWeight = Number(params.targetWeight) || null;
-    const rate = Number(params.rate) || 0.5;
-    const trainingDays = Number(params.trainingDays) || 3;
-    const place = (params.place as Program['trainingPlace']) || 'home';
+    const setup = setupDraft.current ?? {};
+    const goal = (setup.goal as ProgramGoal) || 'lose';
+    const level = (setup.level as ActivityLevel) || 'light';
+    const weight = Number(setup.weight) || profile?.weight || null;
+    const targetWeight = Number(setup.targetWeight) || null;
+    const rate = Number(setup.rate) || 0.5;
+    const trainingDays = Number(setup.trainingDays) || 3;
+    const place = (setup.place as Program['trainingPlace']) || 'home';
 
     let constraints: ProgramConstraints = DEFAULT_CONSTRAINTS;
     try {
-      if (typeof params.constraints === 'string')
-        constraints = { ...DEFAULT_CONSTRAINTS, ...JSON.parse(params.constraints) };
+      if (typeof setup.constraints === 'string')
+        constraints = { ...DEFAULT_CONSTRAINTS, ...JSON.parse(setup.constraints) };
     } catch {
       /* a malformed hand-off must not block the program */
     }
@@ -244,7 +255,9 @@ export default function ProgramScreen() {
     setShoppingWeeks([]);
     // The first week, and the shopping that goes with it.
     await prepareWeek(saved, 0);
-  }, [params, profile, today, setProgram, setDays, setShoppingWeeks, prepareWeek]);
+    // `params` is no longer read here — the wizard's answers come from the
+    // in-memory draft — so it is not a dependency.
+  }, [profile, today, setProgram, setDays, setShoppingWeeks, prepareWeek]);
 
   useEffect(() => {
     if (params.create === '1' && !program) void createFromParams();
@@ -342,13 +355,14 @@ export default function ProgramScreen() {
       setConfirming(null);
 
       if (dose) {
-        router.push({
-          pathname: '/bolus',
-          params: {
-            carbs: String(Math.round(plannedMealResult(meal, portion).carbohydrates)),
-            meal: meal.slot,
-          },
-        } as any);
+        // The carbohydrate is staged in memory rather than put in the URL
+        // (BOLUS-A1) — same mechanism as the programme wizard's draft. The
+        // value and its string shape are exactly what the route param carried.
+        setBolusHandoff({
+          carbs: String(Math.round(plannedMealResult(meal, portion).carbohydrates)),
+          meal: meal.slot,
+        });
+        router.push('/bolus');
       }
     },
     [confirming, day, patchMeal, persist, router]
@@ -793,12 +807,14 @@ export default function ProgramScreen() {
                   </Pressable>
                   <Pressable
                     style={styles.ghostAction}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/bolus',
-                        params: { carbs: String(nextMeal.carbs), meal: nextMeal.slot },
-                      } as any)
-                    }
+                    onPress={() => {
+                      // In memory, not in the URL (BOLUS-A1).
+                      setBolusHandoff({
+                        carbs: String(nextMeal.carbs),
+                        meal: nextMeal.slot,
+                      });
+                      router.push('/bolus');
+                    }}
                   >
                     <Text style={styles.ghostActionText}>💉 {t('program.myDose')}</Text>
                   </Pressable>

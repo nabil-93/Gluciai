@@ -47,9 +47,21 @@ export function DoseHero({
   // The counted-up number the patient reads.
   const [shown, setShown] = useState(reduceMotion || isHypo ? dose : 0);
 
+  // Where a count-up starts is decided HERE rather than inside the effect:
+  // adjusting state during render is React's documented alternative to
+  // synchronising it in an effect, and it keeps `shown` correct on the very
+  // first paint instead of one frame later. The start value is exactly what
+  // the effect used to write — `dose` when there is nothing to animate, 0 when
+  // the number is about to count up — so the displayed figure is unchanged.
+  const runId = `${dose}|${isHypo}|${reduceMotion}`;
+  const [startedRun, setStartedRun] = useState(runId);
+  if (startedRun !== runId) {
+    setStartedRun(runId);
+    setShown(reduceMotion || isHypo || dose <= 0 ? dose : 0);
+  }
+
   useEffect(() => {
     if (reduceMotion) {
-      setShown(dose);
       return;
     }
     enter.setValue(0);
@@ -72,12 +84,10 @@ export function DoseHero({
     // Count-up is a text value, so it can't ride the native driver — drive it
     // off a short JS timer instead (one-shot, ~34 frames, cheap).
     if (isHypo || dose <= 0) {
-      setShown(dose);
       return;
     }
     const steps = 22;
     let i = 0;
-    setShown(0);
     const id = setInterval(() => {
       i += 1;
       const p = i / steps;

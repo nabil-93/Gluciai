@@ -34,6 +34,69 @@ import type {
 export const DIA_HOURS = 4; // duration of insulin action (rapid analogs 3-5 h)
 export const MAX_SAFE_BOLUS = 20; // safety cap — flag anything above
 
+/**
+ * THE INPUT CONTRACT (Step 13 — findings P7-003, P7-005, P7-006).
+ *
+ * The arithmetic below this comment is unchanged. What changed is what the
+ * engine is willing to *believe* before doing it, because three questions used
+ * to be answered by silence:
+ *
+ *   · IS THERE A READING? `inputs.glucose && inputs.glucose > 0` collapsed a
+ *     genuine 0, a NaN and "not measured" into one state, so a critical value
+ *     produced a full meal bolus with no hypo flag, and a dose computed with no
+ *     glucose context at all reported nothing.
+ *   · IN WHAT UNIT? `GlucoseLog` has always carried `unit`, and nothing read
+ *     it: 5.6 mmol/L was compared against mg/dL thresholds (hypo, dose 0), and
+ *     one mmol/L row in the history fabricated a fast fall.
+ *   · DID THE PATIENT ACTUALLY STATE THIS PARAMETER? A missing ICR became
+ *     10 g/U, a missing ISF became 50, a NEGATIVE ISF was used as given (it is
+ *     truthy) and produced a correction that SUBTRACTED from the meal bolus,
+ *     and a NaN target silently switched the hypo guard off.
+ *
+ * The fallbacks themselves are unchanged — 10 g/U, 50 mg/dL/U, 70-180 mg/dL are
+ * the application's existing defaults (and the database's) — but they are now
+ * REPORTED as fallbacks instead of passing for the patient's own numbers, and a
+ * parameter that is present-but-unusable takes the same explicit fallback path
+ * as a missing one instead of reaching the formula.
+ *
+ * No threshold, formula, factor, cap, rounding, IOB rule or meal window is
+ * touched here. Whether a *missing* parameter should block the dose entirely is
+ * a clinical-policy question and is deliberately NOT decided in this step.
+ */
+
+/** The application's existing fallbacks, named rather than inline. */
+export const FALLBACK_G_PER_U = 10; // ICR when the patient has stated none
+export const FALLBACK_ISF = 50; // mg/dL per U when the patient has stated none
+export const FALLBACK_TARGET_LOW = 70; // mg/dL — also the DB column default
+export const FALLBACK_TARGET_HIGH = 180; // mg/dL — also the DB column default
+
+/** Glucose units the engine can interpret. Mirrors `GlucoseLog['unit']` and the
+ *  `glucose_logs.unit` CHECK constraint (migration 0001). */
+export type GlucoseUnit = 'mg/dL' | 'mmol/L';
+
+/**
+ * mmol/L → mg/dL. Glucose's molar mass is 180.156 g/mol, so 1 mmol/L is
+ * 18.0182 mg/dL; this is the standard conversion, not a clinical choice. No
+ * threshold moves: the comparisons still happen in mg/dL, against the same
+ * numbers as before.
+ */
+export const MMOL_TO_MGDL = 18.0182;
+
+/** Whether a parameter came from the patient's profile or from the fallback. */
+export type ParamSource = 'profile' | 'fallback';
+
+/**
+ * What the engine was given for the current glucose:
+ *   · `absent`  — nothing was supplied. No correction, no hypo guard, and the
+ *                 result says so instead of looking like a normal calculation.
+ *   · `invalid` — something was supplied that cannot be a reading (non-finite,
+ *                 negative, or in a unit this engine does not know). NOT the
+ *                 same as absent, and reported separately so the defect cannot
+ *                 hide as "the patient didn't measure".
+ *   · `value`   — a usable reading, INCLUDING a genuine 0.
+ */
+export type GlucoseState = 'absent' | 'invalid' | 'value';
+
 export type BolusFlag =
   | 'hypo' // BG below low target → dose forced to 0
   | 'nearLow' // BG in the low-normal band and falling
@@ -48,7 +111,13 @@ export type BolusFlag =
   | 'sick' // patient declared illness → needs raised
   | 'stress' // patient declared stress → needs raised
   | 'lowActivity' // status injured/paused → less exercise, less sensitive
-  | 'alcohol'; // alcohol → correction halved + dose reduced (hypo risk)
+  | 'alcohol' // alcohol → correction halved + dose reduced (hypo risk)
+  /* ── Step 13: states that used to be silent ─────────────────────────── */
+  | 'noGlucose' // no reading was supplied — dose computed without BG context
+  | 'glucoseInvalid' // a reading was supplied that cannot be interpreted
+  | 'carbsUnknown' // the carbohydrate is a placeholder, not a measurement
+  | 'defaultIsf' // the correction factor is the app fallback, not the patient's
+  | 'defaultTarget'; // the target range is the app fallback, not the patient's
 
 /**
  * Which meal-of-day ratio applies. Patients enter U per 10 g of carbs per
@@ -65,10 +134,29 @@ export function guessMealTime(now: Date): MealType {
 export type RatioSource = 'meal' | 'global' | 'default';
 
 /**
+ * A number that may be used as a clinical parameter, or null.
+ *
+ * A parameter must be finite and strictly positive: a ratio, a correction
+ * factor and a target are all quantities that divide or bound a dose, and zero,
+ * a negative, NaN and Infinity are none of them. `||` and `??` both let some of
+ * those through, which is how a negative ISF reached the formula.
+ */
+function clinicalNumber(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/**
  * The insulin-to-carb ratio for a given meal moment.
  * 1) the patient's own per-meal value (U per 10 g, doctor-prescribed),
  * 2) the legacy single carb_ratio (g per U),
- * 3) the 10 g/U default (flagged as 'noRatio' by the engine).
+ * 3) the FALLBACK_G_PER_U default (`source: 'default'`, and the engine's
+ *    `noRatio` flag) — the app's existing fallback, now impossible to mistake
+ *    for a value the patient entered.
+ *
+ * Unusable candidates (0, negative, NaN, Infinity) fall THROUGH to the next
+ * one instead of being used: `per10g > 0` already rejected 0, negatives and
+ * NaN, but `Infinity > 0` is true, and an infinite ratio produced either a
+ * capped 20 U dose or a silent 0 U one depending on which field held it.
  */
 export function ratioForMeal(
   profile: Profile | null,
@@ -82,22 +170,113 @@ export function ratioForMeal(
         snack: profile.insulin_per_10g_lunch,
       }[mealTime]
     : undefined;
-  if (per10g && per10g > 0) {
-    return { gPerU: 10 / per10g, uPer10g: per10g, source: 'meal' };
+  const mealRatio = clinicalNumber(per10g);
+  if (mealRatio !== null) {
+    return { gPerU: 10 / mealRatio, uPer10g: mealRatio, source: 'meal' };
   }
-  if (profile?.carb_ratio && profile.carb_ratio > 0) {
+  const globalRatio = clinicalNumber(profile?.carb_ratio);
+  if (globalRatio !== null) {
     return {
-      gPerU: profile.carb_ratio,
-      uPer10g: Math.round((10 / profile.carb_ratio) * 100) / 100,
+      gPerU: globalRatio,
+      uPer10g: Math.round((10 / globalRatio) * 100) / 100,
       source: 'global',
     };
   }
-  return { gPerU: 10, uPer10g: 1, source: 'default' };
+  return { gPerU: FALLBACK_G_PER_U, uPer10g: 1, source: 'default' };
+}
+
+/**
+ * The correction factor to use, and whether it is the patient's own.
+ *
+ * A supplied ISF that is not a usable quantity — 0, negative, NaN, Infinity —
+ * is treated as UNAVAILABLE and takes the same explicit fallback path as a
+ * missing one. It is never used as a clinical parameter: a negative ISF used to
+ * produce a negative correction that subtracted from the meal bolus.
+ */
+export function isfForProfile(
+  profile: Profile | null
+): { isf: number; source: ParamSource } {
+  const stated = clinicalNumber(profile?.correction_factor);
+  return stated !== null
+    ? { isf: stated, source: 'profile' }
+    : { isf: FALLBACK_ISF, source: 'fallback' };
+}
+
+/**
+ * The target range to use, and whether it is the patient's own.
+ *
+ * Both bounds must be usable AND correctly ordered before they may drive the
+ * hypo guard or the correction. A NaN target used to switch the hypo guard off
+ * silently — every comparison against NaN being false — which is the most
+ * dangerous shape this defect takes. An unusable or inverted pair falls back to
+ * the application's existing 70-180 mg/dL, reported as a fallback; no new
+ * clinical value is introduced, and a valid pair is passed through untouched.
+ */
+export function targetsForProfile(
+  profile: Profile | null
+): { low: number; high: number; source: ParamSource } {
+  const low = clinicalNumber(profile?.target_low);
+  const high = clinicalNumber(profile?.target_high);
+  if (low !== null && high !== null && low <= high) {
+    return { low, high, source: 'profile' };
+  }
+  return { low: FALLBACK_TARGET_LOW, high: FALLBACK_TARGET_HIGH, source: 'fallback' };
+}
+
+/**
+ * A glucose value in mg/dL, with what was supplied kept alongside it.
+ *
+ * The three states are answered separately (see {@link GlucoseState}) so that
+ * "not measured", "unusable" and "0" can never again share a code path. A
+ * recognized unit is converted deterministically; an unrecognized one makes the
+ * reading `invalid` rather than being read as mg/dL.
+ */
+export function readGlucose(
+  value: number | null | undefined,
+  unit: GlucoseUnit = 'mg/dL'
+): {
+  state: GlucoseState;
+  mgdl: number | null;
+  supplied: { value: number; unit: GlucoseUnit } | null;
+} {
+  if (value === null || value === undefined) {
+    return { state: 'absent', mgdl: null, supplied: null };
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return { state: 'invalid', mgdl: null, supplied: null };
+  }
+  if (unit !== 'mg/dL' && unit !== 'mmol/L') {
+    // A unit this engine cannot interpret is not a reading it may compare
+    // against mg/dL thresholds.
+    return { state: 'invalid', mgdl: null, supplied: null };
+  }
+  const mgdl = unit === 'mmol/L' ? Math.round(value * MMOL_TO_MGDL * 10) / 10 : value;
+  return { state: 'value', mgdl, supplied: { value, unit } };
 }
 
 export interface BolusInputs {
   carbs: number;
+  /**
+   * Whether `carbs` above is a real figure rather than a placeholder.
+   *
+   * Defaults to `true`, so every existing caller keeps its behaviour. Pass
+   * `false` when the carbohydrate is not known (an empty field, a meal whose
+   * carbohydrate was never established — see `carbProvenance.ts`): the engine
+   * then computes no meal bolus from it and SAYS so, instead of returning the
+   * same confident 0 U a genuine zero-carb meal produces.
+   */
+  carbsKnown?: boolean;
+  /** The current reading, in {@link BolusInputs.glucoseUnit}. `null` = not
+   *  measured. `0` is a value, not an absence. */
   glucose: number | null;
+  /**
+   * The unit `glucose` is expressed in. Defaults to mg/dL, which is the app's
+   * own contract for a typed reading: `saveGlucose` writes only `'mg/dL'`, the
+   * `glucose_logs.unit` column defaults to it, `sync.ts` coerces anything else
+   * to one of the two, and every field and label on the bolus screen says
+   * mg/dL. Callers holding a reading in another unit must state it.
+   */
+  glucoseUnit?: GlucoseUnit;
   profile: Profile | null;
   insulinLogs: InsulinLog[];
   activityLogs: ActivityLog[];
@@ -153,11 +332,27 @@ export interface BolusResult {
   bolusInsulinName: string | null;
   ratio: number;
   correctionFactor: number;
+  /** Whether `correctionFactor` is the patient's own or the app's fallback.
+   *  A fallback 50 and a patient-entered 50 used to be indistinguishable. */
+  isfSource: ParamSource;
   targetLow: number;
   targetHigh: number;
   targetMid: number;
+  /** Whether the target range above is the patient's own or the app's
+   *  fallback (unusable or inverted bounds take the fallback path). */
+  targetSource: ParamSource;
+  /** The reading used for the correction and the hypo guard, in mg/dL —
+   *  normalized from `glucoseSupplied` when that came in another unit. */
   glucose: number | null;
+  /** Which of the three input states produced `glucose` above. */
+  glucoseState: GlucoseState;
+  /** Exactly what was handed in, before normalization: `{ value: 5.6,
+   *  unit: 'mmol/L' }` stays visible next to the 100.9 mg/dL it became. Null
+   *  when nothing usable was supplied. */
+  glucoseSupplied: { value: number; unit: GlucoseUnit } | null;
   carbs: number;
+  /** Whether `carbs` is a figure or a placeholder (see `BolusInputs`). */
+  carbsKnown: boolean;
   trendPerMin: number | null; // mg/dL per minute (negative = falling)
   recentActivity: { kind: string; minutes: number; intensity: string } | null;
   /** Declared sport: already done, or planned after the meal (delayed-hypo
@@ -189,17 +384,41 @@ export function computeIOB(logs: InsulinLog[], now: Date): BolusResult['iobDoses
   return out;
 }
 
-/** BG slope in mg/dL per minute from readings in the last 90 minutes. */
+/**
+ * BG slope in mg/dL per minute from readings in the last 90 minutes.
+ *
+ * Every reading is normalized through its OWN `unit` before the subtraction.
+ * Until Step 13 the field was ignored, so a single mmol/L row among mg/dL ones
+ * fabricated a fast fall — 100 mg/dL followed by 5.6 mmol/L (which is 101 mg/dL,
+ * i.e. flat) read as −1.57 mg/dL per minute, tripping `falling`, cutting the
+ * dose by 10 % and making a correct dose look dangerous to `localDoseCheck`.
+ *
+ * A row whose unit is absent is read as mg/dL — the application's own default
+ * (the column default, the only value `saveGlucose` writes, and what `sync.ts`
+ * coerces to), not a guess. A row in a unit this engine does not know is
+ * DROPPED rather than mixed in.
+ */
 export function computeTrend(logs: GlucoseLog[], now: Date): number | null {
   const recent = logs
-    .filter((g) => now.getTime() - new Date(g.created_at).getTime() < 90 * 60000)
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    .map((g) => {
+      // Absent unit → the app's documented default. A unit that is neither of
+      // the two the app writes is passed through as-is, so `readGlucose`
+      // rejects it and the row is dropped below.
+      const unit = (g.unit ?? 'mg/dL') as GlucoseUnit;
+      const read = readGlucose(g.value, unit);
+      return read.state === 'value' && read.mgdl !== null
+        ? { mgdl: read.mgdl, at: new Date(g.created_at).getTime() }
+        : null;
+    })
+    .filter((g): g is { mgdl: number; at: number } => g !== null)
+    .filter((g) => now.getTime() - g.at < 90 * 60000)
+    .sort((a, b) => a.at - b.at);
   if (recent.length < 2) return null;
   const a = recent[0];
   const b = recent[recent.length - 1];
-  const dt = (new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) / 60000;
+  const dt = (b.at - a.at) / 60000;
   if (dt < 10) return null; // too close to be meaningful
-  return (b.value - a.value) / dt;
+  return (b.mgdl - a.mgdl) / dt;
 }
 
 export function computeSmartBolus(inputs: BolusInputs): BolusResult {
@@ -210,14 +429,30 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
   const mealTime = inputs.mealTime ?? guessMealTime(now);
   const r = ratioForMeal(p, mealTime);
   const ratio = Math.round(r.gPerU * 100) / 100;
-  const isf = p?.correction_factor || 50;
-  if (r.source === 'default' || !p?.correction_factor) flags.push('noRatio');
-  const targetLow = p?.target_low ?? 70;
-  const targetHigh = p?.target_high ?? 180;
+  // Each parameter now says whether it is the patient's or the app's fallback.
+  const { isf, source: isfSource } = isfForProfile(p);
+  const { low: targetLow, high: targetHigh, source: targetSource } = targetsForProfile(p);
   const targetMid = Math.round((targetLow + targetHigh) / 2);
+  // `noRatio` is kept exactly as it was — one compound flag for "some parameter
+  // was defaulted" — so anything already reading it behaves identically. The
+  // two specific flags below are what the UI consumes, because the patient has
+  // to know WHICH number is not theirs.
+  if (r.source === 'default' || isfSource === 'fallback') flags.push('noRatio');
+  if (isfSource === 'fallback') flags.push('defaultIsf');
+  if (targetSource === 'fallback') flags.push('defaultTarget');
 
   const carbs = Math.max(0, inputs.carbs || 0);
-  const glucose = inputs.glucose && inputs.glucose > 0 ? inputs.glucose : null;
+  // Absent by default only when the caller says so: `carbsKnown !== false`
+  // keeps every existing caller unchanged.
+  const carbsKnown = inputs.carbsKnown !== false;
+  if (!carbsKnown) flags.push('carbsUnknown');
+
+  // Presence, validity and unit answered separately — never by truthiness.
+  const read = readGlucose(inputs.glucose, inputs.glucoseUnit ?? 'mg/dL');
+  const glucose = read.mgdl;
+  const glucoseState = read.state;
+  if (glucoseState === 'absent') flags.push('noGlucose');
+  if (glucoseState === 'invalid') flags.push('glucoseInvalid');
 
   /* meal details for the report */
   const meal = inputs.lastMeal ?? null;
@@ -228,8 +463,11 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
     flags.push('sugarHeavy');
   }
 
-  /* 1 — meal bolus */
-  const mealBolus = carbs > 0 ? carbs / ratio : 0;
+  /* 1 — meal bolus. An unknown carbohydrate contributes nothing AND is
+     flagged: the 0 it would otherwise produce is indistinguishable from the 0
+     a glass of water genuinely produces. The correction below still runs, so a
+     correction-only dose (a real clinical use) is unaffected. */
+  const mealBolus = carbsKnown && carbs > 0 ? carbs / ratio : 0;
 
   /* 2 — correction (only above target high) */
   let correction = 0;
@@ -361,11 +599,16 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
     bolusInsulinName: p?.bolus_insulin_name?.trim() || null,
     ratio,
     correctionFactor: isf,
+    isfSource,
     targetLow,
     targetHigh,
     targetMid,
+    targetSource,
     glucose,
+    glucoseState,
+    glucoseSupplied: read.supplied,
     carbs,
+    carbsKnown,
     trendPerMin: trendPerMin === null ? null : Math.round(trendPerMin * 10) / 10,
     recentActivity,
     sportTiming,

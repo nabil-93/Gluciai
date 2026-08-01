@@ -15,6 +15,7 @@ import {
   updateProgram,
   type ProgramConstraints,
 } from '@/services/program';
+import { setProgramDraft } from '@/services/programDraft';
 import type { ActivityLevel, ProgramGoal } from '@/services/programEngine';
 import { useAppStore } from '@/store/useAppStore';
 import { useProgramStore } from '@/store/useProgramStore';
@@ -192,20 +193,23 @@ export default function ProgramSetupScreen() {
   const create = () => {
     // Hand the whole setup to the program screen, which creates the row and
     // asks the coach for the first week.
-    router.replace({
-      pathname: '/program',
-      params: {
-        create: '1',
-        goal,
-        weight: String(parseDecimal(weight) ?? ''),
-        targetWeight: String(parseDecimal(targetWeight) ?? ''),
-        rate: String(rate),
-        level,
-        place,
-        trainingDays: String(trainingDays),
-        constraints: JSON.stringify({ ...constraints, avoid: allAvoid() }),
-      },
-    } as any);
+    //
+    // The answers travel IN MEMORY, not as route params: on web a param becomes
+    // part of the URL, and body weight, target weight and dietary avoidances
+    // have no business in browser history, a `Referer` header, or a server
+    // access log. Only the non-sensitive `create` flag stays in the route.
+    // Values are unchanged — same strings, same order (see programDraft.ts).
+    setProgramDraft({
+      goal,
+      weight: String(parseDecimal(weight) ?? ''),
+      targetWeight: String(parseDecimal(targetWeight) ?? ''),
+      rate: String(rate),
+      level,
+      place,
+      trainingDays: String(trainingDays),
+      constraints: JSON.stringify({ ...constraints, avoid: allAvoid() }),
+    });
+    router.replace({ pathname: '/program', params: { create: '1' } } as any);
   };
 
   return (

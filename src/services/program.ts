@@ -302,6 +302,11 @@ export function plannedMealResult(meal: PlannedMeal, portion = 1): NutritionResu
     glycemic_index: meal.gi ?? 50,
     confidence: 0.6,
     nutrition_confidence: 0.4,
+    // An estimate is still a value. `PlannedMeal.carbs` is a required number
+    // the program engine has already resolved, so this is a known figure that
+    // happens to be approximate — not a missing one. Guarded anyway, because
+    // a meal restored from older persisted plan data could be short of it.
+    carbs_known: Number.isFinite(meal.carbs),
     source: 'ai_estimate',
     warnings: ['warn:ai_estimate'],
   };
