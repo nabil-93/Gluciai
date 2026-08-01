@@ -15,11 +15,46 @@ import type {
   MeasureKind,
   MeasureLog,
   NutritionResult,
+  PendingSync,
   Profile,
 } from '@/types';
 
+import { mirrorColumn as mirror } from './nutrition/nutrientProvenance';
+
 function id() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * A durable identity for one clinical event, minted on the DEVICE that records
+ * it (findings P5-005 / RC-4).
+ *
+ * Every event table's primary key is `id uuid primary key default
+ * gen_random_uuid()`, and the default only applies when the column is OMITTED —
+ * so a client-supplied uuid is accepted with no schema change, and RLS gates on
+ * `user_id`, never on `id`. That single fact is what lets the sync layer stop
+ * guessing:
+ *
+ *   · the same event pushed twice collides on its own key and stays ONE row;
+ *   · two genuinely identical events (a split dose: 6 U, then 6 U a minute
+ *     later) carry different keys and stay TWO rows.
+ *
+ * The old `id()` above minted a timestamp string, which the server could not
+ * accept as a uuid, so the row was inserted without a key and came back with a
+ * different one. Rows created before this change still carry those ids; the
+ * sync layer recognizes both shapes.
+ */
+function newEventId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (typeof c?.randomUUID === 'function') return c.randomUUID();
+  // Hermes ships no `crypto` global, and adding a polyfill would be a new
+  // dependency. A v4 laid out by hand from `Math.random` carries the same 122
+  // random bits; for one patient's own rows the collision probability is not a
+  // number that matters, and the value is a syntactically valid uuid either way.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
 }
 
 async function currentUserId(): Promise<string> {
@@ -29,28 +64,97 @@ async function currentUserId(): Promise<string> {
 }
 
 /**
- * Insert a row and return its server id + timestamp so the local copy uses
- * THEM — that's what lets deletes reach the server and lets the sync layer
- * tell synced rows (uuid) from offline ones (local timestamp id). Returns
- * null offline / in demo mode; the caller falls back to a local id and the
- * row is re-pushed by hydrateFromServer() on the next app open.
+ * What actually happened to a write (finding DATA-1).
+ *
+ * The previous signature was `… | null`, and that `null` meant four different
+ * things: demo mode, no network, a rejected insert, a thrown client. The caller
+ * could only treat them alike — keep the row locally and report success — so a
+ * write the server REFUSED looked exactly like a write it never heard about.
+ *
+ *   · `stored`  — the server has it. `created_at` is the server's.
+ *   · `local`   — no attempt was made (demo mode, or no client configured).
+ *                 Expected, not a failure.
+ *   · `failed`  — an attempt WAS made and did not confirm. The row is still
+ *                 kept locally and re-pushed by `hydrateFromServer()`, which is
+ *                 the offline-first guarantee; what changes is that the caller
+ *                 can no longer mistake this for confirmed persistence.
+ */
+export type WriteOutcome =
+  | { state: 'stored'; id: string; created_at: string }
+  | { state: 'local' }
+  | { state: 'failed'; reason: string };
+
+/**
+ * Insert a row the CLIENT has already given an identity to, and report what
+ * happened. The returned `created_at` is the server's, so a stored row shows
+ * the same instant everywhere; the id is the one that was sent.
  */
 async function insertReturning(
   table: string,
   payload: Record<string, unknown>
-): Promise<{ id: string; created_at: string } | null> {
-  if (isDemoMode || !supabase) return null;
+): Promise<WriteOutcome> {
+  if (isDemoMode || !supabase) return { state: 'local' };
   try {
     const { data, error } = await supabase
       .from(table)
       .insert(payload)
       .select('id, created_at')
       .single();
-    if (error || !data) return null;
-    return data as { id: string; created_at: string };
-  } catch {
-    return null;
+    if (error || !data) {
+      // Carried back rather than swallowed. There is deliberately no logging
+      // side-effect here: crash reporting is disabled by design (Step 8) and
+      // wiring an emitter would be a different remediation.
+      return { state: 'failed', reason: error?.message ?? 'no row returned' };
+    }
+    return { state: 'stored', ...(data as { id: string; created_at: string }) };
+  } catch (e) {
+    return { state: 'failed', reason: e instanceof Error ? e.message : 'insert threw' };
   }
+}
+
+/** The row's own id and timestamp when the server took it, the client's when it
+ *  did not — either way the LOCAL row keeps the identity the device minted. */
+function rowIdentity(
+  outcome: WriteOutcome,
+  clientId: string,
+  clientCreatedAt: string
+): {
+  id: string;
+  created_at: string;
+  pending_sync?: true;
+  sync_state?: 'local' | 'failed';
+} {
+  // `pending_sync` is unchanged — the sync layer still reads exactly one bit,
+  // and dedup, retry and identity are untouched. `sync_state` is the SECOND
+  // bit, for the screen that is about to tell the patient what happened: until
+  // Step 18 a write nobody attempted and a write the server REFUSED were the
+  // same row, so both were announced as "saved" (DATA-1's UI half).
+  return outcome.state === 'stored'
+    ? { id: outcome.id, created_at: outcome.created_at }
+    : {
+        id: clientId,
+        created_at: clientCreatedAt,
+        pending_sync: true,
+        sync_state: outcome.state,
+      };
+}
+
+/**
+ * The i18n key for what actually happened to a saved row (DATA-1's UI half).
+ *
+ * Kept here, beside `rowIdentity`, so every screen tells the same truth from
+ * the same two fields, and pure so it can be tested without a renderer:
+ *
+ *   confirmed        → the server has it
+ *   pending, local   → kept on this device, nothing was attempted
+ *   pending, failed  → attempted and refused; still kept, retried on next sync
+ *
+ * Offline-first is unchanged in all three cases: the row is never dropped.
+ */
+export function savedStateKey(row: PendingSync | null | undefined): string {
+  if (row?.sync_state === 'failed') return 'common.savedFailed';
+  if (row?.pending_sync) return 'common.savedLocal';
+  return 'common.savedRemote';
 }
 
 const UUID_RE =
@@ -114,20 +218,33 @@ export async function saveMeal(
   let remoteUrl: string | null = null;
   if (imageBase64) remoteUrl = await uploadMealPhoto(user_id, imageBase64);
 
-  let row: { id: string; created_at: string } | null = null;
+  // The identity of this meal, decided here and never reassigned: the same
+  // value goes to the server and stays on the local row, so a re-push can
+  // collide with itself instead of becoming a second meal.
+  const eventId = newEventId();
+  const at = createdAt ?? new Date().toISOString();
+
+  let outcome: WriteOutcome = { state: 'local' };
   if (user_id !== 'demo-user') {
     const httpUrl =
       remoteUrl ?? (imageUri && /^https?:/i.test(imageUri) ? imageUri : null);
-    row = await insertReturning('meal_scans', {
+    outcome = await insertReturning('meal_scans', {
+      id: eventId,
       user_id,
       image_url: httpUrl,
       result,
-      calories: result.calories,
-      carbs: result.carbohydrates,
-      sugar: result.sugar,
-      protein: result.protein,
-      fat: result.fat,
-      fiber: result.fiber,
+      // Every mirror column is a number or nothing. When a value is not
+      // actually known the result holds a placeholder 0, and writing that would
+      // put a fabricated figure in a column other readers — the dashboard, the
+      // doctor report — treat as fact. The columns are nullable; say nothing
+      // instead. (`result` keeps the full picture, including the provenance.)
+      // Step 10 did this for the carbohydrate; Step 22B does it for the rest.
+      calories: mirror(result, 'calories', result.calories),
+      carbs: result.carbs_known === false ? null : result.carbohydrates,
+      sugar: mirror(result, 'sugar', result.sugar),
+      protein: mirror(result, 'protein', result.protein),
+      fat: mirror(result, 'fat', result.fat),
+      fiber: mirror(result, 'fiber', result.fiber),
       glycemic_index: result.glycemic_index,
       confidence: result.confidence,
       ...(mealType ? { meal_type: mealType } : {}),
@@ -136,12 +253,11 @@ export async function saveMeal(
   }
 
   const meal: MealScan = {
-    id: row?.id ?? id(),
+    ...rowIdentity(outcome, eventId, at),
     user_id,
     image_url: remoteUrl ?? imageUri,
     result,
     meal_type: mealType,
-    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addMeal(meal);
   return meal;
@@ -149,9 +265,12 @@ export async function saveMeal(
 
 export async function saveGlucose(value: number, notes?: string, createdAt?: string) {
   const user_id = await currentUserId();
-  let row: { id: string; created_at: string } | null = null;
+  const eventId = newEventId();
+  const at = createdAt ?? new Date().toISOString();
+  let outcome: WriteOutcome = { state: 'local' };
   if (user_id !== 'demo-user') {
-    row = await insertReturning('glucose_logs', {
+    outcome = await insertReturning('glucose_logs', {
+      id: eventId,
       user_id,
       value,
       unit: 'mg/dL',
@@ -161,13 +280,12 @@ export async function saveGlucose(value: number, notes?: string, createdAt?: str
     });
   }
   const log: GlucoseLog = {
-    id: row?.id ?? id(),
+    ...rowIdentity(outcome, eventId, at),
     user_id,
     value,
     unit: 'mg/dL',
     source: 'manual',
     notes,
-    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addGlucoseLog(log);
   return log;
@@ -182,9 +300,15 @@ export async function saveInsulin(
   mealType?: MealType
 ) {
   const user_id = await currentUserId();
-  let row: { id: string; created_at: string } | null = null;
+  // Two injections of the same dose a minute apart are real practice, and they
+  // get two different ids here — which is precisely what stops the sync layer
+  // from having to guess whether they are one event.
+  const eventId = newEventId();
+  const at = createdAt ?? new Date().toISOString();
+  let outcome: WriteOutcome = { state: 'local' };
   if (user_id !== 'demo-user') {
-    row = await insertReturning('insulin_logs', {
+    outcome = await insertReturning('insulin_logs', {
+      id: eventId,
       user_id,
       insulin_type: insulinType,
       dose,
@@ -194,13 +318,12 @@ export async function saveInsulin(
     });
   }
   const log: InsulinLog = {
-    id: row?.id ?? id(),
+    ...rowIdentity(outcome, eventId, at),
     user_id,
     insulin_type: insulinType,
     dose,
     meal_type: mealType,
     notes,
-    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addInsulinLog(log);
   return log;
@@ -217,14 +340,18 @@ export async function logEvent(
   createdAt?: string
 ) {
   const user_id = await currentUserId();
+  // Event logs are outside Step 14's scope (they are not clinical events and
+  // carry no dose): the outcome is folded back to the previous shape so this
+  // path behaves exactly as it did.
   let row: { id: string; created_at: string } | null = null;
   if (user_id !== 'demo-user') {
-    row = await insertReturning('event_logs', {
+    const outcome = await insertReturning('event_logs', {
       user_id,
       kind,
       payload,
       ...(createdAt ? { created_at: createdAt } : {}),
     });
+    row = outcome.state === 'stored' ? { id: outcome.id, created_at: outcome.created_at } : null;
   }
   const event: AppEvent = {
     id: row?.id ?? id(),
@@ -308,9 +435,12 @@ export async function saveActivity(
   createdAt?: string
 ) {
   const user_id = await currentUserId();
-  let row: { id: string; created_at: string } | null = null;
+  const eventId = newEventId();
+  const at = createdAt ?? new Date().toISOString();
+  let outcome: WriteOutcome = { state: 'local' };
   if (user_id !== 'demo-user') {
-    row = await insertReturning('activity_logs', {
+    outcome = await insertReturning('activity_logs', {
+      id: eventId,
       user_id,
       kind,
       duration_min: durationMin,
@@ -320,13 +450,12 @@ export async function saveActivity(
     });
   }
   const log: ActivityLog = {
-    id: row?.id ?? id(),
+    ...rowIdentity(outcome, eventId, at),
     user_id,
     kind,
     duration_min: durationMin,
     intensity,
     notes,
-    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addActivityLog(log);
   return log;
@@ -339,9 +468,12 @@ export async function saveMeasure(
   createdAt?: string
 ) {
   const user_id = await currentUserId();
-  let row: { id: string; created_at: string } | null = null;
+  const eventId = newEventId();
+  const at = createdAt ?? new Date().toISOString();
+  let outcome: WriteOutcome = { state: 'local' };
   if (user_id !== 'demo-user') {
-    row = await insertReturning('measure_logs', {
+    outcome = await insertReturning('measure_logs', {
+      id: eventId,
       user_id,
       kind,
       value,
@@ -350,12 +482,11 @@ export async function saveMeasure(
     });
   }
   const log: MeasureLog = {
-    id: row?.id ?? id(),
+    ...rowIdentity(outcome, eventId, at),
     user_id,
     kind,
     value,
     unit,
-    created_at: row?.created_at ?? createdAt ?? new Date().toISOString(),
   };
   useAppStore.getState().addMeasureLog(log);
   return log;
@@ -369,9 +500,11 @@ export async function saveLabReport(
   report: Omit<LabReport, 'id' | 'user_id' | 'created_at'>
 ): Promise<LabReport> {
   const user_id = await currentUserId();
+  // Lab reports are outside Step 14's scope; folded back to the previous shape
+  // so this path is byte-for-byte unchanged.
   let row: { id: string; created_at: string } | null = null;
   if (user_id !== 'demo-user') {
-    row = await insertReturning('lab_reports', {
+    const outcome = await insertReturning('lab_reports', {
       user_id,
       lab_name: report.lab_name ?? null,
       report_date: report.report_date ?? null,
@@ -382,6 +515,7 @@ export async function saveLabReport(
       has_graphs: report.has_graphs ?? true,
       image_thumb: report.image_thumb ?? null,
     });
+    row = outcome.state === 'stored' ? { id: outcome.id, created_at: outcome.created_at } : null;
   }
   const saved: LabReport = {
     ...report,
@@ -476,36 +610,18 @@ export function deleteEvent(rowId: string) {
   remoteDelete('event_logs', rowId);
 }
 
-/**
- * Bolus estimation from the medical profile:
- * meal bolus = carbs / carb_ratio
- * correction = max(0, glucose - target_high) / correction_factor
- * Rounded to the nearest 0.5 U. Educational estimate — not medical advice.
+/*
+ * REMOVED IN STEP 14 — `computeBolus` (finding N-16).
+ *
+ * A second dose formula lived here: `carbs / (carb_ratio || 10)` plus
+ * `(glucose − mid) / (correction_factor || 50)`, rounded to 0.5 U. It carried
+ * every defect Step 13 had just removed from the real engine — a fabricated
+ * ICR, a fabricated ISF, and the `||` guard that let a NEGATIVE correction
+ * factor through — and it had no caller anywhere in the app: one stale comment
+ * in `ai.ts` pointed at it, nothing imported it, no test exercised it.
+ *
+ * Deleted rather than repaired. `computeSmartBolus` in `services/bolusEngine.ts`
+ * is the only dose calculation in this codebase, and a dead lookalike is how a
+ * closed finding comes back: the next person needing "a quick bolus number"
+ * would have found this one first.
  */
-export function computeBolus(
-  carbs: number,
-  glucose: number | null,
-  profile: Profile | null
-) {
-  const ratio = profile?.carb_ratio || 10;
-  const correctionFactor = profile?.correction_factor || 50;
-  const targetHigh = profile?.target_high || 180;
-  const targetLow = profile?.target_low || 70;
-  const targetMid = Math.round((targetHigh + targetLow) / 2);
-
-  const mealBolus = carbs > 0 ? carbs / ratio : 0;
-  const correction =
-    glucose && glucose > targetHigh
-      ? (glucose - targetMid) / correctionFactor
-      : 0;
-  const total = Math.max(0, Math.round((mealBolus + correction) * 2) / 2);
-  return {
-    mealBolus: Math.round(mealBolus * 10) / 10,
-    correction: Math.round(correction * 10) / 10,
-    total,
-    ratio,
-    correctionFactor,
-    targetMid,
-    isLow: glucose !== null && glucose < targetLow,
-  };
-}

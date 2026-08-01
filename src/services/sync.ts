@@ -1,4 +1,5 @@
 import { isDemoMode, supabase } from '@/lib/supabase';
+import { mirrorColumn } from '@/services/nutrition/nutrientProvenance';
 import { useAppStore } from '@/store/useAppStore';
 import { useProgramStore } from '@/store/useProgramStore';
 import type {
@@ -34,36 +35,89 @@ import type {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** True when the row already lives on the server (uuid primary key). */
+/**
+ * True when the row carries a uuid — which is now what a DEVICE mints for every
+ * clinical event it records (`newEventId` in `data.ts`), not only what the
+ * server hands back.
+ *
+ * The name is kept because the check is unchanged; what changed is its meaning
+ * for the caller: a uuid no longer implies "already synced", it implies "has a
+ * durable identity". Membership in the pull answers the sync question now.
+ */
 export function isServerId(rowId: string): boolean {
   return UUID_RE.test(rowId);
 }
 
 const httpOnly = (url?: string) => (url && /^https?:/i.test(url) ? url : null);
 
-/** Old mirrored rows kept a local id while the server row's timestamp
- *  drifted by the insert round-trip — treat "same data ± 2 min" as the
- *  same row so re-pushing never duplicates it. */
+/** LEGACY rows only — see `missingOnServer`. Rows written before Step 14 kept a
+ *  local timestamp id while the server's copy drifted by the insert round-trip,
+ *  so "same data ± 2 min" was the only way to recognize them. */
 const near = (a: string, b: string) =>
   Math.abs(new Date(a).getTime() - new Date(b).getTime()) < 120_000;
 
+/**
+ * Which local rows the server has never seen (findings P5-005 / RC-4).
+ *
+ * TWO POPULATIONS, deliberately handled differently:
+ *
+ *  · A row with a uuid was given its identity by the device that recorded it,
+ *    and that identity is what the server stores. So the question is exact set
+ *    membership — is this id in the pull? — and it answers correctly in both
+ *    directions the old heuristic got wrong: two 6 U injections a minute apart
+ *    carry two different ids and stay TWO events, while the same event seen
+ *    twice is one id and stays ONE.
+ *
+ *  · A row with a local timestamp id predates Step 14. Its server copy (if any)
+ *    carries an unrelated uuid, so identity cannot match it and the ±120 s +
+ *    equal-data heuristic is still the only thing available. It is kept EXACTLY
+ *    as it was, for those rows only: replacing it there would re-push every
+ *    legacy row and duplicate a patient's entire history.
+ */
 function missingOnServer<L extends { id: string; created_at: string }>(
   localRows: L[],
-  serverRows: { created_at: string }[],
+  serverRows: { id?: string; created_at: string }[],
   sameData: (local: L, server: any) => boolean
 ): L[] {
-  return localRows.filter(
-    (l) =>
-      !isServerId(l.id) &&
-      !serverRows.some((s) => near(l.created_at, s.created_at) && sameData(l, s))
+  const serverIds = new Set(
+    serverRows.map((s) => s.id).filter((v): v is string => typeof v === 'string')
   );
+  return localRows.filter((l) =>
+    isServerId(l.id)
+      ? !serverIds.has(l.id)
+      : !serverRows.some((s) => near(l.created_at, s.created_at) && sameData(l, s))
+  );
+}
+
+/**
+ * Carry a row's own identity into its push payload — and only its own.
+ *
+ * A uuid is the key the device minted, so sending it is what makes the push
+ * idempotent. A legacy timestamp id is NOT a uuid and the column will not take
+ * it, so the field is omitted and the server mints a key exactly as before.
+ */
+function withId(row: { id: string }): { id?: string } {
+  return isServerId(row.id) ? { id: row.id } : {};
 }
 
 const desc = (a: { created_at: string }, b: { created_at: string }) =>
   b.created_at < a.created_at ? -1 : 1;
 
-/** Insert offline-created rows (their original timestamps preserved) and
- *  return the server copies so the caller can merge them into the pull. */
+/**
+ * Insert offline-created rows (their original timestamps preserved) and return
+ * the server copies so the caller can merge them into the pull.
+ *
+ * IDEMPOTENT since Step 14: rows carry their own primary key, so a push that
+ * races another device — or a push whose response was lost after the server had
+ * already committed — collides with itself. `ignoreDuplicates` makes that
+ * collision a no-op (`ON CONFLICT DO NOTHING`) instead of either duplicating the
+ * event or failing the whole batch, and deliberately does NOT overwrite: the
+ * row already on the server wins, because it may have been edited there.
+ *
+ * A conflicting row simply isn't returned; it is already in the pull the caller
+ * is merging into. Legacy rows without a uuid still insert normally and the
+ * server mints their key, exactly as before.
+ */
 async function pushRows(
   table: string,
   rows: Record<string, unknown>[],
@@ -71,7 +125,10 @@ async function pushRows(
 ): Promise<any[]> {
   if (!rows.length || !supabase) return [];
   try {
-    const { data } = await supabase.from(table).insert(rows).select(select);
+    const { data } = await supabase
+      .from(table)
+      .upsert(rows, { onConflict: 'id', ignoreDuplicates: true })
+      .select(select);
     return (data as any[]) ?? [];
   } catch {
     return [];
@@ -327,6 +384,7 @@ export async function hydrateFromServer(): Promise<boolean> {
             glucoseRows,
             (l, s) => Number(s.value) === l.value
           ).map((g) => ({
+            ...withId(g),
             user_id: uid,
             value: g.value,
             unit: g.unit,
@@ -344,6 +402,7 @@ export async function hydrateFromServer(): Promise<boolean> {
             (l, s) =>
               Number(s.dose) === l.dose && s.insulin_type === l.insulin_type
           ).map((i) => ({
+            ...withId(i),
             user_id: uid,
             insulin_type: i.insulin_type,
             dose: i.dose,
@@ -359,15 +418,22 @@ export async function hydrateFromServer(): Promise<boolean> {
             mealRows,
             (l, s) => s.result?.food_name === l.result?.food_name
           ).map((m) => ({
+            ...withId(m),
             user_id: uid,
             image_url: httpOnly(m.image_url),
             result: m.result,
-            calories: m.result.calories,
-            carbs: m.result.carbohydrates,
-            sugar: m.result.sugar,
-            protein: m.result.protein,
-            fat: m.result.fat,
-            fiber: m.result.fiber,
+            // Same rule as `saveMeal` (data.ts), through the same helper: a
+            // mirror column is a number or nothing, and a meal whose nutrient
+            // was never known holds a placeholder 0. This is the OFFLINE path —
+            // without the gate a meal saved with no connection would land on
+            // the server carrying fabricated zeros the online path refuses to
+            // write. Step 10 covered the carbohydrate; Step 22B the rest.
+            calories: mirrorColumn(m.result, 'calories', m.result.calories),
+            carbs: m.result.carbs_known === false ? null : m.result.carbohydrates,
+            sugar: mirrorColumn(m.result, 'sugar', m.result.sugar),
+            protein: mirrorColumn(m.result, 'protein', m.result.protein),
+            fat: mirrorColumn(m.result, 'fat', m.result.fat),
+            fiber: mirrorColumn(m.result, 'fiber', m.result.fiber),
             glycemic_index: m.result.glycemic_index,
             confidence: m.result.confidence,
             meal_type: m.meal_type ?? null,
@@ -383,6 +449,7 @@ export async function hydrateFromServer(): Promise<boolean> {
             (l, s) =>
               s.kind === l.kind && Number(s.duration_min) === l.duration_min
           ).map((a) => ({
+            ...withId(a),
             user_id: uid,
             kind: a.kind,
             duration_min: a.duration_min,
@@ -399,6 +466,7 @@ export async function hydrateFromServer(): Promise<boolean> {
             measureRows,
             (l, s) => s.kind === l.kind && Number(s.value) === l.value
           ).map((m) => ({
+            ...withId(m),
             user_id: uid,
             kind: m.kind,
             value: m.value,
