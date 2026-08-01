@@ -7,6 +7,12 @@
 //   POST { provider: "fatsecret" | "edamam", query: string }
 //   ->   { hit: { matched_food, food_id?, per100g, match_score? } | null }
 //
+// `per100g` values are `number | null`: a nutrient the upstream source does not
+// publish is null, NEVER 0 — the client tells a measured zero from a missing one
+// and refuses to dose the latter. A FatSecret serving whose metric basis is not
+// grams yields NO hit at all rather than per-serving numbers wearing a per-100 g
+// label (see normalize.ts).
+//
 // Deploy:  supabase functions deploy nutrition-search
 // Secrets (optional — provider is skipped when its secrets are missing):
 //   supabase secrets set FATSECRET_CLIENT_ID=...  FATSECRET_CLIENT_SECRET=...
@@ -14,32 +20,36 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
+import { callerUserId } from '../_shared/usage.ts';
+import { edamamPer100g, fatSecretPer100g, type Hit } from './normalize.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type',
 };
 
-interface Per100g {
-  calories: number;
-  carbs: number;
-  sugar: number;
-  protein: number;
-  fat: number;
-  fiber: number;
-  sodium?: number;
-}
-interface Hit {
-  matched_food: string;
-  food_id?: string;
-  per100g: Per100g;
-  match_score?: number;
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  // A REAL signed-in user, before any provider work (finding P3/P4).
+  //
+  // Platform `verify_jwt` only checks the JWT signature, and the anon key —
+  // which ships inside the published web bundle and the mobile binary — is a
+  // validly signed JWT. So until this check existed, anyone holding the public
+  // key could drive this function in a loop and spend the project's FatSecret
+  // and Edamam credentials. That costs money, and when a provider rate-limits
+  // the project it silently removes the fallback tier of the nutrition chain
+  // for every patient.
+  //
+  // The check runs before the body is read, so an unauthenticated request
+  // costs one token lookup and reaches no provider at all.
+  if (!(await callerUserId(req))) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+
   try {
     const { provider, query } = await req.json();
     if (!query || typeof query !== 'string') {
@@ -120,21 +130,11 @@ async function searchFatSecret(query: string): Promise<Hit | null> {
   const s = Array.isArray(servings) ? servings[0] : servings;
   if (!s) return null;
 
-  const grams = numField(s.metric_serving_amount, 0);
-  const unit = String(s.metric_serving_unit ?? '').toLowerCase();
-  // Only trust gram-based servings for a clean per-100g conversion.
-  const factor = grams > 0 && unit === 'g' ? 100 / grams : 1;
-
-  const per100g: Per100g = {
-    calories: Math.round(numField(s.calories) * factor),
-    carbs: round1(numField(s.carbohydrate) * factor),
-    sugar: round1(numField(s.sugar) * factor),
-    protein: round1(numField(s.protein) * factor),
-    fat: round1(numField(s.fat) * factor),
-    fiber: round1(numField(s.fiber) * factor),
-    sodium: Math.round(numField(s.sodium) * factor), // mg
-  };
-  if (!(per100g.calories > 0)) return null;
+  // Per-serving → per-100 g. Returns null when the serving's basis is not in
+  // grams: emitting per-serving numbers as per-100 g ones is a wrong
+  // carbohydrate, and the engine simply falls through to the next provider.
+  const per100g = fatSecretPer100g(s);
+  if (!per100g) return null;
 
   return {
     matched_food: String(first.food_name ?? query),
@@ -162,18 +162,11 @@ async function searchEdamam(query: string): Promise<Hit | null> {
   const food =
     data?.parsed?.[0]?.food ?? data?.hints?.[0]?.food ?? null;
   if (!food?.nutrients) return null;
-  const n = food.nutrients; // Edamam nutrients are already per 100 g
 
-  const per100g: Per100g = {
-    calories: Math.round(numField(n.ENERC_KCAL)),
-    carbs: round1(numField(n.CHOCDF)),
-    sugar: round1(numField(n.SUGAR)),
-    protein: round1(numField(n.PROCNT)),
-    fat: round1(numField(n.FAT)),
-    fiber: round1(numField(n.FIBTG)),
-    sodium: Math.round(numField(n.NA)), // mg per 100 g
-  };
-  if (!(per100g.calories > 0)) return null;
+  // Edamam publishes per 100 g already, so there is no basis to establish —
+  // only absence to preserve (a nutrient it does not publish stays `null`).
+  const per100g = edamamPer100g(food.nutrients);
+  if (!per100g) return null;
 
   return {
     matched_food: String(food.label ?? query),
@@ -184,13 +177,6 @@ async function searchEdamam(query: string): Promise<Hit | null> {
 
 /* ─────────────────────────────── HELPERS ────────────────────────────── */
 
-function numField(v: unknown, fallback = 0): number {
-  const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
-  return Number.isFinite(n) ? n : fallback;
-}
-function round1(v: number): number {
-  return Math.round(v * 10) / 10;
-}
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,

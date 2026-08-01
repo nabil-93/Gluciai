@@ -6,6 +6,15 @@
 // app can draw the detection over the photo. All nutrition values come from
 // the client-side provider chain (Moroccan DB → USDA → Open Food Facts).
 //
+// RESPONSE CONTRACT (see normalize.ts for the reasoning):
+//   { detections: Detection[], incomplete: boolean }   // detect
+//   { dishes: string[],        incomplete: boolean }   // menu
+// A nutrient the model did not state is `null`, never `0` — the client tells a
+// measured zero from a missing one and refuses to dose the latter. A portion or
+// confidence this function had to default is reported (`*_stated: false`), and
+// `incomplete: true` means the model's answer was cut off and reassembled, so
+// the plate is a subset of what it listed.
+//
 // Deploy:  supabase functions deploy analyze-meal
 // Secrets: supabase secrets set GEMINI_API_KEY=...
 //          (optional) supabase secrets set GEMINI_VISION_MODEL=gemini-2.5-flash
@@ -15,6 +24,12 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
 import { featureLocked } from '../_shared/featureGuard.ts';
 import { quotaState } from '../_shared/quota.ts';
+import {
+  normalizeDetection,
+  parseModelJson,
+  validateRequest,
+  type Detection,
+} from './normalize.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const MODEL = Deno.env.get('GEMINI_VISION_MODEL') ?? 'gemini-2.5-flash';
@@ -116,19 +131,18 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const {
-      image_base64,
-      language = 'en',
-      mode = 'detect',
-    } = await req.json();
-
-    if (!image_base64) return json({ error: 'image_base64 is required' }, 400);
-    if (!GEMINI_API_KEY) {
-      return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
-    }
-
-    // Require a real signed-in user (the anon key alone passes verify_jwt but
-    // must not spend Gemini quota) and honor the dashboard's scanner lock.
+    /* WHO IS ASKING — before anything else (finding P4-b).
+     *
+     * This block used to sit BELOW the body parse and the `GEMINI_API_KEY`
+     * guard, so an unauthenticated caller holding the public anon key got a
+     * 500 naming a missing secret, or a 400 from input validation — learning
+     * server configuration state and consuming parsing work without ever being
+     * authenticated. The checks themselves are unchanged; only their order is.
+     *
+     * A consequence worth stating: the feature lock and the quota are now
+     * reachable without a provider secret, which is what finally makes
+     * server-side lock enforcement (SEC-1) verifiable on the local stack.
+     */
     const uid = await callerUserId(req);
     if (!uid) return json({ error: 'unauthorized' }, 401);
     if (await featureLocked(uid, 'scanner')) {
@@ -143,6 +157,16 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Input validation only — the prompt, the temperature, the provider and the
+    // model's semantics are untouched (see `validateRequest`).
+    const req_ = validateRequest(await req.json());
+    if (!req_.ok) return json({ error: req_.error }, req_.status);
+    const { imageBase64: image_base64, language, mode } = req_;
+
+    if (!GEMINI_API_KEY) {
+      return json({ error: 'AI is not configured (missing GEMINI_API_KEY)' }, 500);
+    }
+
     // Diagnostic (shows in Supabase logs): size of the image we received —
     // lets us verify the app really sends the full, healthy picture.
     console.log(
@@ -151,7 +175,11 @@ Deno.serve(async (req) => {
 
     const prompt = mode === 'menu' ? MENU_PROMPT : DETECT_PROMPT;
     const { text: raw, inTok, outTok } = await callGemini(prompt, image_base64, language);
-    const parsed = parseJson(raw);
+    // `repaired` = the body was cut off and reassembled, so what follows is a
+    // SUBSET of what the model listed. It is reported to the client as
+    // `incomplete`; a plate that is missing foods is missing carbohydrate, and
+    // nothing on screen would otherwise say so.
+    const { data: parsed, repaired } = parseModelJson(raw);
 
     // Exact billing data from Gemini (usageMetadata) → ai_usage table.
     if (uid && (inTok || outTok)) {
@@ -169,7 +197,7 @@ Deno.serve(async (req) => {
       const dishes = Array.isArray(parsed?.dishes)
         ? parsed.dishes.filter((d: unknown) => typeof d === 'string' && d.trim())
         : [];
-      return json({ dishes });
+      return json({ dishes, incomplete: repaired });
     }
 
     // DETECT: map the model's `foods` onto the client's detection contract.
@@ -178,7 +206,7 @@ Deno.serve(async (req) => {
       .map(normalizeDetection)
       .filter((d: Detection | null): d is Detection => d !== null);
 
-    return json({ detections });
+    return json({ detections, incomplete: repaired });
   } catch (error) {
     return json({ error: String(error) }, 500);
   }
@@ -272,192 +300,10 @@ function parseRetryDelayMs(body: string): number {
   return m ? (parseInt(m[1], 10) + 1) * 1000 : 5000;
 }
 
-const CATEGORIES = new Set([
-  'Protein', 'Vegetable', 'Fruit', 'Rice', 'Bread', 'Pasta', 'Soup', 'Sauce',
-  'Dessert', 'Drink', 'Snack', 'Fast Food', 'Seafood', 'Legumes', 'Dairy',
-  'Egg', 'Unknown',
-]);
-
-interface Detection {
-  name: string;
-  search_name: string;
-  category: string;
-  portion_grams: number;
-  confidence: number; // 0..1 for the client
-  // (nutrition_per_100g declared below is emitted straight to the client)
-  bounding_box?: { x: number; y: number; width: number; height: number };
-  is_main_food?: boolean;
-  is_estimated?: boolean;
-  alternatives?: string[];
-  nutrition_per_100g?: {
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-    sugar: number;
-    fiber: number;
-    sodium?: number;
-  };
-}
-
-/** Coerce one raw model food into the strict client contract, or null. */
-function normalizeDetection(raw: unknown): Detection | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const f = raw as Record<string, unknown>;
-
-  const name = String(f.display_name ?? f.name ?? '').trim();
-  if (!name) return null;
-
-  const search = String(f.search_name ?? '').trim() || name.toLowerCase();
-  const grams = clampNumber(f.grams, 5, 2000, 100);
-
-  // Model returns confidence 0..100; the client works in 0..1.
-  const rawConf = clampNumber(f.confidence, 0, 100, 60);
-  const confidence = Math.round((rawConf / 100) * 100) / 100;
-
-  // Validate the category against the allowed enum; anything else → Unknown.
-  const rawCat = String(f.category ?? '').trim();
-  const category = CATEGORIES.has(rawCat) ? rawCat : 'Unknown';
-
-  const det: Detection = {
-    name,
-    search_name: search,
-    category,
-    portion_grams: Math.round(grams),
-    confidence,
-    // Default main-food true only for high confidence; flag low-confidence
-    // gram guesses as estimated even if the model forgot to.
-    is_main_food: f.is_main_food === true,
-    is_estimated: f.is_estimated === true || confidence < 0.5,
-  };
-
-  // Up to 3 distinct alternative search names (for the "Did you mean?" sheet).
-  if (Array.isArray(f.alternatives)) {
-    const alts = f.alternatives
-      .map((a) => String(a ?? '').trim().toLowerCase())
-      .filter((a) => a.length > 0 && a !== search)
-      .slice(0, 3);
-    if (alts.length > 0) det.alternatives = [...new Set(alts)];
-  }
-
-  const box = normalizeBox(f.bounding_box);
-  if (box) det.bounding_box = box;
-
-  const nut = normalizeNutrition(f.nutrition_per_100g);
-  if (nut) det.nutrition_per_100g = nut;
-
-  return det;
-}
-
-/**
- * Convert the model's 0-1000 normalized box into 0-1 FRACTIONS of the
- * image, clamped to bounds. Rejects boxes that cover almost the whole image
- * (> 92% of a side) — those are "I'm not sure where" boxes that would just
- * blanket the photo. Fractions are resolution-independent, so the overlay
- * scales them to whatever size the image is displayed at.
- */
-function normalizeBox(raw: unknown): Detection['bounding_box'] | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const b = raw as Record<string, unknown>;
-  let x = Number(b.x);
-  let y = Number(b.y);
-  let width = Number(b.width);
-  let height = Number(b.height);
-  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
-    return undefined;
-  }
-  // 0-1000 → 0-1 fractions.
-  x /= 1000;
-  y /= 1000;
-  width /= 1000;
-  height /= 1000;
-  // Clamp into the frame.
-  x = Math.max(0, Math.min(1, x));
-  y = Math.max(0, Math.min(1, y));
-  width = Math.min(width, 1 - x);
-  height = Math.min(height, 1 - y);
-  if (width <= 0.01 || height <= 0.01) return undefined;
-  // Reject near-full-frame boxes (not a useful localization).
-  if (width > 0.92 && height > 0.92) return undefined;
-  return { x, y, width, height };
-}
-
-/** Coerce the model's per-100g nutrition estimate, or null if implausible. */
-function normalizeNutrition(raw: unknown): Detection['nutrition_per_100g'] | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const n = raw as Record<string, unknown>;
-  // Pure fats/oils reach ~900 kcal/100g; allow headroom so we don't discard
-  // a valid rich-food estimate (mayonnaise ~680, oil ~884).
-  const calories = clampNumber(n.calories, 0, 950, 0);
-  // A real food per 100g has some calories; 0 means the model didn't fill it.
-  if (calories <= 0) return undefined;
-  return {
-    calories,
-    protein: clampNumber(n.protein, 0, 100, 0),
-    carbs: clampNumber(n.carbs, 0, 100, 0),
-    fat: clampNumber(n.fat, 0, 100, 0),
-    sugar: clampNumber(n.sugar, 0, 100, 0),
-    fiber: clampNumber(n.fiber, 0, 100, 0),
-    sodium: clampNumber(n.sodium, 0, 40000, 0),
-  };
-}
-
-function clampNumber(v: unknown, min: number, max: number, fallback: number) {
-  const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, n));
-}
-
 /** Accept both a bare base64 string and a full `data:...;base64,` URL. */
 function stripDataUrl(b64: string): string {
   const comma = b64.indexOf('base64,');
   return comma >= 0 ? b64.slice(comma + 'base64,'.length) : b64;
-}
-
-/**
- * Parse JSON even if the model wrapped it in ```json fences or prose, and
- * even if the response was cut off mid-array (hit maxOutputTokens on a
- * plate with many foods). In that last case we drop the dangling partial
- * object and close the array/object, so a truncated response still yields
- * every food that was FULLY described before the cut — never invented,
- * just fewer items than the model intended.
- */
-function parseJson(text: string): any {
-  const cleaned = text
-    .replace(/^```(?:json)?/i, '')
-    .replace(/```$/i, '')
-    .trim();
-
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    // 1 — grab the first {...} block (strips leading/trailing prose).
-    const start = cleaned.indexOf('{');
-    if (start < 0) throw new Error('Model did not return valid JSON');
-    const body = cleaned.slice(start);
-
-    const end = cleaned.lastIndexOf('}');
-    if (end > start) {
-      try {
-        return JSON.parse(cleaned.slice(start, end + 1));
-      } catch {
-        /* still broken → likely truncated mid-object, try repair below */
-      }
-    }
-
-    // 2 — truncated response: cut back to the last fully-closed object
-    // inside the foods/dishes array, then close the array + root object.
-    const lastCompleteObj = body.lastIndexOf('}');
-    if (lastCompleteObj > 0) {
-      const repaired = `${body.slice(0, lastCompleteObj + 1)}]}`;
-      try {
-        return JSON.parse(repaired);
-      } catch {
-        /* fall through */
-      }
-    }
-    throw new Error('Model did not return valid JSON');
-  }
 }
 
 function json(body: unknown, status = 200) {

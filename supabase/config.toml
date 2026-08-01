@@ -39,8 +39,17 @@ enabled = true
 file_size_limit = "10MiB"
 
 # ── Edge Functions ─────────────────────────────────────────────────────
-# JWT verification stays ON (default) so only authenticated users can call
-# them. The app invokes them with the user's session token.
+# JWT verification stays ON for every function. It was previously stated for
+# four and inherited from the platform default for the other eight; the posture
+# is now written down rather than assumed. This changes no behaviour: the CLI
+# already resolved `verifyJWT: true` for all twelve (visible in the edge
+# runtime's own SUPABASE_INTERNAL_FUNCTIONS_CONFIG), and an unauthenticated
+# request to any of them is refused "Missing authorization header" today.
+#
+# What `verify_jwt` is NOT: authentication. It only checks the JWT SIGNATURE,
+# and the anon key that ships in the published bundle is a validly signed JWT
+# — so every function ALSO re-checks the caller itself (`callerUserId` /
+# `isAdminCaller`). See tests-security/functions/authBoundary.test.ts.
 [functions.analyze-meal]
 verify_jwt = true
 
@@ -51,4 +60,28 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.tts]
+verify_jwt = true
+
+[functions.food-search]
+verify_jwt = true
+
+[functions.lab-analyze]
+verify_jwt = true
+
+[functions.live-token]
+verify_jwt = true
+
+[functions.world-recipes]
+verify_jwt = true
+
+[functions.admin-ops]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.enrich-dishes]
+verify_jwt = true
+
+[functions.gen-dish-image]
 verify_jwt = true

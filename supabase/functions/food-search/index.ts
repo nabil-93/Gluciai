@@ -10,6 +10,8 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
+import { callerUserId } from '../_shared/usage.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
@@ -27,6 +29,19 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  // A REAL signed-in user, before any provider work (finding P3/P4).
+  //
+  // Platform `verify_jwt` only checks the JWT signature, and the anon key is a
+  // validly signed JWT that ships in the published bundle — so this proxy used
+  // to run for anyone holding it. Open Food Facts needs no key, but every
+  // request goes out under the project's own User-Agent: abuse is attributable
+  // to us, and getting blocked would take the "Base mondiale" tab down for
+  // every patient.
+  if (!(await callerUserId(req))) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+
   try {
     const { q = '', page = 1 } = await req.json();
     const query = String(q).trim().slice(0, 80);

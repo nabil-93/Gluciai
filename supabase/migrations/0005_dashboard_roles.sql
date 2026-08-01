@@ -260,6 +260,18 @@ grant select on public.patient_overview to authenticated;
 grant select on public.doctor_overview to authenticated;
 
 -- ── 12. bootstrap: make Nabil the admin ─────────────────────────────────────
+-- Guarded so the chain also runs against an EMPTY database. profiles.user_id
+-- is a non-deferrable FK to auth.users, so the original unguarded VALUES form
+-- aborted migration 0005 on any fresh environment (local reset, CI, a rebuilt
+-- project) where that auth user does not exist.
+--
+-- Semantically neutral where it has already been applied: the FK guarantees
+-- that a profiles row for this id cannot exist without its auth.users row, so
+-- the predicate is necessarily true there and the outcome is unchanged.
+-- See docs/MIGRATION-HISTORY-NOTE.md.
 insert into public.profiles (user_id, email, name, role)
-values ('e40b51e2-6a19-4948-b2fa-b0a1791875a7', 'nab.ouhaddou@gmail.com', 'Nabil', 'admin')
+select 'e40b51e2-6a19-4948-b2fa-b0a1791875a7', 'nab.ouhaddou@gmail.com', 'Nabil', 'admin'
+where exists (
+  select 1 from auth.users where id = 'e40b51e2-6a19-4948-b2fa-b0a1791875a7'
+)
 on conflict (user_id) do update set role = 'admin';

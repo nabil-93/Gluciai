@@ -1030,10 +1030,12 @@ patient can share with their doctor.
 • Scan a meal — Home → "Scan now". Take/pick a photo; the AI detects the
   foods, then every value comes from nutrition databases (Moroccan internal
   DB, USDA, Open Food Facts…), never invented.
-• Meal analysis (after a scan) — calories, health score /100, Nutri-Score
-  A–E, glycemic index + glycemic load, detected foods (editable), added
-  sugar, vitamins & minerals, goal comparison, exercise equivalent,
-  hydration, meal-of-day choice, Save.
+• Meal analysis (after a scan) — calories, health score /100, the GluciAI
+  index A–E (the app's OWN meal indicator, computed from this plate; it is
+  NOT a Nutri-Score and must never be called one), glycemic index +
+  glycemic load, detected foods (editable), added sugar, vitamins &
+  minerals, goal comparison, exercise equivalent, hydration, meal-of-day
+  choice, Save.
   – Correct a food or a portion: "Edit" next to "Detected foods". Renaming
     re-searches the databases; changing grams rescales everything.
   – Add something the AI missed: "Add a food".
