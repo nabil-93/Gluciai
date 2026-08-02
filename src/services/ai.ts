@@ -181,7 +181,32 @@ async function detectFoods(
   });
   const quota = await asQuotaError(error, data);
   if (quota) throw quota;
-  if (error) throw error;
+  if (error) {
+    /* THE SERVER'S EXPLANATION WAS BEING THROWN AWAY.
+       supabase-js turns any non-2xx into a FunctionsHttpError whose `message`
+       is the generic "Edge Function returned a non-2xx status code" and whose
+       `data` is null — the JSON body, which carries our real reason, is only
+       reachable through `context`, the raw Response. So the function could
+       answer 503 `code: 'ai_unavailable'` and the app would still show
+       "vérifiez votre connexion", because nothing ever read it.
+
+       Read the body, attach the code and the server's message to the thrown
+       error, and let the screen decide from a CODE rather than from a
+       sentence. A body that will not parse changes nothing — the original
+       error is rethrown exactly as before. */
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === 'function') {
+      const body = await ctx.clone().json().catch(() => null);
+      if (body && typeof body === 'object') {
+        const e = error as Error & { code?: string; serverMessage?: string };
+        if (typeof body.code === 'string') e.code = body.code;
+        if (typeof body.error === 'string') e.serverMessage = body.error;
+        // A 503 IS the busy case even when the function could not label it.
+        if (!e.code && ctx.status === 503) e.code = 'ai_unavailable';
+      }
+    }
+    throw error;
+  }
   if (data?.error) throw new Error(data.error);
 
   // New contract: { detections: [{ name, portion_grams, confidence, ... }] }
