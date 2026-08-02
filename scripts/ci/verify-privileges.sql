@@ -74,11 +74,35 @@ begin
   raise notice 'OK  table privileges complete for anon/authenticated/service_role';
 end $$;
 
-/* ── 4. Default privileges, so migrations 0031+ inherit the same baseline ─ */
+/* ── 4. Default privileges, so later migrations inherit the same baseline ──
+   COMPARED TO THE OWNER, not to a literal.
+
+   This block used to require the exact ACL string `arwdDxtm` for each API
+   role. That literal was measured against the HOSTED project, which runs
+   PostgreSQL 17 — and `m` is MAINTAIN, a privilege that only exists from 17
+   onwards. The local CI stack is `major_version = 15` (supabase/config.toml),
+   where `grant all on tables` yields the seven privileges that version has:
+   `arwdDxt`. The roles were not short of anything; the expectation was
+   describing a different server.
+
+   So the rule is now stated as the security property it was always trying to
+   express: no API role may hold FEWER default privileges than the table owner
+   itself. `grant all` satisfies that on every version — seven letters on 15,
+   eight on 17 — and any future REVOKE that narrows anon, authenticated or
+   service_role still fails here, which is the regression this gate exists to
+   catch. Nothing is loosened: a role that lost SELECT fails exactly as before.
+
+   Set-based via aclexplode() rather than substring matching, so the check can
+   never again depend on the spelling or ordering of an ACL string. */
 do $$
-declare acl text;
+declare
+  acl aclitem[];
+  owner_privs text[];
+  role_name text;
+  role_privs text[];
+  problems text := '';
 begin
-  select d.defaclacl::text into acl
+  select d.defaclacl into acl
   from pg_default_acl d
   join pg_namespace ns on ns.oid = d.defaclnamespace
   where ns.nspname = 'public'
@@ -89,12 +113,37 @@ begin
     raise exception 'no default table ACL for role postgres in schema public';
   end if;
 
-  if position('anon=arwdDxtm' in acl) = 0
-     or position('authenticated=arwdDxtm' in acl) = 0
-     or position('service_role=arwdDxtm' in acl) = 0 then
-    raise exception 'default table ACL does not grant full privileges to the api roles: %', acl;
+  select array_agg(distinct a.privilege_type order by a.privilege_type)
+    into owner_privs
+  from aclexplode(acl) a
+  where pg_get_userbyid(a.grantee) = 'postgres';
+
+  -- Without an owner entry there is nothing to measure the roles against, and
+  -- silently passing would turn this gate off.
+  if owner_privs is null then
+    raise exception 'default table ACL carries no entry for the owner: %', acl::text;
   end if;
-  raise notice 'OK  default table privileges match the hosted baseline';
+
+  foreach role_name in array array['anon', 'authenticated', 'service_role'] loop
+    select array_agg(distinct a.privilege_type order by a.privilege_type)
+      into role_privs
+    from aclexplode(acl) a
+    where pg_get_userbyid(a.grantee) = role_name;
+
+    if role_privs is null or not (owner_privs <@ role_privs) then
+      problems := problems || format('%s has [%s]; ', role_name,
+        coalesce(array_to_string(role_privs, ','), '(no entry)'));
+    end if;
+  end loop;
+
+  if problems <> '' then
+    raise exception
+      'default table ACL is narrower for api roles than for the owner [%]: %',
+      array_to_string(owner_privs, ','), problems;
+  end if;
+
+  raise notice 'OK  default table privileges match the owner on this server (%)',
+    array_to_string(owner_privs, ',');
 end $$;
 
 /* ── 5. Function EXECUTE map matches the measured hosted state exactly ──── */
