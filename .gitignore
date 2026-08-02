@@ -61,3 +61,6 @@ supabase/.branches/
 
 .vercel
 .env*
+
+# Local agent scratch (hooks config) — not part of the app
+.codex/
