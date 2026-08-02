@@ -21,6 +21,7 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
+import { aiFetch, AiUnavailableError, aiUnavailableBody } from '../_shared/aiFetch.ts';
 import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
 import { featureLocked } from '../_shared/featureGuard.ts';
 import { quotaState } from '../_shared/quota.ts';
@@ -249,6 +250,20 @@ async function callGemini(
       },
     ],
     generationConfig: {
+      // THINKING WAS EATING THE ANSWER — the older half of the scanner bug.
+      //
+      // gemini-2.5-flash reasons by default, and thinking tokens are drawn from
+      // `maxOutputTokens`, the SAME budget as the reply. On a busy plate the
+      // model could spend most of the 4096 thinking, then stop at MAX_TOKENS
+      // with its `parts` truncated or absent — which arrives here as a 200 with
+      // no text and becomes "Empty response from Gemini", a 500 after ~17s.
+      // Retrying cannot help: the provider answered fine, we asked badly.
+      //
+      // Every other Gemini call in this repo already sets this — ai-chat in
+      // seven places, lab-analyze in four, world-recipes, enrich-dishes. The
+      // scanner was the only one left thinking, and detection is extraction,
+      // not reasoning: the whole budget belongs to the JSON.
+      thinkingConfig: { thinkingBudget: 0 },
       temperature: 0.2,
       // Force JSON so we don't have to scrape markdown fences.
       responseMimeType: 'application/json',
@@ -279,8 +294,19 @@ async function callGemini(
     ?.map((p: { text?: string }) => p.text ?? '')
     .join('')
     .trim();
-  if (!text) throw new Error('Empty response from Gemini');
   const um = data?.usageMetadata ?? {};
+  if (!text) {
+    // "Empty response from Gemini" said nothing about WHY, and the why is the
+    // whole diagnosis: MAX_TOKENS means we asked for more than the budget
+    // allowed (see thinkingConfig above), SAFETY means the image was refused,
+    // and neither is a transient fault worth retrying. Name the reason and the
+    // token spend so the next occurrence is one log line, not an investigation.
+    const reason = data?.candidates?.[0]?.finishReason ?? 'unknown';
+    throw new Error(
+      `Empty response from Gemini (finishReason=${reason}, ` +
+        `thoughts=${um.thoughtsTokenCount ?? 0}, out=${um.candidatesTokenCount ?? 0})`
+    );
+  }
   return {
     text,
     inTok: um.promptTokenCount ?? 0,

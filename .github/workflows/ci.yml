@@ -34,6 +34,15 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit
 
+      # tsconfig.json EXCLUDES supabase/functions (Deno, its own globals), and
+      # `supabase functions deploy` bundles without typechecking. So nothing
+      # above this line reads the edge functions at all. A symbol used but not
+      # imported deploys ACTIVE and throws ReferenceError on the first real
+      # request — that is how the scanner returned 500 on every photo for a
+      # release. This is the floor under that directory.
+      - name: Edge function imports
+        run: npm run check:edge
+
       # The clinical and domain golden baselines. These characterize today's
       # behaviour, including known-bad behaviour — a diff here means behaviour
       # changed, which is exactly the signal we want.

@@ -67,6 +67,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "check:edge": "node scripts/ci/check-edge-imports.mjs",
     "test": "vitest",
     "test:ci": "vitest run",
     "test:security": "vitest run --config vitest.security.config.ts"
