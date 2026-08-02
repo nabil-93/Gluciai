@@ -207,6 +207,32 @@ export function unitToGrams(value: number, unit: PortionUnit, density: number): 
 }
 
 /**
+ * What the number should read after the patient switches a row's unit.
+ *
+ * Two cases, and they differ in a way that reaches the saved grams — which is
+ * why this is a function here and not two lines inside a component.
+ *
+ * `established` — the food already has a known quantity, because the scanner
+ * resolved it. Switching RE-EXPRESSES that quantity: 100 g of milk becomes
+ * 97 ml, the same milk, and nothing downstream moves.
+ *
+ * Not established — the food is still being described. The number is what the
+ * patient is entering and the unit says what they MEAN by it. Someone who
+ * types 700 and picks ml wants 700 ml; converting would answer them with 769.
+ * The grams are derived from both when the plate is saved.
+ */
+export function amountAfterUnitSwitch(
+  amount: number,
+  from: PortionUnit,
+  to: PortionUnit,
+  density: number,
+  established: boolean
+): number {
+  if (from === to || !established) return amount;
+  return gramsToUnit(unitToGrams(amount, from, density), to, density);
+}
+
+/**
  * "180 g" / "250 ml" — the portion as it should appear anywhere a food is
  * listed. One function so the analysis screen, the PDF, the program's meal
  * card and the editor cannot disagree about the same plate.

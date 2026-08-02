@@ -9,6 +9,7 @@ import { AppButton, BevelCard, FadeInView, HeroScreen, HERO_INK, HERO_MUTED } fr
 import { analyzeMenu } from '@/services/ai';
 import { saveMeal } from '@/services/data';
 import { sourceLabel } from '@/services/nutrition/engine';
+import { formatPortion } from '@/services/nutrition/portionUnit';
 import {
   giBand,
   isCarbKnown,
@@ -187,7 +188,7 @@ export default function MenuScanScreen() {
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={styles.dishName}>{d.item.name}</Text>
                       <Text style={styles.dishPortion}>
-                        {Math.round(d.item.portion_grams)} g ·{' '}
+                        {formatPortion(d.item)} ·{' '}
                         {sourceLabel(d.item.source)}
                       </Text>
                     </View>

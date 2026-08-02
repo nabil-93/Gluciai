@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_DENSITY,
+  amountAfterUnitSwitch,
   defaultUnitFor,
   densityFor,
   formatPortion,
@@ -199,6 +200,36 @@ describe('THE INVARIANT — a unit switch re-expresses a portion, never re-weigh
   it('a zero or negative density cannot divide by zero — it falls back to water', () => {
     expect(gramsToUnit(100, 'ml', 0)).toBe(100);
     expect(unitToGrams(100, 'ml', -1)).toBe(100);
+  });
+});
+
+describe('amountAfterUnitSwitch — an established food converts, a typed one does not', () => {
+  const milk = densityFor({ search_name: 'milk' }); // 1.03
+  const oil = densityFor({ search_name: 'olive oil' }); // 0.91
+
+  it('re-expresses a food the scanner already resolved', () => {
+    expect(amountAfterUnitSwitch(100, 'g', 'ml', milk, true)).toBe(97);
+    expect(amountAfterUnitSwitch(97, 'ml', 'g', milk, true)).toBe(100);
+  });
+
+  it('leaves a food still being typed exactly as typed', () => {
+    // Someone who types 700 and picks ml means 700 ml, not the 769 that
+    // converting 700 g would produce. This reaches the SAVED GRAMS.
+    expect(amountAfterUnitSwitch(700, 'g', 'ml', oil, false)).toBe(700);
+    expect(amountAfterUnitSwitch(100, 'g', 'ml', milk, false)).toBe(100);
+  });
+
+  it('and those two really do save different amounts of food', () => {
+    const typed = unitToGrams(amountAfterUnitSwitch(700, 'g', 'ml', oil, false), 'ml', oil);
+    const converted = unitToGrams(amountAfterUnitSwitch(700, 'g', 'ml', oil, true), 'ml', oil);
+    expect(Math.round(typed)).toBe(637); // 700 ml of oil
+    expect(Math.round(converted)).toBe(700); // still the 700 g it was
+    expect(typed).not.toBe(converted);
+  });
+
+  it('a switch to the same unit is a no-op either way', () => {
+    expect(amountAfterUnitSwitch(250, 'ml', 'ml', milk, true)).toBe(250);
+    expect(amountAfterUnitSwitch(250, 'g', 'g', milk, false)).toBe(250);
   });
 });
 

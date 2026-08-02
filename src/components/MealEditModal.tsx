@@ -18,9 +18,10 @@ import { Spinner } from '@/components/ui/Spinner';
 import { reidentifyItem, rescaleItem, resolveFood } from '@/services/nutrition/engine';
 import { clampPortionGrams } from '@/services/nutrition/plausibility';
 import {
+  amountAfterUnitSwitch,
+  defaultUnitFor,
   densityFor,
   gramsToUnit,
-  isLiquid,
   unitOf,
   unitToGrams,
   type PortionUnit,
@@ -29,7 +30,6 @@ import { useAppStore } from '@/store/useAppStore';
 import type { FoodCategory, FoodItemResult } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
-const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
@@ -69,6 +69,12 @@ interface Row {
    */
   amount: string;
   unit: PortionUnit;
+  /**
+   * True once the patient picked the unit themselves. Name-based detection
+   * then stops touching it: typing "lait" may propose ml, but it must never
+   * overrule someone who has already said what they meant.
+   */
+  unitPinned?: boolean;
   category?: FoodCategory;
   /** English query name, kept for the density lookup and reused on save. */
   search_name?: string;
@@ -90,16 +96,9 @@ const UNITS: readonly PortionUnit[] = ['g', 'ml'];
 const rowDensity = (r: Row) =>
   densityFor({ name: r.name, search_name: r.search_name, category: r.category });
 
-/**
- * Does this row get the g/ml picker?
- *
- * Pourable foods do. So does anything ALREADY written in ml — a food switched
- * before this rule existed, or one whose name the patient has since edited out
- * of recognition, must never be stranded in a unit it cannot leave.
- */
-const showsUnitPicker = (r: Row) =>
-  r.unit === 'ml' ||
-  isLiquid({ name: r.name, search_name: r.search_name, category: r.category });
+/** The unit a row should adopt from its name alone: ml for anything poured. */
+const detectedUnit = (r: Row) =>
+  defaultUnitFor({ name: r.name, search_name: r.search_name, category: r.category });
 
 /** The row's portion in grams, which is the only thing the engine computes on. */
 const rowGrams = (r: Row) =>
@@ -194,19 +193,50 @@ export function MealEditModal({
   /**
    * Switch ONE row between grams and millilitres.
    *
-   * This re-expresses the portion; it does not change it. 100 g of milk becomes
-   * "97 ml" — the same milk, so the nutrition, the score and the dose all stay
-   * exactly where they were. Only editing the number afterwards changes the
-   * food. A toggle that silently re-weighed the plate would be a dosing bug
-   * dressed as a formatting feature.
+   * TWO CASES, and they genuinely differ.
+   *
+   * An EXISTING food — one the scanner resolved — has an established quantity.
+   * Switching RE-EXPRESSES it: 100 g of milk becomes "97 ml", the same milk, so
+   * the nutrition, the score and the dose all stay exactly where they were. A
+   * toggle that silently re-weighed the plate would be a dosing bug dressed as
+   * a formatting feature.
+   *
+   * A food still being TYPED has established nothing. The number is what the
+   * patient is entering, and the unit says what they mean by it: someone who
+   * types 700 and picks ml wants 700 ml, not the 769 that converting 700 g
+   * would produce. So the number stays and only the unit changes; the grams are
+   * derived from both on save.
    */
   const setUnit = (key: string, next: PortionUnit) =>
     setRows((rs) =>
       rs.map((r) => {
         if (r.key !== key || r.unit === next) return r;
-        const d = rowDensity(r);
-        const grams = unitToGrams(Number(r.amount) || 0, r.unit, d);
-        return { ...r, unit: next, amount: String(gramsToUnit(grams, next, d)) };
+        const amount = amountAfterUnitSwitch(
+          Number(r.amount) || 0,
+          r.unit,
+          next,
+          rowDensity(r),
+          // A resolved food has an established quantity; a typed one does not.
+          r.origin !== null
+        );
+        return { ...r, unit: next, unitPinned: true, amount: String(amount) };
+      })
+    );
+
+  /**
+   * Renaming a food the patient is adding re-reads its unit from the new name,
+   * so typing "lait" lands on ml without a tap — unless they have already
+   * chosen, in which case their choice stands whatever they type next.
+   *
+   * The number is left alone: nothing is being re-expressed here, the food is
+   * still being described.
+   */
+  const setName = (key: string, name: string) =>
+    setRows((rs) =>
+      rs.map((r) => {
+        if (r.key !== key) return r;
+        if (r.unitPinned || r.origin) return { ...r, name };
+        return { ...r, name, unit: detectedUnit({ ...r, name }) };
       })
     );
 
@@ -334,7 +364,7 @@ export function MealEditModal({
                   <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
                     <TextInput
                       value={r.name}
-                      onChangeText={(v) => patch(r.key, { name: v })}
+                      onChangeText={(v) => setName(r.key, v)}
                       placeholder={t('analysis.foodNamePlaceholder')}
                       placeholderTextColor="#b7bfb8"
                       style={styles.nameInput}
@@ -354,39 +384,35 @@ export function MealEditModal({
                         editable={!busy}
                         maxLength={4}
                       />
-                      {/* BOTH units are shown, and only on a liquid.
+                      {/* BOTH units, on EVERY row.
                           A single pill that flipped on tap hid the choice: you
-                          had to already know it was a button to discover it
-                          was one. Two visible options say what is available and
-                          which one is on. On a steak there is nothing to
-                          choose, so the row keeps a plain "g" — a switch on
-                          every row of every plate is noise. A poured food
-                          arrives in ml on its own. */}
-                      {showsUnitPicker(r) ? (
-                        <View style={styles.unitSeg}>
-                          {UNITS.map((u) => {
-                            const on = r.unit === u;
-                            return (
-                              <Pressable
-                                key={u}
-                                style={[styles.unitOpt, on && styles.unitOptOn]}
-                                onPress={() => setUnit(r.key, u)}
-                                disabled={busy}
-                                hitSlop={4}
-                                accessibilityRole="button"
-                                accessibilityState={{ selected: on }}
-                                accessibilityLabel={t('analysis.switchUnit')}
-                              >
-                                <Text style={[styles.unitOptText, on && styles.unitOptTextOn]}>
-                                  {u}
-                                </Text>
-                              </Pressable>
-                            );
-                          })}
-                        </View>
-                      ) : (
-                        <Text style={styles.gramUnit}>g</Text>
-                      )}
+                          had to already know it was a button to discover it was
+                          one. Two visible options say what exists and which one
+                          is on. Every food gets them — including a new one being
+                          typed, where the unit is part of describing it — while
+                          the DEFAULT still does the work: poured foods land on
+                          ml by themselves, everything else on g. */}
+                      <View style={styles.unitSeg}>
+                        {UNITS.map((u) => {
+                          const on = r.unit === u;
+                          return (
+                            <Pressable
+                              key={u}
+                              style={[styles.unitOpt, on && styles.unitOptOn]}
+                              onPress={() => setUnit(r.key, u)}
+                              disabled={busy}
+                              hitSlop={4}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: on }}
+                              accessibilityLabel={t('analysis.switchUnit')}
+                            >
+                              <Text style={[styles.unitOptText, on && styles.unitOptTextOn]}>
+                                {u}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
                       <Pressable style={styles.stepBtn} onPress={() => bumpAmount(r.key, AMOUNT_STEP)} disabled={busy} hitSlop={6}>
                         <Svg width={13} height={13} viewBox="0 0 24 24" stroke="#3a463f" strokeWidth={2.6} strokeLinecap="round">
                           <Path d="M12 5v14M5 12h14" />
@@ -544,12 +570,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e6e9e4',
   },
-  /** A solid has no choice to make: the unit is a caption, as it always was. */
-  gramUnit: { fontSize: 11, fontFamily: F600, color: MUTED, marginLeft: -2 },
-
-  /** A liquid gets both units, side by side, with the active one lifted onto
-   *  white. Same height as the +/− buttons so the stepper still reads as one
-   *  control, and narrow enough that the row survives a 320 px screen. */
+  /** Both units side by side, with the active one lifted onto white. Same
+   *  height as the +/− buttons so the stepper still reads as one control, and
+   *  narrow enough that the row survives a 320 px screen. */
   unitSeg: {
     flexDirection: 'row',
     gap: 2,
