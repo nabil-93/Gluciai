@@ -464,3 +464,49 @@ Jeor, the FDA Daily Values) are cited as the *kind* of source each rule would
 need. They have not been verified against a current edition, and the applicable
 national guidance for Morocco has not been consulted. **That verification is
 part of this review, not an input to it.**
+
+---
+
+## Decisions added by the deployed-UI review (external, post Step 22D Phase 2)
+
+Six findings were raised against the live build. Three were fixed without any
+formula change; two are answered here; one is new and needs a nutrition call.
+
+### D21 — should a sugar-sweetened drink count as hydration? **(new, open)**
+
+`WATER_FRACTION.Drink = 0.9` (micros.ts). A 330 ml soda is therefore credited
+with **297 ml** toward the hydration ring — on the same screen where its 35 g of
+sugar takes the score’s largest single penalty (−22). The app rewards and
+penalises the same object, and says nothing about the tension.
+
+Why this is not merely cosmetic for THIS population: sugar-sweetened beverages
+are the one drink category diabetes guidance singles out to avoid, and at high
+glucose osmotic diuresis means the net fluid benefit is not equal to the water
+content. Counting a soda as ~90 % as hydrating as water is the kind of claim a
+reviewer would reject outright.
+
+**Options.** (a) leave it and label the limitation; (b) give sugary drinks their
+own lower fraction; (c) exclude added-sugar beverages from the hydration figure
+entirely; (d) drop the per-meal hydration ring and show only the daily goal.
+Every one of (b)(c)(d) changes a displayed number — RU-3’s call, not
+engineering’s.
+
+**Second, separate defect in the same card (UI, not science):** the ring shows a
+SINGLE meal against the DAILY goal, so it reads 10–20 % essentially always,
+with the nag *"Pensez à boire plus d’eau !"* permanently attached. A per-meal
+contribution displayed against a daily denominator is a framing error
+independent of D21.
+
+### D16 — burn minutes: **ANSWERED by the review, implemented**
+
+The four unsourced divisors are replaced by `kcal/min = MET × 3.5 × kg / 200`
+using the patient’s own weight, with Compendium MET values. Displayed minutes
+change for every patient; see the ledger record. The card states which weight it
+used, and says so explicitly when it fell back to 70 kg.
+
+### D-GI/GL — the "idéal pour un diabétique" claim: **ANSWERED, implemented**
+
+The GI-low copy asserted suitability for the whole MEAL while describing only
+the INDEX, and rendered three lines above a load reading **Élevé**. Reworded to
+describe speed only, plus a reconciliation line that fires when the bands
+diverge. No band and no formula moved.
