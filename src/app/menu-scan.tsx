@@ -8,10 +8,14 @@ import { useTranslation } from 'react-i18next';
 import { AppButton, BevelCard, FadeInView, HeroScreen, HERO_INK, HERO_MUTED } from '@/components/ui';
 import { analyzeMenu } from '@/services/ai';
 import { saveMeal } from '@/services/data';
-import { giBand, qualityClaimSupported } from '@/services/nutrition/advice';
-import { isCarbKnown } from '@/services/nutrition/carbProvenance';
 import { sourceLabel } from '@/services/nutrition/engine';
-import { scoreMeal, type MealScore } from '@/services/nutrition/mealScore';
+import {
+  giBand,
+  isCarbKnown,
+  qualityClaimSupported,
+  scoreMeal,
+  type MealScore,
+} from '@/services/nutrition/interpret';
 import { colors, shadows } from '@/theme';
 import type { FoodItemResult } from '@/types';
 

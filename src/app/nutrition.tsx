@@ -31,7 +31,7 @@ import {
   carbText,
   carbUnit,
   plateCarbStatus,
-} from '@/services/nutrition/carbProvenance';
+} from '@/services/nutrition/interpret';
 import { getRecommendations } from '@/services/recommendations';
 import { setPendingScan } from '@/services/scanSession';
 import { useAppStore } from '@/store/useAppStore';

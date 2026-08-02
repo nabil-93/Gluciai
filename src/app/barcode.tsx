@@ -19,8 +19,7 @@ import {
 } from '@/components/WebBarcodeScanner';
 import { saveMeal } from '@/services/data';
 import { sourceLabel } from '@/services/nutrition/engine';
-import { qualityClaimSupported } from '@/services/nutrition/advice';
-import { scoreMeal } from '@/services/nutrition/mealScore';
+import { qualityClaimSupported, scoreMeal } from '@/services/nutrition/interpret';
 import { sanitizePer100g } from '@/services/nutrition/plausibility';
 import {
   lookupBarcodeMulti,

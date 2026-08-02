@@ -5,14 +5,14 @@ import { useTranslation } from 'react-i18next';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { AnimatedRobot, ImageLightbox, ZoomableThumb } from '@/components/ui';
-import { displayableHighlights, qualityClaimSupported } from '@/services/nutrition/advice';
 import {
   carbDisplay,
+  carbFigure,
   carbStatus,
-  carbText,
-  carbUnit,
-} from '@/services/nutrition/carbProvenance';
-import { scoreMeal } from '@/services/nutrition/mealScore';
+  displayableHighlights,
+  qualityClaimSupported,
+  scoreMeal,
+} from '@/services/nutrition/interpret';
 import type { MealScan } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -203,7 +203,7 @@ export function LastMealCard({ meal, onPress }: { meal: MealScan; onPress: () =>
         <MacroLine
           color={CARBS}
           label={t('result.carbs')}
-          value={`${carbText(carbView)}${carbUnit(carbView) ? ` ${carbUnit(carbView)}` : ''}`}
+          value={carbFigure(carbView).full}
         />
         <MacroLine color={PROTEIN} label={t('result.protein')} value={`${P} g`} />
         <MacroLine color={LIPIDS} label={t('result.fat')} value={`${F} g`} />

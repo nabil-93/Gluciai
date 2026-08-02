@@ -1,5 +1,5 @@
 import { buildDayEvents, dayTotals, type DayEvent, type DayTotals } from '@/services/dayLog';
-import { qualityClaimSupported } from '@/services/nutrition/advice';
+import { qualityClaimSupported } from '@/services/nutrition/interpret';
 
 /**
  * A 0–100 quality score for a day, blending glucose time-in-range (how much of

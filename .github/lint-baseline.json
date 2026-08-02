@@ -8,7 +8,7 @@
   "findings": [
     {
       "file": "src/app/(tabs)/index.tsx",
-      "line": 99,
+      "line": 100,
       "rule": "@typescript-eslint/no-unused-vars",
       "severity": "warning"
     },

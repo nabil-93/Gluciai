@@ -3,12 +3,7 @@ import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Svg, { Path } from 'react-native-svg';
 
-import {
-  carbDisplay,
-  carbStatus,
-  carbText,
-  carbUnit,
-} from '@/services/nutrition/carbProvenance';
+import { carbFigureOf, carbStatus } from '@/services/nutrition/interpret';
 import type { MealScan, MealType } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -110,8 +105,8 @@ export function MealPeekModal({
                       screen refuses to show as a value (finding NUTR-A9). */}
                   <Macro
                     label={t('result.carbs')}
-                    value={carbText(carbDisplay(carbStatus(r), Math.round(r.carbohydrates)))}
-                    unit={carbUnit(carbDisplay(carbStatus(r), Math.round(r.carbohydrates)))}
+                    value={carbFigureOf(carbStatus(r), Math.round(r.carbohydrates)).text}
+                    unit={carbFigureOf(carbStatus(r), Math.round(r.carbohydrates)).unit}
                     color={ORANGE}
                   />
                   <Macro label={t('result.protein')} value={Math.round(r.protein)} color={GREEN} />

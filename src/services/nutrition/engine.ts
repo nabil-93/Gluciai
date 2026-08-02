@@ -1,7 +1,10 @@
 import i18n from '@/i18n';
 import type { FoodItemResult, NutritionResult, NutritionSource } from '@/types';
 
-import { buildHighlights, glycemicLoad } from './advice';
+import { buildHighlights } from './advice';
+/* Phase 2 — the GI/GL rules live in one leaf module now. `glValue` is the load
+   expression this file used to write out by hand, assumed index and all. */
+import { glValue, glycemicLoad } from './interpret/glycemic';
 import { getCachedMatch, setCachedMatch } from './cache';
 import { plateCarbStatus, unknownCarbNames } from './carbProvenance';
 import {
@@ -662,7 +665,7 @@ export function aggregateItems(resolved: FoodItemResult[]): NutritionResult {
     glycemic_load,
     // GL = GI x available carbs / 100. Unlike the index this scales with the
     // portion, so it is what actually answers "how much will this raise me?".
-    glycemic_load_value: Math.round(((gi > 0 ? gi : 55) * totals.carbs) / 100),
+    glycemic_load_value: Math.round(glValue(totals.carbs, gi)),
     glycemic_index_estimated,
     gi_carb_coverage,
     // Stable highlight KEYS; the UI localizes each via

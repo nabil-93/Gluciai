@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
-import { giBand } from '@/services/nutrition/advice';
+import { giBand, GLYCEMIC_TONE } from '@/services/nutrition/interpret';
 
 import { useReduceMotion } from './motion';
 
@@ -39,25 +39,18 @@ function zoneColorAt(p: number): string {
   return `rgb(${ch(0)}, ${ch(1)}, ${ch(2)})`;
 }
 
-/**
- * The tone for a whole IG value: `color` for graphics (bars, dots, chips) and
- * `textColor` for type. The bright scale colours only reach ~3.2-3.5:1 on
- * white, so small labels and the explanation sentence use the darker twins to
- * clear the 4.5:1 WCAG AA floor without changing what the colours MEAN.
- */
-const TONE = {
-  low: { color: '#0f9d58', textColor: '#0B7A44' },
-  medium: { color: '#d97706', textColor: '#B45309' },
-  high: { color: '#dc2626', textColor: '#C81E1E' },
-} as const;
-
 export function glycemicTone(value: number) {
   // The BANDS live in the nutrition domain (`giBand`) so that one function
   // classifies a glycemic index for the whole app — this component only picks
   // the colours. The boundaries are the same ones this file always used, so
   // nothing on any screen changes tone (Step 22A).
+  //
+  // PHASE 2 — the palette moved out too. It used to be a private `TONE` here,
+  // which the glycemic-LOAD tag in `scan-result` had copied by hand; both now
+  // read `GLYCEMIC_TONE`, so green/amber/red cannot drift apart. The hex values
+  // are unchanged.
   const key = giBand(value);
-  return { key, ...TONE[key] };
+  return { key, ...GLYCEMIC_TONE[key] };
 }
 
 /** Scale-word colours under the bar — same three meanings, readable at 9.5 px. */

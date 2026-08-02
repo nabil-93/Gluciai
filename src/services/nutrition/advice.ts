@@ -10,6 +10,27 @@
 
 import type { FoodCategory, MealHighlight } from '@/types';
 
+import { glycemicLoad } from './interpret/glycemic';
+
+/**
+ * The glycemic classifications moved to `interpret/glycemic.ts` in Phase 2 of
+ * the interpretation refactor, so one leaf module owns every GI/GL band in the
+ * app. They are re-exported here unchanged: `giBand` and `glycemicLoad` have
+ * importers across the screens and the fixtures, and churning those imports
+ * would be movement without meaning. Nothing about the rules changed.
+ */
+export {
+  ASSUMED_GI,
+  effectiveGi,
+  giBand,
+  glBand,
+  glValue,
+  glycemicLoad,
+  GLYCEMIC_TONE,
+  isAssumedGi,
+  type GiBand,
+} from './interpret/glycemic';
+
 export interface HighlightInput {
   calories: number;
   carbs: number;
@@ -21,53 +42,6 @@ export interface HighlightInput {
   glycemic_index: number;
   /** Categories of the foods on the plate — for composition highlights */
   categories?: FoodCategory[];
-}
-
-/** Low / medium / high for a glycemic INDEX — see `giBand`. */
-export type GiBand = 'low' | 'medium' | 'high';
-
-/**
- * THE app's one glycemic-index classification (finding NUTR-C3 / Step 22A).
- *
- * The bands are the standard ones the app already adopted for the shared
- * `GlycemicBar` — low ≤ 55, medium 56–69, high ≥ 70 — lifted here unchanged so
- * a single function answers "what band is this GI in?" for every surface.
- * `glycemicTone` (the chip's colours) now delegates to it, which is why no
- * displayed classification moves.
- *
- * Two OTHER thresholds in the app deliberately still disagree with it and are
- * NOT touched here, because moving either changes a patient-facing number or
- * removes a safety warning — both nutrition-policy calls for RU-3:
- *
- *   · `scoreMeal` opens its harsh GI penalty at `gi > 70`, so a GI of exactly
- *     70 is "high" on the chip and "moderate" to the score (the 480 kcal
- *     screenshot). Pinned in tests/domain/nutritionClaims.golden.test.ts.
- *   · `aggregateItems` raises `warn:high_gi` from 66, i.e. it warns across part
- *     of the medium band. Warning EARLIER is the safe direction, so it stays.
- *
- * A GI of 0 means "no index known" and lands in `low`; every caller gates the
- * chip on `gi > 0` before asking, exactly as before.
- */
-export function giBand(gi: number): GiBand {
-  if (gi <= 55) return 'low';
-  if (gi <= 69) return 'medium';
-  return 'high';
-}
-
-/**
- * Glycemic Load ≈ (GI × available carbs) / 100. Standard buckets:
- *   GL < 10 → Low, 10–20 → Medium, > 20 → High.
- * When no GI is known we approximate from carbs (assume moderate GI ~55).
- */
-export function glycemicLoad(
-  carbs: number,
-  glycemicIndex: number
-): 'Low' | 'Medium' | 'High' {
-  const gi = glycemicIndex > 0 ? glycemicIndex : 55;
-  const gl = (gi * carbs) / 100;
-  if (gl < 10) return 'Low';
-  if (gl <= 20) return 'Medium';
-  return 'High';
 }
 
 const VEGGIE: ReadonlySet<FoodCategory> = new Set<FoodCategory>([

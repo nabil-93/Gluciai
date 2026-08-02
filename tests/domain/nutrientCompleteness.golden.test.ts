@@ -327,6 +327,14 @@ describe('FIXED IN STEP 22B — the carbohydrate floor is honest on every screen
    * "0 g" on all three. No threshold is involved: the signal already existed
    * (Step 10), it simply stopped travelling.
    */
+  /*
+   * PHASE 3 (interpretation refactor) — the guarantee is unchanged, its seam
+   * moved. These screens used to import `carbDisplay` straight from
+   * `carbProvenance` and hand-assemble "62 g" / "≥ 62 g" four different ways;
+   * they now go through `nutrition/interpret`, which re-exports the same rule
+   * and adds the one assembly (`carbFigure`). No displayed string moved — the
+   * assertions in the next `it` are what prove that, and they are untouched.
+   */
   it('every surface that prints a carbohydrate asks the same question', () => {
     for (const file of [
       'src/app/scan-result.tsx',
@@ -335,7 +343,25 @@ describe('FIXED IN STEP 22B — the carbohydrate floor is honest on every screen
       'src/components/MealPeekModal.tsx',
       'src/components/LastMealCard.tsx',
     ]) {
-      expect(src(file), file).toContain('carbDisplay(');
+      const text = src(file);
+      // It asks the provenance question…
+      expect(text, file).toMatch(/carbDisplay\(|carbFigureOf\(/);
+      // …and it asks it of the ONE module that owns the answer.
+      expect(text, file).toContain("@/services/nutrition/interpret");
+    }
+  });
+
+  it('and no screen re-implements the "value + unit" assembly by hand', () => {
+    // The four hand-written copies of
+    // `${carbText(v)}${carbUnit(v) ? ` ${carbUnit(v)}` : ''}` are gone; only
+    // `interpret/format.ts` joins a figure to its unit now.
+    for (const file of [
+      'src/app/scan-result.tsx',
+      'src/app/(tabs)/index.tsx',
+      'src/components/MealPeekModal.tsx',
+      'src/components/LastMealCard.tsx',
+    ]) {
+      expect(src(file), file).not.toMatch(/carbUnit\([A-Za-z]*\) \? ` \$\{carbUnit/);
     }
   });
 

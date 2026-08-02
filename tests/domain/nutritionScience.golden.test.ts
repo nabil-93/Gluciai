@@ -202,8 +202,12 @@ describe('GI / GL — what is reference, what is assumed', () => {
     // it hides the whole card when `gi === 0` — but `buildHighlights` is not,
     // so a badge can be earned from an index no source ever supplied.
     expect(glycemicLoad(30, 0)).toBe('Medium'); // 55 × 30 / 100 = 16.5
-    expect(src('src/services/nutrition/advice.ts')).toContain(
-      'const gi = glycemicIndex > 0 ? glycemicIndex : 55'
+    // PHASE 2 — the assumption is unchanged, but it is now written ONCE, as a
+    // named constant, instead of three times as an inline `gi > 0 ? gi : 55`
+    // (advice, engine, scan-result). Naming it is what will let a caller mark a
+    // load as assumed rather than measured; nothing reads that flag yet.
+    expect(src('src/services/nutrition/interpret/glycemic.ts')).toContain(
+      'export const ASSUMED_GI = 55'
     );
     expect(buildHighlights({
       calories: 200, carbs: 10, sugar: 1, protein: 5, fat: 3, fiber: 1,
@@ -321,22 +325,41 @@ describe('hydration — a water fraction per category, and a per-kg goal', () =>
 
 /* ══════════ PHASE 8 — exercise minutes ══════════ */
 
-describe('burn minutes — four divisors and nothing else (NUTR-A10)', () => {
-  it('HEURISTIC — kcal ÷ {5, 12, 8.5, 9.5}, no patient metric at all', () => {
+describe('burn minutes — a MET model using the patient weight (NUTR-A10)', () => {
+  /**
+   * BEFORE (Step 22C, recorded as known-bad and pinned here): four unsourced
+   * kcal-per-minute divisors — `cal / 5`, `/ 12`, `/ 8.5`, `/ 9.5` — for one
+   * hypothetical 70 kg adult. `burnMinutes(cal)` took calories ONLY, while the
+   * patient's weight sat four lines below the call site driving the water goal.
+   *
+   * AFTER (external review): `kcal/min = MET × 3.5 × kg / 200`, the standard
+   * conversion, with MET values from the Compendium of Physical Activities.
+   * Energy cost is linear in body mass, so the minutes now differ between a
+   * 55 kg and a 95 kg patient — which is the entire point.
+   */
+  it('the divisors are gone, and the signature takes a weight', () => {
     const page = src('src/app/scan-result.tsx');
-    expect(page).toContain('walk: Math.max(1, Math.round(cal / 5))');
-    expect(page).toContain('run: Math.max(1, Math.round(cal / 12))');
-    expect(page).toContain('bike: Math.max(1, Math.round(cal / 8.5))');
-    expect(page).toContain('swim: Math.max(1, Math.round(cal / 9.5))');
-    // The signature takes calories ONLY: no weight, no sex, no age, no MET.
-    expect(page).toContain('function burnMinutes(cal: number)');
+    expect(page).not.toContain('Math.round(cal / 5)');
+    expect(page).not.toContain('Math.round(cal / 12)');
+    expect(page).toContain('function burnMinutes(cal: number, weightKg?: number)');
+    expect(page).toContain('(met * 3.5 * kg) / 200');
+    expect(page).toContain('burnMinutes(cals, profile?.weight)');
   });
 
-  it('FIXED IN STEP 22C — the card and the PDF now say what they rest on', () => {
+  it('the MET constants are named and sourced, not inline magic numbers', () => {
     const page = src('src/app/scan-result.tsx');
-    expect(page).toContain("t('analysis.burnEstimated')");
-    // Twice: once on screen, once in the document a doctor reads.
-    expect(page.match(/analysis\.burnEstimated/g)?.length).toBe(2);
+    expect(page).toContain('const BURN_MET = {');
+    expect(page).toContain('Compendium of Physical Activities');
+    expect(page).toContain('const BURN_DEFAULT_KG = 70');
+  });
+
+  it('the card says WHICH weight it used — the patient\'s, or the default', () => {
+    const page = src('src/app/scan-result.tsx');
+    expect(page).toContain('burnFromWeight');
+    expect(page).toContain("t('analysis.burnEstimated', { kg:");
+    expect(page).toContain("t('analysis.burnEstimatedDefault')");
+    // Both branches reach the PDF as well as the screen.
+    expect(page.match(/analysis\.burnEstimatedDefault/g)?.length).toBe(2);
   });
 });
 
@@ -507,12 +530,16 @@ describe('the 480 kcal case — all three questions, answered separately', () =>
 
   it('3. the UI states its limitations — PARTLY, and now further', () => {
     const page = src('src/app/scan-result.tsx');
-    // The Step 16 "not a Nutri-Score" note lived on the A–E strip, removed in
-    // 22D Phase 1. The constraint itself is preserved in mealScore.ts's header.
-    expect(src('src/services/nutrition/mealScore.ts')).toContain('not a Nutri-Score');
+    // The A–E strip was restored by product decision after 22D Phase 1. Its
+    // note must never claim an official label, and mealScore.ts still carries
+    // the NUTR-A1 constraint in prose.
+    expect(page).toContain("t('analysis.mealGradeNote')");
+    expect(src('src/services/nutrition/mealScore.ts')).toContain(
+      'NOT AN OFFICIAL NUTRITIONAL LABEL'
+    );
     expect(page).toContain("t('analysis.giScoreScope')"); // GI ≠ score (Step 22A)
     expect(page).toContain("t('analysis.estimatedFromCategories')"); // micros (Step 17)
-    expect(page).toContain("t('analysis.burnEstimated')"); // Step 22C
+    expect(page).toContain("t('analysis.burnEstimated'"); // burn, now weight-based
     expect(page).toContain("t('analysis.goalEstimated')"); // Step 22C
     // STILL MISSING, recorded for RU-3: nothing on the screen tells the patient
     // that the health score itself is the app's own heuristic rather than a
