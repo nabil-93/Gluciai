@@ -438,14 +438,50 @@ export interface AiReminder {
  * detected (good or bad), recorded chronologically like a coach
  * following the patient all day long.
  */
+/**
+ * WHICH coach event this is — the stable identity, independent of any language.
+ *
+ * A journal entry used to be nothing but rendered text, so the language it was
+ * written in was the language it stayed in, and the detail screen had to guess
+ * the event back out of a French sentence. This is that guess made unnecessary.
+ * Never renamed, never localized: it is the key, not the copy.
+ */
+export type InsightKind =
+  | 'hypo'
+  | 'hyper'
+  | 'postmeal'
+  | 'sugar'
+  | 'greatday'
+  | 'activity'
+  | 'fasting'
+  | 'nomeasure'
+  | 'scannext'
+  | 'uptodate';
+
 export interface AIJournalEntry {
   id: string;
   icon: string;
+  /**
+   * The text AS RENDERED when the entry was written.
+   *
+   * Kept, and still the only thing a pre-`kind` row has. New rows carry `kind`
+   * and re-render from it in whatever language is active now, so these two are
+   * a fallback rather than the source of truth. Never rewritten: a journal is a
+   * record of what the patient was actually shown.
+   */
   title: string;
   body: string;
   tone: 'danger' | 'warning' | 'success' | 'info';
   href?: string;
   created_at: string;
+  /** Stable event identity. Absent on rows written before this existed. */
+  kind?: InsightKind;
+  /**
+   * The values the body interpolates (a glucose reading, a food name, minutes).
+   * Stored beside the text so the sentence can be rebuilt in another language
+   * without inventing or re-deriving the numbers.
+   */
+  params?: Record<string, string | number>;
 }
 
 /** Status of one biological value against its reference range. */

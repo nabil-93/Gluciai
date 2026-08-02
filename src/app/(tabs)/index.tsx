@@ -1596,8 +1596,24 @@ export default function HomeScreen() {
       tone: insight.tone,
       href: insight.href,
       created_at: new Date().toISOString(),
+      // WHAT the event is, and the values its sentence interpolates — stored
+      // beside the rendered text, never instead of it. This is what lets the
+      // notification list and the coach report re-render in whatever language
+      // is selected later, instead of freezing the one that was active when
+      // the alert fired.
+      kind: insight.kind,
+      params: insight.params,
     });
-  }, [insight.title, insight.tone, insight.body, insight.icon, insight.href, addAiJournalEntry]);
+  }, [
+    insight.title,
+    insight.tone,
+    insight.body,
+    insight.icon,
+    insight.href,
+    insight.kind,
+    insight.params,
+    addAiJournalEntry,
+  ]);
 
   // ── Robot notification button: unread count + urgent state ──
   // The robot surfaces EVERYTHING new: coach detections (AI journal) that

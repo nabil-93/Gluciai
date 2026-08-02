@@ -11,8 +11,9 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, LockChip, PremiumEmptyState } from '@/components/ui';
-import { isRTL } from '@/i18n';
+import { isRTL, SUPPORTED_LANGUAGES } from '@/i18n';
 import { refreshFeatureLocks } from '@/services/features';
+import { localizeEntry } from '@/services/insightIdentity';
 import { getPlannedReminders } from '@/services/notifications';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
@@ -69,6 +70,24 @@ export default function AiJournalScreen() {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
   };
+
+  /* ── Every row, in the language selected RIGHT NOW ──────────────────────
+     Entries used to be nothing but rendered text, so this list showed German,
+     Arabic and French side by side depending on which language happened to be
+     active when each alert fired. New rows carry a `kind`, so they rebuild
+     from it; older rows are recognised by matching their stored title against
+     that title in every language we ship, which re-titles them too. Only a
+     legacy BODY stays as written — its numbers were interpolated at the time
+     and cannot be pulled back out of the sentence without guessing. */
+  const langs = useMemo(() => SUPPORTED_LANGUAGES.map((l) => l.code), []);
+  const tIn = React.useCallback(
+    (lang: string, key: string) => i18n.getFixedT(lang)(key),
+    [i18n]
+  );
+  const shownEntry = React.useCallback(
+    (e: AIJournalEntry) => localizeEntry(e, t, langs, tIn),
+    [t, langs, tIn]
+  );
 
   // Group entries by day, newest first
   const groups = useMemo(() => {
@@ -233,6 +252,7 @@ export default function AiJournalScreen() {
               <View style={styles.dayCol}>
                 {entries.map((e, i) => {
                   const tone = TONE_STYLE[e.tone] ?? TONE_STYLE.info;
+                  const shown = shownEntry(e);
                   return (
                     <View key={e.id} style={styles.entryRow}>
                       {/* rail */}
@@ -254,7 +274,7 @@ export default function AiJournalScreen() {
                         <View style={styles.entryHead}>
                           <Text style={{ fontSize: 15 }}>{e.icon}</Text>
                           <Text style={styles.entryTitle} numberOfLines={1}>
-                            {e.title}
+                            {shown.title}
                           </Text>
                           <View
                             style={[styles.toneBadge, { backgroundColor: tone.bg }]}
@@ -267,7 +287,7 @@ export default function AiJournalScreen() {
                           </View>
                         </View>
                         <Text style={styles.entryBody} numberOfLines={3}>
-                          {e.body}
+                          {shown.body}
                         </Text>
                         {/* The card opens a full coach report, and nothing said
                             so — the log card above it has carried this same

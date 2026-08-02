@@ -3,6 +3,7 @@ import type {
   GlucoseLog,
   InsulinLog,
   MealScan,
+  InsightKind,
   Profile,
 } from '@/types';
 
@@ -16,6 +17,15 @@ export interface Insight {
   /** Route to open when tapped */
   href?: string;
   tone: 'danger' | 'warning' | 'success' | 'info';
+  /**
+   * WHICH event this is, independent of the words above. Stored on the journal
+   * entry so the coach report can be opened — and the sentence re-rendered — in
+   * whatever language is selected later, instead of the one that happened to be
+   * active when the alert fired.
+   */
+  kind: InsightKind;
+  /** The values `body` interpolates, kept so it can be rebuilt elsewhere. */
+  params?: Record<string, string | number>;
 }
 
 function isToday(iso: string) {
@@ -49,6 +59,8 @@ export function getDailyInsight(
   if (last && last.value < low && hoursAgo(last.created_at) < 2) {
     return {
       icon: '🚨',
+      kind: 'hypo',
+      params: { value: last.value },
       title: t('insights.hypoTitle'),
       body: t('insights.hypoBody', { value: last.value }),
       href: '/log-glucose',
@@ -64,6 +76,8 @@ export function getDailyInsight(
     if (!recentRapid) {
       return {
         icon: '📈',
+        kind: 'hyper',
+        params: { value: last.value },
         title: t('insights.hyperTitle'),
         body: t('insights.hyperBody', { value: last.value }),
         href: '/bolus',
@@ -83,6 +97,8 @@ export function getDailyInsight(
   ) {
     return {
       icon: '⏱️',
+      kind: 'postmeal',
+      params: { food: lastMeal.result.food_name },
       title: t('insights.postMealTitle'),
       body: t('insights.postMealBody', { food: lastMeal.result.food_name }),
       href: '/log-glucose',
@@ -97,6 +113,8 @@ export function getDailyInsight(
   if (sugarToday > 50) {
     return {
       icon: '🍬',
+      kind: 'sugar',
+      params: { grams: Math.round(sugarToday) },
       title: t('insights.sugarTitle'),
       body: t('insights.sugarBody', { grams: Math.round(sugarToday) }),
       href: '/nutrition',
@@ -112,7 +130,9 @@ export function getDailyInsight(
     if (tir >= 0.7) {
       return {
         icon: '🏆',
-        title: t('insights.greatTitle'),
+        kind: 'greatday',
+      params: { percent: Math.round(tir * 100), low, high },
+      title: t('insights.greatTitle'),
         body: t('insights.greatBody', {
           percent: Math.round(tir * 100),
           low,
@@ -129,6 +149,8 @@ export function getDailyInsight(
   if (activityToday && hoursAgo(activityToday.created_at) < 4) {
     return {
       icon: '🏃',
+      kind: 'activity',
+      params: { min: activityToday.duration_min },
       title: t('insights.activityTitle'),
       body: t('insights.activityBody', { min: activityToday.duration_min }),
       href: '/log-glucose',
@@ -141,6 +163,7 @@ export function getDailyInsight(
     const hour = new Date().getHours();
     return {
       icon: '🌅',
+      kind: hour < 11 ? 'fasting' : 'nomeasure',
       title: hour < 11 ? t('insights.fastingTitle') : t('insights.noMeasureTitle'),
       body:
         hour < 11 ? t('insights.fastingBody') : t('insights.noMeasureBody'),
@@ -154,6 +177,7 @@ export function getDailyInsight(
   if (mealsToday.length === 0) {
     return {
       icon: '📸',
+      kind: 'scannext',
       title: t('insights.scanNextTitle'),
       body: t('insights.scanNextBody'),
       href: '/scan',
@@ -163,6 +187,8 @@ export function getDailyInsight(
 
   return {
     icon: '✨',
+    kind: 'uptodate',
+    params: { glucose: todayGlucose.length, meals: mealsToday.length },
     title: t('insights.upToDateTitle'),
     body: t('insights.upToDateBody', {
       glucose: todayGlucose.length,

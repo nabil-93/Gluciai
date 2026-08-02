@@ -7,29 +7,39 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft } from '@/components/ui';
+import { isRTL, SUPPORTED_LANGUAGES } from '@/i18n';
+import { kindOfEntry, localizeEntry } from '@/services/insightIdentity';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
-import type { AIJournalEntry } from '@/types';
+import type { AIJournalEntry, InsightKind } from '@/types';
 
 /*
- * TODO(i18n + medical-review): THIS ENTIRE SCREEN IS IN FRENCH ONLY.
+ * WHAT IS LOCALIZED HERE, AND WHAT IS DELIBERATELY NOT.
  *
- * The educational content below (hypo/hyper causes, corrective advice,
- * rule-of-15 instructions…) is MEDICAL EDUCATION about insulin and
- * glycemia. It must NOT be machine-translated: the ar/de/en versions
- * need to be written or reviewed by a clinician / native speaker, then
- * moved into the i18n locale files like every other screen.
+ * ALL CHROME IS TRANSLATED — the title, the section headings, the verdict
+ * badges, the follow-up card, the action buttons, the dates and the
+ * disclaimer, in fr/en/de/ar. Before this, the whole screen was French, so a
+ * German patient opened a German notification onto a French report.
  *
- * Until that review happens, Arabic/German/English users will see this
- * screen in French — a known, accepted limitation for the first release.
+ * THE MEDICAL EDUCATION BELOW IS STILL FRENCH ONLY, on purpose. The causes and
+ * advice are patient education about insulin and glycemia — the rule of 15,
+ * hypo correction, when to re-measure. Machine-translating clinical
+ * instructions into three languages is not a formatting change, so ar/de/en
+ * versions must be written or reviewed by a clinician / native speaker before
+ * they ship. Until then a non-French reader sees a translated screen with a
+ * line saying the detailed advice is in French and under review, rather than
+ * an unreviewed translation presented as medical guidance.
  *
- * Note: `classify()` below also matches FRENCH keywords in the entry
- * title (e.g. 'basse', 'élevée') because AI journal titles are currently
- * generated in French; when localizing, classification should switch to
- * a structured `kind` field instead of text matching.
+ * CLASSIFICATION NO LONGER READS WORDS. It used to match FRENCH keywords in
+ * the entry title, so a German or Arabic entry matched nothing, fell to the
+ * generic branch, and its reader got filler advice where a French reader got
+ * the hypoglycemia report. The event now travels as a stable "kind"
+ * (services/insightIdentity), with a title-based recovery for rows written
+ * before that field existed.
  */
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -37,35 +47,20 @@ const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
-/* ── Event classification from the recorded entry ── */
-type Kind =
-  | 'hypo'
-  | 'hyper'
-  | 'postmeal'
-  | 'sugar'
-  | 'activity'
-  | 'goodday'
-  | 'fasting'
-  | 'other';
-
-function classify(e: AIJournalEntry): Kind {
-  const t = e.title.toLowerCase();
-  if (t.includes('basse')) return 'hypo';
-  if (t.includes('au-dessus') || t.includes('élevée')) return 'hyper';
-  if (t.includes('post-repas') || t.includes('contrôle post')) return 'postmeal';
-  if (t.includes('sucre')) return 'sugar';
-  if (t.includes('effort') || t.includes('activité')) return 'activity';
-  if (t.includes('excellente')) return 'goodday';
-  if (t.includes('jeun') || t.includes('aucune mesure')) return 'fasting';
-  return 'other';
-}
+/* ── Event classification ─────────────────────────────────────────────────
+   Straight from the entry's stable identity. "kindOfEntry" falls back to
+   matching the stored title against that title in every language we ship, so
+   rows written before that field existed — in any language — still open the
+   right report. */
+type Kind = InsightKind | 'other';
 
 interface Report {
   verdict: 'good' | 'moderate' | 'bad';
   verdictText: string;
   causes: string[];
   advices: string[];
-  actions: { label: string; href: string }[];
+  /** Destination only; the label is translated from ACTION_KEY. */
+  actions: { href: string }[];
 }
 
 function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
@@ -89,8 +84,8 @@ function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
           'Si les hypos se répètent, votre ratio/facteur doit être revu par le médecin',
         ],
         actions: [
-          { label: '🩸 Re-mesurer maintenant', href: '/log-glucose' },
-          { label: '📈 Voir ma courbe', href: '/glucose' },
+          { href: '/log-glucose' },
+          { href: '/glucose' },
         ],
       };
     case 'hyper':
@@ -112,8 +107,8 @@ function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
           'Ne « sur-corrigez » pas : attendez l\'effet de la première dose (3-4 h)',
         ],
         actions: [
-          { label: '💉 Calculer une correction', href: '/bolus' },
-          { label: '🩸 Re-mesurer', href: '/log-glucose' },
+          { href: '/bolus' },
+          { href: '/log-glucose' },
         ],
       };
     case 'postmeal':
@@ -131,8 +126,8 @@ function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
           'Associer fibres/protéines au repas adoucit le pic suivant',
         ],
         actions: [
-          { label: '🩸 Mesurer maintenant', href: '/log-glucose' },
-          { label: '🍽️ Revoir mon repas', href: '/nutrition' },
+          { href: '/log-glucose' },
+          { href: '/nutrition' },
         ],
       };
     case 'sugar':
@@ -150,8 +145,8 @@ function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
           'Surveillez la glycémie ce soir et demain à jeun',
         ],
         actions: [
-          { label: '🥗 Voir ma nutrition', href: '/nutrition' },
-          { label: '🇲🇦 Choisir des plats à IG bas', href: '/foods' },
+          { href: '/nutrition' },
+          { href: '/foods' },
         ],
       };
     case 'activity':
@@ -167,11 +162,11 @@ function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
           'Visez 150 min/semaine — vous êtes sur la bonne voie',
         ],
         actions: [
-          { label: '🩸 Mesurer ma glycémie', href: '/log-glucose' },
-          { label: '🏃 Voir mes séances', href: '/(tabs)/activity' },
+          { href: '/log-glucose' },
+          { href: '/(tabs)/activity' },
         ],
       };
-    case 'goodday':
+    case 'greatday':
       return {
         verdict: 'good',
         verdictText:
@@ -183,10 +178,11 @@ function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
           'Partagez cette tendance avec votre médecin au prochain rendez-vous',
         ],
         actions: [
-          { label: '📄 Générer mon rapport', href: '/report' },
-          { label: '📈 Voir ma courbe', href: '/glucose' },
+          { href: '/report' },
+          { href: '/glucose' },
         ],
       };
+    case 'nomeasure':
     case 'fasting':
       return {
         verdict: 'moderate',
@@ -197,7 +193,7 @@ function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
           'Mesurez à jeun chaque matin, avant le petit-déjeuner',
           'Une mesure par jour minimum donne une vraie tendance sur la semaine',
         ],
-        actions: [{ label: '🩸 Ajouter une mesure', href: '/log-glucose' }],
+        actions: [{ href: '/log-glucose' }],
       };
     default:
       return {
@@ -208,24 +204,53 @@ function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
             : 'Un point à surveiller — suivez le conseil ci-dessous.',
         causes: [],
         advices: ['Continuez à enregistrer vos mesures, repas et activités.'],
-        actions: [{ label: '📈 Voir ma glycémie', href: '/glucose' }],
+        actions: [{ href: '/glucose' }],
       };
   }
 }
 
+/** Colour only — the WORD is translated at render time. */
 const VERDICT_STYLE = {
-  good: { label: '✅ Bon pour vous', color: '#16955f', bg: '#e9fbf2' },
-  moderate: { label: '⚠️ À surveiller', color: '#d97706', bg: '#fef4e8' },
-  bad: { label: '🚨 À corriger', color: '#dc2626', bg: '#feecec' },
+  good: { key: 'verdictGood', color: '#16955f', bg: '#e9fbf2' },
+  moderate: { key: 'verdictModerate', color: '#d97706', bg: '#fef4e8' },
+  bad: { key: 'verdictBad', color: '#dc2626', bg: '#feecec' },
 } as const;
+
+/** Action-button labels: one i18n key per destination. */
+const ACTION_KEY: Record<string, string> = {
+  '/log-glucose': 'actMeasureNow',
+  '/glucose': 'actGlycemia',
+  '/bolus': 'actCorrection',
+  '/nutrition': 'actNutrition',
+  '/foods': 'actLowGi',
+  '/(tabs)/activity': 'actSessions',
+  '/report': 'actReport',
+};
 
 export default function InsightDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
+  const rtl = isRTL(locale);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { aiJournal, glucoseLogs } = useAppStore();
 
   const entry = aiJournal.find((e) => e.id === id);
+
+  /* The report's own copy is translated; the educational text below is not
+     (see the header). Non-French readers get a line saying so, rather than an
+     unreviewed translation of clinical instructions. */
+  const medicalInFrenchOnly = !locale.startsWith('fr');
+  const langs = useMemo(() => SUPPORTED_LANGUAGES.map((l) => l.code), []);
+  const tIn = React.useCallback(
+    (lang: string, key: string) => i18n.getFixedT(lang)(key),
+    [i18n]
+  );
+  const dt = (iso: string, opts: Intl.DateTimeFormatOptions) =>
+    new Date(iso).toLocaleDateString(locale, opts);
+  const tm = (iso: string) =>
+    new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -251,7 +276,7 @@ export default function InsightDetailScreen() {
   if (!entry) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + 40, alignItems: 'center' }]}>
-        <Text style={styles.notFound}>Événement introuvable.</Text>
+        <Text style={styles.notFound}>{t('insightDetail.notFound')}</Text>
         <Pressable onPress={close} style={styles.backBtn}>
           <ChevronLeft size={16} />
         </Pressable>
@@ -259,7 +284,8 @@ export default function InsightDetailScreen() {
     );
   }
 
-  const kind = classify(entry);
+  const kind: Kind = kindOfEntry(entry, langs, tIn) ?? 'other';
+  const shown = localizeEntry(entry, t, langs, tIn);
   const report = buildReport(kind, entry.tone);
   const v = VERDICT_STYLE[report.verdict];
   const isAlert = entry.tone === 'danger' || entry.tone === 'warning';
@@ -283,9 +309,11 @@ export default function InsightDetailScreen() {
       >
         <View style={styles.headRow}>
           <Pressable onPress={close} style={styles.backBtn}>
-            <ChevronLeft size={16} />
+            <View style={rtl ? { transform: [{ scaleX: -1 }] } : undefined}>
+              <ChevronLeft size={16} />
+            </View>
           </Pressable>
-          <Text style={styles.headTitle}>Rapport du coach</Text>
+          <Text style={styles.headTitle}>{t('insightDetail.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
@@ -294,20 +322,17 @@ export default function InsightDetailScreen() {
           <AnimatedRobot size={64} mood={isAlert ? 'alert' : 'happy'} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.eventTitle}>
-              {entry.icon} {entry.title}
+              {entry.icon} {shown.title}
             </Text>
-            <Text style={styles.eventBody}>{entry.body}</Text>
+            <Text style={styles.eventBody}>{shown.body}</Text>
             <Text style={styles.eventTime}>
-              {new Date(entry.created_at).toLocaleDateString('fr-FR', {
+              {dt(entry.created_at, {
                 weekday: 'long',
                 day: 'numeric',
                 month: 'long',
-              })}{' '}
-              à{' '}
-              {new Date(entry.created_at).toLocaleTimeString('fr-FR', {
-                hour: '2-digit',
-                minute: '2-digit',
               })}
+              {' · '}
+              {tm(entry.created_at)}
             </Text>
           </View>
         </View>
@@ -315,7 +340,7 @@ export default function InsightDetailScreen() {
         {/* Verdict */}
         <View style={[styles.verdictCard, { backgroundColor: v.bg }]}>
           <Text style={[styles.verdictLabel, { color: v.color }]}>
-            {v.label}
+            {t('insightDetail.' + v.key)}
           </Text>
           <Text style={styles.verdictText}>{report.verdictText}</Text>
         </View>
@@ -329,28 +354,30 @@ export default function InsightDetailScreen() {
             ]}
           >
             <Text style={styles.followTitle}>
-              {recovered ? '👏 Bien géré !' : '👀 Toujours à suivre'}
+              {t(recovered ? 'insightDetail.followOkTitle' : 'insightDetail.followWatchTitle')}
             </Text>
             <Text style={styles.followText}>
               {recovered
-                ? `Votre mesure suivante (${followUp.value} mg/dL à ${new Date(followUp.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}) montre que vous avez corrigé la situation.`
-                : `Votre mesure suivante (${followUp.value} mg/dL) n'était pas encore dans la cible — continuez à surveiller.`}
+                ? t('insightDetail.followOk', {
+                    value: followUp.value,
+                    time: tm(followUp.created_at),
+                  })
+                : t('insightDetail.followWatch', { value: followUp.value })}
             </Text>
           </View>
         ) : isAlert && !followUp ? (
           <View style={[styles.followCard, { backgroundColor: '#f3f0ff' }]}>
-            <Text style={styles.followTitle}>⏱️ Pas encore de suivi</Text>
-            <Text style={styles.followText}>
-              Aucune mesure enregistrée après cet événement — re-mesurez pour
-              vérifier que tout est rentré dans l'ordre.
+            <Text style={styles.followTitle}>
+              {t('insightDetail.followNoneTitle')}
             </Text>
+            <Text style={styles.followText}>{t('insightDetail.followNone')}</Text>
           </View>
         ) : null}
 
         {/* Causes */}
         {report.causes.length > 0 ? (
           <>
-            <Text style={styles.section}>Pourquoi c'est arrivé ?</Text>
+            <Text style={styles.section}>{t('insightDetail.causes')}</Text>
             <View style={styles.listCard}>
               {report.causes.map((c, i) => (
                 <View key={i} style={styles.listRow}>
@@ -363,7 +390,14 @@ export default function InsightDetailScreen() {
         ) : null}
 
         {/* Advices */}
-        <Text style={styles.section}>Mes conseils</Text>
+        <Text style={styles.section}>{t('insightDetail.advices')}</Text>
+        {/* Said once, above the advice it qualifies: this text is French and
+            its medical translation has not been reviewed yet. */}
+        {medicalInFrenchOnly ? (
+          <Text style={styles.pendingNote}>
+            {t('insightDetail.pendingTranslation')}
+          </Text>
+        ) : null}
         <View style={styles.listCard}>
           {report.advices.map((a, i) => (
             <View key={i} style={styles.listRow}>
@@ -374,7 +408,7 @@ export default function InsightDetailScreen() {
         </View>
 
         {/* Actions */}
-        <Text style={styles.section}>Et maintenant ?</Text>
+        <Text style={styles.section}>{t('insightDetail.actions')}</Text>
         <View style={{ gap: 9 }}>
           {report.actions.map((a) => (
             <Pressable
@@ -382,15 +416,14 @@ export default function InsightDetailScreen() {
               style={styles.actionBtn}
               onPress={() => router.push(a.href as any)}
             >
-              <Text style={styles.actionText}>{a.label}</Text>
+              <Text style={styles.actionText}>
+                {t('insightDetail.' + (ACTION_KEY[a.href] ?? 'actGlycemia'))}
+              </Text>
             </Pressable>
           ))}
         </View>
 
-        <Text style={styles.disclaimer}>
-          Analyse éducative générée par votre coach IA — ne remplace jamais
-          l'avis de votre médecin.
-        </Text>
+        <Text style={styles.disclaimer}>{t('insightDetail.disclaimer')}</Text>
       </ScrollView>
     </View>
   );
@@ -468,6 +501,17 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 9,
     marginLeft: 2,
+  },
+  pendingNote: {
+    fontFamily: F500,
+    fontSize: 11,
+    lineHeight: 15.5,
+    color: '#8a6416',
+    backgroundColor: '#fef4e8',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+    marginBottom: 9,
   },
   listCard: {
     backgroundColor: '#ffffff',
