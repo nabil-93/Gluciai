@@ -32,27 +32,52 @@ export interface MealScore {
   reasons: string[];
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
- * REMOVED IN STEP 22D, PHASE 1 — the A–E letter (`MealGrade`, `mealGrade`,
- * `GRADE_COLORS`) and its strip component.
+/** Letter form of the app's own meal indicator (A best → E worst). */
+export type MealGrade = 'A' | 'B' | 'C' | 'D' | 'E';
+
+/**
+ * Map the 0..100 meal indicator to an A–E letter, so a meal can carry a
+ * glanceable grade in addition to the numeric ring. A meal that scores well for
+ * a diabetic (low GI/sugar, good fibre/protein) lands on A/B; sugary, high-GI,
+ * very caloric plates fall to D/E.
  *
- * It was `mealGrade(score)`: the same number below, re-cut at 80/65/50/35. It
- * therefore carried no information the score does not carry, its bands were
- * never given a defined meaning, and it contradicted the word bands (85/70/50)
- * over 80–84 — a plate could read "A" beside the word "Bon". Being computed per
- * PLATE, it also changed with portion size while looking like a grade for the
- * food. Removed by decision, not by refactor: see
- * docs/SCORING-IDENTITY-DECISION.md and docs/SCORING-IMPLEMENTATION-SPEC.md.
+ * THIS IS NOT AN OFFICIAL NUTRITIONAL LABEL, and must never be presented as
+ * one (finding NUTR-A1). The regulated front-of-pack metric is computed
+ * **per 100 g** from energy, sugars, saturated fat, salt, fibre, protein and
+ * the fruit/veg/legumes/nuts share, with category-specific cut-offs. This one
+ * is computed per PLATE — so the same food at twice the portion changes letter
+ * — it never looks at fat, the app holds no saturated-fat figure anywhere to
+ * look at, and it is driven by the glycemic index, which the official algorithm
+ * does not use at all. It answers a different question on purpose: how well
+ * does this plate suit a diabetic patient.
  *
- * THE NUTR-A1 CONSTRAINT SURVIVES THE LETTER AND STILL BINDS `scoreMeal` BELOW.
- * This score is not a Nutri-Score and must never be presented as one. The
- * official metric is computed **per 100 g** from energy, sugars, saturated fat,
- * salt, fibre, protein and the fruit/veg/legumes/nuts share, with
- * category-specific cut-offs. This one is computed per PLATE, it never looks at
- * fat, the app holds no saturated-fat figure anywhere to look at, and it is
- * driven by the glycemic index — which the official algorithm does not use at
- * all. Nothing here may borrow the official five-colour palette.
- * ───────────────────────────────────────────────────────────────────────── */
+ * REMOVED in Step 22D Phase 1, RESTORED by product decision. The restoration is
+ * visual: these boundaries and `scoreMeal` below are unchanged. What the letter
+ * MEANS, and its 80–84 overlap with the word bands, stay open in
+ * docs/RU3-NUTRITION-DECISIONS.md (D10).
+ */
+export function mealGrade(score: number): MealGrade {
+  if (score >= 80) return 'A';
+  if (score >= 65) return 'B';
+  if (score >= 50) return 'C';
+  if (score >= 35) return 'D';
+  return 'E';
+}
+
+/**
+ * Badge colours for the A–E letters — deliberately the app's OWN tier palette,
+ * the same greens/ambers the indicator ring and the journal day badge already
+ * use, and deliberately NOT any official five-colour front-of-pack mark, which
+ * would lend an app heuristic the authority of a regulated one. `fg` is picked
+ * per background for contrast.
+ */
+export const GRADE_COLORS: Record<MealGrade, { bg: string; fg: string }> = {
+  A: { bg: '#17A24A', fg: '#ffffff' },
+  B: { bg: '#2FCB8E', fg: '#06301F' },
+  C: { bg: '#E0A93F', fg: '#3A2A00' },
+  D: { bg: '#F5763B', fg: '#3A1400' },
+  E: { bg: '#B4441A', fg: '#ffffff' },
+};
 
 const COLORS = {
   excellent: '#37B24D',
