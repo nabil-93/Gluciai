@@ -20,6 +20,7 @@ import { clampPortionGrams } from '@/services/nutrition/plausibility';
 import {
   densityFor,
   gramsToUnit,
+  isLiquid,
   unitOf,
   unitToGrams,
   type PortionUnit,
@@ -28,6 +29,7 @@ import { useAppStore } from '@/store/useAppStore';
 import type { FoodCategory, FoodItemResult } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
+const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
@@ -82,9 +84,22 @@ const makeEmptyRow = (): Row => ({
   unit: 'g',
 });
 
+const UNITS: readonly PortionUnit[] = ['g', 'ml'];
+
 /** Grams per ml for this row's food — 1.00 for everything not a named liquid. */
 const rowDensity = (r: Row) =>
   densityFor({ name: r.name, search_name: r.search_name, category: r.category });
+
+/**
+ * Does this row get the g/ml picker?
+ *
+ * Pourable foods do. So does anything ALREADY written in ml — a food switched
+ * before this rule existed, or one whose name the patient has since edited out
+ * of recognition, must never be stranded in a unit it cannot leave.
+ */
+const showsUnitPicker = (r: Row) =>
+  r.unit === 'ml' ||
+  isLiquid({ name: r.name, search_name: r.search_name, category: r.category });
 
 /** The row's portion in grams, which is the only thing the engine computes on. */
 const rowGrams = (r: Row) =>
@@ -339,20 +354,39 @@ export function MealEditModal({
                         editable={!busy}
                         maxLength={4}
                       />
-                      {/* The unit is the control. Tapping it switches THIS food
-                          between grams and millilitres and converts the number
-                          — nobody pours 250 g of milk. The portion itself does
-                          not move: only how it is written. */}
-                      <Pressable
-                        style={styles.unitBtn}
-                        onPress={() => setUnit(r.key, r.unit === 'g' ? 'ml' : 'g')}
-                        disabled={busy}
-                        hitSlop={6}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('analysis.switchUnit')}
-                      >
-                        <Text style={styles.unitBtnText}>{r.unit}</Text>
-                      </Pressable>
+                      {/* BOTH units are shown, and only on a liquid.
+                          A single pill that flipped on tap hid the choice: you
+                          had to already know it was a button to discover it
+                          was one. Two visible options say what is available and
+                          which one is on. On a steak there is nothing to
+                          choose, so the row keeps a plain "g" — a switch on
+                          every row of every plate is noise. A poured food
+                          arrives in ml on its own. */}
+                      {showsUnitPicker(r) ? (
+                        <View style={styles.unitSeg}>
+                          {UNITS.map((u) => {
+                            const on = r.unit === u;
+                            return (
+                              <Pressable
+                                key={u}
+                                style={[styles.unitOpt, on && styles.unitOptOn]}
+                                onPress={() => setUnit(r.key, u)}
+                                disabled={busy}
+                                hitSlop={4}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: on }}
+                                accessibilityLabel={t('analysis.switchUnit')}
+                              >
+                                <Text style={[styles.unitOptText, on && styles.unitOptTextOn]}>
+                                  {u}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : (
+                        <Text style={styles.gramUnit}>g</Text>
+                      )}
                       <Pressable style={styles.stepBtn} onPress={() => bumpAmount(r.key, AMOUNT_STEP)} disabled={busy} hitSlop={6}>
                         <Svg width={13} height={13} viewBox="0 0 24 24" stroke="#3a463f" strokeWidth={2.6} strokeLinecap="round">
                           <Path d="M12 5v14M5 12h14" />
@@ -510,21 +544,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e6e9e4',
   },
-  /** The unit doubles as the g↔ml switch, so it has to LOOK pressable — a bare
-   *  grey "g" reads as a caption nobody would think to tap. Same height as the
-   *  +/− buttons beside it, so the stepper still reads as one control. */
-  unitBtn: {
-    minWidth: 30,
-    height: 26,
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    backgroundColor: '#e7f4ec',
-    borderWidth: 1,
-    borderColor: '#cfe8da',
+  /** A solid has no choice to make: the unit is a caption, as it always was. */
+  gramUnit: { fontSize: 11, fontFamily: F600, color: MUTED, marginLeft: -2 },
+
+  /** A liquid gets both units, side by side, with the active one lifted onto
+   *  white. Same height as the +/− buttons so the stepper still reads as one
+   *  control, and narrow enough that the row survives a 320 px screen. */
+  unitSeg: {
+    flexDirection: 'row',
+    gap: 2,
+    padding: 2,
+    borderRadius: 9,
+    backgroundColor: '#e9ece7',
+  },
+  unitOpt: {
+    minWidth: 23,
+    height: 22,
+    borderRadius: 7,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  unitBtnText: { fontSize: 11, fontFamily: F800, color: '#158a52' },
+  unitOptOn: {
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.09,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  unitOptText: { fontSize: 10.5, fontFamily: F700, color: '#8d968f' },
+  unitOptTextOn: { fontFamily: F800, color: '#158a52' },
   trash: {
     width: 32,
     height: 32,

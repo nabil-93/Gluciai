@@ -36,15 +36,19 @@ export type PortionUnit = 'g' | 'ml';
 export const DEFAULT_DENSITY = 1.0;
 
 /**
- * Nominal densities (g/ml) for the liquids that are NOT water-like. Keyed by
- * substrings of the English `search_name` — the vision model is instructed to
- * always return that field in English, so this stays a single-language table
- * instead of five that drift.
+ * THE LIQUIDS THIS APP KNOWS, and what a millilitre of each weighs.
  *
- * Ordered most specific first: "olive oil" must not be read as "oil"… which
- * here happens to be the same number, but the ordering is the contract.
+ * One table answers two questions — "should this food offer ml at all?" and
+ * "how much does its ml weigh?" — because two lists would eventually disagree
+ * about whether oil is a liquid.
+ *
+ * Keyed by substrings of the English `search_name`: the vision model is
+ * instructed to always return that field in English, so this stays a
+ * single-language table instead of five that drift.
+ *
+ * Ordered most specific first — "olive oil" must be read before "oil".
  */
-const DENSITY_BY_KEYWORD: readonly (readonly [string, number])[] = [
+const LIQUIDS: readonly (readonly [string, number])[] = [
   // Fats — the largest honest deviation downward.
   ['olive oil', 0.91],
   ['vegetable oil', 0.92],
@@ -55,13 +59,54 @@ const DENSITY_BY_KEYWORD: readonly (readonly [string, number])[] = [
   ['syrup', 1.33],
   // Dairy, slightly denser than water because of its solids.
   ['condensed milk', 1.29],
-  ['yogurt', 1.03],
+  ['yogurt drink', 1.03],
   ['milk', 1.03],
   ['cream', 1.01],
   // Sweetened aqueous drinks carry dissolved sugar.
   ['juice', 1.05],
+  ['smoothie', 1.05],
+  ['lemonade', 1.04],
   ['soda', 1.04],
   ['cola', 1.04],
+  // Water and what is mostly water.
+  ['water', 1.0],
+  ['tea', 1.0],
+  ['coffee', 1.0],
+  ['broth', 1.0],
+  ['vinegar', 1.01],
+];
+
+/**
+ * Words that mean "liquid" in the languages the app ships, for the one case
+ * the English table cannot serve: a food the PATIENT typed by hand, where
+ * there is no `search_name` and `name` is in their own language.
+ *
+ * This list is allowed to be looser than the density table above, and the
+ * difference in rigour is deliberate. Being wrong here costs a unit button
+ * that should not be offered, or one that should have been — cosmetic. Being
+ * wrong about a DENSITY changes a number. Different stakes, different bars.
+ */
+const LIQUID_WORDS: readonly string[] = [
+  // fr
+  'huile', 'lait', 'jus', 'eau', 'thé', 'the', 'café', 'cafe', 'sirop', 'miel', 'crème', 'creme',
+  'bouillon', 'vinaigre',
+  // de — the ones that stand alone
+  'tee', 'kaffee', 'wasser', 'milch', 'saft', 'öl', 'sirup', 'honig', 'sahne', 'brühe', 'essig',
+  // ar
+  'زيت', 'حليب', 'عصير', 'ماء', 'شاي', 'قهوة', 'عسل', 'كريمة', 'مرق', 'خل',
+];
+
+/**
+ * German glues the head noun onto the end: "Olivenöl", "Vollmilch",
+ * "Orangensaft" are single words, so whole-word matching cannot see them.
+ * These are therefore matched as a word ENDING.
+ *
+ * Only German gets this rule, and that is not an oversight. Applied to French
+ * it would be a disaster — "eau" ends "gâteau", "chapeau", "morceau" — which
+ * is exactly why the two lists are separate instead of one loose regex.
+ */
+const LIQUID_WORD_ENDINGS: readonly string[] = [
+  'öl', 'milch', 'saft', 'wasser', 'sirup', 'honig', 'sahne', 'brühe', 'essig',
 ];
 
 /**
@@ -70,27 +115,73 @@ const DENSITY_BY_KEYWORD: readonly (readonly [string, number])[] = [
  * at all, so a patient who switches a solid to ml still gets a number that is
  * self-consistent rather than a refusal.
  */
+/**
+ * What a food is called, as WHOLE WORDS, padded so a match can be anchored.
+ *
+ * Substring matching was the first attempt and it was wrong in a way a test
+ * caught immediately: "steak" contains "tea", "watermelon" contains "water",
+ * and "boiled egg" contains "oil". Every one of those would have offered a
+ * millilitre switch on a solid. Punctuation is flattened too, so
+ * "Huile d'olive" tokenises to " huile d olive " and still matches "huile".
+ */
+function words(item: { search_name?: string; name?: string }): string {
+  const raw = `${item.search_name ?? ''} ${item.name ?? ''}`.toLowerCase();
+  return ` ${raw.replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
+}
+
+/** True when `needle` (one word, or a phrase) appears as whole words in `hay`. */
+const hasWord = (hay: string, needle: string) => hay.includes(` ${needle} `);
+
+/** True when some word in `hay` ENDS with `needle` — German compounds only. */
+const hasWordEnding = (hay: string, needle: string) => hay.includes(`${needle} `);
+
 export function densityFor(item: {
   search_name?: string;
   name?: string;
   category?: FoodCategory;
 }): number {
-  const hay = `${item.search_name ?? ''} ${item.name ?? ''}`.toLowerCase();
-  for (const [needle, d] of DENSITY_BY_KEYWORD) {
-    if (hay.includes(needle)) return d;
+  const hay = words(item);
+  for (const [needle, d] of LIQUIDS) {
+    if (hasWord(hay, needle)) return d;
   }
   return DEFAULT_DENSITY;
 }
 
 /**
- * The unit a food should arrive in when nothing has been chosen for it.
+ * Is this something a person POURS?
  *
- * Only `Drink` — the one category that is a liquid by definition. A soup is
- * eaten with a spoon and a sauce is spooned onto food; both stay in grams
- * unless the patient says otherwise, which they can, per food.
+ * Only these get the g/ml switch. Offering it on a steak would be noise on
+ * every row of every plate to serve the rare food that needs it; a patient
+ * scanning a drink should simply find it already in ml.
+ *
+ * `Drink` is a liquid by category. Everything else has to be named — in
+ * English by the vision model, or in the patient's own language when they
+ * typed it themselves.
  */
-export function defaultUnitFor(item: { category?: FoodCategory }): PortionUnit {
-  return item.category === 'Drink' ? 'ml' : 'g';
+export function isLiquid(item: {
+  search_name?: string;
+  name?: string;
+  category?: FoodCategory;
+}): boolean {
+  if (item.category === 'Drink') return true;
+  const hay = words(item);
+  if (!hay.trim()) return false;
+  if (LIQUIDS.some(([needle]) => hasWord(hay, needle))) return true;
+  if (LIQUID_WORDS.some((w) => hasWord(hay, w))) return true;
+  return LIQUID_WORD_ENDINGS.some((w) => hasWordEnding(hay, w));
+}
+
+/**
+ * The unit a food arrives in when nothing has been chosen for it: ml for
+ * anything pourable, grams for everything else. A scanned bottle of oil or
+ * glass of milk is therefore already in ml, with no tap required.
+ */
+export function defaultUnitFor(item: {
+  search_name?: string;
+  name?: string;
+  category?: FoodCategory;
+}): PortionUnit {
+  return isLiquid(item) ? 'ml' : 'g';
 }
 
 /** The unit to SHOW for an item: its own choice if it made one, else the default. */

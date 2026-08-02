@@ -6,6 +6,7 @@ import {
   densityFor,
   formatPortion,
   gramsToUnit,
+  isLiquid,
   unitOf,
   unitToGrams,
 } from '@/services/nutrition/portionUnit';
@@ -72,15 +73,83 @@ describe('densityFor — only genuinely non-water liquids are named', () => {
   });
 });
 
-describe('defaultUnitFor — only a Drink is a liquid by definition', () => {
-  it('gives a drink ml', () => {
-    expect(defaultUnitFor({ category: 'Drink' })).toBe('ml');
+describe('isLiquid — who gets the g/ml picker at all', () => {
+  it('a Drink is a liquid by category, whatever it is called', () => {
+    expect(isLiquid({ category: 'Drink' })).toBe(true);
+    expect(isLiquid({ category: 'Drink', name: 'Something' })).toBe(true);
   });
 
-  it('leaves everything else in grams, including soup and sauce', () => {
+  it('names a poured food even outside the Drink category', () => {
+    // The screenshot that prompted this: olive oil is not a "Drink".
+    expect(isLiquid({ search_name: 'olive oil' })).toBe(true);
+    expect(isLiquid({ search_name: 'milk' })).toBe(true);
+    expect(isLiquid({ search_name: 'orange juice' })).toBe(true);
+    expect(isLiquid({ search_name: 'water' })).toBe(true);
+  });
+
+  it('leaves solids alone — no picker on a steak', () => {
+    expect(isLiquid({ search_name: 'chicken breast', category: 'Protein' })).toBe(false);
+    expect(isLiquid({ search_name: 'white rice', category: 'Rice' })).toBe(false);
+    expect(isLiquid({ search_name: 'bread', category: 'Bread' })).toBe(false);
+    // Spooned, not poured.
+    expect(isLiquid({ search_name: 'yogurt', category: 'Dairy' })).toBe(false);
+  });
+
+  it('recognises a hand-typed liquid in the app own languages', () => {
+    // A manually added row has no English search_name — only what the patient
+    // typed. Being wrong here costs a button, not a number.
+    expect(isLiquid({ name: "Huile d'olive extra vierge" })).toBe(true);
+    expect(isLiquid({ name: 'Lait demi-écrémé' })).toBe(true);
+    expect(isLiquid({ name: 'حليب' })).toBe(true);
+  });
+
+  it('sees German compounds, which glue the head noun on the end', () => {
+    expect(isLiquid({ name: 'Olivenöl' })).toBe(true);
+    expect(isLiquid({ name: 'Vollmilch' })).toBe(true);
+    expect(isLiquid({ name: 'Orangensaft' })).toBe(true);
+    expect(isLiquid({ name: 'Mineralwasser' })).toBe(true);
+  });
+
+  it('does NOT extend the compound rule to French, where it would be a disaster', () => {
+    // "eau" ends gâteau, chapeau, morceau — the reason the two lists are apart.
+    expect(isLiquid({ name: 'Gâteau au chocolat' })).toBe(false);
+    expect(isLiquid({ name: 'Morceau de pain' })).toBe(false);
+  });
+
+  it('an empty row is not a liquid — an unnamed food shows no picker', () => {
+    expect(isLiquid({})).toBe(false);
+    expect(isLiquid({ name: '   ' })).toBe(false);
+  });
+
+  it('matches WHOLE WORDS — the substring trap that shipped for ten minutes', () => {
+    // Every one of these was a false positive when the lookup used
+    // String.includes: a solid offering a millilitre switch.
+    expect(isLiquid({ search_name: 'steak' })).toBe(false); // contains "tea"
+    expect(isLiquid({ search_name: 'watermelon' })).toBe(false); // contains "water"
+    expect(isLiquid({ search_name: 'boiled egg' })).toBe(false); // contains "oil"
+    expect(isLiquid({ search_name: 'teabread' })).toBe(false);
+    // …while the real phrases still match.
+    expect(isLiquid({ search_name: 'green tea' })).toBe(true);
+    expect(isLiquid({ search_name: 'sparkling water' })).toBe(true);
+  });
+
+  it('density obeys the same word boundary, so a solid never converts', () => {
+    expect(densityFor({ search_name: 'steak' })).toBe(DEFAULT_DENSITY);
+    expect(densityFor({ search_name: 'boiled egg' })).toBe(DEFAULT_DENSITY);
+    expect(densityFor({ search_name: 'extra virgin olive oil' })).toBe(0.91);
+  });
+});
+
+describe('defaultUnitFor — a poured food arrives in ml with no tap required', () => {
+  it('gives every liquid ml', () => {
+    expect(defaultUnitFor({ category: 'Drink' })).toBe('ml');
+    expect(defaultUnitFor({ search_name: 'olive oil' })).toBe('ml');
+    expect(defaultUnitFor({ name: "Huile d'olive" })).toBe('ml');
+  });
+
+  it('leaves everything else in grams', () => {
     expect(defaultUnitFor({ category: 'Soup' })).toBe('g');
-    expect(defaultUnitFor({ category: 'Sauce' })).toBe('g');
-    expect(defaultUnitFor({ category: 'Protein' })).toBe('g');
+    expect(defaultUnitFor({ category: 'Protein', search_name: 'steak' })).toBe('g');
     expect(defaultUnitFor({})).toBe('g');
   });
 });
@@ -144,10 +213,23 @@ describe('formatPortion — one sentence for every screen', () => {
     expect(formatPortion(item({ name: 'Rice', category: 'Rice', portion_grams: 180 }))).toBe('180 g');
   });
 
-  it('honours an explicit unit against the category default', () => {
+  it('honours an explicit unit against the default', () => {
+    // Plain yogurt is spooned, so it is NOT in the liquids table and converts
+    // at water density — the explicit ml is still honoured.
     expect(
       formatPortion(item({ name: 'Yogurt', search_name: 'yogurt', category: 'Dairy', portion_grams: 103, portion_unit: 'ml' }))
-    ).toBe('100 ml');
+    ).toBe('103 ml');
+    // And a liquid can be forced back to grams.
+    expect(
+      formatPortion(item({ name: 'Olive oil', search_name: 'olive oil', portion_grams: 700, portion_unit: 'g' }))
+    ).toBe('700 g');
+  });
+
+  it('a scanned oil comes out in ml on its own, at its real density', () => {
+    // 700 g of olive oil is ~769 ml — the plate is unchanged, the wording is not.
+    expect(formatPortion(item({ name: "Huile d'olive extra vierge", search_name: 'olive oil', portion_grams: 700 }))).toBe(
+      '769 ml'
+    );
   });
 
   it('rounds — a portion nobody measured must not read to three decimals', () => {
