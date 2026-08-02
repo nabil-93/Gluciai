@@ -756,12 +756,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  /* PHYSICAL vs LOGICAL edges (Arabic).
+     The card reserves room on the side the ring tucks into, and the ring is
+     pulled back over it by a negative margin. Both were written as `right` and
+     `left`, which never flip: in Arabic the row reverses (document.dir on web,
+     I18nManager on native) but the padding stayed on the right and the ring
+     pulled itself further LEFT, away from the card — so the ring overlapped the
+     card's own text and hung off the edge. `paddingEnd` / `marginStart` are the
+     same two numbers, on the edge that follows the language. No-ops in French,
+     German and English. */
   carbsCard: {
     flex: 1,
     minWidth: 0,
     borderRadius: 28,
     padding: 20,
-    paddingRight: 44,
+    paddingEnd: 44,
     shadowColor: '#149A57',
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.4,
@@ -785,7 +794,9 @@ const styles = StyleSheet.create({
   },
   carbsFill: {
     position: 'absolute',
-    left: 0,
+    // Same reason as the card above: a progress bar has to grow FROM the edge
+    // the language starts at, or an Arabic day at 40 % fills from the wrong end.
+    start: 0,
     top: 0,
     bottom: 0,
     borderRadius: 99,
@@ -795,7 +806,7 @@ const styles = StyleSheet.create({
     fontFamily: F800,
     fontSize: 12,
     color: GREEN_D,
-    marginLeft: 9,
+    marginStart: 9,
   },
   carbsRemaining: { fontFamily: F600, fontSize: 14, color: 'rgba(255,255,255,0.92)', marginTop: 12 },
   /* On the green gradient, so it keeps a high-contrast white; wraps freely
@@ -811,7 +822,7 @@ const styles = StyleSheet.create({
   ringWrap: {
     width: RING,
     height: RING,
-    marginLeft: -40,
+    marginStart: -40,
     borderRadius: 999,
     backgroundColor: '#fff',
     alignItems: 'center',

@@ -21,6 +21,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import { AddedSugarCard, SUGAR_SEARCH_NAME } from '@/components/AddedSugarCard';
 import { AnimatedRobot, GlycemicBar, ImageLightbox, RotaryDial, glycemicTone } from '@/components/ui';
+import { Spinner } from '@/components/ui/Spinner';
 import { MealAssistant } from '@/components/MealAssistant';
 import { MealEditModal } from '@/components/MealEditModal';
 import { MealGradeBar } from '@/components/MealGradeBar';
@@ -1669,10 +1670,20 @@ export default function ScanResultScreen() {
           primary
           label={saving ? t('common.loading') : t('analysis.save')}
           onPress={onSave}
+          /* Saving writes to the journal AND to Supabase, so on a slow
+             connection the button sat with a changed label and a static
+             bookmark — nothing moved, and the plate looked stuck. The mark
+             becomes the spinner for exactly as long as the write is in
+             flight; the label already said "loading", it just had nothing
+             beside it that was actually alive. */
           icon={
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <Path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
-            </Svg>
+            saving ? (
+              <Spinner size={16} color="#fff" />
+            ) : (
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
+              </Svg>
+            )
           }
         />
         <FooterBtn

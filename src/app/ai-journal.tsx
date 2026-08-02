@@ -269,12 +269,20 @@ export default function AiJournalScreen() {
                         <Text style={styles.entryBody} numberOfLines={3}>
                           {e.body}
                         </Text>
-                        <Text style={styles.entryTime}>
-                          {new Date(e.created_at).toLocaleTimeString(locale, {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </Text>
+                        {/* The card opens a full coach report, and nothing said
+                            so — the log card above it has carried this same
+                            chevron all along. Sits on the time row so it reads
+                            as "there is more here", and points the way the
+                            language runs. */}
+                        <View style={styles.entryFoot}>
+                          <Text style={styles.entryTime}>
+                            {new Date(e.created_at).toLocaleTimeString(locale, {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </Text>
+                          <Text style={styles.entryArrow}>{rtl ? '‹' : '›'}</Text>
+                        </View>
                       </Pressable>
                     </View>
                   );
@@ -467,11 +475,25 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     marginTop: 4,
   },
+  /* The time and the "there is more" chevron share one row, pushed apart, so
+     the chevron sits on the reading edge in both directions. `alignSelf` moved
+     off the time itself — the row now does that job. */
+  entryFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    gap: 8,
+  },
   entryTime: {
     fontFamily: F600,
     fontSize: 10.5,
     color: '#9CA3AF',
-    marginTop: 6,
-    alignSelf: 'flex-end',
+  },
+  entryArrow: {
+    fontFamily: F800,
+    fontSize: 18,
+    lineHeight: 20,
+    color: '#C4CAD4',
   },
 });

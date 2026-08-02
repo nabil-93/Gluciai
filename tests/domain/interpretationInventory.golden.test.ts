@@ -60,8 +60,16 @@ const { computeProgramTargets, splitCarbs, mealCarbCap } = await import(
 const { waterGoalMl, estimateMealWaterMl } = await import('@/services/nutrition/micros');
 const { scoreBand } = await import('@/components/journal/dayScore');
 
+/**
+ * Source of a file, with line endings NORMALISED.
+ *
+ * Git rewrites these files with CRLF on checkout (core.autocrlf on Windows), so
+ * an expectation containing a literal `\n` passes before a commit and fails
+ * after one — which is what happened to the two-maps assertion below. The rule
+ * being pinned is about the CODE, never about how the checkout stored it.
+ */
 const src = (rel: string): string =>
-  readFileSync(path.resolve(process.cwd(), rel), 'utf8');
+  readFileSync(path.resolve(process.cwd(), rel), 'utf8').replace(/\r\n/g, '\n');
 
 /** A plate that trips nothing — every case below moves one axis off it. */
 const plate = (o: Record<string, unknown> = {}) => ({
