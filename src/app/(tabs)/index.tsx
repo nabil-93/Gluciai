@@ -46,11 +46,12 @@ import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
 import { getDailyInsight, type Insight } from '@/services/insights';
 import {
   carbDisplay,
+  carbFigure,
   carbStatus,
   carbText,
   carbUnit,
   plateCarbStatus,
-} from '@/services/nutrition/carbProvenance';
+} from '@/services/nutrition/interpret';
 import { setPendingScan } from '@/services/scanSession';
 import { getPlannedReminders } from '@/services/notifications';
 import { useAppStore } from '@/store/useAppStore';
@@ -103,12 +104,25 @@ function sameDay(iso: string, ref: Date) {
   return new Date(iso).toDateString() === ref.toDateString();
 }
 
-/** Which home slot a meal files under. The meal_type the patient CONFIRMED
- *  (scan picker / AI confirm card) always wins — "klit f lghda" logged at
- *  night must land under lunch; the hour of created_at only classifies
- *  legacy rows without a meal_type (snacks fall back to the hour too,
- *  since the home view has no snack slot). */
-function slotOfMeal(m: MealScan): 'breakfast' | 'lunch' | 'dinner' {
+/**
+ * Which home slot a meal files under, or `null` when it belongs to none.
+ *
+ * The meal_type the patient CONFIRMED (scan picker / AI confirm card) always
+ * wins — "klit f lghda" logged at night must land under lunch.
+ *
+ * A CONFIRMED SNACK RETURNS null. It used to fall through to the hour
+ * fallback below, which meant an ice cream logged at 21:48 was classified as
+ * `dinner` and — being the most recent — REPLACED the dinner the patient had
+ * actually eaten and confirmed. The card showed the ice cream under "Dîner"
+ * while the journal correctly held both. The patient's own answer to "which
+ * meal is this?" was overwritten by a clock reading.
+ *
+ * The hour fallback now classifies ONLY rows with no meal_type at all —
+ * legacy scans saved before the picker existed, which is all it was ever
+ * meant for. Snacks stay visible on this screen through the recap card and
+ * the timeline, and the Nutrition page has a real Snacks row for them.
+ */
+function slotOfMeal(m: MealScan): 'breakfast' | 'lunch' | 'dinner' | null {
   if (
     m.meal_type === 'breakfast' ||
     m.meal_type === 'lunch' ||
@@ -116,6 +130,7 @@ function slotOfMeal(m: MealScan): 'breakfast' | 'lunch' | 'dinner' {
   ) {
     return m.meal_type;
   }
+  if (m.meal_type === 'snack') return null;
   const h = new Date(m.created_at).getHours();
   return h < 11 ? 'breakfast' : h < 16 ? 'lunch' : 'dinner';
 }
@@ -1472,6 +1487,7 @@ export default function HomeScreen() {
     const bySlot: Record<string, MealScan | undefined> = {};
     for (const m of dayMeals) {
       const s = slotOfMeal(m);
+      if (s === null) continue; // a confirmed snack owns no slot
       // keep the latest in each slot
       if (!bySlot[s] || new Date(m.created_at) > new Date(bySlot[s]!.created_at)) {
         bySlot[s] = m;
@@ -1507,8 +1523,11 @@ export default function HomeScreen() {
   const mealsByDay = useMemo(() => {
     const map: Record<string, Set<'breakfast' | 'lunch' | 'dinner'>> = {};
     for (const m of meals) {
+      const s = slotOfMeal(m);
+      // A snack lights no arc — the ring has three, one per named meal.
+      if (s === null) continue;
       const key = new Date(m.created_at).toDateString();
-      (map[key] ??= new Set()).add(slotOfMeal(m));
+      (map[key] ??= new Set()).add(s);
     }
     return map;
   }, [meals]);
@@ -1922,7 +1941,7 @@ export default function HomeScreen() {
                   unit="g"
                   zone={carbZone}
                   zoneLabel={carbZone ? t(carbZone.labelKey) : ''}
-                  alertTitle={`${carbTotalText}${carbUnit(carbView) ? ` ${carbUnit(carbView)}` : ''} / ${CARB_GOAL} g`}
+                  alertTitle={`${carbFigure(carbView).full} / ${CARB_GOAL} g`}
                   alertDesc={carbZone ? t(carbZone.alertDescKey) : ''}
                   sliderFrac={carbSliderFrac}
                   ringWidth={glyRingW}

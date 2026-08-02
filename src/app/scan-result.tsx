@@ -23,19 +23,27 @@ import { AddedSugarCard, SUGAR_SEARCH_NAME } from '@/components/AddedSugarCard';
 import { AnimatedRobot, GlycemicBar, ImageLightbox, RotaryDial, glycemicTone } from '@/components/ui';
 import { MealAssistant } from '@/components/MealAssistant';
 import { MealEditModal } from '@/components/MealEditModal';
+import { MealGradeBar } from '@/components/MealGradeBar';
 import { MEAL_TYPES, MealTypeModal } from '@/components/MealTypeModal';
 import { SaveConfirmModal } from '@/components/SaveConfirmModal';
 import { savedStateKey, saveMeal, updateMealType } from '@/services/data';
-import { qualityEvidence } from '@/services/nutrition/advice';
+import { aggregateItems } from '@/services/nutrition/engine';
+/* ONE import path for every interpretation this screen renders (Phase 2/3).
+   The screen used to own a private `glBand` and its own copy of the load
+   palette; both now come from `interpret/glycemic`, unchanged. */
 import {
   carbDisplay,
+  carbFigure,
   carbStatus,
   carbText as carbTextOf,
   carbUnit as carbUnitOf,
+  effectiveGi,
+  glBand,
+  mealGrade,
   plateCarbStatus,
-} from '@/services/nutrition/carbProvenance';
-import { aggregateItems } from '@/services/nutrition/engine';
-import { scoreMeal } from '@/services/nutrition/mealScore';
+  qualityEvidence,
+  scoreMeal,
+} from '@/services/nutrition/interpret';
 import {
   estimateMealWaterMl,
   estimateMicros,
@@ -219,29 +227,54 @@ function calorieTone(pct: number) {
 }
 
 /**
- * Minutes of each activity needed to burn `cal` kcal (moderate intensity,
- * ~70 kg reference). Illustrative — for motivation, not a prescription.
+ * Metabolic equivalents for the four activities shown, at MODERATE intensity,
+ * from the Compendium of Physical Activities (Ainsworth et al.) — the
+ * reference table these values are normally taken from.
  *
- * STEP 22C AUDIT (finding NUTR-A10) — these four divisors are the ENTIRE
- * model. They are kcal-per-minute constants for one hypothetical 70 kg adult
- * at one unstated intensity: they ignore the patient's weight (the app knows
- * it — `profile.weight` is two lines away and drives the water goal), their
- * sex, their age, their fitness and the MET value of the activity. A 50 kg and
- * a 110 kg patient are told the same number of minutes for the same plate,
- * and the true figure differs by more than a factor of two between them.
- *
- * The constants are NOT changed here: replacing them with a MET × weight model
- * would move every minute shown on the screen and in the meal PDF, which is a
- * nutrition-policy change for RU-3, not an engineering one. What Step 22C does
- * is stop presenting them as facts — the card and the PDF now say what they
- * rest on, in the vocabulary Step 17 gave the other estimates.
+ * They replace four unsourced kcal-per-minute divisors (5 / 12 / 8.5 / 9.5)
+ * that Step 22C recorded as NUTR-A10 and left in place. External review
+ * rejected that: the app already stores the patient's weight — `profile.weight`
+ * drives the water goal four lines below the call site — and printing minutes
+ * computed for a hypothetical 70 kg adult to a 95 kg patient is wrong by more
+ * than a third, in the direction that overstates the effort required.
  */
-function burnMinutes(cal: number) {
+const BURN_MET = {
+  /** Walking, brisk, firm surface (~5.5 km/h). */
+  walk: 4.3,
+  /** Running (~8 km/h). */
+  run: 8.3,
+  /** Bicycling, general leisure. */
+  bike: 7.5,
+  /** Swimming, leisurely — not lap training. */
+  swim: 6.0,
+} as const;
+
+/** Weight assumed when the profile has none. Named so the UI can say so. */
+const BURN_DEFAULT_KG = 70;
+
+/**
+ * Minutes of each activity needed to burn `cal` kcal, for THIS patient.
+ *
+ * `kcal/min = MET × 3.5 × kg / 200` — the standard conversion from a metabolic
+ * equivalent to an energy cost, which is linear in body mass. That linearity is
+ * the whole point of the fix: the same plate is ~35 % fewer minutes for a 95 kg
+ * patient than for a 70 kg one, and the previous model showed them the same
+ * number.
+ *
+ * STILL AN ESTIMATE, and the card says so: MET tables are population averages
+ * at one assumed intensity, they ignore fitness, age, sex and terrain, and the
+ * "calories burned" framing ignores that some of that energy would have been
+ * spent at rest anyway. It is a motivational comparison, not a prescription.
+ */
+function burnMinutes(cal: number, weightKg?: number) {
+  const kg = weightKg && weightKg > 0 ? weightKg : BURN_DEFAULT_KG;
+  const minutes = (met: number) =>
+    Math.max(1, Math.round(cal / ((met * 3.5 * kg) / 200)));
   return {
-    walk: Math.max(1, Math.round(cal / 5)),
-    run: Math.max(1, Math.round(cal / 12)),
-    bike: Math.max(1, Math.round(cal / 8.5)),
-    swim: Math.max(1, Math.round(cal / 9.5)),
+    walk: minutes(BURN_MET.walk),
+    run: minutes(BURN_MET.run),
+    bike: minutes(BURN_MET.bike),
+    swim: minutes(BURN_MET.swim),
   };
 }
 
@@ -304,17 +337,9 @@ function makeSugarItem(grams: number, label: string): FoodItemResult {
   };
 }
 
-/**
- * Glycemic-LOAD band. GL = GI x carbs / 100; < 10 low, 10–20 medium, > 20 high.
- * Different thresholds from the index, but deliberately the SAME three colours
- * as `glycemicTone` (the shared GlycemicBar scale) so green/amber/red mean one
- * thing across the app.
- */
-function glBand(gl: number): { key: 'low' | 'medium' | 'high'; color: string } {
-  if (gl > 20) return { key: 'high', color: '#dc2626' };
-  if (gl >= 10) return { key: 'medium', color: '#d97706' };
-  return { key: 'low', color: '#0f9d58' };
-}
+/* The glycemic-LOAD band moved to `interpret/glycemic` in Phase 2 — same
+   thresholds (< 10 low, 10–20 medium, > 20 high) and the same three colours as
+   `glycemicTone`, which is now literally the same table rather than a hand copy. */
 
 /** glycemicTone's key → the shared IG explanation copy (already written for the
  *  Sélection Santé dish pages, in all four languages — reused, not duplicated). */
@@ -532,6 +557,9 @@ export default function ScanResultScreen() {
   /** No unit after a dash: "— g" reads like a quantity, which is the thing
    *  this whole change exists to stop implying. */
   const carbUnit = carbUnitOf(carbView);
+  /** The two joined — the shared assembly, so the PDF row cannot drift from
+   *  the home card and the peek window (Phase 3). */
+  const carbFull = carbFigure(carbView).full;
 
   /* ── What the numbers above REST ON (finding NUTR-A7, Step 22B) ─────────
      `fieldsFound` was computed by every provider *"so the UI can say how
@@ -585,6 +613,15 @@ export default function ScanResultScreen() {
   const evidence = qualityEvidence(result);
   const rated = evidence === 'supported';
 
+  /**
+   * The A–E letter form of the SAME indicator shown in the ring below — it
+   * moves with the food (a lean, high-fibre plate → A/B; a sugary, high-GI one
+   * → D/E). It is the app's own indicator, never an official nutritional label
+   * (NUTR-A1): the strip and the PDF both say so. `null` when the plate cannot
+   * support a verdict, so no letter is awarded (Step 22A).
+   */
+  const grade = rated ? mealGrade(quality.score) : null;
+
   /** Why the verdict is withheld — the sentence shown in its place. */
   const unratedWhy =
     evidence === 'carbs_unknown'
@@ -597,7 +634,7 @@ export default function ScanResultScreen() {
   const giTone = glycemicTone(gi);
   // …paired with the glycemic LOAD, the number that actually tracks the
   // portion. A 72-GI watermelon slice is a GL of 8; couscous at GI 65 is 39.
-  const gl = Math.round(result.glycemic_load_value ?? ((gi > 0 ? gi : 55) * C) / 100);
+  const gl = Math.round(result.glycemic_load_value ?? (effectiveGi(gi) * C) / 100);
   const glInfo = glBand(gl);
   // Percentage of the plate's carbs the index actually covers (0 when unknown).
   const giCoveragePct = Math.round((result.gi_carb_coverage ?? 0) * 100);
@@ -614,7 +651,11 @@ export default function ScanResultScreen() {
      count in full, and which percentages are floors rather than matches. */
   const microProv = microProvenance(items);
   const estimateCoveragePct = Math.round(microProv.coverageRatio * 100);
-  const burn = burnMinutes(cals);
+  const burn = burnMinutes(cals, profile?.weight);
+  /** Whether those minutes were computed for THIS patient or for the default
+   *  70 kg adult. The card says which — it must not imply a personal figure
+   *  when the profile could not supply one. */
+  const burnFromWeight = Boolean(profile?.weight && profile.weight > 0);
 
   // ── Goal comparison: this meal vs the day's remaining allowance ──
   const goal = dailyCalorieGoal(
@@ -765,6 +806,7 @@ export default function ScanResultScreen() {
                and the note below says what the figure is (Phase 2). */
             `<p class="sub" style="font-weight:700;margin-bottom:2px">${esc(quality.label)}</p>
       <div class="kcal">${quality.score}<small>/100</small></div>
+      <p class="sub">${esc(t('analysis.mealGrade'))} : <b>${grade}</b></p>
       <p class="sub" style="font-size:9.5px;margin-top:4px">${esc(t('analysis.scoreNote'))}</p>`
           : /* A document a doctor may read must not print a verdict the plate
                cannot support — the dash and the reason go in its place. */
@@ -780,7 +822,7 @@ export default function ScanResultScreen() {
       <h2>${esc(t('analysis.distribution'))}</h2>
       <table>
         ${row(t('result.protein'), `${P} g · ${pPct}%`)}
-        ${row(t('result.carbs'), `${carbText}${carbUnit ? ` ${carbUnit}` : ''} · ${carbPctText}`)}
+        ${row(t('result.carbs'), `${carbFull} · ${carbPctText}`)}
         ${row(t('result.fat'), `${F} g · ${fPct}%`)}
         ${row(t('result.fiber'), `${Math.round(result.fiber)} g`)}
         ${row(t('result.sugar'), `${Math.round(result.sugar)} g`)}
@@ -855,10 +897,11 @@ export default function ScanResultScreen() {
         ${row(t('analysis.bike'), `${burn.bike} min`)}
         ${row(t('analysis.swim'), `${burn.swim} min`)}
       </table>
-      <!-- A doctor must be able to see that these minutes use no patient
-           metric at all (NUTR-A10). -->
+      <!-- A doctor must be able to see which weight these minutes assume. -->
       <p class="sub" style="font-size:9.5px;margin-top:8px">${esc(
-        t('analysis.burnEstimated')
+        burnFromWeight
+          ? t('analysis.burnEstimated', { kg: Math.round(profile!.weight!) })
+          : t('analysis.burnEstimatedDefault')
       )}</p>
     </div>
     <div class="card grow">
@@ -1100,6 +1143,23 @@ export default function ScanResultScreen() {
             ) : null}
           </Pressable>
 
+          {/* The app's A–E indicator — under the photo, above the nutrition
+              card, where it has always been. The strip names it and says whose
+              indicator it is; the line below states it is not an official
+              nutritional label, because an A–E letter on a food photo is
+              exactly what a patient would otherwise read it as (NUTR-A1).
+              Restored by product decision after Step 22D Phase 1: visual only,
+              `mealGrade` and its boundaries are unchanged. */}
+          <View style={styles.scoreBarBelow}>
+            <MealGradeBar
+              grade={grade}
+              label={t('analysis.mealGrade')}
+              sub={rated ? t('analysis.mealGradeSub') : t('analysis.gradeUnavailableSub')}
+            />
+            <Text style={styles.gradeNote}>
+              {rated ? t('analysis.mealGradeNote') : unratedWhy}
+            </Text>
+          </View>
         </LinearGradient>
 
         <View style={styles.body}>
@@ -1189,6 +1249,29 @@ export default function ScanResultScreen() {
                 A–E strip used to carry (Step 16's "not a Nutri-Score") is
                 superseded by this one, which says the stronger thing. */}
             <Text style={styles.dataFoot}>{t('analysis.scoreNote')}</Text>
+
+            {/* THE SELF-CONTRADICTION AN EXTERNAL REVIEWER HIT (and they were
+                right): 736 kcal, 123 g of carbohydrate, glycemic load 50
+                "Élevé", calorie chip "Élevé" — and this card's headline said
+                "Excellent".
+
+                It is arithmetically exact. The carbohydrate rule charges −15
+                and CANNOT charge more, whether the plate holds 81 g or 300 g,
+                and the fibre (+5) and protein (+5) bonuses hand 10 of it back.
+                So 123 g costs a net 5 points.
+
+                Fixing THAT is a formula change and belongs to RU-3 (D3). What
+                does not need a decision is that the word must not stand alone
+                contradicting the plate's own load. The reason already exists —
+                `reasons[0]` here is "Charge glucidique très élevée (123 g)" —
+                it was simply buried in the advice card far below. This raises
+                it next to the figure it qualifies. No band, no weight, no
+                formula: `glBand` is the one already drawing the row below. */}
+            {rated && glInfo.key === 'high' && quality.reasons.length > 0 ? (
+              <Text style={styles.scoreVsLoad}>
+                {t('analysis.scoreVsLoad', { gl, why: quality.reasons[0] })}
+              </Text>
+            ) : null}
           </View>
 
           {/* ── Glycemic index (quality) + glycemic load (quantity) ──
@@ -1229,6 +1312,25 @@ export default function ScanResultScreen() {
                     ? `${t('analysis.giEstimated')} · `
                     : ''}
                   {t('analysis.giCoverage', { pct: giCoveragePct })}
+                </Text>
+              ) : null}
+
+              {/* THE CONTRADICTION A PATIENT ACTUALLY HITS (external review):
+                  the index reads "Bas · vert" and the load "Élevé · rouge" on
+                  the same card, three lines apart, and the index copy used to
+                  end with "idéal pour un diabétique". Both numbers are right —
+                  a low-GI carbohydrate in a large portion — but nothing said
+                  so, and the reassuring one came first.
+
+                  This line appears only when they diverge, and it names the
+                  figure that actually decides the outcome: the grams. No band
+                  moved, no formula moved; `giBand` and `glBand` are the ones
+                  already driving the two rows above it. */}
+              {glInfo.key === 'high' && giTone.key !== 'high' ? (
+                <Text style={styles.glVsGi}>
+                  {t(giTone.key === 'low' ? 'analysis.glVsGi' : 'analysis.glVsGiMed', {
+                    g: C,
+                  })}
                 </Text>
               ) : null}
 
@@ -1463,10 +1565,13 @@ export default function ScanResultScreen() {
                 <BurnRow emoji="🏊" label={t('analysis.swim')} min={burn.swim} />
               </View>
               <Text style={styles.miniFoot}>{t('analysis.basedOn', { cal: cals })}</Text>
-              {/* Fixed kcal-per-minute divisors for a ~70 kg adult — they do
-                  not use this patient's weight, sex, age or the activity's MET
-                  (NUTR-A10). The minutes are unchanged; the claim is not. */}
-              <Text style={styles.estimateFoot}>{t('analysis.burnEstimated')}</Text>
+              {/* Computed from THIS patient's weight when the profile has one
+                  (MET × 3.5 × kg / 200), and it says which case it is in. */}
+              <Text style={styles.estimateFoot}>
+                {burnFromWeight
+                  ? t('analysis.burnEstimated', { kg: Math.round(profile!.weight!) })
+                  : t('analysis.burnEstimatedDefault')}
+              </Text>
             </View>
 
             {/* Hydration */}
@@ -1769,6 +1874,18 @@ const styles = StyleSheet.create({
   scanBadgeText: { color: '#0F7A42', fontSize: 12.5, fontFamily: F700 },
   // Once the text has gathered into the check, the pill shrinks to the logo.
   scanBadgeCollapsed: { paddingLeft: 8, paddingRight: 8, gap: 0 },
+  // The A–E strip lives under the photo, inside the hero gradient.
+  scoreBarBelow: { marginHorizontal: 14, marginTop: 12 },
+  // The "app indicator, not an official label" line. On the photo gradient, so
+  // it is light — and left to wrap, since German and Arabic run longer.
+  gradeNote: {
+    color: 'rgba(255,255,255,0.72)',
+    fontFamily: F600,
+    fontSize: 10.5,
+    lineHeight: 14,
+    marginTop: 6,
+    marginHorizontal: 2,
+  },
 
   body: { paddingHorizontal: 14, paddingTop: 13, gap: 12 },
   card: {
@@ -1826,6 +1943,37 @@ const styles = StyleSheet.create({
   glTag: { borderRadius: 999, paddingVertical: 3.5, paddingHorizontal: 9 },
   glTagText: { fontSize: 10, fontFamily: F800, color: '#fff' },
   giFoot: { fontSize: 10, color: MUTED, fontFamily: F500, marginTop: 10 },
+  /* The indicator-vs-load caveat. Amber like the GI/GL reconciliation, because
+     it fires for the same reason: two figures on one card disagreeing. */
+  scoreVsLoad: {
+    marginTop: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderRadius: 12,
+    backgroundColor: '#fff8ec',
+    borderWidth: 1,
+    borderColor: '#f2d9b0',
+    color: '#8A5A00',
+    fontFamily: F600,
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
+  /* The index/load reconciliation. Amber-tinted panel rather than grey body
+     text: it fires only when the two rows above disagree, which is exactly
+     when the patient needs to read something instead of skimming past. */
+  glVsGi: {
+    marginTop: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderRadius: 12,
+    backgroundColor: '#fff8ec',
+    borderWidth: 1,
+    borderColor: '#f2d9b0',
+    color: '#8A5A00',
+    fontFamily: F600,
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
   /* Provenance of the totals (NUTR-A7). Wraps freely: the German and Arabic
      sentences are long, and truncating the caveat is exactly the failure this
      line exists to prevent. */
