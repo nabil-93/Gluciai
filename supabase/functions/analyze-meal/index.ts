@@ -253,28 +253,75 @@ async function callGemini(
     },
   };
 
-  // A transient 429 (rate limit) is retried ONCE after a short wait — the
-  // API tells us how long via retryDelay. Any other error fails fast.
-  let res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  /*
+   * RETRY EVERY TRANSIENT FAILURE, NOT JUST 429.
+   *
+   * This used to retry a rate limit once and "fail fast" on anything else —
+   * and anything else is mostly 503 UNAVAILABLE, "the model is overloaded",
+   * which is the ordinary weather of a vision model at peak hours. A patient
+   * photographing dinner got "Analyse impossible pour le moment. Vérifiez
+   * votre connexion" and had to press the shutter again and again until one
+   * attempt happened to land. Their connection was never the problem.
+   *
+   * WHAT IS RETRIED — the statuses that mean "ask again later":
+   *   429 too many requests · 500 internal · 502 · 503 overloaded · 504 timeout
+   * plus a THROWN fetch, which is a socket or DNS blip and never reached the
+   * model at all. That throw previously escaped this function untouched.
+   *
+   * WHAT IS NOT — 400 (the image or the request is malformed) and 401/403 (the
+   * key is wrong). Those return the same answer however many times they are
+   * asked, so retrying only burns the patient's wait and our quota.
+   *
+   * THE BUDGET IS BOUNDED. Three attempts, ~0.6s then ~1.5s of backoff with
+   * jitter so a burst of clients does not resynchronise into the next spike.
+   * A 429 still honours the server's own `retryDelay`, capped at 8s as before.
+   * Worst case adds ~2s to a scan that would otherwise have failed outright —
+   * far below the function's wall clock, and far below retrying by hand.
+   */
+  const TRANSIENT = new Set([429, 500, 502, 503, 504]);
+  const MAX_ATTEMPTS = 3;
 
-  if (res.status === 429) {
-    const detail = await res.text();
-    const wait = parseRetryDelayMs(detail);
-    await new Promise((r) => setTimeout(r, Math.min(wait, 8000)));
-    res = await fetch(url, {
+  const post = () =>
+    fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+
+  let res: Response | null = null;
+  let lastDetail = '';
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    let threw: unknown = null;
+    try {
+      res = await post();
+    } catch (e) {
+      // Never reached the model: no response to read, no status to branch on.
+      threw = e;
+      res = null;
+    }
+
+    if (res && res.ok) break;
+
+    const status = res?.status ?? 0;
+    const retryable = threw !== null || TRANSIENT.has(status);
+    if (!retryable || attempt === MAX_ATTEMPTS) {
+      if (threw !== null) throw threw;
+      lastDetail = res ? await res.text() : '';
+      break;
+    }
+
+    // A 429 carries its own instruction; everything else backs off on a curve.
+    lastDetail = res ? await res.text() : '';
+    const wait =
+      status === 429
+        ? Math.min(parseRetryDelayMs(lastDetail), 8000)
+        : Math.round(attempt * 600 + Math.random() * 400);
+    await new Promise((r) => setTimeout(r, wait));
   }
 
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`Gemini error ${res.status}: ${detail}`);
+  if (!res || !res.ok) {
+    throw new Error(`Gemini error ${res?.status ?? 'network'}: ${lastDetail}`);
   }
 
   const data = await res.json();
