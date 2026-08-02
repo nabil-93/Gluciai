@@ -208,6 +208,12 @@ Deno.serve(async (req) => {
 
     return json({ detections, incomplete: repaired });
   } catch (error) {
+    // Retries were spent on a busy provider. Say so with a stable CODE so the
+    // app can tell "the server is overloaded" from "your request was wrong" —
+    // it must never blame the patient's connection for our upstream.
+    if (error instanceof AiUnavailableError) {
+      return json(aiUnavailableBody(error), 503);
+    }
     return json({ error: String(error) }, 500);
   }
 });
@@ -253,75 +259,18 @@ async function callGemini(
     },
   };
 
-  /*
-   * RETRY EVERY TRANSIENT FAILURE, NOT JUST 429.
-   *
-   * This used to retry a rate limit once and "fail fast" on anything else —
-   * and anything else is mostly 503 UNAVAILABLE, "the model is overloaded",
-   * which is the ordinary weather of a vision model at peak hours. A patient
-   * photographing dinner got "Analyse impossible pour le moment. Vérifiez
-   * votre connexion" and had to press the shutter again and again until one
-   * attempt happened to land. Their connection was never the problem.
-   *
-   * WHAT IS RETRIED — the statuses that mean "ask again later":
-   *   429 too many requests · 500 internal · 502 · 503 overloaded · 504 timeout
-   * plus a THROWN fetch, which is a socket or DNS blip and never reached the
-   * model at all. That throw previously escaped this function untouched.
-   *
-   * WHAT IS NOT — 400 (the image or the request is malformed) and 401/403 (the
-   * key is wrong). Those return the same answer however many times they are
-   * asked, so retrying only burns the patient's wait and our quota.
-   *
-   * THE BUDGET IS BOUNDED. Three attempts, ~0.6s then ~1.5s of backoff with
-   * jitter so a burst of clients does not resynchronise into the next spike.
-   * A 429 still honours the server's own `retryDelay`, capped at 8s as before.
-   * Worst case adds ~2s to a scan that would otherwise have failed outright —
-   * far below the function's wall clock, and far below retrying by hand.
-   */
-  const TRANSIENT = new Set([429, 500, 502, 503, 504]);
-  const MAX_ATTEMPTS = 3;
+  // The retry policy lives in _shared/aiFetch.ts so all four AI functions
+  // share ONE behaviour — a policy written down four times is four policies
+  // that drift. Throws AiUnavailableError once the attempts are spent.
+  const res = await aiFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 
-  const post = () =>
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-
-  let res: Response | null = null;
-  let lastDetail = '';
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    let threw: unknown = null;
-    try {
-      res = await post();
-    } catch (e) {
-      // Never reached the model: no response to read, no status to branch on.
-      threw = e;
-      res = null;
-    }
-
-    if (res && res.ok) break;
-
-    const status = res?.status ?? 0;
-    const retryable = threw !== null || TRANSIENT.has(status);
-    if (!retryable || attempt === MAX_ATTEMPTS) {
-      if (threw !== null) throw threw;
-      lastDetail = res ? await res.text() : '';
-      break;
-    }
-
-    // A 429 carries its own instruction; everything else backs off on a curve.
-    lastDetail = res ? await res.text() : '';
-    const wait =
-      status === 429
-        ? Math.min(parseRetryDelayMs(lastDetail), 8000)
-        : Math.round(attempt * 600 + Math.random() * 400);
-    await new Promise((r) => setTimeout(r, wait));
-  }
-
-  if (!res || !res.ok) {
-    throw new Error(`Gemini error ${res?.status ?? 'network'}: ${lastDetail}`);
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Gemini error ${res.status}: ${detail}`);
   }
 
   const data = await res.json();
@@ -341,11 +290,7 @@ async function callGemini(
 
 /* ─────────────────────────────── HELPERS ────────────────────────────── */
 
-/** Pull the retryDelay ("11s") out of a Gemini 429 body → ms (default 5s). */
-function parseRetryDelayMs(body: string): number {
-  const m = body.match(/"retryDelay"\s*:\s*"(\d+)(?:\.\d+)?s"/);
-  return m ? (parseInt(m[1], 10) + 1) * 1000 : 5000;
-}
+
 
 /** Accept both a bare base64 string and a full `data:...;base64,` URL. */
 function stripDataUrl(b64: string): string {

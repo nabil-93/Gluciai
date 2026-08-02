@@ -9,6 +9,7 @@
 // Deploy: supabase functions deploy food-search
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import { aiFetch, AiUnavailableError, aiUnavailableBody } from '../_shared/aiFetch.ts';
 
 import { callerUserId } from '../_shared/usage.ts';
 
@@ -80,7 +81,7 @@ Deno.serve(async (req) => {
     } | null = null;
     for (const attempt of attempts) {
       try {
-        const res = await fetch(attempt, {
+        const res = await aiFetch(attempt, {
           headers: { 'User-Agent': UA },
           signal: AbortSignal.timeout(12_000),
         });
@@ -125,6 +126,12 @@ Deno.serve(async (req) => {
     const seen = (num(data.page) || pg) * (num(data.page_size) || 24);
     return json({ result: { items, hasMore: total > seen } });
   } catch (error) {
+    // Retries were spent on a busy provider. Say so with a stable CODE so the
+    // app can tell "the server is overloaded" from "your request was wrong" —
+    // it must never blame the patient's connection for our upstream.
+    if (error instanceof AiUnavailableError) {
+      return json(aiUnavailableBody(error), 503);
+    }
     return json({ error: String(error) }, 500);
   }
 });

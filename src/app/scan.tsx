@@ -255,10 +255,30 @@ function ScanScreen() {
       // The percent interval carries the bar to 100% then routes.
       finishedRef.current = true;
     } catch (e) {
-      // Distinguish a temporary AI rate-limit (quota) from other failures.
-      const msg = String((e as Error)?.message ?? e);
+      /* WHOSE FAULT IS IT — the patient must not be sent to their wifi
+         settings for our upstream being busy.
+
+         `scanFailed` says "vérifiez votre connexion". That was the ONLY
+         message for everything except a quota, so an overloaded vision model
+         — the single most common failure — read as a broken phone. The
+         function now answers `code: 'ai_unavailable'` once its retries are
+         spent, which is a fact about OUR provider, and gets its own sentence.
+         Anything else keeps the connection wording, because then it really
+         might be the network. */
+      const err = e as { message?: string; code?: string; context?: { status?: number } };
+      const msg = String(err?.message ?? e);
       const rateLimited = /429|quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(msg);
-      setError(rateLimited ? t('scanner.rateLimited') : t('scanner.scanFailed'));
+      const aiBusy =
+        err?.code === 'ai_unavailable' ||
+        /ai_unavailable/i.test(msg) ||
+        err?.context?.status === 503;
+      setError(
+        rateLimited
+          ? t('scanner.rateLimited')
+          : aiBusy
+            ? t('scanner.serviceBusy')
+            : t('scanner.scanFailed')
+      );
       setAnalyzing(false);
       setCaptured(null);
     }
@@ -715,6 +735,17 @@ function DockButton({
 }
 
 /** White status card with thumbnail (purple corner ticks) + live % ring. */
+/**
+ * How long the analysis runs before we say WHY it is slow.
+ *
+ * The retries happen server-side inside one `invoke`, so the app cannot watch
+ * them — but it can watch the clock. A normal scan answers well under this; if
+ * it has not, the function is almost certainly on its second or third attempt
+ * against a busy provider. Saying so beats a progress bar that appears stuck,
+ * and it is true rather than decorative.
+ */
+const RETRY_HINT_AFTER_MS = 7000;
+
 function AnalyzingCard({
   percent,
   uri,
@@ -724,6 +755,12 @@ function AnalyzingCard({
   uri: string | null;
   t: (k: string) => string;
 }) {
+  const [slow, setSlow] = React.useState(false);
+  React.useEffect(() => {
+    const id = setTimeout(() => setSlow(true), RETRY_HINT_AFTER_MS);
+    return () => clearTimeout(id);
+  }, []);
+
   return (
     <View style={styles.analyzeCard}>
       <View style={styles.thumb}>
@@ -736,7 +773,7 @@ function AnalyzingCard({
           {t('scanner.analyzingCard')}
         </Text>
         <Text style={styles.analyzeSub} numberOfLines={2}>
-          {t('scanner.analyzingCardSub')} ✨
+          {slow ? t('scanner.stillTrying') : `${t('scanner.analyzingCardSub')} ✨`}
         </Text>
       </View>
       <ProgressRing

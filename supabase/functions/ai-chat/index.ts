@@ -3,6 +3,7 @@
 // Secrets: supabase secrets set GEMINI_API_KEY=... (shared with analyze-meal)
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import { aiFetch, AiUnavailableError, aiUnavailableBody } from '../_shared/aiFetch.ts';
 
 import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
 import { featureLocked } from '../_shared/featureGuard.ts';
@@ -168,7 +169,7 @@ message: 2-3 sentences in ${langName}, personal and concrete (use their
 numbers). For caution/danger, clearly tell them to check with their doctor
 BEFORE injecting this modified dose.`;
 
-      const response = await fetch(
+      const response = await aiFetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
@@ -300,7 +301,7 @@ Exactly four meals, slots breakfast, lunch, snack, dinner. Keep "recipe" to
 at most 3 short steps and "ingredients" to at most 6 items — brevity here
 matters more than detail.`;
 
-      const response = await fetch(
+      const response = await aiFetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
@@ -506,7 +507,7 @@ Rules:
       while (logContents.length && logContents[0].role === 'model') logContents.shift();
       if (logContents.length === 0) return json({ error: 'Empty conversation' }, 400);
 
-      const response = await fetch(
+      const response = await aiFetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
@@ -690,7 +691,7 @@ Rules:
       while (mealContents.length && mealContents[0].role === 'model') mealContents.shift();
       if (mealContents.length === 0) return json({ error: 'Empty conversation' }, 400);
 
-      const response = await fetch(
+      const response = await aiFetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
@@ -933,7 +934,7 @@ THREE STAGES — pick one per turn:
       while (coachContents.length && coachContents[0].role === 'model') coachContents.shift();
       if (coachContents.length === 0) return json({ error: 'Empty conversation' }, 400);
 
-      const response = await fetch(
+      const response = await aiFetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
@@ -1118,7 +1119,7 @@ in their language. Empty array if none fit.`;
       while (helpContents.length && helpContents[0].role === 'model') helpContents.shift();
       if (helpContents.length === 0) return json({ error: 'Empty conversation' }, 400);
 
-      const response = await fetch(
+      const response = await aiFetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
@@ -1366,7 +1367,7 @@ Rules:
       return json({ error: 'Empty conversation' }, 400);
     }
 
-    const response = await fetch(
+    const response = await aiFetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
@@ -1435,6 +1436,12 @@ Rules:
 
     return json({ reply, transcript });
   } catch (error) {
+    // Retries were spent on a busy provider. Say so with a stable CODE so the
+    // app can tell "the server is overloaded" from "your request was wrong" —
+    // it must never blame the patient's connection for our upstream.
+    if (error instanceof AiUnavailableError) {
+      return json(aiUnavailableBody(error), 503);
+    }
     return json({ error: String(error) }, 500);
   }
 });

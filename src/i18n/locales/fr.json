@@ -606,7 +606,9 @@
     },
     "rateLimited": "L'IA a atteint sa limite momentanée. Réessayez dans quelques instants.",
     "scanFailed": "Analyse impossible pour le moment. Vérifiez votre connexion et réessayez.",
-    "noDetect": "Nous n'avons pas pu identifier ce repas avec certitude. Reprenez une photo plus proche et bien éclairée."
+    "noDetect": "Nous n'avons pas pu identifier ce repas avec certitude. Reprenez une photo plus proche et bien éclairée.",
+    "serviceBusy": "Le service d'analyse est très sollicité en ce moment. Ce n'est pas votre connexion — réessayez dans quelques instants.",
+    "stillTrying": "Le service est occupé — nouvelle tentative en cours…"
   },
   "result": {
     "title": "Analyse du repas",

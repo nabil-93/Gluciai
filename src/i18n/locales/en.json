@@ -606,7 +606,9 @@
     },
     "rateLimited": "The AI hit its momentary limit. Please try again shortly.",
     "scanFailed": "Analysis unavailable right now. Check your connection and try again.",
-    "noDetect": "We couldn't identify this meal with confidence. Take a closer, well-lit photo."
+    "noDetect": "We couldn't identify this meal with confidence. Take a closer, well-lit photo.",
+    "serviceBusy": "The analysis service is very busy right now. This is not your connection — try again in a moment.",
+    "stillTrying": "The service is busy — retrying…"
   },
   "result": {
     "title": "Meal analysis",

@@ -606,7 +606,9 @@
     },
     "rateLimited": "Die KI hat ihr momentanes Limit erreicht. Versuche es in Kürze erneut.",
     "scanFailed": "Analyse momentan nicht möglich. Prüfe deine Verbindung und versuche es erneut.",
-    "noDetect": "Wir konnten diese Mahlzeit nicht sicher erkennen. Mache ein näheres, gut beleuchtetes Foto."
+    "noDetect": "Wir konnten diese Mahlzeit nicht sicher erkennen. Mache ein näheres, gut beleuchtetes Foto.",
+    "serviceBusy": "Der Analysedienst ist gerade stark ausgelastet. Es liegt nicht an deiner Verbindung — versuche es gleich noch einmal.",
+    "stillTrying": "Der Dienst ist ausgelastet — neuer Versuch läuft…"
   },
   "result": {
     "title": "Mahlzeiten-Analyse",

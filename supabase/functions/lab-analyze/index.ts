@@ -11,6 +11,7 @@
 // Secrets: GEMINI_API_KEY (shared with the other functions)
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import { aiFetch, AiUnavailableError, aiUnavailableBody } from '../_shared/aiFetch.ts';
 
 import { callerUserId, flashCost, logUsage } from '../_shared/usage.ts';
 import { featureGranted } from '../_shared/featureGuard.ts';
@@ -55,7 +56,7 @@ function fmtValues(vals: LabValue[]): string {
 async function gemini(
   body: Record<string, unknown>
 ): Promise<{ text: string; usage: any } | { error: string }> {
-  const r = await fetch(
+  const r = await aiFetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: 'POST',
@@ -352,6 +353,12 @@ decides.`;
 
     return json({ error: `unknown task: ${task}` }, 400);
   } catch (error) {
+    // Retries were spent on a busy provider. Say so with a stable CODE so the
+    // app can tell "the server is overloaded" from "your request was wrong" —
+    // it must never blame the patient's connection for our upstream.
+    if (error instanceof AiUnavailableError) {
+      return json(aiUnavailableBody(error), 503);
+    }
     return json({ error: String(error) }, 500);
   }
 });
