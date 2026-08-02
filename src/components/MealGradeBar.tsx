@@ -9,12 +9,17 @@ const F800 = 'PlusJakartaSans_800ExtraBold';
 
 const GRADES: MealGrade[] = ['A', 'B', 'C', 'D', 'E'];
 
-/** The app's mascot, the same one the AI surfaces use — so the strip reads as
- *  GluciAI's own indicator at a glance.
+/** The APPLICATION's logo — the green G with the robot, leaf and drop, the same
+ *  mark on the home screen and the launcher icon.
  *
- *  Relative, like every other asset in this app: the `@/assets` alias points at
- *  the ROOT `assets/` folder, not `src/assets/`. */
-const LOGO = require('../assets/claude/robot.png');
+ *  It was the bare `claude/robot.png` mascot, which at 24 px read as a generic
+ *  white blob against the dark strip: the robot's own body is white and it
+ *  carries none of the brand's green. The launcher icon is drawn to survive
+ *  being small, so the strip now uses the same file the store does — the mark a
+ *  patient already associates with this app.
+ *
+ *  `@/assets` points at the ROOT `assets/` folder, not `src/assets/`. */
+const LOGO = require('@/assets/images/icon.png');
 
 /**
  * The A–E letter of the app's OWN meal indicator, as a strip under the meal
@@ -131,9 +136,11 @@ const styles = StyleSheet.create({
   left: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1, minWidth: 0 },
   labelBox: { flexShrink: 1, minWidth: 0 },
   labelTop: { color: '#ffffff', fontFamily: F800, fontSize: 12.5, letterSpacing: -0.2 },
-  /** The brand mark, left of the name. 24 px reads at arm's length without
-   *  crowding the five letters, which own the right-hand side of the strip. */
-  logo: { width: 24, height: 24, flexShrink: 0 },
+  /** The brand mark, left of the name. 26 px: the launcher icon carries more
+   *  inside it than the bare mascot did (the G, the leaf, the drop), so it
+   *  needs a touch more room to stay legible — still short of crowding the five
+   *  letters, which own the right-hand side of the strip. */
+  logo: { width: 26, height: 26, flexShrink: 0 },
   labelSub: {
     color: 'rgba(255,255,255,0.6)',
     fontFamily: F600,
