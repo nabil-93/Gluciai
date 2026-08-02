@@ -124,7 +124,16 @@
     "dataUnavailable": "Aucune donnée nutritionnelle exploitable pour cette assiette.",
     "dataUnidentified": "aliments non identifiés : {{count}}",
     "dataInvalidPortion": "portions inutilisables : {{count}}",
-    "dataWeakId": "{{g}} g identifiés sans certitude"
+    "dataWeakId": "{{g}} g identifiés sans certitude",
+    "scanAdd": "Scanner",
+    "scanAddTitle": "Scanner un aliment",
+    "scanAddHint": "Prenez la photo, puis cochez ce que vous voulez ajouter.",
+    "scanPickTitle": "Aliments détectés",
+    "scanPickHint": "Cochez ceux à ajouter à votre liste.",
+    "scanAddSelected": "Ajouter ({{n}})",
+    "scanAlreadyListed": "Déjà dans la liste",
+    "switchUnit": "Changer d'unité (g / ml)",
+    "pdfPortion": "Portion"
   },
   "common": {
     "appName": "GluciAI",

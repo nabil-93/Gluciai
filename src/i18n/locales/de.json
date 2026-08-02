@@ -124,7 +124,16 @@
     "dataUnavailable": "Keine verwertbaren Nährwertdaten für diesen Teller.",
     "dataUnidentified": "nicht erkannte Lebensmittel: {{count}}",
     "dataInvalidPortion": "unbrauchbare Portionen: {{count}}",
-    "dataWeakId": "{{g}} g ohne Sicherheit erkannt"
+    "dataWeakId": "{{g}} g ohne Sicherheit erkannt",
+    "scanAdd": "Scannen",
+    "scanAddTitle": "Lebensmittel scannen",
+    "scanAddHint": "Foto aufnehmen, dann ankreuzen, was hinzugefügt werden soll.",
+    "scanPickTitle": "Erkannte Lebensmittel",
+    "scanPickHint": "Kreuzen Sie an, was in Ihre Liste soll.",
+    "scanAddSelected": "Hinzufügen ({{n}})",
+    "scanAlreadyListed": "Bereits in der Liste",
+    "switchUnit": "Einheit wechseln (g / ml)",
+    "pdfPortion": "Portion"
   },
   "common": {
     "appName": "GluciAI",

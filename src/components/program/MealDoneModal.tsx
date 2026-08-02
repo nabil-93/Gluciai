@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useTranslation } from 'react-i18next';
 
 import { Spinner } from '@/components/ui';
+import { formatPortion } from '@/services/nutrition/portionUnit';
 import { plannedMealResult, type PlannedMeal } from '@/services/program';
 import { shadows } from '@/theme';
 
@@ -127,7 +128,7 @@ export function MealDoneModal({
                     <Text style={styles.itemName} numberOfLines={1}>
                       {it.name}
                     </Text>
-                    <Text style={styles.itemGrams}>{Math.round(it.portion_grams)} g</Text>
+                    <Text style={styles.itemGrams}>{formatPortion(it)}</Text>
                   </View>
                 ))}
               </View>

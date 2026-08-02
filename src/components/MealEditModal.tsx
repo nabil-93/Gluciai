@@ -13,13 +13,21 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
+import { ScanAddSheet } from '@/components/ScanAddSheet';
 import { Spinner } from '@/components/ui/Spinner';
 import { reidentifyItem, rescaleItem, resolveFood } from '@/services/nutrition/engine';
 import { clampPortionGrams } from '@/services/nutrition/plausibility';
+import {
+  densityFor,
+  gramsToUnit,
+  unitOf,
+  unitToGrams,
+  type PortionUnit,
+} from '@/services/nutrition/portionUnit';
+import { useAppStore } from '@/store/useAppStore';
 import type { FoodCategory, FoodItemResult } from '@/types';
 
 const F500 = 'PlusJakartaSans_500Medium';
-const F600 = 'PlusJakartaSans_600SemiBold';
 const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
@@ -53,15 +61,39 @@ interface Row {
   /** The original resolved item; null for a food the user is adding. */
   origin: FoodItemResult | null;
   name: string;
-  grams: string;
+  /**
+   * The number as the patient sees it, expressed in `unit` below — NOT
+   * necessarily grams. Grams are derived on save; see `portionUnit.ts`.
+   */
+  amount: string;
+  unit: PortionUnit;
   category?: FoodCategory;
+  /** English query name, kept for the density lookup and reused on save. */
+  search_name?: string;
 }
 
 let _rowSeq = 0;
 const newKey = () => `r${(_rowSeq += 1)}`;
-const makeEmptyRow = (): Row => ({ key: newKey(), origin: null, name: '', grams: '100' });
+const makeEmptyRow = (): Row => ({
+  key: newKey(),
+  origin: null,
+  name: '',
+  amount: '100',
+  unit: 'g',
+});
 
-const GRAM_STEP = 10;
+/** Grams per ml for this row's food — 1.00 for everything not a named liquid. */
+const rowDensity = (r: Row) =>
+  densityFor({ name: r.name, search_name: r.search_name, category: r.category });
+
+/** The row's portion in grams, which is the only thing the engine computes on. */
+const rowGrams = (r: Row) =>
+  clampPortionGrams(unitToGrams(Number(r.amount) || 0, r.unit, rowDensity(r)));
+
+/** One tap of +/−. Read in the row's OWN unit: 10 g of rice and 10 ml of milk
+ *  are both the step a person would take, and a step converted from grams
+ *  would land on 9 or 11 ml and look broken. */
+const AMOUNT_STEP = 10;
 
 /**
  * Centered modal to edit the scanned plate: rename a food, correct a portion,
@@ -87,7 +119,14 @@ export function MealEditModal({
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [wasOpen, setWasOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  /* The scanner can be switched off for an account from the admin dashboard.
+     The main scan screen checks this before it ever shows a camera; without
+     the same check here the button would open, take a photo, and come back
+     with "vérifiez votre connexion" for what is actually a 403. Offering it
+     and then refusing is worse than not offering it. */
+  const scannerLocked = useAppStore((s) => s.lockedFeatures.includes('scanner'));
 
   // Seed the draft from the current plate when the modal transitions to open.
   // Done during render (guarded so it runs once per open) — the pattern React
@@ -95,13 +134,20 @@ export function MealEditModal({
   if (open && !wasOpen) {
     setWasOpen(true);
     setBusy(false);
-    const seeded: Row[] = items.map((it) => ({
-      key: newKey(),
-      origin: it,
-      name: it.name,
-      grams: String(Math.round(it.portion_grams)),
-      category: it.category,
-    }));
+    setScanOpen(false);
+    const seeded: Row[] = items.map((it) => {
+      // A drink arrives in ml unless this food already carries its own choice.
+      const unit = unitOf(it);
+      return {
+        key: newKey(),
+        origin: it,
+        name: it.name,
+        amount: String(gramsToUnit(it.portion_grams, unit, densityFor(it))),
+        unit,
+        category: it.category,
+        search_name: it.search_name,
+      };
+    });
     if (startWithNewRow || seeded.length === 0) seeded.push(makeEmptyRow());
     setRows(seeded);
   } else if (!open && wasOpen) {
@@ -113,22 +159,76 @@ export function MealEditModal({
 
   const remove = (key: string) => setRows((rs) => rs.filter((r) => r.key !== key));
 
-  const bumpGrams = (key: string, delta: number) =>
+  const bumpAmount = (key: string, delta: number) =>
     setRows((rs) =>
       rs.map((r) => {
         if (r.key !== key) return r;
-        const current = Math.round(Number(r.grams) || 0);
+        const d = rowDensity(r);
+        const stepped = Math.round(Number(r.amount) || 0) + delta;
         // Bounded to a portion a person could eat (5–2000 g, the same range
         // `analyze-meal` applies to the vision estimate). The four-digit field
         // previously accepted 9999 g, and every macro — including the one the
-        // dose is computed from — scales linearly with this number.
-        const next = clampPortionGrams(current + delta);
-        return { ...r, grams: String(next) };
+        // dose is computed from — scales linearly with this number. The bound
+        // is applied in GRAMS, then written back in the row's unit, so the
+        // limit means the same amount of food whichever unit is on screen.
+        const grams = clampPortionGrams(unitToGrams(stepped, r.unit, d));
+        return { ...r, amount: String(gramsToUnit(grams, r.unit, d)) };
+      })
+    );
+
+  /**
+   * Switch ONE row between grams and millilitres.
+   *
+   * This re-expresses the portion; it does not change it. 100 g of milk becomes
+   * "97 ml" — the same milk, so the nutrition, the score and the dose all stay
+   * exactly where they were. Only editing the number afterwards changes the
+   * food. A toggle that silently re-weighed the plate would be a dosing bug
+   * dressed as a formatting feature.
+   */
+  const setUnit = (key: string, next: PortionUnit) =>
+    setRows((rs) =>
+      rs.map((r) => {
+        if (r.key !== key || r.unit === next) return r;
+        const d = rowDensity(r);
+        const grams = unitToGrams(Number(r.amount) || 0, r.unit, d);
+        return { ...r, unit: next, amount: String(gramsToUnit(grams, next, d)) };
       })
     );
 
   const addRow = () => {
     setRows((rs) => [...rs, makeEmptyRow()]);
+    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+  };
+
+  /**
+   * Foods the patient ticked in the scan sheet, appended to the draft.
+   *
+   * They arrive as fully resolved items, so each keeps `origin` — its
+   * database provenance, its per-100g values, its carb-known flag. That is
+   * what makes a scanned addition worth the same as a scanned plate: on save
+   * it takes the `rescaleItem` path, not the "look this name up again" path.
+   */
+  const addScanned = (items: FoodItemResult[]) => {
+    setRows((rs) => {
+      const added: Row[] = items.map((it) => {
+        const unit = unitOf(it);
+        return {
+          key: newKey(),
+          origin: it,
+          name: it.name,
+          amount: String(gramsToUnit(it.portion_grams, unit, densityFor(it))),
+          unit,
+          category: it.category,
+          search_name: it.search_name,
+        };
+      });
+      // A blank row the patient never filled would otherwise sit above the
+      // scan's results looking like something went wrong. It contributes
+      // nothing on save either way.
+      const kept = rs.filter((r) => r.origin !== null || r.name.trim().length > 0);
+      return [...kept, ...added];
+    });
+    setScanOpen(false);
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
   };
 
@@ -141,7 +241,8 @@ export function MealEditModal({
       const out: FoodItemResult[] = [];
       for (const r of rows) {
         const name = r.name.trim();
-        const grams = clampPortionGrams(Number(r.grams) || 0);
+        // Back to grams — the only quantity anything downstream computes on.
+        const grams = rowGrams(r);
         if (!name) continue;
         if (r.origin) {
           let item = r.origin;
@@ -150,12 +251,12 @@ export function MealEditModal({
           if (renamed) item = await reidentifyItem(r.origin, name);
           // …then rescale linearly to the corrected portion.
           if (Math.round(item.portion_grams) !== grams) item = rescaleItem(item, grams);
-          out.push({ ...item, name });
+          out.push({ ...item, name, portion_unit: r.unit });
         } else {
           const resolved = await resolveFood(
             {
               name,
-              search_name: name,
+              search_name: r.search_name ?? name,
               portion_grams: grams,
               confidence: 1,
               is_main_food: false,
@@ -166,7 +267,7 @@ export function MealEditModal({
             // (shown with a warning) — never silently drop the user's input.
             { keepUnmatched: true }
           );
-          if (resolved) out.push({ ...resolved, name });
+          if (resolved) out.push({ ...resolved, name, portion_unit: r.unit });
         }
       }
       if (out.length === 0) {
@@ -225,21 +326,34 @@ export function MealEditModal({
                       editable={!busy}
                     />
                     <View style={styles.stepper}>
-                      <Pressable style={styles.stepBtn} onPress={() => bumpGrams(r.key, -GRAM_STEP)} disabled={busy} hitSlop={6}>
+                      <Pressable style={styles.stepBtn} onPress={() => bumpAmount(r.key, -AMOUNT_STEP)} disabled={busy} hitSlop={6}>
                         <Svg width={13} height={13} viewBox="0 0 24 24" stroke="#3a463f" strokeWidth={2.6} strokeLinecap="round">
                           <Path d="M5 12h14" />
                         </Svg>
                       </Pressable>
                       <TextInput
-                        value={r.grams}
-                        onChangeText={(v) => patch(r.key, { grams: v.replace(/[^0-9]/g, '') })}
+                        value={r.amount}
+                        onChangeText={(v) => patch(r.key, { amount: v.replace(/[^0-9]/g, '') })}
                         keyboardType="number-pad"
                         style={styles.gramInput}
                         editable={!busy}
                         maxLength={4}
                       />
-                      <Text style={styles.gramUnit}>g</Text>
-                      <Pressable style={styles.stepBtn} onPress={() => bumpGrams(r.key, GRAM_STEP)} disabled={busy} hitSlop={6}>
+                      {/* The unit is the control. Tapping it switches THIS food
+                          between grams and millilitres and converts the number
+                          — nobody pours 250 g of milk. The portion itself does
+                          not move: only how it is written. */}
+                      <Pressable
+                        style={styles.unitBtn}
+                        onPress={() => setUnit(r.key, r.unit === 'g' ? 'ml' : 'g')}
+                        disabled={busy}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('analysis.switchUnit')}
+                      >
+                        <Text style={styles.unitBtnText}>{r.unit}</Text>
+                      </Pressable>
+                      <Pressable style={styles.stepBtn} onPress={() => bumpAmount(r.key, AMOUNT_STEP)} disabled={busy} hitSlop={6}>
                         <Svg width={13} height={13} viewBox="0 0 24 24" stroke="#3a463f" strokeWidth={2.6} strokeLinecap="round">
                           <Path d="M12 5v14M5 12h14" />
                         </Svg>
@@ -255,13 +369,34 @@ export function MealEditModal({
               ))}
             </ScrollView>
 
-            {/* Add a food */}
-            <Pressable style={styles.addRow} onPress={addRow} disabled={busy}>
-              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth={2.4} strokeLinecap="round">
-                <Path d="M12 5v14M5 12h14" />
-              </Svg>
-              <Text style={styles.addRowText}>{t('analysis.addFood')}</Text>
-            </Pressable>
+            {/* Add a food — by name, or by camera.
+                Typing assumes you know what the thing is called. A regional
+                dish, a sauce, a packaged snack in a script you do not read:
+                the camera already answers that everywhere else in the app, so
+                it answers it here too. */}
+            <View style={styles.addBar}>
+              <Pressable style={[styles.addRow, { flex: 1 }]} onPress={addRow} disabled={busy}>
+                <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth={2.4} strokeLinecap="round">
+                  <Path d="M12 5v14M5 12h14" />
+                </Svg>
+                <Text style={styles.addRowText}>{t('analysis.addFood')}</Text>
+              </Pressable>
+              {!scannerLocked && (
+                <Pressable style={styles.scanBtn} onPress={() => setScanOpen(true)} disabled={busy}>
+                  {/* Filled glyph, like the tab bar's — the app's icons have
+                      weight; a thin outline camera would read as a stray sketch. */}
+                  <Svg width={17} height={17} viewBox="0 0 24 24">
+                    <Path
+                      fillRule="evenodd"
+                      clipRule="evenodd"
+                      fill={GREEN}
+                      d="M9 2 L7.17 4 H4 a2 2 0 0 0 -2 2 v12 a2 2 0 0 0 2 2 h16 a2 2 0 0 0 2 -2 V6 a2 2 0 0 0 -2 -2 h-3.17 L15 2 H9 Z M12 17.2 a5 5 0 1 1 0 -10 a5 5 0 0 1 0 10 Z"
+                    />
+                  </Svg>
+                  <Text style={styles.addRowText}>{t('analysis.scanAdd')}</Text>
+                </Pressable>
+              )}
+            </View>
 
             {/* Footer */}
             <View style={styles.footer}>
@@ -282,6 +417,15 @@ export function MealEditModal({
             </View>
           </View>
         </View>
+
+        {/* Camera + pick list. An overlay INSIDE this Modal, not a second
+            Modal: stacking two native Modals is unreliable on iOS. */}
+        <ScanAddSheet
+          open={scanOpen}
+          existingNames={rows.map((r) => r.name).filter((n) => n.trim().length > 0)}
+          onCancel={() => setScanOpen(false)}
+          onAdd={addScanned}
+        />
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -366,7 +510,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e6e9e4',
   },
-  gramUnit: { fontSize: 11, fontFamily: F600, color: MUTED, marginLeft: -2 },
+  /** The unit doubles as the g↔ml switch, so it has to LOOK pressable — a bare
+   *  grey "g" reads as a caption nobody would think to tap. Same height as the
+   *  +/− buttons beside it, so the stepper still reads as one control. */
+  unitBtn: {
+    minWidth: 30,
+    height: 26,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    backgroundColor: '#e7f4ec',
+    borderWidth: 1,
+    borderColor: '#cfe8da',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unitBtnText: { fontSize: 11, fontFamily: F800, color: '#158a52' },
   trash: {
     width: 32,
     height: 32,
@@ -376,6 +534,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  addBar: { flexDirection: 'row', gap: 8 },
   addRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -387,6 +546,20 @@ const styles = StyleSheet.create({
     borderColor: '#bfe6d0',
     borderStyle: 'dashed',
     backgroundColor: '#f1faf4',
+  },
+  /** Solid, not dashed: typing a name is the open-ended action, scanning is a
+   *  definite one. Sized to its label so "Ajouter un aliment" keeps the room. */
+  scanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: '#bfe6d0',
+    backgroundColor: '#e7f4ec',
   },
   addRowText: { fontSize: 12.5, fontFamily: F700, color: '#158a52' },
 

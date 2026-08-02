@@ -124,7 +124,16 @@
     "dataUnavailable": "No usable nutrition data for this plate.",
     "dataUnidentified": "unidentified foods: {{count}}",
     "dataInvalidPortion": "unusable portions: {{count}}",
-    "dataWeakId": "{{g}} g identified without certainty"
+    "dataWeakId": "{{g}} g identified without certainty",
+    "scanAdd": "Scan",
+    "scanAddTitle": "Scan a food",
+    "scanAddHint": "Take the photo, then tick what you want to add.",
+    "scanPickTitle": "Foods detected",
+    "scanPickHint": "Tick the ones to add to your list.",
+    "scanAddSelected": "Add ({{n}})",
+    "scanAlreadyListed": "Already in the list",
+    "switchUnit": "Switch unit (g / ml)",
+    "pdfPortion": "Portion"
   },
   "common": {
     "appName": "GluciAI",

@@ -124,7 +124,16 @@
     "dataUnavailable": "لا توجد بيانات غذائية قابلة للاستعمال لهذا الطبق.",
     "dataUnidentified": "أطعمة غير محدّدة: {{count}}",
     "dataInvalidPortion": "حصص غير صالحة: {{count}}",
-    "dataWeakId": "{{g}} غ محدّدة بدون يقين"
+    "dataWeakId": "{{g}} غ محدّدة بدون يقين",
+    "scanAdd": "مسح",
+    "scanAddTitle": "مسح طعام",
+    "scanAddHint": "التقط الصورة ثم حدّد ما تريد إضافته.",
+    "scanPickTitle": "الأطعمة المكتشفة",
+    "scanPickHint": "حدّد ما تريد إضافته إلى قائمتك.",
+    "scanAddSelected": "إضافة ({{n}})",
+    "scanAlreadyListed": "موجود في القائمة",
+    "switchUnit": "تغيير الوحدة (g / ml)",
+    "pdfPortion": "الحصة"
   },
   "common": {
     "appName": "GluciAI",

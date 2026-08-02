@@ -17,7 +17,6 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +26,7 @@ import { isDemoMode, supabase } from '@/lib/supabase';
 import { analyzeMealImage, type ScanStage } from '@/services/ai';
 import { setPendingScan } from '@/services/scanSession';
 import { isFeatureExhausted } from '@/services/usage';
+import { prepareImageForVision, scanErrorKey } from '@/services/visionCapture';
 import { useAppStore } from '@/store/useAppStore';
 
 /* ── Palette taken 1:1 from the Claude-Design "Scanner Repas" reference ── */
@@ -256,64 +256,22 @@ function ScanScreen() {
       finishedRef.current = true;
     } catch (e) {
       /* WHOSE FAULT IS IT — the patient must not be sent to their wifi
-         settings for our upstream being busy.
-
-         `scanFailed` says "vérifiez votre connexion". That was the ONLY
-         message for everything except a quota, so an overloaded vision model
-         — the single most common failure — read as a broken phone. The
-         function now answers `code: 'ai_unavailable'` once its retries are
-         spent, which is a fact about OUR provider, and gets its own sentence.
-         Anything else keeps the connection wording, because then it really
-         might be the network. */
-      const err = e as { message?: string; code?: string; context?: { status?: number } };
-      const msg = String(err?.message ?? e);
-      const rateLimited = /429|quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(msg);
-      const aiBusy =
-        err?.code === 'ai_unavailable' ||
-        /ai_unavailable/i.test(msg) ||
-        err?.context?.status === 503;
-      setError(
-        rateLimited
-          ? t('scanner.rateLimited')
-          : aiBusy
-            ? t('scanner.serviceBusy')
-            : t('scanner.scanFailed')
-      );
+         settings for our upstream being busy. The mapping now lives in
+         `services/visionCapture` because the scan-to-add sheet inside
+         "Modifier les aliments" has to answer the same question, and a second
+         copy of this rule is a second chance to regress it. */
+      setError(t(scanErrorKey(e)));
       setAnalyzing(false);
       setCaptured(null);
     }
   };
 
-  /**
-   * Normalize any captured/picked image before sending it to the vision
-   * model: resize to 1024px wide (ratio preserved), re-encode JPEG 0.8, so
-   * the model always gets the FULL frame at a consistent, detail-rich size.
-   * Returns the base64 plus the exact sent dimensions — the reference frame
-   * for the bounding boxes Gemini sends back.
-   */
-  const prepareImage = async (
-    uri: string
-  ): Promise<{ base64: string; width: number; height: number } | null> => {
-    try {
-      const ctx = ImageManipulator.manipulate(uri);
-      ctx.resize({ width: 1024 }); // height omitted → ratio preserved
-      const ref = await ctx.renderAsync();
-      const out = await ref.saveAsync({ base64: true, compress: 0.8, format: SaveFormat.JPEG });
-      if (!out.base64) return null;
-      console.log(
-        `[scan] sending ${out.width}x${out.height} JPEG, ~${Math.round(out.base64.length / 1024)}KB (b64)`
-      );
-      return { base64: out.base64, width: out.width, height: out.height };
-    } catch (e) {
-      console.warn('[scan] prepareImage failed, falling back to raw picker image', e);
-      return null;
-    }
-  };
-
   // Freeze the shot on screen, then run it through prepare + analyze.
+  // `prepareImageForVision` is shared with the scan-to-add sheet: the same
+  // plate must reach the model identically whichever button was pressed.
   const runOn = async (uri: string, rawBase64?: string) => {
     setCaptured(uri);
-    const prepared = await prepareImage(uri);
+    const prepared = await prepareImageForVision(uri);
     if (prepared) {
       await analyze(prepared.base64, uri, { width: prepared.width, height: prepared.height });
     } else if (rawBase64) {

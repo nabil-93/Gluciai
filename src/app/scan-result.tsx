@@ -45,6 +45,7 @@ import {
   qualityEvidence,
   scoreMeal,
 } from '@/services/nutrition/interpret';
+import { formatPortion } from '@/services/nutrition/portionUnit';
 import {
   estimateMealWaterMl,
   estimateMicros,
@@ -852,7 +853,12 @@ export default function ScanResultScreen() {
   <div class="card" style="margin-bottom:14px">
     <h2>${esc(t('analysis.detectedFoods'))}</h2>
     <table>
-      <tr><th>${esc(t('analysis.pdfFood'))}</th><th style="text-align:right">g</th>
+      <!-- The column used to be headed "g" with a bare number under it. A plate
+           can now hold a drink written in ml, so the unit travels with each
+           value and the header names the column instead of its unit. -->
+      <tr><th>${esc(t('analysis.pdfFood'))}</th><th style="text-align:right">${esc(
+        t('analysis.pdfPortion')
+      )}</th>
           <th style="text-align:right">kcal</th><th style="text-align:right">${esc(
             t('result.carbs')
           )}</th></tr>
@@ -861,7 +867,7 @@ export default function ScanResultScreen() {
           .map(
             (it) =>
               `<tr><td>${esc(it.name)}</td>
-                   <td class="v">${Math.round(it.portion_grams)}</td>
+                   <td class="v">${esc(formatPortion(it))}</td>
                    <td class="v">${Math.round(it.calories)}</td>
                    <td class="v">${Math.round(it.carbohydrates)} g</td></tr>`
           )
@@ -1402,7 +1408,7 @@ export default function ScanResultScreen() {
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.foodName} numberOfLines={1}>{it.name}</Text>
-                    <Text style={styles.foodPortion}>{Math.round(it.portion_grams)} g</Text>
+                    <Text style={styles.foodPortion}>{formatPortion(it)}</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.foodKcal}>{Math.round(it.calories)} kcal</Text>

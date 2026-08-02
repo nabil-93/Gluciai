@@ -147,6 +147,19 @@ export interface FoodItemResult {
   /** Vision model's food category (Protein, Vegetable, Rice…) — never nutrition */
   category?: FoodCategory;
   portion_grams: number;
+  /**
+   * How this portion is WRITTEN — grams or millilitres. Display only.
+   *
+   * `portion_grams` above stays the sole quantity the app computes with: every
+   * nutrition value here is per 100 g and the bolus is seeded from grams of
+   * carbohydrate. Switching this field re-expresses the same food (100 g of
+   * milk reads as 97 ml) and must never change the plate, the score or the
+   * dose — see `services/nutrition/portionUnit.ts`, which owns the conversion.
+   *
+   * Absent on every item written before the unit existed, and on every solid
+   * that was never switched: `unitOf()` resolves that to the category default.
+   */
+  portion_unit?: 'g' | 'ml';
   calories: number;
   carbohydrates: number;
   sugar: number;

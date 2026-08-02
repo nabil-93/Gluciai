@@ -14,12 +14,20 @@ const GRADES: MealGrade[] = ['A', 'B', 'C', 'D', 'E'];
  *
  *  It was the bare `claude/robot.png` mascot, which at 24 px read as a generic
  *  white blob against the dark strip: the robot's own body is white and it
- *  carries none of the brand's green. The launcher icon is drawn to survive
- *  being small, so the strip now uses the same file the store does — the mark a
- *  patient already associates with this app.
+ *  carries none of the brand's green. So it became the launcher icon — the mark
+ *  a patient already associates with this app.
+ *
+ *  But `icon.png` is a store asset and store icons are OPAQUE: measured, it is
+ *  0% transparent, alpha 255 in every corner. On this dark frosted strip that
+ *  put the mark on a white tile — a chip, which is exactly the look this app
+ *  rejects everywhere else. `splash-icon.png` is the SAME artwork cut with a
+ *  real alpha channel (57% transparent), so the mark floats instead.
+ *
+ *  Sharing the splash's file is deliberate: it is by definition the same brand
+ *  mark, and a second copy would add ~52 KB to the bundle to say so.
  *
  *  `@/assets` points at the ROOT `assets/` folder, not `src/assets/`. */
-const LOGO = require('@/assets/images/icon.png');
+const LOGO = require('@/assets/images/splash-icon.png');
 
 /**
  * The A–E letter of the app's OWN meal indicator, as a strip under the meal
@@ -133,14 +141,23 @@ const styles = StyleSheet.create({
   tint: { backgroundColor: 'rgba(14,16,15,0.62)' },
 
   // Left: the indicator's name, and whose indicator it is
-  left: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1, minWidth: 0 },
+  // gap 7, not 8: the logo took 8 px growing to 34, and a transparent mark
+  // needs less breathing room than a tile did — its own edges are the padding.
+  left: { flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 1, minWidth: 0 },
   labelBox: { flexShrink: 1, minWidth: 0 },
   labelTop: { color: '#ffffff', fontFamily: F800, fontSize: 12.5, letterSpacing: -0.2 },
-  /** The brand mark, left of the name. 26 px: the launcher icon carries more
-   *  inside it than the bare mascot did (the G, the leaf, the drop), so it
-   *  needs a touch more room to stay legible — still short of crowding the five
-   *  letters, which own the right-hand side of the strip. */
-  logo: { width: 26, height: 26, flexShrink: 0 },
+  /** The brand mark, left of the name.
+   *
+   *  34 px, up from 26. Two reasons compound: the mark carries a lot inside it
+   *  (the G, the robot, the leaf, the drop), and the artwork only fills 82% of
+   *  its own frame — measured, 420x414 of 512 — so a 26 px box drew a ~21 px
+   *  mark. At 34 the drawn mark is ~28 px, a third larger, and now that the
+   *  white tile is gone it has to carry itself on contrast alone.
+   *
+   *  It stays short of crowding the text: the longest top label is 14
+   *  characters ("Indice GluciAI") on one line, and the five letters own the
+   *  right-hand side. The gap below gives back a little of what this took. */
+  logo: { width: 34, height: 34, flexShrink: 0 },
   labelSub: {
     color: 'rgba(255,255,255,0.6)',
     fontFamily: F600,
