@@ -57,8 +57,13 @@ type Kind = InsightKind | 'other';
 interface Report {
   verdict: 'good' | 'moderate' | 'bad';
   verdictText: string;
+  /** Set INSTEAD of verdictText when the copy is generic app text, not
+   *  medical education — that half is translated, this half is not. */
+  verdictKey?: string;
   causes: string[];
   advices: string[];
+  /** Same split as verdictKey, for the advice list. */
+  adviceKeys?: string[];
   /** Destination only; the label is translated from ACTION_KEY. */
   actions: { href: string }[];
 }
@@ -196,14 +201,19 @@ function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
         actions: [{ href: '/log-glucose' }],
       };
     default:
+      /* THE GENERIC REPORT IS NOT MEDICAL EDUCATION, so it is translated.
+         "keep tracking" and "something to watch" are app copy — no dose, no
+         threshold, no instruction a clinician needs to sign off. This is also
+         the branch a patient hits most often (uptodate, scannext), which is
+         why French kept surfacing on an otherwise Arabic screen. */
       return {
         verdict: tone === 'success' ? 'good' : 'moderate',
-        verdictText:
-          tone === 'success'
-            ? 'Tout va bien — continuez votre suivi régulier.'
-            : 'Un point à surveiller — suivez le conseil ci-dessous.',
+        verdictText: '',
+        verdictKey:
+          tone === 'success' ? 'insightDetail.genericGood' : 'insightDetail.genericWatch',
         causes: [],
-        advices: ['Continuez à enregistrer vos mesures, repas et activités.'],
+        advices: [],
+        adviceKeys: ['insightDetail.genericAdvice'],
         actions: [{ href: '/glucose' }],
       };
   }
@@ -342,7 +352,9 @@ export default function InsightDetailScreen() {
           <Text style={[styles.verdictLabel, { color: v.color }]}>
             {t('insightDetail.' + v.key)}
           </Text>
-          <Text style={styles.verdictText}>{report.verdictText}</Text>
+          <Text style={styles.verdictText}>
+            {report.verdictKey ? t(report.verdictKey) : report.verdictText}
+          </Text>
         </View>
 
         {/* Follow-up: did it get better? */}
@@ -393,16 +405,18 @@ export default function InsightDetailScreen() {
         <Text style={styles.section}>{t('insightDetail.advices')}</Text>
         {/* Said once, above the advice it qualifies: this text is French and
             its medical translation has not been reviewed yet. */}
-        {medicalInFrenchOnly ? (
+        {medicalInFrenchOnly && !report.adviceKeys ? (
           <Text style={styles.pendingNote}>
             {t('insightDetail.pendingTranslation')}
           </Text>
         ) : null}
         <View style={styles.listCard}>
-          {report.advices.map((a, i) => (
+          {(report.adviceKeys ?? report.advices).map((a, i) => (
             <View key={i} style={styles.listRow}>
               <Text style={styles.adviceNum}>{i + 1}</Text>
-              <Text style={styles.listText}>{a}</Text>
+              <Text style={styles.listText}>
+                {report.adviceKeys ? t(a) : a}
+              </Text>
             </View>
           ))}
         </View>

@@ -2287,6 +2287,9 @@
     "actSessions": "🏃 Meine Einheiten ansehen",
     "actReport": "📄 Bericht erstellen",
     "actAddMeasure": "🩸 Messwert hinzufügen",
-    "actGlycemia": "📈 Meinen Blutzucker ansehen"
+    "actGlycemia": "📈 Meinen Blutzucker ansehen",
+    "genericGood": "Alles in Ordnung — behalte deine regelmäßige Kontrolle bei.",
+    "genericWatch": "Ein Punkt zum Beobachten — folge dem Tipp unten.",
+    "genericAdvice": "Erfasse weiterhin deine Messwerte, Mahlzeiten und Aktivitäten."
   }
 }

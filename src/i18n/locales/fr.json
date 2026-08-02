@@ -2287,6 +2287,9 @@
     "actSessions": "🏃 Voir mes séances",
     "actReport": "📄 Générer mon rapport",
     "actAddMeasure": "🩸 Ajouter une mesure",
-    "actGlycemia": "📈 Voir ma glycémie"
+    "actGlycemia": "📈 Voir ma glycémie",
+    "genericGood": "Tout va bien — continuez votre suivi régulier.",
+    "genericWatch": "Un point à surveiller — suivez le conseil ci-dessous.",
+    "genericAdvice": "Continuez à enregistrer vos mesures, repas et activités."
   }
 }

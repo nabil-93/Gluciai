@@ -2287,6 +2287,9 @@
     "actSessions": "🏃 See my sessions",
     "actReport": "📄 Generate my report",
     "actAddMeasure": "🩸 Add a reading",
-    "actGlycemia": "📈 See my glucose"
+    "actGlycemia": "📈 See my glucose",
+    "genericGood": "All is well — keep up your regular tracking.",
+    "genericWatch": "Something to watch — follow the advice below.",
+    "genericAdvice": "Keep logging your readings, meals and activities."
   }
 }

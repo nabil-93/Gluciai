@@ -249,10 +249,22 @@ export const useAppStore = create<AppState>()(
         })),
       addAiJournalEntry: (entry) =>
         set((s) => {
-          // Dedup: skip if the latest entry is the same detection
+          /* DEDUP ON THE EVENT, NOT ON THE SENTENCE.
+             This compared rendered titles, so the SAME event written in another
+             language read as a new one: switching the app to Arabic and back
+             appended "سكر الدم فوق الهدف", then "Blutzucker über dem Ziel",
+             then "Glycémie au-dessus de la cible" — one alert, three rows,
+             growing every time the patient changed language.
+             `kind` is the identity and does not move with the wording. Entries
+             without one (the AI chat's free-form notes) keep the old title
+             comparison, which is all they have. */
           const last = s.aiJournal[0];
-          if (last && last.title === entry.title && last.tone === entry.tone) {
-            return s;
+          if (last && last.tone === entry.tone) {
+            const sameEvent =
+              entry.kind && last.kind
+                ? last.kind === entry.kind
+                : last.title === entry.title;
+            if (sameEvent) return s;
           }
           return { aiJournal: [entry, ...s.aiJournal].slice(0, 300) };
         }),
