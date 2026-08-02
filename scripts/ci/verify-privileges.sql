@@ -15,18 +15,22 @@
 
 \set ON_ERROR_STOP on
 
-/* ── 1. Every migration applied ─────────────────────────────────────────── */
-do $$
-declare n int;
-begin
-  -- 30 through Step 15; 31-33 added by Step 20B (N-17 clinical-parameter
-  -- checks, N-7 meal_scans non-negativity, N-12/N-13 catalogue write trust).
-  select count(*) into n from supabase_migrations.schema_migrations;
-  if n <> 33 then
-    raise exception 'migration count is %, expected 33', n;
-  end if;
-  raise notice 'OK  migrations applied: %', n;
-end $$;
+/* ── 1. Every migration applied ─────────────────────────────────────────────
+   Asserted by the workflow step BEFORE this script, not here.
+
+   This block used to hard-code the total (30, then 33). SQL cannot see the
+   migrations directory, so any number written here is a copy of a fact that
+   lives on disk — and copies go stale: the workflow's own copy said 30 while
+   this one said 33, and the first run of the pipeline failed on exactly that
+   disagreement.
+
+   The check itself did not go away. `Assert every migration applied` runs the
+   same `count(*) from supabase_migrations.schema_migrations`, against the same
+   database, moments earlier — and compares it to the number of .sql files
+   actually present, so migration 0034 needs no edit anywhere.
+
+   What remains below is what this script is FOR: privilege parity, which
+   cannot be derived from the filesystem. */
 
 /* ── 2. RLS enabled on every public table ───────────────────────────────── */
 do $$

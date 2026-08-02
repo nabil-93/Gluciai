@@ -63,19 +63,39 @@ jobs:
       - name: Start the LOCAL Supabase stack
         run: npx --yes supabase@2.110.0 start
 
-      # The rebuild that Blocker 2 was about: all 30 migrations against an
-      # empty database. Before the 0005 fix this aborted at 5 of 30.
+      # The rebuild that Blocker 2 was about: every migration against an empty
+      # database. Before the 0005 fix this aborted at 5 of 30.
       - name: Rebuild the local database from scratch
         run: npx --yes supabase@2.110.0 db reset --local
 
-      - name: Assert all 30 migrations applied
+      # COUNTED, NEVER DECLARED. The first run of this workflow failed here with
+      # two independent defects, both of which came from writing the answer down
+      # instead of measuring it:
+      #
+      #   · the expected total was the literal 30, while 0031-0033 had been
+      #     added three commits later — the sibling assertion in
+      #     verify-privileges.sql was updated, this one was not;
+      #   · the count was parsed with a grep for `"local":"0001"`, but
+      #     `migration list` prints a TEXT TABLE unless `--output-format json`
+      #     is passed, which it never was. The grep matched nothing, so the
+      #     step would have failed even at exactly 30.
+      #
+      # Both sides are now derived: the expectation from the directory, the
+      # actual from the database the previous step just built. Adding 0034
+      # requires no edit here, and no output format to keep in sync.
+      - name: Assert every migration applied
         run: |
           set -euo pipefail
-          npx --yes supabase@2.110.0 migration list --local > migrations.txt
-          cat migrations.txt
-          count=$(grep -o '"local":"[0-9]\+"' migrations.txt | wc -l)
-          echo "migrations applied: $count"
-          test "$count" -eq 30
+          expected=$(find supabase/migrations -maxdepth 1 -name '*.sql' | wc -l)
+          # A zero here would make the comparison below pass vacuously — if the
+          # directory ever moves, that must fail loudly rather than agree.
+          test "$expected" -gt 0
+          applied=$(docker exec -i supabase_db_glucoai \
+            psql -U postgres -d postgres -tAc \
+            'select count(*) from supabase_migrations.schema_migrations' \
+            | tr -d '[:space:]')
+          echo "migrations applied: $applied of $expected"
+          test "$applied" -eq "$expected"
 
       # Blocker 3: the chain used to apply cleanly and leave a database the API
       # roles could not read. This asserts parity with the measured hosted
