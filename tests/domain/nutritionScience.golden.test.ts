@@ -41,9 +41,10 @@ const { scoreMeal } = await import('@/services/nutrition/mealScore');
 const { giBand, glycemicLoad, buildHighlights } = await import(
   '@/services/nutrition/advice'
 );
-const { estimateMicros, estimateMealWaterMl, waterGoalMl, microAverage } = await import(
+const { estimateMicros, estimateMealWaterMl, microAverage } = await import(
   '@/services/nutrition/micros'
 );
+const { dailyWaterNeedMl, hydrationForMeal } = await import('@/services/nutrition/hydration');
 
 const src = (rel: string): string =>
   readFileSync(path.resolve(process.cwd(), rel), 'utf8');
@@ -305,21 +306,42 @@ describe('hydration — a water fraction per category, and a per-kg goal', () =>
     expect(estimateMealWaterMl([item({ category: 'Soup', portion_grams: 250 })])).toBe(220);
   });
 
-  it('REFERENCE-ish — the daily goal is ~35 ml/kg, clamped 1.5–4 L', () => {
-    // 30–40 ml/kg is a commonly cited adult range, so the constant is defensible;
-    // the 2 L fallback for an unknown weight is a population default, not this
-    // patient's need, and nothing on the hydration card says which one it used.
-    expect(waterGoalMl(70)).toBe(2450);
-    expect(waterGoalMl(undefined)).toBe(2000);
-    expect(waterGoalMl(20)).toBe(1500); // clamp
-    expect(waterGoalMl(200)).toBe(4000); // clamp
+  it('REFERENCE-ish — the daily need is ~35 ml/kg, by age, clamped 1.5–4 L', () => {
+    // 30–40 ml/kg is a commonly cited adult range, so the constant is
+    // defensible; it now steps down with age (ESPEN/Volkert bands), and the
+    // 2 L fallback for an unknown weight is a population default that the card
+    // labels as such through `basis`.
+    expect(dailyWaterNeedMl(70, 40)).toBe(2450);
+    expect(dailyWaterNeedMl(70, 80)).toBe(1750);
+    expect(dailyWaterNeedMl(undefined, 40)).toBe(2000);
+    expect(dailyWaterNeedMl(20, 40)).toBe(1500); // clamp
+    expect(dailyWaterNeedMl(200, 40)).toBe(4000); // clamp
   });
 
-  it('UNSUPPORTED ASSUMPTION — food water counts fully toward a DRINKING goal', () => {
-    // The ring reads "% of your water needs" and is filled by the water held in
-    // the food. A 250 g soup is 220 ml of the goal; whether food water should
-    // count toward a hydration target at all is a nutrition question, unanswered.
-    expect(src('src/app/scan-result.tsx')).toContain("t('analysis.ofWaterNeeds')");
+  it('RESOLVED — food water is now SUBTRACTED from the need, not counted as drinking', () => {
+    /* The recorded concern: the card showed a ring reading "% of your water
+       needs" that was FILLED by the water held in the food, which silently
+       answered a nutrition question nobody had answered — whether eating a
+       soup discharges a drinking target.
+
+       It no longer claims that. The card states what is left TO DRINK: the
+       meal's share of the daily need, minus what the food supplies. Food water
+       still counts (it is genuinely absorbed), but as a reduction of a
+       remainder rather than as progress toward a goal, and the remainder is
+       the number the patient is given. */
+    const soup = [item({ category: 'Soup', portion_grams: 250 })] as never;
+    const plan = hydrationForMeal({
+      items: soup,
+      mealKcal: 400,
+      weightKg: 70,
+      age: 40,
+      dailyKcalGoal: 2000,
+    });
+    expect(plan.fromFoodMl).toBe(220);
+    expect(plan.mealNeedMl).toBe(490); // 2450 × 400/2000
+    expect(plan.toDrinkMl).toBe(270); // 490 − 220
+    // And the old percentage-ring string is gone from the screen.
+    expect(src('src/app/scan-result.tsx')).not.toContain("t('analysis.ofWaterNeeds')");
   });
 });
 
@@ -332,34 +354,71 @@ describe('burn minutes — a MET model using the patient weight (NUTR-A10)', () 
    * hypothetical 70 kg adult. `burnMinutes(cal)` took calories ONLY, while the
    * patient's weight sat four lines below the call site driving the water goal.
    *
-   * AFTER (external review): `kcal/min = MET × 3.5 × kg / 200`, the standard
+   * THEN (external review): `kcal/min = MET × 3.5 × kg / 200`, the standard
    * conversion, with MET values from the Compendium of Physical Activities.
-   * Energy cost is linear in body mass, so the minutes now differ between a
-   * 55 kg and a 95 kg patient — which is the entire point.
+   * Energy cost is linear in body mass, so the minutes differed between a
+   * 55 kg and a 95 kg patient — which was that fix's entire point.
+   *
+   * NOW: that 3.5 is the resting oxygen uptake of a reference 40-year-old male,
+   * so every patient was still costed as that man, scaled only by weight. A MET
+   * is a multiple of RESTING metabolism, so the model uses the patient's own —
+   * Mifflin-St Jeor, which brings age, sex and height with it. The code moved
+   * out of this screen into `services/nutrition/burn` so a number the patient
+   * acts on can be tested without a renderer; see `burn.golden.test.ts`.
    */
-  it('the divisors are gone, and the signature takes a weight', () => {
+  it('the divisors are gone, and the model is no longer in the screen', () => {
     const page = src('src/app/scan-result.tsx');
     expect(page).not.toContain('Math.round(cal / 5)');
     expect(page).not.toContain('Math.round(cal / 12)');
-    expect(page).toContain('function burnMinutes(cal: number, weightKg?: number)');
-    expect(page).toContain('(met * 3.5 * kg) / 200');
-    expect(page).toContain('burnMinutes(cals, profile?.weight)');
+    expect(page).not.toContain('(met * 3.5 * kg) / 200');
+    expect(page).toContain("from '@/services/nutrition/burn'");
+  });
+
+  it('the screen hands over the whole patient, not just their weight', () => {
+    const page = src('src/app/scan-result.tsx');
+    // Age is the input this step added; height and sex come with it because
+    // Mifflin-St Jeor needs all three.
+    expect(page).toContain('age: patientAge');
+    expect(page).toContain('heightCm: profile?.height');
+    expect(page).toContain('sex: profile?.gender');
   });
 
   it('the MET constants are named and sourced, not inline magic numbers', () => {
-    const page = src('src/app/scan-result.tsx');
-    expect(page).toContain('const BURN_MET = {');
-    expect(page).toContain('Compendium of Physical Activities');
-    expect(page).toContain('const BURN_DEFAULT_KG = 70');
+    const mod = src('src/services/nutrition/burn.ts');
+    expect(mod).toContain('export const BURN_MET = {');
+    expect(mod).toContain('Compendium of Physical Activities');
+    expect(mod).toContain('export const BURN_DEFAULT_KG = 70');
+    // And the reference-man fallback is kept, for a profile that cannot
+    // support the personal model.
+    expect(mod).toContain('(met * 3.5 * kg) / 200');
   });
 
-  it('the card says WHICH weight it used — the patient\'s, or the default', () => {
+  it('the caption names what actually went into the minutes', () => {
     const page = src('src/app/scan-result.tsx');
-    expect(page).toContain('burnFromWeight');
+    // Three cases now, built once and shared by the screen and the PDF.
+    expect(page).toContain('const burnCaption =');
+    expect(page).toContain("t('analysis.burnEstimatedFull', {");
     expect(page).toContain("t('analysis.burnEstimated', { kg:");
     expect(page).toContain("t('analysis.burnEstimatedDefault')");
-    // Both branches reach the PDF as well as the screen.
-    expect(page.match(/analysis\.burnEstimatedDefault/g)?.length).toBe(2);
+    // Built in one place, so the paper and the screen cannot disagree.
+    expect(page.match(/burnCaption/g)?.length).toBe(3);
+  });
+
+  it('the age disclaimer survives ONLY where it is still true', () => {
+    /* `burnEstimated` ends "does not take your age into account". That was
+       true of the weight-only model and became a lie the moment age entered,
+       so the personal case has its own string that does not say it. A caption
+       that disclaims an input the number actually used is worse than none. */
+    const fr = JSON.parse(src('src/i18n/locales/fr.json'));
+    expect(fr.analysis.burnEstimated).toContain('ne tient pas compte de votre âge');
+    expect(fr.analysis.burnEstimatedFull).not.toContain('âge)');
+    expect(fr.analysis.burnEstimatedFull).toContain('{{age}}');
+    // Every locale carries the new one — no French leaking into de/en/ar.
+    for (const l of ['en', 'de', 'ar']) {
+      const j = JSON.parse(src(`src/i18n/locales/${l}.json`));
+      expect(typeof j.analysis.burnEstimatedFull).toBe('string');
+      expect(j.analysis.burnEstimatedFull).not.toBe(fr.analysis.burnEstimatedFull);
+    }
   });
 });
 

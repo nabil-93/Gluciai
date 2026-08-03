@@ -46,12 +46,14 @@ import {
   scoreMeal,
 } from '@/services/nutrition/interpret';
 import { formatPortion } from '@/services/nutrition/portionUnit';
+import { burnMinutes } from '@/services/nutrition/burn';
+import { hydrationForMeal } from '@/services/nutrition/hydration';
+import { ageFrom } from '@/services/programEngine';
+import { WaterGlasses } from '@/components/WaterGlasses';
 import {
-  estimateMealWaterMl,
   estimateMicros,
   microAverage,
   microProvenance,
-  waterGoalMl,
 } from '@/services/nutrition/micros';
 import {
   NUTRIENT_KEYS,
@@ -228,57 +230,10 @@ function calorieTone(pct: number) {
   return { key: 'analysis.calVeryHigh', dot: '#ef4444', bg: '#fdeceb', text: '#B3261E' };
 }
 
-/**
- * Metabolic equivalents for the four activities shown, at MODERATE intensity,
- * from the Compendium of Physical Activities (Ainsworth et al.) — the
- * reference table these values are normally taken from.
- *
- * They replace four unsourced kcal-per-minute divisors (5 / 12 / 8.5 / 9.5)
- * that Step 22C recorded as NUTR-A10 and left in place. External review
- * rejected that: the app already stores the patient's weight — `profile.weight`
- * drives the water goal four lines below the call site — and printing minutes
- * computed for a hypothetical 70 kg adult to a 95 kg patient is wrong by more
- * than a third, in the direction that overstates the effort required.
- */
-const BURN_MET = {
-  /** Walking, brisk, firm surface (~5.5 km/h). */
-  walk: 4.3,
-  /** Running (~8 km/h). */
-  run: 8.3,
-  /** Bicycling, general leisure. */
-  bike: 7.5,
-  /** Swimming, leisurely — not lap training. */
-  swim: 6.0,
-} as const;
-
-/** Weight assumed when the profile has none. Named so the UI can say so. */
-const BURN_DEFAULT_KG = 70;
-
-/**
- * Minutes of each activity needed to burn `cal` kcal, for THIS patient.
- *
- * `kcal/min = MET × 3.5 × kg / 200` — the standard conversion from a metabolic
- * equivalent to an energy cost, which is linear in body mass. That linearity is
- * the whole point of the fix: the same plate is ~35 % fewer minutes for a 95 kg
- * patient than for a 70 kg one, and the previous model showed them the same
- * number.
- *
- * STILL AN ESTIMATE, and the card says so: MET tables are population averages
- * at one assumed intensity, they ignore fitness, age, sex and terrain, and the
- * "calories burned" framing ignores that some of that energy would have been
- * spent at rest anyway. It is a motivational comparison, not a prescription.
- */
-function burnMinutes(cal: number, weightKg?: number) {
-  const kg = weightKg && weightKg > 0 ? weightKg : BURN_DEFAULT_KG;
-  const minutes = (met: number) =>
-    Math.max(1, Math.round(cal / ((met * 3.5 * kg) / 200)));
-  return {
-    walk: minutes(BURN_MET.walk),
-    run: minutes(BURN_MET.run),
-    bike: minutes(BURN_MET.bike),
-    swim: minutes(BURN_MET.swim),
-  };
-}
+/* The MET table, the resting-metabolism model and the minutes themselves now
+   live in `services/nutrition/burn` — see that file for why age belongs in
+   this calculation and where it enters. Moved out of this screen so a number
+   the patient acts on can be tested without a renderer. */
 
 /** Foods to hand to the edit modal. Normally the detected per-item list; when
  *  a scan has no breakdown, synthesize a single editable row from the plate
@@ -653,11 +608,32 @@ export default function ScanResultScreen() {
      count in full, and which percentages are floors rather than matches. */
   const microProv = microProvenance(items);
   const estimateCoveragePct = Math.round(microProv.coverageRatio * 100);
-  const burn = burnMinutes(cals, profile?.weight);
-  /** Whether those minutes were computed for THIS patient or for the default
-   *  70 kg adult. The card says which — it must not imply a personal figure
-   *  when the profile could not supply one. */
-  const burnFromWeight = Boolean(profile?.weight && profile.weight > 0);
+  /** The patient's age, or the module's default when no birth date is set.
+   *  Used by BOTH the effort estimate and the water target below. */
+  const patientAge = profile?.birth_date ? ageFrom(profile.birth_date) : undefined;
+  const burn = burnMinutes(cals, {
+    weightKg: profile?.weight,
+    heightCm: profile?.height,
+    age: patientAge,
+    sex: profile?.gender,
+  });
+  /**
+   * The sentence under the minutes, matched to what actually went into them.
+   *
+   * `burnEstimated` ends "does not take your age into account" — true while the
+   * model was weight-only, and a lie the moment it stopped being. So the
+   * personal case gets its own string, and the weight-only case keeps the old
+   * one, where the disclaimer is still accurate.
+   */
+  const burnCaption =
+    burn.basis === 'rmr'
+      ? t('analysis.burnEstimatedFull', {
+          kg: Math.round(profile!.weight!),
+          age: patientAge,
+        })
+      : burn.basis === 'weight'
+        ? t('analysis.burnEstimated', { kg: Math.round(profile!.weight!) })
+        : t('analysis.burnEstimatedDefault');
 
   // ── Goal comparison: this meal vs the day's remaining allowance ──
   const goal = dailyCalorieGoal(
@@ -685,14 +661,20 @@ export default function ScanResultScreen() {
   const remainC = Math.max(0, Math.round((goal * 0.5) / 4 - eatenC - (saved ? 0 : C)));
   const remainF = Math.max(0, Math.round((goal * 0.25) / 9 - eatenF - (saved ? 0 : F)));
 
-  // Hydration: a weight-based daily goal, plus how much water THIS meal itself
-  // brings (from its foods) — so the ring shows a real, portion-driven value
-  // instead of a fixed full circle, and updates when the plate is edited.
-  const waterTargetMl = waterGoalMl(profile?.weight);
-  const waterGoalL = Math.round(waterTargetMl / 100) / 10;
-  const waterGlasses = Math.round(waterTargetMl / 250);
-  const mealWaterMl = estimateMealWaterMl(items);
-  const waterPct = Math.min(100, Math.round((mealWaterMl / waterTargetMl) * 100));
+  /* Hydration — the whole chain lives in `services/nutrition/hydration`: the
+     daily need from weight AND age, this meal's share of it by energy, the
+     water the foods themselves supply, and what is therefore left to DRINK,
+     as glasses with the last one part-filled. It recomputes with the plate,
+     so editing a portion moves the glasses. */
+  const water = hydrationForMeal({
+    items,
+    mealKcal: cals,
+    weightKg: profile?.weight,
+    age: patientAge,
+    dailyKcalGoal: goal,
+  });
+  const waterGoalL = Math.round(water.dailyNeedMl / 100) / 10;
+  const mealWaterMl = water.fromFoodMl;
 
   // The written advice repeats the score's own reasons, so it inherits the
   // gate: on an unsupported plate those reasons are "balanced meal" computed
@@ -839,6 +821,12 @@ export default function ScanResultScreen() {
         ${row(t('analysis.giLabel'), `${gi}`)}
         ${row(t('analysis.glLabel'), `${gl} · ${t(`result.${glInfo.key}`)}`)}
         ${row(t('analysis.hydration'), t('analysis.waterFromMeal', { ml: mealWaterMl }))}
+        ${row(
+          t('analysis.waterToDrink'),
+          water.coveredByFood
+            ? t('analysis.waterCovered')
+            : `${water.toDrinkMl} mL · ${t('analysis.perGlass', { ml: water.glasses.glassMl })}`
+        )}
       </table>
       ${
         giCoveragePct < 100
@@ -904,12 +892,9 @@ export default function ScanResultScreen() {
         ${row(t('analysis.bike'), `${burn.bike} min`)}
         ${row(t('analysis.swim'), `${burn.swim} min`)}
       </table>
-      <!-- A doctor must be able to see which weight these minutes assume. -->
-      <p class="sub" style="font-size:9.5px;margin-top:8px">${esc(
-        burnFromWeight
-          ? t('analysis.burnEstimated', { kg: Math.round(profile!.weight!) })
-          : t('analysis.burnEstimatedDefault')
-      )}</p>
+      <!-- A doctor must be able to see what these minutes assume — the same
+           sentence the screen shows, from the same source. -->
+      <p class="sub" style="font-size:9.5px;margin-top:8px">${esc(burnCaption)}</p>
     </div>
     <div class="card grow">
       <h2>${esc(t('analysis.goals'))}</h2>
@@ -1572,13 +1557,10 @@ export default function ScanResultScreen() {
                 <BurnRow emoji="🏊" label={t('analysis.swim')} min={burn.swim} />
               </View>
               <Text style={styles.miniFoot}>{t('analysis.basedOn', { cal: cals })}</Text>
-              {/* Computed from THIS patient's weight when the profile has one
-                  (MET × 3.5 × kg / 200), and it says which case it is in. */}
-              <Text style={styles.estimateFoot}>
-                {burnFromWeight
-                  ? t('analysis.burnEstimated', { kg: Math.round(profile!.weight!) })
-                  : t('analysis.burnEstimatedDefault')}
-              </Text>
+              {/* Three cases, and the caption names the one it is in. The
+                  middle one still disclaims age; the first must NOT, because
+                  the figure above it now uses it. */}
+              <Text style={styles.estimateFoot}>{burnCaption}</Text>
             </View>
 
             {/* Hydration */}
@@ -1589,25 +1571,44 @@ export default function ScanResultScreen() {
                 </Svg>
                 <Text style={styles.miniTitle}>{t('analysis.hydration')}</Text>
               </View>
-              <View style={{ alignSelf: 'center', marginVertical: 2 }}>
-                <Ring size={74} pct={waterPct} color={BLUE} track="#e3eefb">
-                  <Text style={styles.goalPct}>{waterPct}%</Text>
-                </Ring>
-              </View>
-              <Text style={styles.goalCaption}>{t('analysis.ofWaterNeeds')}</Text>
-              {/* The ring is this MEAL's contribution to the daily goal, not how
-                  hydrated the patient is — spelled out so a low ring doesn't
-                  read as a failure. The millilitres themselves are inferred
-                  from each food's category, never measured, so the line now
-                  says "≈ … estimated" and the foot says from what (NUTR-A3). */}
+              {/* THE ANSWER FIRST: how much to drink, for this plate.
+                  The card used to lead with a percentage ring, which told a
+                  patient how much of a daily goal a meal happened to cover —
+                  true, and not a thing anyone can act on. */}
+              {water.coveredByFood ? (
+                <Text style={styles.waterCovered}>{t('analysis.waterCovered')}</Text>
+              ) : (
+                <>
+                  <View style={styles.waterAmount}>
+                    <Text style={styles.waterAmountVal}>{water.toDrinkMl}</Text>
+                    <Text style={styles.waterAmountUnit}>mL</Text>
+                  </View>
+                  <Text style={styles.goalCaption}>{t('analysis.waterToDrink')}</Text>
+                  {/* Whole glasses, then the last one filled only as far as the
+                      remainder goes — 80 ml left must look like 80 ml. */}
+                  <WaterGlasses
+                    full={water.glasses.full}
+                    partial={water.glasses.partial}
+                    glassMl={water.glasses.glassMl}
+                    perGlassLabel={t('analysis.perGlass', { ml: water.glasses.glassMl })}
+                  />
+                </>
+              )}
+              {/* What the food itself already gave, so the figure above reads as
+                  a remainder rather than a fresh demand. The millilitres are
+                  inferred from each food's category, never measured (NUTR-A3). */}
               <Text style={styles.waterFromMeal}>
                 {t('analysis.waterFromMeal', { ml: mealWaterMl })}
               </Text>
               <View style={styles.waterStat}>
                 <Text style={styles.waterStatVal}>{waterGoalL} L</Text>
-                <Text style={styles.waterStatUnit}>· {t('analysis.glasses', { n: waterGlasses })}</Text>
+                <Text style={styles.waterStatUnit}>· {t('analysis.waterPerDay')}</Text>
               </View>
-              <Text style={styles.waterHint}>{t('analysis.drinkReminder')}</Text>
+              <Text style={styles.waterHint}>
+                {water.basis === 'profile'
+                  ? t('analysis.waterFromProfile')
+                  : t('analysis.waterFromDefault')}
+              </Text>
               <Text style={styles.estimateFoot}>
                 {t('analysis.estimatedFromCategories')}
                 {estimateCoveragePct < 100
@@ -2155,6 +2156,28 @@ const styles = StyleSheet.create({
   burnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   burnLabel: { fontSize: 10.5, color: '#4a544d', fontFamily: F600, flex: 1 },
   burnMin: { fontSize: 10.5, color: INK, fontFamily: F800 },
+
+  /** The figure the card now leads with: millilitres left to drink. Big,
+   *  because it is the one number on this card a patient can act on. */
+  waterAmount: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: 3,
+    marginTop: 2,
+  },
+  waterAmountVal: { fontSize: 26, fontFamily: F800, color: '#2E6B9E', letterSpacing: -0.6 },
+  waterAmountUnit: { fontSize: 12, fontFamily: F700, color: '#7FA8CC' },
+  /** The food already covered this meal's share — say so instead of drawing
+   *  zero glasses, which would read as a target that was missed. */
+  waterCovered: {
+    textAlign: 'center',
+    fontSize: 11,
+    fontFamily: F700,
+    color: '#2E6B9E',
+    lineHeight: 15,
+    paddingVertical: 10,
+  },
 
   waterStat: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 3, flexWrap: 'wrap' },
   waterStatVal: { fontSize: 12, fontFamily: F800, color: INK },

@@ -5,8 +5,8 @@ import {
   estimateMealWaterMl,
   estimateMicros,
   microAverage,
-  waterGoalMl,
 } from '@/services/nutrition/micros';
+import { dailyWaterNeedMl } from '@/services/nutrition/hydration';
 import type { FoodCategory, FoodItemResult } from '@/types';
 
 /**
@@ -144,25 +144,37 @@ describe('estimateMealWaterMl', () => {
   });
 });
 
-describe('waterGoalMl', () => {
-  it('uses ~35 ml per kg, rounded to the nearest 50 ml', () => {
-    expect(waterGoalMl(70)).toBe(2450);
-    expect(waterGoalMl(71)).toBe(2500); // 2485 → 2500
+/* `waterGoalMl` moved to `nutrition/hydration` as `dailyWaterNeedMl` when age
+   was added to it. The cases below are the original ones, re-pointed, plus the
+   age band that is the reason for the move. */
+describe('dailyWaterNeedMl', () => {
+  it('uses ~35 ml per kg for an adult, rounded to the nearest 50 ml', () => {
+    expect(dailyWaterNeedMl(70, 40)).toBe(2450);
+    expect(dailyWaterNeedMl(71, 40)).toBe(2500); // 2485 → 2500
   });
 
   it('clamps to the 1500–4000 ml band', () => {
-    expect(waterGoalMl(30)).toBe(1500);
-    expect(waterGoalMl(200)).toBe(4000);
+    expect(dailyWaterNeedMl(30, 40)).toBe(1500);
+    expect(dailyWaterNeedMl(200, 40)).toBe(4000);
   });
 
   it('falls back to 2000 ml when the weight is unknown, zero or NaN', () => {
-    expect(waterGoalMl(undefined)).toBe(2000);
-    expect(waterGoalMl(0)).toBe(2000);
-    expect(waterGoalMl(Number.NaN)).toBe(2000);
+    expect(dailyWaterNeedMl(undefined, 40)).toBe(2000);
+    expect(dailyWaterNeedMl(0, 40)).toBe(2000);
+    expect(dailyWaterNeedMl(Number.NaN, 40)).toBe(2000);
   });
 
-  it('clamps a negative weight up to the floor instead of returning a negative goal', () => {
-    expect(waterGoalMl(-70)).toBe(1500);
+  it('CHANGED — a negative weight is treated as no data, not multiplied', () => {
+    // Previously -70 became -2450 and was clamped UP to 1500, which looked
+    // like a computed target. It is now the same "no weight" case as above.
+    expect(dailyWaterNeedMl(-70, 40)).toBe(2000);
+  });
+
+  it('falls with age — the reason this function moved', () => {
+    // Same 80 kg patient: 35 ml/kg as an adult, 30 past 55, 25 past 65.
+    expect(dailyWaterNeedMl(80, 40)).toBe(2800);
+    expect(dailyWaterNeedMl(80, 60)).toBe(2400);
+    expect(dailyWaterNeedMl(80, 80)).toBe(2000);
   });
 });
 

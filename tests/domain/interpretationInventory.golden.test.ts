@@ -57,7 +57,8 @@ const { guessMealTime } = await import('@/services/bolusEngine');
 const { computeProgramTargets, splitCarbs, mealCarbCap } = await import(
   '@/services/programEngine'
 );
-const { waterGoalMl, estimateMealWaterMl } = await import('@/services/nutrition/micros');
+const { estimateMealWaterMl } = await import('@/services/nutrition/micros');
+const { dailyWaterNeedMl } = await import('@/services/nutrition/hydration');
 const { scoreBand } = await import('@/components/journal/dayScore');
 
 /**
@@ -472,21 +473,28 @@ describe('§5/§6 KNOWN-BAD — five daily-target implementations', () => {
 /* ═══════════════════════════ §7 — HYDRATION ═══════════════════════════ */
 
 describe('§7 hydration — computed once, interpreted in JSX', () => {
-  it('the two computations are already single', () => {
-    expect(waterGoalMl(80)).toBe(2800);
-    expect(waterGoalMl(undefined)).toBe(2000);
-    expect(waterGoalMl(20)).toBe(1500); // clamped
-    expect(waterGoalMl(150)).toBe(4000); // clamped
+  it('the computations are single, and now age-aware', () => {
+    expect(dailyWaterNeedMl(80, 40)).toBe(2800);
+    expect(dailyWaterNeedMl(undefined, 40)).toBe(2000);
+    expect(dailyWaterNeedMl(20, 40)).toBe(1500); // clamped
+    expect(dailyWaterNeedMl(150, 40)).toBe(4000); // clamped
     expect(estimateMealWaterMl([])).toBe(0);
   });
 
-  it('KNOWN-BAD — the ring reads as hydration status, and always nags', () => {
-    /** S2-10, BLOCKED: PHASE 8. */
+  it('FIXED — S2-10: the ring is gone, and the nag with it', () => {
+    /* Was: a ring reading "% of your water needs", filled by the water held in
+       the FOOD, so it read as hydration status; and a reminder printed
+       unconditionally, so it nagged a patient who had nothing left to drink.
+
+       Now: the card states the millilitres left TO DRINK for this meal, drawn
+       as glasses. When the food covers the meal's share there is no remainder,
+       no glasses and no reminder — `coveredByFood` says so instead. */
     const s = src('src/app/scan-result.tsx');
-    expect(s).toContain("Math.round((mealWaterMl / waterTargetMl) * 100)");
-    expect(s).toContain("t('analysis.ofWaterNeeds')");
-    // Printed with no condition on the ring's own value.
-    expect(s).toContain("<Text style={styles.waterHint}>{t('analysis.drinkReminder')}</Text>");
+    expect(s).not.toContain('waterTargetMl');
+    expect(s).not.toContain("t('analysis.ofWaterNeeds')");
+    expect(s).not.toContain("t('analysis.drinkReminder')");
+    expect(s).toContain('hydrationForMeal');
+    expect(s).toContain('water.coveredByFood');
   });
 });
 

@@ -218,12 +218,8 @@ export function estimateMealWaterMl(items: FoodItemResult[]): number {
   return Math.round(ml);
 }
 
-/**
- * Recommended daily water goal in millilitres, ~35 ml per kg of body weight,
- * clamped to a sensible 1.5–4 L. Falls back to 2 L when weight is unknown.
- */
-export function waterGoalMl(weight?: number): number {
-  const raw = weight ? weight * 35 : 2000;
-  const clamped = Math.max(1500, Math.min(4000, raw));
-  return Math.round(clamped / 50) * 50;
-}
+/* The daily water goal used to live here as a flat 35 ml/kg. It moved to
+   `./hydration` when age was added — 35 ml/kg overstates an 80-year-old's
+   target by about a third — and that module now owns the whole chain from
+   daily need to glasses. `estimateMealWaterMl` above stays here, because it is
+   a fact about food composition rather than about the patient. */

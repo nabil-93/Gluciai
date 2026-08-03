@@ -133,7 +133,14 @@
     "scanAddSelected": "Add ({{n}})",
     "scanAlreadyListed": "Already in the list",
     "switchUnit": "Switch unit (g / ml)",
-    "pdfPortion": "Portion"
+    "pdfPortion": "Portion",
+    "waterToDrink": "To drink for this meal",
+    "perGlass": "{{ml}} mL per glass",
+    "waterCovered": "This meal already covers its water need.",
+    "waterPerDay": "per day",
+    "waterFromProfile": "Based on your weight and age. An estimate, not a prescription.",
+    "waterFromDefault": "Add your weight and date of birth for a personalised figure.",
+    "burnEstimatedFull": "Estimated for your weight ({{kg}} kg) and age ({{age}}), at moderate intensity (reference MET values). Indicative only: it does not account for your fitness or the terrain."
   },
   "common": {
     "appName": "GluciAI",

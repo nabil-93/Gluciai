@@ -133,7 +133,14 @@
     "scanAddSelected": "إضافة ({{n}})",
     "scanAlreadyListed": "موجود في القائمة",
     "switchUnit": "تغيير الوحدة (g / ml)",
-    "pdfPortion": "الحصة"
+    "pdfPortion": "الحصة",
+    "waterToDrink": "اشرب مع هذه الوجبة",
+    "perGlass": "{{ml}} مل لكل كوب",
+    "waterCovered": "هذه الوجبة تغطي حاجتها من الماء.",
+    "waterPerDay": "يوميًا",
+    "waterFromProfile": "محسوب حسب وزنك وعمرك. تقدير وليس وصفة طبية.",
+    "waterFromDefault": "أضف وزنك وتاريخ ميلادك للحصول على قيمة شخصية.",
+    "burnEstimatedFull": "تقدير حسب وزنك ({{kg}} كغ) وعمرك ({{age}} سنة)، بشدة متوسطة (قيم MET المرجعية). إرشادي فقط: لا يأخذ في الحسبان لياقتك أو طبيعة الأرض."
   },
   "common": {
     "appName": "GluciAI",
