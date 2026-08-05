@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import Svg, {
   Circle,
@@ -27,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SUPPORTED_LANGUAGES, setAppLanguage, type LanguageCode } from '@/i18n';
+import { useFrameDimensions } from '@/lib/appFrame';
 import { useAppStore } from '@/store/useAppStore';
 
 /* Welcome — "Smart Nutrition" hero landing, from the
@@ -273,7 +273,7 @@ export default function WelcomeScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { height: winH } = useWindowDimensions();
+  const { height: winH } = useFrameDimensions();
   const setLanguageChosen = useAppStore((s) => s.setLanguageChosen);
   const [menuOpen, setMenuOpen] = useState(false);
 

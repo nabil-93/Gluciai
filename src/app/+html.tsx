@@ -53,11 +53,20 @@ export default function Root({ children }: PropsWithChildren) {
 // feeling size. Supported on iOS Safari 16+ and Chrome; older engines simply
 // ignore it and fall back to full size (no breakage).
 const responsiveBackground = `
+:root {
+  /* Geometry of the app surface. On a phone it is the whole viewport; the
+     desktop rule further down turns it into a centred phone-shaped column.
+     These numbers are mirrored in lib/appFrame.ts — keep the two in step. */
+  --vh: 100vh;
+  --frame-w: 100%;
+  --frame-h: var(--vh);
+  --frame-r: 0px;
+}
+@supports (height: 100dvh) { :root { --vh: 100dvh; } }
 html, body { margin: 0; padding: 0; }
 html { height: 100%; }
 body {
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: var(--vh);
   background-color: #f9fafe;
   overflow: hidden;
   /* Kill double-tap-to-zoom (leaves taps/scroll working). Together with the
@@ -68,9 +77,8 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
+  width: var(--frame-w);
+  height: var(--frame-h);
   /* Safe-area padding so nothing hides behind the notch / browser bars.
      Cap the bottom inset so it doesn't leave a big empty gap under the
      content — the home-indicator area only needs a few px. */
@@ -86,6 +94,64 @@ body {
 }
 @media (prefers-color-scheme: dark) {
   body { background-color: #f9fafe; }
+}
+
+/* ── Desktop: the app is a phone, not a page ─────────────────────────────
+   This UI was drawn for a 390–430px screen. Let loose on a 1900px monitor
+   every row stretches into a band and the design falls apart. So above a
+   tablet's width the app stops being the page and becomes a phone standing
+   on it: the same column the patient sees in their hand, centred, with the
+   rest of the window as the wall behind it.
+
+   The height condition is what keeps a real phone out of this: turned
+   sideways it is wide too, but only ~400px tall, and it should still use
+   every pixel it has. */
+@media (min-width: 600px) and (min-height: 500px) {
+  :root {
+    --frame-w: 430px;
+    /* Never taller than a large phone, and always a little air top and
+       bottom so the rounded corners read as a device edge. */
+    --frame-h: min(calc(var(--vh) - 24px), 932px);
+    --frame-r: 30px;
+  }
+  body {
+    height: var(--vh);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(120% 80% at 50% -10%, #eaf7f1 0%, rgba(234,247,241,0) 60%),
+      radial-gradient(90% 60% at 50% 110%, #eef0fa 0%, rgba(238,240,250,0) 55%),
+      #e9ecf3;
+  }
+  #root {
+    flex: 0 0 auto;
+    border-radius: var(--frame-r);
+    overflow: hidden;
+    background-color: #f9fafe;
+    box-shadow:
+      0 1px 2px rgba(17, 24, 39, 0.06),
+      0 24px 70px -12px rgba(17, 24, 39, 0.28);
+  }
+  /* react-native-web renders every <Modal> into its own <div> appended to
+     <body>, and the modal inside it is \`position: fixed; inset: 0\` — which
+     would cover the whole browser instead of the phone. A transform on the
+     portal makes it the containing block for that fixed child, so the modal
+     lands on the phone and gets clipped to it. Portals also exist for every
+     mounted-but-hidden Modal, hence pointer-events: those empty boxes must
+     not swallow taps meant for the screen underneath. */
+  body > div:not(#root) {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: var(--frame-w);
+    height: var(--frame-h);
+    transform: translate(-50%, -50%);
+    border-radius: var(--frame-r);
+    overflow: hidden;
+    pointer-events: none;
+  }
+  body > div:not(#root) > * { pointer-events: auto; }
 }
 /* Remove the browser's default blue focus ring on inputs and pressables.
    The app draws its own focus feedback (border colour / background), so the

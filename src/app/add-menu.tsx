@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -18,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionGlyph, type ActionGlyphName } from '@/components/ui/ActionGlyphs';
 import { getTabFabAnchor } from '@/components/ui/tabFabAnchor';
 import { isRTL } from '@/i18n';
+import { useFrameDimensions } from '@/lib/appFrame';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
 
@@ -86,7 +86,7 @@ export default function AddMenuScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, offsetX, offsetY } = useFrameDimensions();
 
   // Hidden features: the labs and world-recipes shortcuts only exist for
   // accounts the admin explicitly granted.
@@ -132,12 +132,14 @@ export default function AddMenuScreen() {
   const open = (href: Href) => dismiss(() => setTimeout(() => router.push(href), 40));
 
   /* Where the bar's + actually is — measured by the bar, not recomputed from
-     its paddings, so the two stay welded together whatever the layout does. */
+     its paddings, so the two stay welded together whatever the layout does.
+     The bar measures itself in *browser* coordinates; on a desktop the app is
+     a column in the middle of the page, so shift back into app ones. */
   const anchor = getTabFabAnchor();
   const colWidth = (width - BAR_H_PAD * 2 - BAR_INNER_PAD * 2) / BAR_COLS;
   const fabColumn = isRTL(i18n.language) ? 0 : BAR_COLS - 1;
   const fabPos = anchor
-    ? { left: anchor.x, top: anchor.y, size: anchor.size }
+    ? { left: anchor.x - offsetX, top: anchor.y - offsetY, size: anchor.size }
     : {
         left: BAR_H_PAD + BAR_INNER_PAD + colWidth * (fabColumn + 0.5) - FAB / 2,
         bottom: Math.min(insets.bottom, 10) + 10 + BAR_INNER_PAD,

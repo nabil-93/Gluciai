@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { Spinner } from '@/components/ui/Spinner';
@@ -22,6 +21,7 @@ import Svg, { Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton, LockedScreen, ProgressRing } from '@/components/ui';
+import { useFrameDimensions } from '@/lib/appFrame';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { analyzeMealImage, type ScanStage } from '@/services/ai';
 import { setPendingScan } from '@/services/scanSession';
@@ -119,7 +119,7 @@ function ScanScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { width: winW, height: winH } = useWindowDimensions();
+  const { width: winW, height: winH } = useFrameDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   // Flash cycles off → auto → on. "on" = continuous torch (works on Android

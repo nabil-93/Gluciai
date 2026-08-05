@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useRouter } from 'expo-router';
@@ -14,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FadeInView } from '@/components/ui';
+import { useFrameDimensions } from '@/lib/appFrame';
 import { useAppStore } from '@/store/useAppStore';
 
 /* Onboarding — Poppins, per the "1ere page" design handoff */
@@ -80,7 +80,7 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { height: winH } = useWindowDimensions();
+  const { height: winH } = useFrameDimensions();
   const setOnboardingDone = useAppStore((s) => s.setOnboardingDone);
   const [index, setIndex] = useState(0);
 

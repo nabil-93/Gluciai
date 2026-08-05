@@ -8,7 +8,6 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FadeInView, Spinner } from '@/components/ui';
 import { CONSENT_IDS, CONSENT_META } from '@/data/consent';
 import { isRTL } from '@/i18n';
+import { useFrameDimensions } from '@/lib/appFrame';
 import { confirmAsync } from '@/lib/confirm';
 import { parseDecimal, parsePositive, sanitizeDecimal } from '@/lib/num';
 import { isDemoMode, supabase } from '@/lib/supabase';
@@ -372,7 +372,7 @@ export default function WizardScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { height: winH } = useWindowDimensions();
+  const { height: winH } = useFrameDimensions();
   // Scale the hero to the viewport so title + fields + CTA stay visible.
   const heroH = Math.min(150, Math.round(winH * 0.17));
   const setWizardDone = useAppStore((s) => s.setWizardDone);
