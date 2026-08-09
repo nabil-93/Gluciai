@@ -7,6 +7,24 @@ Step 22D; after it, 22D is implementation and nothing else.
 Direction accepted: **Option B — glycemic suitability**, A–E removed
 ([SCORING-IDENTITY-DECISION.md](SCORING-IDENTITY-DECISION.md), challenge round).
 
+## Implementation status — where 22D actually stands
+
+Recorded here (Phase 3's documentation half, which needs no sign-off) so the
+spec cannot be read as describing the code when it does not.
+
+| Phase | Status | Gate |
+|---|---|---|
+| **1** — remove A–E | **EXECUTED, THEN REVERTED** by product decision. The letter is in the app today; `mealGrade`'s boundaries and `scoreMeal` are unchanged, and the letter stays gated by `qualityClaimSupported`. The 80–84 "A" vs *"Bon"* overlap it closed is **reopened** → **D10** | product decision (taken) |
+| **2** — interim naming, demotion | **COMPLETE.** `analysis.scoreTitle` (*Repère GluciAI*), the word leads the figure, the "not a clinical measure" sentence is on the analysis card, the meal PDF and the panel footnote | none |
+| **3** — documentation | **COMPLETE (this table).** | none |
+| **3** — band unification | **BLOCKED.** Four band sets still disagree: word 85/70/50 · letter 80/65/50/35 · barcode 70/50 · panel 70/45 | **RU-3 D10** |
+| **4** — formula change, final rename | **BLOCKED.** Moving sodium and energy out of the composite, adopting *Aptitude glycémique*, adding `score_model` | **RU-3 D5** + a new *"remove sodium's weight"* decision |
+| **5** — rounding | **BLOCKED.** NUTR-B4 / P8-004 | dose-input gated, RU-11 |
+
+**Phase 3's fixture** — *"a fixture asserting exactly one band set exists"* —
+cannot be written until D10 collapses the sets. Writing it now would assert a
+state that does not exist.
+
 **The governing constraint of this spec:** the final name is only truthful once
 sodium and energy have left the composite, and that is a formula change gated on
 RU-3. So the spec defines **two states** — an interim state that claims nothing

@@ -143,7 +143,25 @@ export function buildReportStats(args: {
   from.setHours(0, 0, 0, 0);
   const cutoff = from.getTime();
 
-  const inWindow = (iso: string) => new Date(iso).getTime() >= cutoff;
+  /**
+   * P9-002 — the window is a CLOSED interval [from, now].
+   *
+   * This used to test the lower bound only, so a reading dated in the future —
+   * a device with a wrong clock, a bad manual entry, a bogus import — was
+   * counted in a report titled "the last 7 days", and inflated every average a
+   * clinician reads. `to` (= now) already existed as the window's upper edge
+   * and was simply never applied.
+   *
+   * An unparseable timestamp yields NaN, and both comparisons are false for
+   * NaN, so such a row is excluded rather than silently treated as in-window.
+   * No threshold and no clinical value is involved: this is what "the last N
+   * days" already meant.
+   */
+  const upper = to.getTime();
+  const inWindow = (iso: string) => {
+    const t = new Date(iso).getTime();
+    return t >= cutoff && t <= upper;
+  };
 
   const glucose = glucoseLogs
     .filter((g) => inWindow(g.created_at))
@@ -152,7 +170,21 @@ export function buildReportStats(args: {
   const mealsP = meals.filter((m) => inWindow(m.created_at));
   const activities = activityLogs.filter((a) => inWindow(a.created_at));
 
-  const values = glucose.map((g) => g.value);
+  /**
+   * P9-004 — one unusable reading used to poison the whole report.
+   *
+   * `values` took every reading as-is, so a single NaN (a corrupt import, a
+   * failed parse) made avg, min, max, SD and CV all NaN — printed as "NaN" in
+   * the PDF — while the band percentages below stayed confident, because they
+   * count rows rather than average them. eA1c/GMI fell to null. A clinician saw
+   * a report that was simultaneously broken and self-assured.
+   *
+   * A value that is not a finite number is not a reading: it is excluded, the
+   * same rule `qualityEvidence` already applies to energy. Nothing is coerced
+   * or invented, and `n` now counts the readings the statistics were actually
+   * computed from, so the band percentages share their denominator.
+   */
+  const values = glucose.map((g) => g.value).filter((v) => Number.isFinite(v));
   const n = values.length;
   const sum = values.reduce((s, v) => s + v, 0);
   const avg = n ? Math.round(sum / n) : null;

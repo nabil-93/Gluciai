@@ -2607,7 +2607,32 @@ touches no arithmetic.
 
 ---
 
-## Step 22D record — Phase 1 only (A–E letter removed)
+## Step 22D record — Phase 1 only (A–E letter removed, then RESTORED)
+
+> ### ⚠️ THIS RECORD NO LONGER DESCRIBES THE CODE — read this first
+>
+> Phase 1 was executed as written below, and then **reverted by an explicit
+> product decision**. The A–E letter is **back in the application today**:
+> `src/components/MealGradeBar.tsx` exists, and `scan-result.tsx` references it
+> (screen + PDF). `mealScore.ts` carries the decision at its `mealGrade` doc
+> comment — *"REMOVED in Step 22D Phase 1, RESTORED by product decision."*
+>
+> The restoration is **visual only**: `mealGrade`'s 80/65/50/35 boundaries and
+> `scoreMeal` are byte-for-byte unchanged, and the letter is still gated by
+> `qualityClaimSupported`, so an unsupported plate is awarded no letter.
+>
+> **What this means for the table below:**
+>
+> | Row | Actual state |
+> |---|---|
+> | "Deleted `MealGradeBar.tsx`, `mealGrade()`, `GRADE_COLORS`" | **false today** — all three exist |
+> | "Closed the 80–84 letter/word contradiction" | **REOPENED** — an "A" can again sit beside the word *"Bon"*. Returns to RU-3 **D10** |
+> | "Closed the per-plate food-grade illusion" | **REOPENED** for the same reason |
+> | "Still open: barcode (70/50) and panel (70/45) band sets" | **still true**, and D10 must now be decided knowing the letter is a product commitment rather than a deletion candidate |
+> | Verification counts (961 in 36 files) | **stale** — the suite is now **1156 in 46 files** |
+>
+> Nothing below is edited, so the original decision and its reasoning stay
+> readable. This banner is the correction.
 
 **No formula, threshold or weight changed.** `scoreMeal` was not modified.
 
@@ -2640,9 +2665,120 @@ wording plus the order and size of two existing elements.
 | **New disclosure** | the tooltip (`analysis.scoreNote`) states what the indicator weighs and that it is **not a clinical measure**; the same sentence is in the meal PDF and in the panel footnote |
 | **Claims withdrawn** | `mealScore.balanced` no longer asserts a balanced meal · `barcodePage.verdictQ` no longer asks *"Convient au diabète ?"* · `menuScanPage.bestChoice` no longer says *"meilleur choix pour le diabète"* |
 | **Day badge** | keeps its wording (RU-3 D13) and gains `journalV2.scoreInputs`, naming its two inputs |
-| **Verification** | unit/golden **961 in 36 files** (unchanged) · clinical **156 unchanged** · typecheck clean · lint ratchet 6/6 · Demo Mode fr/en/de/ar + RTL + 375 px, console clean, **zero external requests**, PDF captured, panel asset verified as served |
+| **Verification** | unit/golden **961 in 36 files** at the time of this phase (**stale — the suite is now 1156 in 46 files**) · clinical **156 unchanged** · typecheck clean · lint ratchet 6/6 · Demo Mode fr/en/de/ar + RTL + 375 px, console clean, **zero external requests**, PDF captured, panel asset verified as served |
 | **Not exercised at runtime** | the barcode verdict block and the menu ranking need a network lookup Demo Mode cannot perform; their strings were verified in the locale files and in source. The panel needs Supabase auth; its served asset was verified instead |
 | **Pre-existing, untouched** | the barcode and menu screens overflow to 393 px from a decorative SVG — present before Phase 2 and outside its scope |
 
 **Phases 3–5 not started.** The band sets (barcode 70/50, panel 70/45) still
 disagree — RU-3 D10, Phase 3.
+
+---
+
+## Step 22D record — Phase 3, documentation half (complete)
+
+The phase splits in two. **The documentation half needs no sign-off and is
+done**: [SCORING-IMPLEMENTATION-SPEC.md](SCORING-IMPLEMENTATION-SPEC.md) now
+carries an implementation-status table stating what each phase actually did,
+including that **Phase 1 was reverted by product decision**, and the Phase 1
+record above carries a correction banner. No code changed.
+
+**The band-unification half is BLOCKED on RU-3 D10.** Four sets still disagree —
+word 85/70/50 · letter 80/65/50/35 · barcode 70/50 · panel 70/45. The phase's
+own fixture (*"exactly one band set exists"*) cannot be written until D10
+collapses them; writing it now would assert a state that does not exist.
+
+**Phases 4 (formula + final rename) and 5 (rounding) remain blocked** on RU-3 D5
++ a new *"remove sodium's weight"* decision, and on RU-11 respectively.
+
+---
+
+## Step 23 record — reporting (partial: 2 of 5 defects closed)
+
+Data-integrity only. **No clinical value, threshold, formula or wording was
+changed**, and no decision was taken about whether the doctor report may carry
+the meal score (that stays with RU-3 D13).
+
+| Defect | Status | What changed |
+|---|---|---|
+| **P9-002** — `inWindow` had no upper bound, so a future-dated reading counted in a report titled "the last N days" | ✅ **FIXED** | The window is now the closed interval `[from, now]` it always claimed to be. `to` already existed and was simply never applied; `computeIOB` already rejected `t > now`. An unparseable timestamp is excluded rather than assumed in-window (NaN fails both comparisons) |
+| **P9-004** — one NaN reading turned avg/min/max/SD/CV into NaN, printed literally as "NaN", while the band percentages stayed confident and eA1c/GMI fell to null | ✅ **FIXED** | A value that is not a finite number is not a reading, so it is excluded — the same rule `qualityEvidence` applies to energy. The statistics and the band percentages now share one denominator. **No plausibility bound was invented**: an implausible-but-finite reading is still counted, which is RU-2's call |
+| **P9-001** — today has no `byDay` row, so the chart's sums ≠ the totals beside it | ⛔ **OPEN** | The fix is a day-bucketing change whose correct shape depends on how a partial day should be charted — recorded, not guessed |
+| **P9-003** — `mixed` insulin is in `totalInsulin` but in neither `rapidU` nor `longU` | ⛔ **BLOCKED — RU-11** | Same root question as P7-011: what fraction of a premix is rapid. Splitting it requires the clinical decomposition the app does not have |
+| **P9-005** — "per day" averages divide by days-with-data, not window length | ⛔ **BLOCKED — RU-6** | Which denominator is correct is a reporting-policy call: dividing by window length reports a lower average for a patient who logged on fewer days |
+
+**Verification:** unit/golden **1160 in 46 files** (1156 before, +4) · typecheck
+clean · lint ratchet 6/6 · edge imports 23 symbols · web build green. Two
+known-bad fixtures were updated to assert the corrected behaviour and re-pin
+what deliberately did not move (no new plausibility bound; legitimate in-window
+data still counted).
+
+**Not decided here:** whether the periodic doctor report may carry the meal
+score at all (RU-3 **D13**). Every fix above is independent of it.
+
+---
+
+## Step 24 record — native (RC-6): Android build PRODUCED, iOS blocked
+
+**RC-6 was "the audit's root cause: built for web, never run on a device."
+That is no longer true for Android.**
+
+### The artifact
+
+| | |
+|---|---|
+| **Build ID** | `115139b3-f04e-44b6-86b2-038a76a0f80e` |
+| **Status** | **finished** |
+| **Profile / distribution** | `preview` / internal · APK · versionCode 3 · SDK 57.0.0 |
+| **Credentials** | existing remote keystore `Build Credentials shNoY_XR5D` — nothing created or modified |
+| **Artifact** | verified downloadable: **HTTP 200, 157 604 630 bytes, `application/octet-stream`** |
+| **Contents** | the working tree at build time, so it INCLUDES the uncommitted fixes of that session. EAS labels the build with HEAD (`6bf88e4`), which is a traceability caveat, not a defect |
+| **Store submission** | **none.** Not submitted to Google Play |
+
+### Static native configuration — audited, all green
+
+`ios.bundleIdentifier` = `android.package` = `com.nabil.glucoai` · EAS project
+`@tsuhel/glucoai` (`f42952af-…`) matching `app.json` · scheme `glucoai` ·
+`NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription` and
+**`NSMicrophoneUsageDescription`** all present · Android `CAMERA` and
+`RECORD_AUDIO` declared · `appVersionSource: "remote"`, so absent
+buildNumber/versionCode is correct rather than missing · required env vars
+resolve (`EXPO_PUBLIC_SUPABASE_URL`, `…_ANON_KEY`, `…_SENTRY_DSN`,
+`…_USDA_API_KEY`).
+
+**The microphone entry is the one native DEFECT this step found and fixed**
+(committed in `9d06008`): Android declared `RECORD_AUDIO` and the app records
+voice, while iOS had no usage string — which terminates the app at first
+microphone access and fails App Store review.
+
+### Two release-configuration gaps — recorded, deliberately not changed
+
+Both were surfaced by EAS itself. Neither is a bug, and neither blocks an
+internal build:
+
+1. **`ITSAppUsesNonExemptEncryption` is absent** from `ios.infoPlist`. It is an
+   export-compliance **declaration about the product**, answered in App Store
+   Connect. Engineering should not assert it.
+2. **`expo-updates` is not installed**, so the `preview`/`production` channels
+   declared in `eas.json` are **inert** — OTA updates will not work until
+   `npx expo install expo-updates` + `eas update:configure`. Adding an
+   update-delivery mechanism is a release-process decision.
+
+### iOS — BLOCKED on credentials
+
+`eas build --platform ios` fails at credential setup:
+*"EAS CLI couldn't find any credentials suitable for internal distribution"*,
+and `eas device:list` reports **"No Apple teams found for account tsuhel"**.
+
+Required, in order: an **Apple Developer Program membership** ($99/yr) linked to
+the EAS account; `eas credentials --platform ios` run **interactively** to mint
+the distribution certificate and provisioning profile; and at least one device
+registered via `eas device:create` — an internal-distribution iOS build installs
+only on registered UDIDs.
+
+### Device validation — NOT performed
+
+An APK exists; **no flow has been exercised on a device**, and none is claimed.
+All 20 flows (auth, scan + retry, result, score, GI/GL, history, notifications,
+fr/en/de/ar, RTL, profile, hydration, bolus, glucose units, offline, doctor
+surfaces) remain **DEVICE VERIFICATION REQUIRED**. NUTR-GAP-5, A11Y-1 and P14-*
+stay gated behind that.

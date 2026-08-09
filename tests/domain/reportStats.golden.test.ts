@@ -156,18 +156,35 @@ describe('buildReportStats — window', () => {
   });
 
   /**
-   * KNOWN-BAD BASELINE — P9-002
-   * `inWindow` tests only the lower bound. A future-dated log — from a device
-   * with a wrong clock, or a sync replaying a bad timestamp — is counted in the
-   * average, the bands and the totals. `computeIOB` in the bolus engine
-   * explicitly rejects `t > now`; this builder does not.
-   * Owning remediation: RU-4 (time contract) + RU-5 (sync).
+   * RESOLVED — P9-002 (Step 23).
+   *
+   * `inWindow` tested only the lower bound, so a future-dated log — a device
+   * with a wrong clock, a bad manual entry, a sync replaying a bad timestamp —
+   * was counted in a report titled "the last N days" and inflated every figure
+   * a clinician reads. `computeIOB` already rejected `t > now`; this builder
+   * now does too.
+   *
+   * NO THRESHOLD AND NO CLINICAL VALUE IS INVOLVED: the window is simply the
+   * closed interval [from, now] it always claimed to be.
    */
-  it('KNOWN-BAD BASELINE — P9-002: a future-dated reading is counted', () => {
+  it('P9-002: a future-dated reading is EXCLUDED from the window', () => {
     const s = build({ glucoseLogs: [glucose(400, 20)] }); // five days ahead
+    expect(s.count).toBe(0);
+    expect(s.avg).toBeNull();
+    expect(s.veryHighPct).toBe(0);
+  });
+
+  it('P9-002: a reading inside the window is still counted', () => {
+    // The upper bound must not exclude legitimate data.
+    const s = build({ glucoseLogs: [glucose(400, 10)] });
     expect(s.count).toBe(1);
     expect(s.avg).toBe(400);
     expect(s.veryHighPct).toBe(100);
+  });
+
+  it('P9-002: an unparseable timestamp is excluded rather than assumed in-window', () => {
+    const bad = { ...glucose(120, 10), created_at: 'not-a-date' };
+    expect(build({ glucoseLogs: [bad] }).count).toBe(0);
   });
 });
 
@@ -255,23 +272,43 @@ describe('buildReportStats — central tendency and spread', () => {
   });
 
   /**
-   * KNOWN-BAD BASELINE — P9-004
-   * One corrupt reading turns avg, min, max, SD and CV into NaN — which the UI
-   * renders as "NaN" — while the band percentages still report a confident
-   * figure computed over the remaining readings, and eA1c/GMI fall back to null
-   * (indistinguishable from "not enough data"). No validation rejects the row.
-   * Owning remediation: RU-2 (plausibility) + RU-16 (data layer).
+   * RESOLVED — P9-004 (Step 23).
+   *
+   * One corrupt reading used to turn avg, min, max, SD and CV into NaN — which
+   * the PDF rendered literally as "NaN" — while the band percentages stayed
+   * confident (they count rows rather than average them) and eA1c/GMI fell to
+   * null, indistinguishable from "not enough data". A clinician saw a report
+   * that was simultaneously broken and self-assured.
+   *
+   * A value that is not a finite number is not a reading, so it is excluded —
+   * the same rule `qualityEvidence` already applies to energy. NOTHING IS
+   * COERCED OR INVENTED, and no plausibility bound is introduced: an
+   * implausible-but-finite reading is still counted (that is RU-2's call).
    */
-  it('KNOWN-BAD BASELINE — P9-004: a single NaN reading poisons the summary but not the percentages', () => {
+  it('P9-004: a NaN reading is excluded instead of poisoning the summary', () => {
     const s = build({ glucoseLogs: [glucose(100, 10), glucose(Number.NaN, 10)] });
-    expect(Number.isNaN(s.avg as number)).toBe(true);
-    expect(Number.isNaN(s.min as number)).toBe(true);
-    expect(Number.isNaN(s.max as number)).toBe(true);
-    expect(Number.isNaN(s.sd as number)).toBe(true);
+    expect(s.avg).toBe(100);
+    expect(s.min).toBe(100);
+    expect(s.max).toBe(100);
+    expect(s.count).toBe(1); // the usable readings the stats were computed from
+    expect(s.inRangePct).toBe(100); // same denominator as the summary
+  });
+
+  it('P9-004: the statistics and the band percentages share one denominator', () => {
+    const s = build({
+      glucoseLogs: [glucose(100, 10), glucose(Number.NaN, 10), glucose(300, 10)],
+    });
     expect(s.count).toBe(2);
-    expect(s.inRangePct).toBe(50); // still confident
-    expect(s.ea1c).toBeNull(); // reads as "no data", not "bad data"
-    expect(s.gmi).toBeNull();
+    expect(s.avg).toBe(200);
+    expect(s.inRangePct).toBe(50); // 1 of 2 usable, not 1 of 3
+  });
+
+  it('P9-004: an implausible but FINITE reading is still counted (no new bound)', () => {
+    // Excluding NaN is a data-integrity rule. Deciding that 900 mg/dL is
+    // implausible would be a clinical threshold — deliberately not invented.
+    const s = build({ glucoseLogs: [glucose(900, 10)] });
+    expect(s.count).toBe(1);
+    expect(s.avg).toBe(900);
   });
 });
 
