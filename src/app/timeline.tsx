@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChevronLeft, PremiumEmptyState } from '@/components/ui';
 import { buildDayEvents, dayTotals, type DayEvent } from '@/services/dayLog';
+import { carbFigureOf, carbStatus } from '@/services/nutrition/interpret';
 import { isRTL } from '@/i18n';
 import { nowMs } from '@/lib/clock';
 import { useAppStore } from '@/store/useAppStore';
@@ -277,7 +278,13 @@ export default function TimelineScreen() {
                           </Text>
                           <Text style={styles.cardMeta}>
                             {Math.round(e.meal.result.calories)} kcal ·{' '}
-                            {Math.round(e.meal.result.carbohydrates)} g{' '}
+                            {/* S1-7 — a floor prints "≥ 62 g", never a total. */}
+                            {
+                              carbFigureOf(
+                                carbStatus(e.meal.result),
+                                Math.round(e.meal.result.carbohydrates)
+                              ).full
+                            }{' '}
                             {t('day.carbsShort')} ·{' '}
                             {Math.round(e.meal.result.sugar)} g{' '}
                             {t('day.sugarShort')}

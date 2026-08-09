@@ -258,9 +258,9 @@ Numbered so a reviewer can answer them individually. **None is answered here.**
 | **D13** | Should the **day badge** keep the 0.6/0.4 blend and the meal vocabulary? | 23 |
 | **D14** | Should the screen state, in words, that the **/100 is the app's own heuristic**? (The letter says so since Step 16; the number does not) | 22D |
 | **D15** | **NUTR-A12** — correct calcium to 1300 mg and potassium to 4700 mg? (Displayed percentages fall ~30 % / ~34 %) | 22D |
-| **D16** | **NUTR-A10** — replace the four burn divisors with a MET × weight model? | 22D |
+| ~~**D16**~~ | ~~**NUTR-A10** — replace the four burn divisors with a MET × weight model?~~ **RESOLVED — already implemented.** `src/services/nutrition/burn.ts` no longer uses the four fixed divisors: it computes `kcal/min = MET × BMR / 1440` from the patient's own Mifflin-St Jeor resting rate, so weight, age, height and sex all enter, and a `basis` field says which convention answered when height or sex is missing. The card and the PDF carry an estimate qualifier. **No decision is outstanding**; this row is kept struck-through rather than deleted so the question's history stays readable | — |
 | **D17** | **NUTR-A6** — should the 1.45 activity factor be asked for rather than assumed? | 22D |
-| **D18** | **NUTR-A5** — should a GL be shown at all when no index is known (today it assumes GI 55)? | 22D |
+| **D18** | **NUTR-A5** — should a GL be shown at all when no index is known (today it assumes GI 55)? **STILL OPEN, but narrowed.** The *dishonesty* half is closed (S1-2): the load is still computed from `ASSUMED_GI`, and the value is unchanged, but the PDF no longer prints "Index glycémique : 0" beside it — it names the index unknown and marks the load as resting on an assumed index, and the sentence that quotes the load as its own evidence is gated on a real index. **What remains for the specialist is the original question: should the load be SHOWN at all in that case, or withheld?** Engineering will not decide it, because withholding a figure a patient currently sees is a clinical judgement | 22D |
 | **D19** | **NUTR-B3** — should a weakly identified food contribute its nutrition in full? | 22D |
 | **D20** | Should a plate with a **declared 0 kcal** be scored? (Today it is not — Step 22A) | 22D |
 

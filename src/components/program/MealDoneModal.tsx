@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useTranslation } from 'react-i18next';
 
 import { Spinner } from '@/components/ui';
+import { carbFigureOf, carbStatus } from '@/services/nutrition/interpret';
 import { formatPortion } from '@/services/nutrition/portionUnit';
 import { plannedMealResult, type PlannedMeal } from '@/services/program';
 import { shadows } from '@/theme';
@@ -104,7 +105,17 @@ export function MealDoneModal({
             {/* What will be written to the journal — no surprises. */}
             <View style={styles.macroBox}>
               <View style={styles.macroCell}>
-                <Text style={styles.macroValue}>{Math.round(result.carbohydrates)} g</Text>
+                {/* S1-7 — the journal preview shows "≥ 62 g" for a floor. The
+                    DOSE button below is deliberately left alone: its label
+                    feeds the bolus path, which this batch may not touch. */}
+                <Text style={styles.macroValue}>
+                  {
+                    carbFigureOf(
+                      carbStatus(result),
+                      Math.round(result.carbohydrates)
+                    ).full
+                  }
+                </Text>
                 <Text style={styles.macroLabel}>{t('program.macro_carbs')}</Text>
               </View>
               <View style={styles.macroCell}>

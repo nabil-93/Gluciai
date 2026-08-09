@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { useTranslation } from 'react-i18next';
 
 import type { DayEvent } from '@/services/dayLog';
+import { carbFigureOf, carbStatus } from '@/services/nutrition/interpret';
 import { activityKindLabel, logoFor } from './metricIcons';
 
 /** Every entry the timeline shows — now including notes, status changes and
@@ -67,10 +68,13 @@ export function DetailSheet({
   if (event.kind === 'meal') {
     const r = event.meal.result;
     title = t('journalV2.detailMeal');
+    const carbFig = carbFigureOf(carbStatus(r), Math.round(r.carbohydrates));
     big = (
       <Text style={[styles.bigVal, { color: m.color }]}>
-        {Math.round(r.carbohydrates)}
-        <Text style={styles.bigUnit}> g</Text>{' '}
+        {/* S1-7 — "≥ 62" + " g", or "—" with NO unit: "— g" reads as a
+            quantity, which is the implication the rule exists to stop. */}
+        {carbFig.text}
+        <Text style={styles.bigUnit}>{carbFig.unit ? ` ${carbFig.unit}` : ''}</Text>{' '}
         <Text style={[styles.bigTag, { color: m.color }]}>{t('journalV2.mCarbs')}</Text>
       </Text>
     );

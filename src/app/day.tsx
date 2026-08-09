@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChevronLeft, PremiumEmptyState } from '@/components/ui';
 import { isRTL } from '@/i18n';
+import { carbFigureOf, carbStatus } from '@/services/nutrition/interpret';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
 
@@ -60,6 +61,12 @@ export default function DayScreen() {
 
   const totInsulin = dInsu.reduce((s, x) => s + Number(x.dose || 0), 0);
   const totCarbs = dMeals.reduce((s, m) => s + (m.result.carbohydrates || 0), 0);
+  // S1-7 — one meal with an unknown carbohydrate makes the DAY's total a floor,
+  // exactly as the analysis screen, the PDF, the panel and the weekly narrative
+  // already say. The sum above is unchanged: an unknown still contributes 0.
+  const totCarbsStatus = dMeals.some((m) => carbStatus(m.result) !== 'known')
+    ? 'unknown'
+    : 'known';
   const totKcal = dMeals.reduce((s, m) => s + (m.result.calories || 0), 0);
   const totActivity = dActs.reduce((s, a) => s + (a.duration_min || 0), 0);
   const avgGly = dGly.length
@@ -144,7 +151,9 @@ export default function DayScreen() {
               </View>
               <View style={styles.sumCard}>
                 <Text style={styles.sumIcon}>🍽️</Text>
-                <Text style={styles.sumValue}>{Math.round(totCarbs)}</Text>
+                <Text style={styles.sumValue}>
+                  {carbFigureOf(totCarbsStatus, Math.round(totCarbs)).text}
+                </Text>
                 <Text style={styles.sumLabel}>{t('day.totCarbs')}</Text>
               </View>
               <View style={styles.sumCard}>
@@ -182,7 +191,14 @@ export default function DayScreen() {
                           </Text>
                           <Text style={styles.mealMeta}>
                             {Math.round(m.result.calories)} kcal ·{' '}
-                            {Math.round(m.result.carbohydrates)} g{' '}
+                            {/* S1-7 — "≥ 62 g" when the plate only knows a
+                                floor. Same helper every other surface uses. */}
+                            {
+                              carbFigureOf(
+                                carbStatus(m.result),
+                                Math.round(m.result.carbohydrates)
+                              ).full
+                            }{' '}
                             {t('day.carbsShort')} · {Math.round(m.result.sugar)} g{' '}
                             {t('day.sugarShort')}
                           </Text>

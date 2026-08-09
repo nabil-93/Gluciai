@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
 import { GlassCard } from './GlassCard';
+import { carbFigureOf, carbStatus } from '@/services/nutrition/interpret';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { MealScan } from '@/types';
 
@@ -36,7 +37,16 @@ export function MealCard({ meal, carbsLabel, caloriesLabel, onPress }: MealCardP
         <Text style={styles.time}>{time}</Text>
         <View style={styles.macros}>
           <Text style={styles.macro}>
-            <Text style={styles.macroValue}>{Math.round(meal.result.carbohydrates)}g</Text>{' '}
+            {/* S1-7 — a floor shows "≥ 62 g"; an unknown shows "—" with no
+                unit, never "0g". */}
+            <Text style={styles.macroValue}>
+              {
+                carbFigureOf(
+                  carbStatus(meal.result),
+                  Math.round(meal.result.carbohydrates)
+                ).full
+              }
+            </Text>{' '}
             {carbsLabel}
           </Text>
           <Text style={styles.macro}>

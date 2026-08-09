@@ -23,6 +23,7 @@ import {
   deleteMeasure,
 } from '@/services/data';
 import { buildDayEvents, dayTotals, type DayEvent } from '@/services/dayLog';
+import { carbFigureOf, carbStatus } from '@/services/nutrition/interpret';
 import { setPendingScan } from '@/services/scanSession';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -136,7 +137,10 @@ function TimelineRow({
   if (event.kind === 'meal') {
     const r = event.meal.result;
     title = t('history.meal');
-    sub = `${event.meal.meal_type ? t(`mealType.${event.meal.meal_type}`) + ' · ' : ''}${Math.round(r.carbohydrates)} g ${t('journalV2.mCarbs').toLowerCase()}`;
+    // S1-7 — "≥ 62 g" when the plate only knows a floor, the same helper the
+    // analysis screen, the PDF, the panel and the day view already use.
+    const carbs = carbFigureOf(carbStatus(r), Math.round(r.carbohydrates)).full;
+    sub = `${event.meal.meal_type ? t(`mealType.${event.meal.meal_type}`) + ' · ' : ''}${carbs} ${t('journalV2.mCarbs').toLowerCase()}`;
     if (event.meal.image_url && /^(https?|blob|data|file):/i.test(event.meal.image_url))
       thumb = event.meal.image_url;
   } else if (event.kind === 'insulin') {

@@ -9,6 +9,7 @@ import { DayRingGlyph } from '@/components/calendar/RingCalendar';
 import { ChevronLeft, FadeInView } from '@/components/ui';
 import { getSession } from '@/data/workouts';
 import { buildDayEvents, dayTotals } from '@/services/dayLog';
+import { carbFigureOf, carbStatus } from '@/services/nutrition/interpret';
 import { budgetForDate, dayProgress, isoDay, isRevealed } from '@/services/program';
 import { MEAL_SLOTS } from '@/services/programEngine';
 import { useProgramStore } from '@/store/useProgramStore';
@@ -251,7 +252,13 @@ export default function ProgramDayScreen() {
                     ) : null}
                   </View>
                   <Text style={styles.logCarbs}>
-                    {Math.round(e.meal.result.carbohydrates)} g
+                    {/* S1-7 — a floor prints as "≥ 62 g", never as a total. */}
+                    {
+                      carbFigureOf(
+                        carbStatus(e.meal.result),
+                        Math.round(e.meal.result.carbohydrates)
+                      ).full
+                    }
                   </Text>
                 </View>
               ) : null

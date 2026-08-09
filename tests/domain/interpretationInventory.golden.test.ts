@@ -534,37 +534,50 @@ describe('§6 formatting — one assembly, byte-for-byte the old strings', () =>
     expect(carbFigureOf('indeterminate', 0).full).toBe('—');
   });
 
-  it('PARTIALLY MIGRATED — the two CLINICIAN surfaces now print a floor honestly', () => {
+  it('RESOLVED — every carbohydrate surface now distinguishes a floor from a total', () => {
     /**
-     * S1-7, updated as this assertion was designed to be: it is "the switch's
-     * guard: when the six migrate, it flips to the positive form."
+     * S1-7, fully closed. This assertion was written as "the switch's guard:
+     * when the six migrate, it flips to the positive form." All six have now
+     * migrated, in two batches:
      *
-     * MIGRATED (NUTR-A11 — the surfaces a DOCTOR reads):
-     *   · the exported PDF (`report.tsx` → `reportHtml`/`reportStats`)
-     *   · the doctor/admin panel (`public/panel-x7k42m/app.js`)
-     * Both now write "≥ 62 g" and explain the sign.
+     *   CLINICIAN — the exported PDF (`report.tsx` → `reportHtml`/
+     *   `reportStats`), the doctor/admin panel, the weekly narrative.
+     *   PATIENT — day, journal, programme day, plus the timeline, the journal
+     *   detail sheet, the meal card and the programme "meal done" preview,
+     *   found during the same sweep.
      *
-     * STILL KNOWN-BAD (patient-facing day surfaces): day.tsx, journal.tsx and
-     * program-day.tsx still print `Math.round(...carbohydrates)`. They are a
-     * visible patient-facing change and remain scoped out.
+     * PRESENTATION ONLY: every sum is byte-identical — an unknown carbohydrate
+     * still contributes its placeholder 0 — and no threshold moved. What
+     * changed is whether a number is claimed to be a total.
      */
+    // Clinician surfaces.
+    expect(src('src/app/report.tsx')).toContain('carbsAreFloor');
+    expect(src('src/services/weeklyReport.ts')).toContain('carbStatus(m.result)');
+    expect(src('public/panel-x7k42m/app.js')).toContain('carbCell(m, r)');
+    expect(src('public/panel-x7k42m/app.js')).not.toContain(
+      'Math.round(m.carbs ?? r.carbohydrates ?? 0)'
+    );
+
+    // Patient surfaces — each must now route through the shared helper.
     for (const file of [
       'src/app/day.tsx',
       'src/app/(tabs)/journal.tsx',
       'src/app/program-day.tsx',
+      'src/app/timeline.tsx',
+      'src/components/journal/DetailSheet.tsx',
+      'src/components/ui/MealCard.tsx',
+      'src/components/program/MealDoneModal.tsx',
     ]) {
-      expect(src(file), file).toMatch(/Math\.round\([^)]*carbohydrates\)/);
-      expect(src(file), file).not.toContain('@/services/nutrition/interpret');
+      expect(src(file), file).toContain('carbFigureOf');
+      expect(src(file), file).toContain('carbStatus');
     }
-    expect(src('src/services/weeklyReport.ts')).toContain(
-      '(m.result.carbohydrates ?? 0)'
-    );
 
-    // The two clinician surfaces have migrated: they must NOT be blind any more.
-    expect(src('src/app/report.tsx')).toContain('carbsAreFloor');
-    expect(src('public/panel-x7k42m/app.js')).toContain('carbCell(m, r)');
-    expect(src('public/panel-x7k42m/app.js')).not.toContain(
-      'Math.round(m.carbs ?? r.carbohydrates ?? 0)'
+    // The sums themselves did not move.
+    expect(src('src/services/weeklyReport.ts')).toContain(
+      '(s, m) => s + (m.result.carbohydrates ?? 0)'
+    );
+    expect(src('src/app/day.tsx')).toContain(
+      '(s, m) => s + (m.result.carbohydrates || 0)'
     );
   });
 });

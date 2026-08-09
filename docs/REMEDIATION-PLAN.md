@@ -2597,7 +2597,7 @@ fixtures. `src/services/nutrition/mealScore.ts` was not modified.
 | **Third finding** | the reachable range is **[19, 100]**, not [0, 100] — the six penalties total 81 points |
 | **Blocks Step 22D** | D1, D3, D4, D5, D6, D8, D9, D10, D14, D15, D16, D17, D18, D20 |
 | **Blocks Step 23** | D13, plus whether the doctor report may carry the score at all |
-| **NOT blocked by RU-3** | ✅ **NUTR-A11 — FIXED.** The doctor report prints "≥" for a carbohydrate floor and explains the sign. Reused `carbStatus`; no formula, threshold or sum moved. **Still outstanding on the same surface:** the doctor/admin panel (`public/panel-x7k42m/app.js`) prints its meals-table carbohydrate with the same provenance blindness — out of scope for that batch, recorded here |
+| **NOT blocked by RU-3** | ✅ **NUTR-A11 / S1-7 — FULLY CLOSED.** Every surface that prints a carbohydrate now distinguishes a floor from a total. **Clinician:** the exported PDF, the doctor/admin panel (where the defect had a second mechanism — `meal_scans.carbs` is written NULL when unknown, so `m.carbs ?? r.carbohydrates` fell back to the JSONB placeholder and printed it as fact) and the weekly narrative. **Patient:** day, journal, programme day, plus the timeline, the journal detail sheet, the meal card and the programme "meal done" preview, found during the closing sweep. All route through the shared `carbFigureOf`/`carbStatus` helpers. **No sum moved** — an unknown carbohydrate still contributes its placeholder 0 — and no threshold changed. The one carbohydrate string deliberately left alone is the `confirmAndDose` button label in `MealDoneModal`, because it feeds the bolus path |
 | **Verification** | unit/golden **991 in 37 files** (982 before, +9 evidence fixtures) · clinical **156 unchanged** · typecheck clean · lint ratchet 6/6 · no behaviour change, so no runtime verification was required or performed |
 
 **Cheapest honest fix available, if the specialist wants one change only:**
@@ -2712,8 +2712,24 @@ known-bad fixtures were updated to assert the corrected behaviour and re-pin
 what deliberately did not move (no new plausibility bound; legitimate in-window
 data still counted).
 
-**Not decided here:** whether the periodic doctor report may carry the meal
-score at all (RU-3 **D13**). Every fix above is independent of it.
+**Not decided here — and these are TWO separate questions, not one.** An
+earlier draft of this record conflated them; corrected:
+
+| Question | Owner | State |
+|---|---|---|
+| May the periodic doctor report carry the meal score **at all**? | **product decision, unnumbered** — it is *not* D13 | open. `reportHtml.ts`/`reportStats.ts` carry no score today, and [SCORING-IDENTITY-DECISION.md](SCORING-IDENTITY-DECISION.md) §7 argues it should stay out |
+| Should the **day badge** keep its 0.6/0.4 blend and the meal vocabulary? | **RU-3 D13** | open |
+
+Every fix in this record is independent of both.
+
+**Also open on the reporting surface, now registered:** the "per day"
+denominator (P9-005) and partial-day charting (P9-001) are stated as **R1** and
+**R2** in [RU6-REPORTING-DECISIONS.md](RU6-REPORTING-DECISIONS.md), which was
+created because RU-6 had been cited as an owner since Step 10 without a register
+existing — so those findings were blocked on a question nobody had written down.
+The glucose-plausibility question behind P9-004's remaining half is likewise now
+stated in [RU2-GLUCOSE-PLAUSIBILITY.md](RU2-GLUCOSE-PLAUSIBILITY.md), with no
+bound proposed.
 
 ---
 
