@@ -140,7 +140,9 @@
     "waterPerDay": "pro Tag",
     "waterFromProfile": "Berechnet aus Gewicht und Alter. Eine Schätzung, keine Vorgabe.",
     "waterFromDefault": "Gewicht und Geburtsdatum ergänzen für einen persönlichen Wert.",
-    "burnEstimatedFull": "Geschätzt für Ihr Gewicht ({{kg}} kg) und Alter ({{age}}), bei mittlerer Intensität (MET-Referenzwerte). Richtwert: Fitness und Gelände sind nicht berücksichtigt."
+    "burnEstimatedFull": "Geschätzt für Ihr Gewicht ({{kg}} kg) und Alter ({{age}}), bei mittlerer Intensität (MET-Referenzwerte). Richtwert: Fitness und Gelände sind nicht berücksichtigt.",
+    "giUnknown": "Unbekannt",
+    "glFromAssumedGi": "geschätzt mit einem angenommenen Index von {{gi}}"
   },
   "common": {
     "appName": "GluciAI",
@@ -907,7 +909,9 @@
     "hoursAgo": "vor {{n}} Std.",
     "daysAgo": "vor {{n}} T.",
     "notesHintInsulin": "Injektionsstelle, Kontext…",
-    "todayTotal": "{{total}} E {{type}} heute"
+    "todayTotal": "{{total}} E {{type}} heute",
+    "unitLooksMmol": "Das sieht nach einem mmol/L-Wert aus. Diese App speichert in mg/dL — in mg/dL wären das etwa {{mgdl}}. Bitte gib den Wert in mg/dL ein.",
+    "unitOutOfRange": "Wert außerhalb des erwarteten mg/dL-Bereichs (20–900). Bitte überprüfe die Eingabe."
   },
   "tabs": {
     "home": "Start",
@@ -1228,7 +1232,9 @@
     "seedFromMeal": "Vorausgefüllt aus „{{food}}“ · {{time}} — vor der Berechnung prüfen",
     "seedFromProgram": "Vorausgefüllt aus deinem Programm (geplante Mahlzeit) — vor der Berechnung prüfen",
     "cappedTitle": "Dosis auf das Maximum der App begrenzt ({{max}} U)",
-    "cappedBody": "Die Berechnung ergab {{raw}} U. Die App zeigt nie mehr als {{max}} U: diese Obergrenze ist eine Grenze der App, keine für dich empfohlene Dosis. Prüfe die eingegebenen Kohlenhydrate und sprich vor dem Spritzen mit deiner Ärztin oder deinem Arzt."
+    "cappedBody": "Die Berechnung ergab {{raw}} U. Die App zeigt nie mehr als {{max}} U: diese Obergrenze ist eine Grenze der App, keine für dich empfohlene Dosis. Prüfe die eingegebenen Kohlenhydrate und sprich vor dem Spritzen mit deiner Ärztin oder deinem Arzt.",
+    "mixedIobTitle": "Mischinsulin nicht berücksichtigt",
+    "mixedIobBody": "Du hast kürzlich eine Dosis Mischinsulin gespritzt. Die App weiß nicht, welcher Anteil davon schnell wirkt, daher wird sie NICHT von dieser Dosis abgezogen. Dein aktives Insulin kann höher sein als angezeigt — kläre das vor der Injektion mit deiner Ärztin oder deinem Arzt."
   },
   "day": {
     "emptyTitle": "Nichts an diesem Tag",

@@ -389,24 +389,26 @@ describe('FIXED IN STEP 22B — the carbohydrate floor is honest on every screen
 
 /* ═════════ 5b. NUTR-A8 — a ratio that can span two meals ═════════ */
 
-describe('KNOWN-BAD — NUTR-A8 is a provenance defect Step 22B may not touch', () => {
+describe('RESOLVED — NUTR-A8 now compares one meal with itself', () => {
   /**
-   * `sugarHeavy` divides the last SCANNED meal's sugar by the carbohydrate the
-   * patient TYPED into the bolus screen. Those two numbers need not describe
-   * the same food: a patient who types 60 g for tonight's dinner while the last
-   * scan is this morning's pastry gets a ratio built from two meals.
+   * `sugarHeavy` used to divide the last SCANNED meal's sugar by the
+   * carbohydrate the patient TYPED into the bolus screen — two numbers that
+   * need not describe the same food. Both operands now come from the meal.
    *
-   * It is provenance, not a threshold — the 0.4 cut-off would not move. But the
-   * only place to fix it is inside `computeBolus`, and Step 22B is forbidden
-   * from touching the dose engine. It also needs a policy answer (must the
-   * carbohydrate have COME from that meal? what if the patient edited it?), so
-   * it stays with RU-6. The flag drives one advice line and no arithmetic —
-   * pinned here so that stays true.
+   * As this record always said, it is PROVENANCE, not a threshold: the 0.4
+   * cut-off is unchanged and still belongs to RU-3/RU-6, and the flag still
+   * drives one advice line and no arithmetic. A meal whose carbohydrate is
+   * unknown withholds the flag rather than computing it from a placeholder.
+   *
+   * Behaviour is pinned in tests/clinical/sugarHeavyAssociation.golden.test.ts.
    */
-  it('the ratio is still taken against the typed carbohydrate', () => {
-    expect(src('src/services/bolusEngine.ts')).toContain(
-      '(meal.result.sugar ?? 0) / Math.max(1, carbs)'
-    );
+  it('the ratio is taken against the MEAL\'s own carbohydrate', () => {
+    const engine = src('src/services/bolusEngine.ts');
+    expect(engine).toContain('(meal.result.sugar ?? 0) / mealCarbs');
+    // The defect: the typed carbohydrate must no longer be an operand.
+    expect(engine).not.toContain('(meal.result.sugar ?? 0) / Math.max(1, carbs)');
+    // The threshold did not move.
+    expect(engine).toContain('> 0.4');
   });
 
   it('and the flag still changes no dose', () => {

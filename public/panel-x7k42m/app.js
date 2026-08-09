@@ -97,6 +97,38 @@ const esc = (s) =>
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 const fmtDT = (iso) =>
   iso ? new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) + ' · ' + new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—';
+/**
+ * NUTR-A11 — a carbohydrate FLOOR must never print as a definitive total on a
+ * clinician's screen.
+ *
+ * The patient app (Step 22B) and the exported PDF already write "≥ 62 g" for a
+ * plate where at least one food's carbohydrate is unknown. This panel did not:
+ * `m.carbs` is written NULL for such a meal, so `m.carbs ?? r.carbohydrates`
+ * silently fell back to the JSONB PLACEHOLDER and printed it as a total.
+ *
+ * Mirrors `carbStatus` in src/services/nutrition/carbProvenance.ts — including
+ * its legacy rule: a row written before the flag existed is trusted when its
+ * value is non-zero (a zero-fill could not have produced 42), and only an
+ * ambiguous legacy zero is treated as unknown. No value is changed here; this
+ * decides only how the number may be READ.
+ */
+const carbIsFloor = (meal, result) => {
+  const r = result || {};
+  if (r.carbs_known === false) return true;
+  if (r.carbs_known === true) return false;
+  // Legacy row: trust a real value, distrust an ambiguous zero.
+  const mirrored = meal && meal.carbs;
+  const v = mirrored === null || mirrored === undefined ? r.carbohydrates : mirrored;
+  return !(typeof v === 'number' && isFinite(v) && v !== 0);
+};
+
+/** "42" or "≥ 42" — never a bare total for a plate that only knows a floor. */
+const carbCell = (meal, result) => {
+  const r = result || {};
+  const grams = Math.round(Number(meal?.carbs ?? r.carbohydrates ?? 0));
+  return `${carbIsFloor(meal, r) ? '≥ ' : ''}${grams}`;
+};
+
 const timeAgo = (iso) => {
   if (!iso) return '—';
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -1081,12 +1113,16 @@ async function pagePatient(pid, initTab) {
         const photo = hasPhoto
           ? `<img class="meal-thumb" src="${esc(m.image_url)}" data-photo="${esc(m.image_url)}" data-cap="${esc(names)}" loading="lazy" alt="" />`
           : `<div class="meal-thumb ph">🍽️</div>`;
-        return `<tr><td style="width:52px">${photo}</td><td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(m.created_at)}</td><td style="max-width:240px"><b>${esc(names)}</b></td><td>${Math.round(m.calories ?? r.calories ?? 0)}</td><td><b>${Math.round(m.carbs ?? r.carbohydrates ?? 0)} g</b></td><td>${Math.round(m.sugar ?? r.sugar ?? 0)} g</td><td>${m.glycemic_index ?? r.glycemic_index ?? '—'}</td><td>${r.meal_score != null ? `<span class="badge ${r.meal_score >= 70 ? 'green' : r.meal_score >= 45 ? 'amber' : 'red'}">${r.meal_score}/100</span>` : '—'}</td></tr>`;
+        return `<tr><td style="width:52px">${photo}</td><td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(m.created_at)}</td><td style="max-width:240px"><b>${esc(names)}</b></td><td>${Math.round(m.calories ?? r.calories ?? 0)}</td><td><b>${carbCell(m, r)} g</b></td><td>${Math.round(m.sugar ?? r.sugar ?? 0)} g</td><td>${m.glycemic_index ?? r.glycemic_index ?? '—'}</td><td>${r.meal_score != null ? `<span class="badge ${r.meal_score >= 70 ? 'green' : r.meal_score >= 45 ? 'amber' : 'red'}">${r.meal_score}/100</span>` : '—'}</td></tr>`;
       }).join('')}</tbody></table>
       <p style="color:var(--muted);font-size:11.5px;line-height:1.5;margin:8px 2px 0">
         Repère calculé par l'application à partir des valeurs du repas ; ni une mesure
         clinique, ni un score nutritionnel validé.
-      </p></div>` : emptyData('🍽️', 'Aucun repas scanné'),
+      </p>
+      ${meals.some((m) => carbIsFloor(m, m.result)) ? `<p style="color:var(--muted);font-size:11.5px;line-height:1.5;margin:6px 2px 0">
+        Le signe « ≥ » indique un total de glucides <b>minimal</b> : au moins un aliment du
+        repas n'a pas pu être identifié, la valeur réelle est supérieure.
+      </p>` : ''}</div>` : emptyData('🍽️', 'Aucun repas scanné'),
     gly: () => glys.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Valeur</th><th>Source</th><th>Notes</th></tr></thead><tbody>
       ${glys.map((g) => `<tr><td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(g.created_at)}</td><td>${glyBadge(g.value)}</td><td style="color:var(--muted)">${esc(g.source || 'manuel')}</td><td style="color:var(--muted)">${esc(g.notes || '—')}</td></tr>`).join('')}</tbody></table></div>` : emptyData('🩸', 'Aucune mesure de glycémie'),
     insu: () => insus.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Type</th><th>Dose</th><th>Notes</th></tr></thead><tbody>
@@ -1226,6 +1262,9 @@ async function pagePatient(pid, initTab) {
 
     /* Totaux du jour — les mêmes chiffres que la barre de totaux de l'app */
     const totCarbs = dm.reduce((a, m) => a + Number(m.carbs ?? m.result?.carbohydrates ?? 0), 0);
+    // NUTR-A11 — one meal with an unknown carbohydrate makes the DAY's total a
+    // floor. The sum above is unchanged; this only decides how it is written.
+    const totCarbsFloor = dm.some((m) => carbIsFloor(m, m.result));
     const totKcal = dm.reduce((a, m) => a + Number(m.calories ?? m.result?.calories ?? 0), 0);
     const totSugar = dm.reduce((a, m) => a + Number(m.sugar ?? m.result?.sugar ?? 0), 0);
     const rapidU = di.filter((x) => x.insulin_type === 'rapid').reduce((a, x) => a + Number(x.dose || 0), 0);
@@ -1268,7 +1307,7 @@ async function pagePatient(pid, initTab) {
           ? `<img class="meal-thumb" src="${esc(e.m.image_url)}" data-photo="${esc(e.m.image_url)}" data-cap="${esc(names)}" loading="lazy" alt="" />` : '';
         color = '#3b82f6';
         inner = card(color, '🍽️', `${e.m.meal_type ? esc(e.m.meal_type) + ' · ' : ''}${esc(names)}`,
-          `${Math.round(e.m.calories ?? r.calories ?? 0)} kcal · ${Math.round(e.m.carbs ?? r.carbohydrates ?? 0)} g gluc. · ${Math.round(e.m.sugar ?? r.sugar ?? 0)} g sucre`, thumb);
+          `${Math.round(e.m.calories ?? r.calories ?? 0)} kcal · ${carbCell(e.m, r)} g gluc. · ${Math.round(e.m.sugar ?? r.sugar ?? 0)} g sucre`, thumb);
       } else if (e.type === 'insu') {
         color = '#8b5cf6';
         inner = card(color, '💉', `${e.x.dose} U · ${esc(e.x.insulin_type === 'rapid' ? 'rapide' : e.x.insulin_type === 'long' ? 'lente' : e.x.insulin_type || 'insuline')}`, esc(e.x.notes || 'Insuline'));
@@ -1301,7 +1340,7 @@ async function pagePatient(pid, initTab) {
 
     dayPanel.innerHTML = `
       <div class="pay-stats" style="padding:0 0 10px">
-        <span class="badge indigo">🍽️ ${dm.length} repas · ${Math.round(totCarbs)} g gluc. · ${Math.round(totKcal)} kcal · ${Math.round(totSugar)} g sucre</span>
+        <span class="badge indigo">🍽️ ${dm.length} repas · ${totCarbsFloor ? '≥ ' : ''}${Math.round(totCarbs)} g gluc. · ${Math.round(totKcal)} kcal · ${Math.round(totSugar)} g sucre</span>
         <span class="badge violet">💉 ${Math.round(totIns * 10) / 10} U${totIns ? ` (${Math.round(rapidU * 10) / 10} rapide / ${Math.round(longU * 10) / 10} lente)` : ''}</span>
         <span class="badge gray">🩸 ${dg.length} mesure${dg.length > 1 ? 's' : ''}${avgGly !== null ? ` · moy. ${avgGly}` : ''}</span>
         ${sportMin ? `<span class="badge green">🏃 ${sportMin} min</span>` : ''}

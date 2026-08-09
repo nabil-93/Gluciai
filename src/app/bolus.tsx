@@ -814,6 +814,18 @@ export default function BolusScreen() {
               </View>
             ) : null}
 
+            {/* P7-011 — a premixed dose is active but contributes nothing to
+                IOB, because how much of it is rapid is a clinical decision the
+                app does not hold (RU-11 Q4–Q7). The dose above is unchanged;
+                this refuses to let that omission look like a complete picture
+                of the insulin still on board. */}
+            {engine.flags.includes('mixedInsulinUncounted') ? (
+              <View style={styles.cappedCard}>
+                <Text style={styles.cappedTitle}>⚠️ {t('bolus.mixedIobTitle')}</Text>
+                <Text style={styles.cappedBody}>{t('bolus.mixedIobBody')}</Text>
+              </View>
+            ) : null}
+
             {/* How the number was reached — a clean ledger of every + and −.
                 Lifted out of the hero so the hero stays cinematic and this
                 stays readable. */}

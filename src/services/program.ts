@@ -300,6 +300,11 @@ export function plannedMealResult(meal: PlannedMeal, portion = 1): NutritionResu
     fat: r(meal.fat),
     fiber: r(meal.fiber),
     glycemic_index: meal.gi ?? 50,
+    // S1-8 — `PlannedMeal.gi` is nullable, so this 50 is a PLACEHOLDER when the
+    // plan carries no index. Marked so the screen shows its existing "estimé"
+    // caption rather than a green "Bas" chip for a number nobody measured. The
+    // value is unchanged, exactly like `carbs_known` below.
+    glycemic_index_estimated: meal.gi == null,
     confidence: 0.6,
     nutrition_confidence: 0.4,
     // An estimate is still a value. `PlannedMeal.carbs` is a required number

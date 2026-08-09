@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { buildReportHtml, type ReportMealRow } from '@/services/reportHtml';
 import { buildReportStats, trendGeometry } from '@/services/reportStats';
 import type { ActivityLog, GlucoseLog, InsulinLog, MealScan, Profile } from '@/types';
 
@@ -475,5 +476,128 @@ describe('trendGeometry', () => {
     const g = trendGeometry(extreme.byDay, 70, 180)!;
     expect(g.yTicks[0].value).toBe(0); // min 20 − 20
     expect(g.yTicks[3].value).toBe(420); // max 400 + 20
+  });
+});
+
+/**
+ * NUTR-A11 — a carbohydrate FLOOR must never print as a definitive total in
+ * the document a clinician reads.
+ *
+ * The patient surfaces have rendered a floor honestly since Step 22B; this
+ * report summed `result.carbohydrates` blind. These fixtures pin the fix and,
+ * just as importantly, pin that **no sum moved**: an unknown carbohydrate
+ * still contributes its placeholder 0 exactly as before.
+ */
+describe('buildReportStats — carbohydrate provenance (NUTR-A11)', () => {
+  /** A meal whose carbohydrate is explicitly unknown (Step 10 provenance). */
+  function unknownCarbMeal(day: number): MealScan {
+    const m = meal(0, day);
+    return { ...m, result: { ...m.result, carbs_known: false } };
+  }
+
+  /** A meal that declares its carbohydrate. */
+  function knownCarbMeal(carbohydrates: number, day: number): MealScan {
+    const m = meal(carbohydrates, day);
+    return { ...m, result: { ...m.result, carbs_known: true } };
+  }
+
+  it('does not flag a floor when every meal declares its carbohydrate', () => {
+    const s = build({ meals: [knownCarbMeal(40, 10), knownCarbMeal(60, 11)] });
+    expect(s.carbsAreFloor).toBe(false);
+    expect(s.unknownCarbMeals).toBe(0);
+    expect(s.totalCarbs).toBe(100);
+  });
+
+  it('flags the window as a floor when one meal has an unknown carbohydrate', () => {
+    const s = build({ meals: [knownCarbMeal(40, 10), unknownCarbMeal(11)] });
+    expect(s.carbsAreFloor).toBe(true);
+    expect(s.unknownCarbMeals).toBe(1);
+  });
+
+  it('leaves the arithmetic untouched — an unknown carbohydrate still adds 0', () => {
+    const known = build({ meals: [knownCarbMeal(40, 10)] });
+    const withUnknown = build({ meals: [knownCarbMeal(40, 10), unknownCarbMeal(11)] });
+    expect(withUnknown.totalCarbs).toBe(known.totalCarbs);
+  });
+
+  it('flags only the day that actually holds the unknown meal', () => {
+    const s = build({ meals: [knownCarbMeal(40, 10), unknownCarbMeal(11)] });
+    const d10 = s.byDay.find((d) => d.date === '2026-01-10')!;
+    const d11 = s.byDay.find((d) => d.date === '2026-01-11')!;
+    expect(d10.carbsAreFloor).toBe(false);
+    expect(d11.carbsAreFloor).toBe(true);
+  });
+
+  it('treats a legacy meal with no provenance flag and a real value as known', () => {
+    // A zero-fill could not have produced 42, so a legacy non-zero stays trusted
+    // (the rule `carbStatus` already applies everywhere else).
+    const s = build({ meals: [meal(42, 10)] });
+    expect(s.carbsAreFloor).toBe(false);
+  });
+
+  it('treats a legacy meal with an ambiguous zero as not-known', () => {
+    const s = build({ meals: [meal(0, 10)] });
+    expect(s.carbsAreFloor).toBe(true);
+  });
+});
+
+/**
+ * NUTR-A11, rendering half — the `≥` must reach the page, not just the stats
+ * object. This is the assertion that would have caught the original defect.
+ */
+describe('buildReportHtml — carbohydrate floors are visible (NUTR-A11)', () => {
+  function knownCarbMeal(carbohydrates: number, day: number): MealScan {
+    const m = meal(carbohydrates, day);
+    return { ...m, result: { ...m.result, carbs_known: true } };
+  }
+  function unknownCarbMeal(day: number): MealScan {
+    const m = meal(0, day);
+    return { ...m, result: { ...m.result, carbs_known: false } };
+  }
+
+  const narrative = { observations: [], positives: [], improvements: [] };
+  const patient = { name: 'T', diabetesType: 'type1' };
+
+  const html = (over: Parameters<typeof build>[0], mealRows: ReportMealRow[]) =>
+    buildReportHtml({
+      stats: build(over),
+      narrative,
+      patient,
+      low: 70,
+      high: 180,
+      trend: null,
+      meals: mealRows,
+    });
+
+  const row = (carbs: number, carbsAreFloor: boolean): ReportMealRow => ({
+    createdAt: at(10),
+    name: 'Couscous',
+    carbs,
+    carbsAreFloor,
+    sugar: 0,
+    calories: 300,
+    sourceLabel: 'Estimation IA',
+  });
+
+  it('prints a definitive total when the carbohydrate is known', () => {
+    const out = html({ meals: [knownCarbMeal(42, 10)] }, [row(42, false)]);
+    expect(out).toContain('42 g');
+    expect(out).not.toContain('≥ 42 g');
+  });
+
+  it('prints "≥" instead of a definitive total when the meal is a floor', () => {
+    const out = html({ meals: [knownCarbMeal(42, 10), unknownCarbMeal(11)] }, [row(42, true)]);
+    expect(out).toContain('≥ 42 g');
+  });
+
+  it('explains the "≥" sign so a clinician can read it', () => {
+    const out = html({ meals: [knownCarbMeal(42, 10), unknownCarbMeal(11)] }, [row(42, true)]);
+    expect(out).toContain('minimal');
+    expect(out).toContain('un repas contient');
+  });
+
+  it('adds no floor note at all when nothing is a floor', () => {
+    const out = html({ meals: [knownCarbMeal(42, 10)] }, [row(42, false)]);
+    expect(out).not.toContain('« ≥ »');
   });
 });

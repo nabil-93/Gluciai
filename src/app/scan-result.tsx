@@ -38,8 +38,10 @@ import {
   carbStatus,
   carbText as carbTextOf,
   carbUnit as carbUnitOf,
+  ASSUMED_GI,
   effectiveGi,
   glBand,
+  isAssumedGi,
   mealGrade,
   plateCarbStatus,
   qualityEvidence,
@@ -593,6 +595,9 @@ export default function ScanResultScreen() {
   // portion. A 72-GI watermelon slice is a GL of 8; couscous at GI 65 is 39.
   const gl = Math.round(result.glycemic_load_value ?? (effectiveGi(gi) * C) / 100);
   const glInfo = glBand(gl);
+  // S1-2 — whether the plate has a REAL index. When it does not, the load rests
+  // on ASSUMED_GI and must not be printed beside an index of 0.
+  const giKnown = !isAssumedGi(gi);
   // Percentage of the plate's carbs the index actually covers (0 when unknown).
   const giCoveragePct = Math.round((result.gi_carb_coverage ?? 0) * 100);
 
@@ -818,8 +823,17 @@ export default function ScanResultScreen() {
     <div class="card grow">
       <h2>${esc(t('analysis.giLabel'))}</h2>
       <table>
-        ${row(t('analysis.giLabel'), `${gi}`)}
-        ${row(t('analysis.glLabel'), `${gl} · ${t(`result.${glInfo.key}`)}`)}
+        ${/* S1-2 — "Index glycémique : 0" beside "Charge glycémique : 50" is
+              arithmetically impossible (GL = GI × carbs / 100), and the
+              assumed index that produced the load appeared nowhere. The screen
+              already HIDES the GI card when no index is known; the PDF printed
+              both rows unconditionally. It now says the index is unknown, and
+              marks the load as resting on an assumption — no value changed. */
+          row(t('analysis.giLabel'), giKnown ? `${gi}` : t('analysis.giUnknown'))}
+        ${row(
+          t('analysis.glLabel'),
+          `${gl} · ${t(`result.${glInfo.key}`)}${giKnown ? '' : ` · ${t('analysis.glFromAssumedGi', { gi: ASSUMED_GI })}`}`
+        )}
         ${row(t('analysis.hydration'), t('analysis.waterFromMeal', { ml: mealWaterMl }))}
         ${row(
           t('analysis.waterToDrink'),
@@ -1259,7 +1273,10 @@ export default function ScanResultScreen() {
                 it was simply buried in the advice card far below. This raises
                 it next to the figure it qualifies. No band, no weight, no
                 formula: `glBand` is the one already drawing the row below. */}
-            {rated && glInfo.key === 'high' && quality.reasons.length > 0 ? (
+            {/* S1-2 — also gated on a REAL index. This sentence quotes the load
+                as evidence, and a load computed from ASSUMED_GI is not evidence
+                of anything on a screen that shows no index. */}
+            {rated && giKnown && glInfo.key === 'high' && quality.reasons.length > 0 ? (
               <Text style={styles.scoreVsLoad}>
                 {t('analysis.scoreVsLoad', { gl, why: quality.reasons[0] })}
               </Text>

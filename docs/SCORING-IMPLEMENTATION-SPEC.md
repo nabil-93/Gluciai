@@ -250,6 +250,28 @@ Each phase states what it needs, what it must not touch, and how it is verified.
 **No phase is performed by this document.**
 
 ### Phase 1 — remove A–E
+
+> **SUPERSEDED BY A PRODUCT DECISION — the letter was removed as specified
+> here, then RESTORED. Do not re-execute this phase.**
+>
+> The current tree renders `MealGradeBar` again (`scan-result.tsx`), and
+> `mealScore.ts` carries the record at its `mealGrade` doc comment: *"REMOVED in
+> Step 22D Phase 1, RESTORED by product decision."*
+>
+> The restoration is **visual only**: `mealGrade`'s 80/65/50/35 boundaries and
+> `scoreMeal` are byte-for-byte unchanged, and the letter stays gated by
+> `qualityClaimSupported` — an unsupported plate is still awarded no letter.
+>
+> Two consequences for later phases, neither resolved here:
+> - The **80–84 overlap** this phase was meant to close (an "A" the card calls
+>   *"Bon"*) is **still open**, and returns to **D10**.
+> - D10's band unification must now be decided knowing the letter is a product
+>   commitment rather than a candidate for deletion.
+>
+> `mealGradeNote` was also rewired to describe the letter as the A–E form of
+> *"Repère GluciAI"*, so Phase 2's interim naming and the restored letter now
+> coexist by design.
+
 - **Needs:** nothing. No sign-off, no formula, no threshold.
 - **Does:** delete `MealGradeBar.tsx`, `mealGrade()`, `GRADE_COLORS`, the strip
   from the analysis screen and the `Indice GluciAI` line from the PDF; remove

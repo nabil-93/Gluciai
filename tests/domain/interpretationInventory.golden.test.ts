@@ -218,16 +218,26 @@ describe('§2 GL — the assumption is named, the bands are shared', () => {
     expect(glBand(Math.round(glValue(carbs, gi))).key).toBe('medium');
   });
 
-  it('KNOWN-BAD — a load is still shown for a plate with no index at all', () => {
+  it('RESOLVED — a plate with no index no longer prints "0" beside a load', () => {
     /**
-     * S1-2. The PDF prints "Index glycémique : 0" beside a non-zero load, which
-     * is arithmetically impossible. `isAssumedGi` is the handle that will fix
-     * it; NOTHING reads it yet, and wiring it changes a rendered document.
+     * S1-2, closed. `isAssumedGi` — named here as "the handle that will fix
+     * it" — is now wired in `scan-result.tsx`:
+     *
+     *   · the PDF prints `analysis.giUnknown` instead of a bare `0`, and marks
+     *     the load as resting on ASSUMED_GI;
+     *   · the amber reconciliation sentence, which quotes the load as its own
+     *     evidence, is gated on a REAL index.
+     *
+     * PRESENTATION ONLY. `ASSUMED_GI`, `glValue`, `glBand` and `glycemicLoad`
+     * are untouched, and no displayed NUMBER changed — only whether a number
+     * is claimed to be measured. Boundary behaviour is pinned in
+     * tests/domain/glycemicHonesty.golden.test.ts.
      */
-    expect(src('src/app/scan-result.tsx')).toContain(
-      "${row(t('analysis.giLabel'), `${gi}`)}"
-    );
-    expect(src('src/app/scan-result.tsx')).not.toContain('isAssumedGi');
+    const screen = src('src/app/scan-result.tsx');
+    expect(screen).toContain('isAssumedGi');
+    expect(screen).toContain('giKnown');
+    // The impossible row is gone: the index is no longer printed unconditionally.
+    expect(screen).not.toContain("${row(t('analysis.giLabel'), `${gi}`)}");
   });
 });
 
@@ -524,12 +534,19 @@ describe('§6 formatting — one assembly, byte-for-byte the old strings', () =>
     expect(carbFigureOf('indeterminate', 0).full).toBe('—');
   });
 
-  it('KNOWN-BAD — six clinician surfaces still print a floor as a total', () => {
+  it('PARTIALLY MIGRATED — the two CLINICIAN surfaces now print a floor honestly', () => {
     /**
-     * S1-7. Routing these through `carbFigure` is one line each — and it is a
-     * VISIBLE change ("62 g" → "≥ 62 g" on six screens), which Phase 3 was
-     * scoped to exclude. This assertion is the switch's guard: when the six
-     * migrate, it flips to the positive form.
+     * S1-7, updated as this assertion was designed to be: it is "the switch's
+     * guard: when the six migrate, it flips to the positive form."
+     *
+     * MIGRATED (NUTR-A11 — the surfaces a DOCTOR reads):
+     *   · the exported PDF (`report.tsx` → `reportHtml`/`reportStats`)
+     *   · the doctor/admin panel (`public/panel-x7k42m/app.js`)
+     * Both now write "≥ 62 g" and explain the sign.
+     *
+     * STILL KNOWN-BAD (patient-facing day surfaces): day.tsx, journal.tsx and
+     * program-day.tsx still print `Math.round(...carbohydrates)`. They are a
+     * visible patient-facing change and remain scoped out.
      */
     for (const file of [
       'src/app/day.tsx',
@@ -539,11 +556,14 @@ describe('§6 formatting — one assembly, byte-for-byte the old strings', () =>
       expect(src(file), file).toMatch(/Math\.round\([^)]*carbohydrates\)/);
       expect(src(file), file).not.toContain('@/services/nutrition/interpret');
     }
-    expect(src('src/app/report.tsx')).toContain('carbs: m.result.carbohydrates');
     expect(src('src/services/weeklyReport.ts')).toContain(
       '(m.result.carbohydrates ?? 0)'
     );
-    expect(src('public/panel-x7k42m/app.js')).toContain(
+
+    // The two clinician surfaces have migrated: they must NOT be blind any more.
+    expect(src('src/app/report.tsx')).toContain('carbsAreFloor');
+    expect(src('public/panel-x7k42m/app.js')).toContain('carbCell(m, r)');
+    expect(src('public/panel-x7k42m/app.js')).not.toContain(
       'Math.round(m.carbs ?? r.carbohydrates ?? 0)'
     );
   });

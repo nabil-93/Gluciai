@@ -1,3 +1,4 @@
+import { carbStatus } from '@/services/nutrition/carbProvenance';
 import type {
   ActivityLog,
   GlucoseLog,
@@ -82,8 +83,13 @@ export function getWeeklySummary(
     const carbs = week.reduce((s, m) => s + (m.result.carbohydrates ?? 0), 0);
     const sugar = week.reduce((s, m) => s + (m.result.sugar ?? 0), 0);
     const kcal = week.reduce((s, m) => s + (m.result.calories ?? 0), 0);
+    // S1-7 / NUTR-A11 — one meal with an unknown carbohydrate makes the week's
+    // total a FLOOR, not a total. The sum is unchanged (an unknown still adds
+    // its placeholder 0); only how it may be read changes. Same `carbStatus`
+    // rule the PDF, the panel and every patient screen already apply.
+    const carbsAreFloor = week.some((m) => carbStatus(m.result) !== 'known');
     observations.push(
-      `${week.length} repas suivis : ${Math.round(kcal)} kcal, ${Math.round(carbs)} g de glucides, ${Math.round(sugar)} g de sucre au total.`
+      `${week.length} repas suivis : ${Math.round(kcal)} kcal, ${carbsAreFloor ? '≥ ' : ''}${Math.round(carbs)} g de glucides, ${Math.round(sugar)} g de sucre au total.`
     );
     const highGi = week.filter((m) => (m.result.glycemic_index ?? 0) > 65).length;
     if (highGi >= 3) {

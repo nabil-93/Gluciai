@@ -58,6 +58,13 @@ export type LoggerAction =
       fat?: number;
       fiber?: number;
       glycemic_index?: number;
+      /**
+       * S1-8 — did the model actually STATE an index, or is the 50 below a
+       * placeholder? Mirrors `carbs_known`. The value is unchanged either way;
+       * this is what lets the screen mark it "estimé" instead of rendering a
+       * green "Bas" chip for a number nobody measured.
+       */
+      glycemic_index_known?: boolean;
       meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
       minutes_ago?: number;
     }
@@ -338,6 +345,9 @@ export function sanitizeAction(raw: any): LoggerAction | null {
         fat: Math.max(0, Math.round(num(raw.fat))),
         fiber: Math.max(0, Math.round(num(raw.fiber))),
         glycemic_index: Math.min(110, Math.max(0, Math.round(num(raw.glycemic_index, 50)))),
+        // S1-8 — the 50 above is a PLACEHOLDER when the model stated nothing.
+        // Same rule as `carbs_known` on the line above; the number is unchanged.
+        glycemic_index_known: stated(raw.glycemic_index),
         meal_type: MEALS.includes(raw.meal_type) ? raw.meal_type : undefined,
         minutes_ago: ago,
       };
@@ -539,6 +549,10 @@ export async function applyLoggerAction(action: LoggerAction): Promise<void> {
         fat: action.fat ?? 0,
         fiber: action.fiber ?? 0,
         glycemic_index: action.glycemic_index ?? 50,
+        // S1-8 — a described meal must not look better characterised than a
+        // photographed one. When the model stated no index, the 50 is a
+        // placeholder and the screen's existing "estimé" caption says so.
+        glycemic_index_estimated: action.glycemic_index_known !== true,
         confidence: 0.6,
         nutrition_confidence: 0.5,
         source: 'ai_estimate',

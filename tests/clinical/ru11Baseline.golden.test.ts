@@ -166,7 +166,19 @@ describe('KNOWN-BAD BASELINE — P7-011: a premix-only patient dosing path', () 
     expect(r.total).toBe(6); // the full meal bolus, with 12 U injected 30 min ago
   });
 
-  it('nothing in the result says the patient uses an insulin the engine ignores', () => {
+  /**
+   * RESOLVED — the DISCLOSURE half only. This fixture used to assert that
+   * `flags` was exactly `['noGlucose']`, i.e. that nothing in the result told a
+   * screen the patient's insulin was being ignored. That silence was the
+   * known-bad part, and it is now closed by `mixedInsulinUncounted`.
+   *
+   * The CLINICAL half of P7-011 is still open and still pinned by the fixtures
+   * around this one: a premixed dose contributes **nothing** to IOB, and the
+   * dose is unchanged (`iob` 0, `total` 6 above). Only RU-11 Q4–Q7 can change
+   * that. See tests/clinical/mixedInsulinDisclosure.golden.test.ts, which
+   * proves the disclosure moved no number.
+   */
+  it('the result now DISCLOSES that an ignored insulin is active', () => {
     const r = computeSmartBolus(
       inputs({
         carbs: 60,
@@ -174,8 +186,10 @@ describe('KNOWN-BAD BASELINE — P7-011: a premix-only patient dosing path', () 
         insulinLogs: [insulinLog(12, 30, 'mixed')],
       })
     );
-    // No flag, no field, nothing for a screen to warn from.
-    expect(r.flags).toEqual(['noGlucose']);
+    expect(r.flags).toEqual(['noGlucose', 'mixedInsulinUncounted']);
+    // The rule itself is untouched — the premix still counts as zero on board.
+    expect(r.iob).toBe(0);
+    expect(r.total).toBe(6);
   });
 
   it('a mixed dose is dropped even when rapid doses are present alongside it', () => {

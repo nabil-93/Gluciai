@@ -2153,7 +2153,10 @@ wrong: it was two contracts talking past each other.
 `src/app/barcode.tsx` · `src/app/menu-scan.tsx` (gate + ranking + chip) ·
 `src/components/journal/dayScore.ts` · `src/i18n/locales/{fr,en,de,ar}.json`
 (7 new keys each; `mealGradeNote` extended) ·
-`tests/domain/nutritionClaims.golden.test.ts` (**new**, 33) · both ledgers.
+`tests/domain/nutritionClaims.golden.test.ts` (**new**, 31 — this record first
+said 33; the file has always held 31 and `vitest run` on it reports 31, so the
+figure was a transcription error in this ledger, not a lost fixture) · both
+ledgers.
 No dependency, no config, no migration, no Edge Function.
 
 ### 6. Verification
@@ -2189,6 +2192,25 @@ described as trustworthy or complete.**
 | P9-001…P9-005 | **Step 23 — reporting** |
 | NUTR-C2, P16-006 | **blocked** — dose-input decisions, with RU-11 |
 | Score/label 80–84 overlap · barcode's 70/50 bands · `scoreMeal`'s GI gate · `warn:high_gi` at 66 | **RU-3 decisions**, pinned as known-bad |
+
+### 7b. Later amendment — the A–E letter was removed, then restored
+
+Recorded here so this record matches the tree. After Step 22A, the
+[scoring spec](SCORING-IMPLEMENTATION-SPEC.md) Phase 1 removed the A–E strip; a
+**product decision then restored it**, and the current tree renders
+`MealGradeBar` again. `mealScore.ts` carries the note at `mealGrade`.
+
+What that changes about §3 and §4 above:
+
+| | Status |
+|---|---|
+| §3's "no letter awarded" for an unsupported plate | **still true** — the letter remains gated by `qualityClaimSupported` |
+| `mealGrade` boundaries 80/65/50/35 | **unchanged**, byte for byte |
+| `scoreMeal` | **unchanged** |
+| §4's open 80–84 "A" vs *"Bon"* overlap | **still open**, and now permanent until **D10** — the letter is a product commitment, not a deletion candidate |
+
+The restoration is visual. No arithmetic moved, and no stored `meal_score` was
+rewritten.
 
 ### 8. New finding recorded during this step
 
@@ -2484,7 +2506,7 @@ reads. **No number moved.**
 | the letter (≥ 80) and the word (≥ 85) disagree over 80–84 | **known-bad, RU-3** |
 | the barcode screen keeps a third band set (70 / 50) | **known-bad, RU-3** |
 | the day badge blends TIR and meal quality, then uses the *meal* words | **known-bad, RU-3** |
-| **NUTR-A11 (new)** — the **doctor report** prints a carbohydrate FLOOR as a total | **open → Step 23.** Step 22B taught every patient screen to write "≥ 62 g"; `reportStats.ts` sums `result.carbohydrates` with no provenance check and `reportHtml.ts` prints it as a figure. The most consequential remaining inconsistency, and the reason the doctor report cannot yet be trusted as a record |
+| **NUTR-A11 (new)** — the **doctor report** prints a carbohydrate FLOOR as a total | ✅ **FIXED — engineering-safe batch** (presentation + provenance only, no specialist needed). `reportStats` now carries `carbsAreFloor` per day and per window plus `unknownCarbMeals`, all derived from the **existing** `carbStatus` helper — no new rule, no new threshold. `reportHtml` renders "≥" at the three carbohydrate sites (per-meal row, per-day row, the "Glucides / jour" KPI) and prints a sentence explaining the sign. **No sum changed**: an unknown carbohydrate still contributes its placeholder 0 exactly as before, pinned by a fixture that compares the totals with and without an unknown meal. 10 new fixtures in `reportStats.golden.test.ts` |
 | the AI is never handed `meal_score` | **verified clean** — it cannot repeat a verdict it never receives |
 
 ### 8. Files changed (6)
@@ -2529,7 +2551,7 @@ profile and with none.
   standard defines their thresholds.
 - The **micronutrient, hydration, calorie-goal and burn-minute figures are
   estimates from proxies**, two of them resting on superseded reference values.
-- The **doctor report still prints a floor as a total** (NUTR-A11).
+- ✅ The doctor report no longer prints a floor as a total (NUTR-A11, fixed).
 
 Computational correctness is established. **Scientific validity is not**, and it
 cannot be established by an audit of the code alone — it requires a nutrition
@@ -2575,7 +2597,7 @@ fixtures. `src/services/nutrition/mealScore.ts` was not modified.
 | **Third finding** | the reachable range is **[19, 100]**, not [0, 100] — the six penalties total 81 points |
 | **Blocks Step 22D** | D1, D3, D4, D5, D6, D8, D9, D10, D14, D15, D16, D17, D18, D20 |
 | **Blocks Step 23** | D13, plus whether the doctor report may carry the score at all |
-| **NOT blocked by RU-3** | **NUTR-A11** — the doctor report printing a carbohydrate floor as a total. A provenance defect with a known fix; it needs Step 23, not a specialist |
+| **NOT blocked by RU-3** | ✅ **NUTR-A11 — FIXED.** The doctor report prints "≥" for a carbohydrate floor and explains the sign. Reused `carbStatus`; no formula, threshold or sum moved. **Still outstanding on the same surface:** the doctor/admin panel (`public/panel-x7k42m/app.js`) prints its meals-table carbohydrate with the same provenance blindness — out of scope for that batch, recorded here |
 | **Verification** | unit/golden **991 in 37 files** (982 before, +9 evidence fixtures) · clinical **156 unchanged** · typecheck clean · lint ratchet 6/6 · no behaviour change, so no runtime verification was required or performed |
 
 **Cheapest honest fix available, if the specialist wants one change only:**

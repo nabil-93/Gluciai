@@ -7,6 +7,11 @@ import { useTranslation } from 'react-i18next';
 import { ActionGlyph, FadeInView, HeroScreen, HERO_INK, HERO_MUTED, Spinner } from '@/components/ui';
 import { nowMs } from '@/lib/clock';
 import { parseDecimal, sanitizeDecimal } from '@/lib/num';
+import {
+  isPlausibleTypedMgdl,
+  looksLikeMmol,
+  MMOL_TO_MGDL,
+} from '@/services/bolusEngine';
 import { saveGlucose } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
@@ -60,8 +65,20 @@ export default function LogGlucoseScreen() {
     else router.replace('/(tabs)');
   };
 
+  /**
+   * P7-005 — this field is mg/dL, and nothing downstream can tell that a
+   * patient typed a mmol/L reading into it. A value below the plausible mg/dL
+   * floor is refused rather than stored or converted: converting would invent
+   * a reading, and storing 5.6 mg/dL would record a hypo that never happened.
+   */
+  const unitWarning = num > 0 && !isPlausibleTypedMgdl(num);
+  const mmolSuggestion = looksLikeMmol(num)
+    ? Math.round(num * MMOL_TO_MGDL)
+    : null;
+
   const save = async () => {
     if (!num || num <= 0) return;
+    if (!isPlausibleTypedMgdl(num)) return;
     setSaving(true);
     try {
       await saveGlucose(num, notes || undefined);
@@ -106,6 +123,18 @@ export default function LogGlucoseScreen() {
             />
             <Text style={styles.unit}>mg/dL</Text>
           </View>
+
+          {/* P7-005 — refuse, never convert. The suggestion is shown so the
+              patient can retype it themselves; nothing is stored from it. */}
+          {unitWarning ? (
+            <View style={styles.unitWarn}>
+              <Text style={styles.unitWarnText}>
+                {mmolSuggestion !== null
+                  ? t('log.unitLooksMmol', { mgdl: mmolSuggestion })
+                  : t('log.unitOutOfRange')}
+              </Text>
+            </View>
+          ) : null}
 
           {/* The band the value falls in, drawn as the band — not as a word
               on its own. Where you are matters more than the label. */}
@@ -183,7 +212,11 @@ export default function LogGlucoseScreen() {
 
       {/* ── Save ── */}
       <FadeInView delay={200}>
-        <Pressable onPress={save} disabled={!num || saving} style={{ marginTop: 22 }}>
+        <Pressable
+          onPress={save}
+          disabled={!num || saving || unitWarning}
+          style={{ marginTop: 22 }}
+        >
           <LinearGradient
             colors={!num ? ['#CFE7DC', '#CFE7DC'] : ['#2FC178', '#149A57']}
             start={{ x: 0, y: 0 }}
@@ -240,6 +273,20 @@ const styles = StyleSheet.create({
     lineHeight: 64,
   },
   unit: { fontFamily: F700, fontSize: 17, color: '#9AA8A0', marginBottom: 12 },
+  unitWarn: {
+    marginTop: 10,
+    backgroundColor: '#FFF4E5',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  unitWarnText: {
+    fontFamily: F600,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8A4B00',
+    textAlign: 'center',
+  },
 
   scale: {
     flexDirection: 'row',

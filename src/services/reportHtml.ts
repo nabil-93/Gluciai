@@ -27,6 +27,13 @@ export interface ReportMealRow {
   createdAt: string;
   name: string;
   carbs: number;
+  /**
+   * True when this meal's carbohydrate is a LOWER BOUND — at least one food
+   * was not identified (finding NUTR-A11). Rendered as "≥ 42 g" rather than
+   * "42 g". Optional so a caller that has not been updated still compiles and
+   * behaves exactly as before.
+   */
+  carbsAreFloor?: boolean;
   sugar: number;
   calories: number;
   sourceLabel: string;
@@ -165,7 +172,7 @@ export function buildReportHtml(args: {
         <td class="num">${d.avg ?? '—'}</td>
         <td class="num">${d.min ?? '—'}${d.max !== null ? ` / ${d.max}` : ''}</td>
         <td class="num">${d.count}</td>
-        <td class="num">${Math.round(d.carbs) || '—'}</td>
+        <td class="num">${Math.round(d.carbs) ? `${d.carbsAreFloor ? '≥ ' : ''}${Math.round(d.carbs)}` : '—'}</td>
         <td class="num">${d.insulin ? fr(Math.round(d.insulin * 10) / 10) : '—'}</td>
       </tr>`
     )
@@ -177,7 +184,7 @@ export function buildReportHtml(args: {
       (m) => `<tr>
         <td>${new Date(m.createdAt).toLocaleDateString('fr-FR')}</td>
         <td>${esc(m.name)}</td>
-        <td class="num">${Math.round(m.carbs)} g</td>
+        <td class="num">${m.carbsAreFloor ? '≥ ' : ''}${Math.round(m.carbs)} g</td>
         <td class="num">${Math.round(m.sugar)} g</td>
         <td class="num">${Math.round(m.calories)}</td>
         <td>${esc(m.sourceLabel)}</td>
@@ -294,7 +301,7 @@ export function buildReportHtml(args: {
     <div class="kpi"><div class="l">Hyperglycémies</div><div class="v" style="color:#D9822B">${stats.highs}</div></div>
     <div class="kpi"><div class="l">Insuline / jour</div><div class="v">${stats.avgInsulinPerDay !== null ? fr(stats.avgInsulinPerDay) : '—'}<small> U</small></div></div>
     <div class="kpi"><div class="l">Rapide / Lente</div><div class="v" style="font-size:14px">${fr(stats.rapidU)} / ${fr(stats.longU)}<small> U</small></div></div>
-    <div class="kpi"><div class="l">Glucides / jour</div><div class="v">${stats.avgCarbsPerDay ?? '—'}<small> g</small></div></div>
+    <div class="kpi"><div class="l">Glucides / jour</div><div class="v">${stats.avgCarbsPerDay !== null ? `${stats.carbsAreFloor ? '≥ ' : ''}${stats.avgCarbsPerDay}` : '—'}<small> g</small></div></div>
     <div class="kpi"><div class="l">Sucres / jour</div><div class="v">${stats.avgSugarPerDay ?? '—'}<small> g</small></div></div>
     <div class="kpi"><div class="l">Repas suivis</div><div class="v">${stats.mealsCount}</div></div>
     <div class="kpi"><div class="l">Activité</div><div class="v">${stats.totalActivityMin}<small> min</small></div></div>
@@ -342,7 +349,15 @@ export function buildReportHtml(args: {
          <table>
            <tr><th>Date</th><th>Aliment</th><th class="num">Glucides</th><th class="num">Sucres</th><th class="num">kcal</th><th>Source</th></tr>
            ${mealRows}
-         </table>`
+         </table>${
+           stats.carbsAreFloor
+             ? `
+         <p class="disc" style="margin-top:6px">Le signe « ≥ » indique un total de glucides
+         <b>minimal</b> : ${stats.unknownCarbMeals === 1 ? 'un repas contient' : `${stats.unknownCarbMeals} repas contiennent`}
+         au moins un aliment dont les glucides n'ont pas pu être déterminés. La valeur réelle est
+         supérieure.</p>`
+             : ''
+         }`
       : ''
   }
 

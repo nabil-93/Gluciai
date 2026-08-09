@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { AppButton, FadeInView, HeroScreen, HERO_INK, HERO_MUTED } from '@/components/ui';
 import { nowMs } from '@/lib/clock';
+import { carbStatus } from '@/services/nutrition/carbProvenance';
 import { SOURCE_LABEL } from '@/services/nutrition/engine';
 import { BAND_COLORS, buildReportHtml, SLOT_FR } from '@/services/reportHtml';
 import { buildReportStats, trendGeometry } from '@/services/reportStats';
@@ -100,6 +101,9 @@ export default function ReportScreen() {
               createdAt: m.created_at,
               name: m.result.food_name,
               carbs: m.result.carbohydrates,
+              // NUTR-A11: the value is unchanged; this only says whether it may
+              // be read as a total or only as a floor.
+              carbsAreFloor: carbStatus(m.result) !== 'known',
               sugar: m.result.sugar ?? 0,
               calories: m.result.calories,
               sourceLabel: m.result.source ? SOURCE_LABEL[m.result.source] : 'Estimation IA',

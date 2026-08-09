@@ -140,7 +140,9 @@
     "waterPerDay": "per day",
     "waterFromProfile": "Based on your weight and age. An estimate, not a prescription.",
     "waterFromDefault": "Add your weight and date of birth for a personalised figure.",
-    "burnEstimatedFull": "Estimated for your weight ({{kg}} kg) and age ({{age}}), at moderate intensity (reference MET values). Indicative only: it does not account for your fitness or the terrain."
+    "burnEstimatedFull": "Estimated for your weight ({{kg}} kg) and age ({{age}}), at moderate intensity (reference MET values). Indicative only: it does not account for your fitness or the terrain.",
+    "giUnknown": "Unknown",
+    "glFromAssumedGi": "estimated using an assumed index of {{gi}}"
   },
   "common": {
     "appName": "GluciAI",
@@ -907,7 +909,9 @@
     "hoursAgo": "{{n}} h ago",
     "daysAgo": "{{n}} d ago",
     "notesHintInsulin": "Injection site, context…",
-    "todayTotal": "{{total}} U of {{type}} today"
+    "todayTotal": "{{total}} U of {{type}} today",
+    "unitLooksMmol": "That looks like a mmol/L reading. This app records mg/dL — in mg/dL that would be about {{mgdl}}. Please enter the value in mg/dL.",
+    "unitOutOfRange": "Value outside the expected mg/dL range (20–900). Please check what you entered."
   },
   "tabs": {
     "home": "Home",
@@ -1228,7 +1232,9 @@
     "seedFromMeal": "Pre-filled from \"{{food}}\" · {{time}} — check it before calculating",
     "seedFromProgram": "Pre-filled from your programme (planned meal) — check it before calculating",
     "cappedTitle": "Dose limited to the app's maximum ({{max}} U)",
-    "cappedBody": "The calculation came to {{raw}} U. The app never shows more than {{max}} U: this ceiling is a limit of the app, not a dose recommended for you. Check the carbohydrates you entered, and talk to your doctor before injecting."
+    "cappedBody": "The calculation came to {{raw}} U. The app never shows more than {{max}} U: this ceiling is a limit of the app, not a dose recommended for you. Check the carbohydrates you entered, and talk to your doctor before injecting.",
+    "mixedIobTitle": "Mixed insulin not counted",
+    "mixedIobBody": "You have a recent premixed insulin dose. The app does not know what share of it is rapid, so it is NOT deducted from this dose. Your active insulin may therefore be higher than shown — check with your doctor before injecting."
   },
   "day": {
     "emptyTitle": "Nothing that day",

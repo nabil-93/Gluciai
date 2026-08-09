@@ -140,7 +140,9 @@
     "waterPerDay": "par jour",
     "waterFromProfile": "Calculé selon ton poids et ton âge. Estimation, pas une prescription.",
     "waterFromDefault": "Complète ton poids et ta date de naissance pour un calcul personnalisé.",
-    "burnEstimatedFull": "Estimation pour votre poids ({{kg}} kg) et votre âge ({{age}} ans), à intensité modérée (valeurs MET de référence). Indicatif : ne tient pas compte de votre condition physique ni du terrain."
+    "burnEstimatedFull": "Estimation pour votre poids ({{kg}} kg) et votre âge ({{age}} ans), à intensité modérée (valeurs MET de référence). Indicatif : ne tient pas compte de votre condition physique ni du terrain.",
+    "giUnknown": "Inconnu",
+    "glFromAssumedGi": "estimée avec un index supposé de {{gi}}"
   },
   "common": {
     "appName": "GluciAI",
@@ -907,7 +909,9 @@
     "hoursAgo": "il y a {{n}} h",
     "daysAgo": "il y a {{n}} j",
     "notesHintInsulin": "Site d’injection, contexte…",
-    "todayTotal": "{{total}} U de {{type}} aujourd’hui"
+    "todayTotal": "{{total}} U de {{type}} aujourd’hui",
+    "unitLooksMmol": "Cette valeur ressemble à une mesure en mmol/L. Cette application enregistre en mg/dL — en mg/dL, ce serait environ {{mgdl}}. Saisissez la valeur en mg/dL.",
+    "unitOutOfRange": "Valeur hors de la plage attendue en mg/dL (20–900). Vérifiez la valeur saisie."
   },
   "tabs": {
     "home": "Accueil",
@@ -1228,7 +1232,9 @@
     "seedFromMeal": "Pré-rempli depuis « {{food}} » · {{time}} — vérifiez avant de calculer",
     "seedFromProgram": "Pré-rempli depuis votre programme (repas planifié) — vérifiez avant de calculer",
     "cappedTitle": "Dose limitée au maximum de l'application ({{max}} U)",
-    "cappedBody": "Le calcul donnait {{raw}} U. L'application n'affiche jamais plus de {{max}} U : ce plafond est une limite de l'application, ce n'est pas une dose recommandée pour vous. Vérifiez les glucides saisis, et parlez-en à votre médecin avant d'injecter."
+    "cappedBody": "Le calcul donnait {{raw}} U. L'application n'affiche jamais plus de {{max}} U : ce plafond est une limite de l'application, ce n'est pas une dose recommandée pour vous. Vérifiez les glucides saisis, et parlez-en à votre médecin avant d'injecter.",
+    "mixedIobTitle": "Insuline mixte non comptée",
+    "mixedIobBody": "Vous avez une dose d'insuline mixte (prémélangée) récente. L'application ne sait pas quelle part en est rapide, donc elle n'est PAS déduite de cette dose. L'insuline encore active peut donc être supérieure à celle affichée — vérifiez avec votre médecin avant d'injecter."
   },
   "day": {
     "emptyTitle": "Rien ce jour-là",

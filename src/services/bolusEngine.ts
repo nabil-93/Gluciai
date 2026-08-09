@@ -82,6 +82,67 @@ export type GlucoseUnit = 'mg/dL' | 'mmol/L';
  */
 export const MMOL_TO_MGDL = 18.0182;
 
+/**
+ * The lowest mg/dL reading this app will accept as TYPED (finding P7-005).
+ *
+ * THE DANGER THIS CLOSES. Every glucose entry surface in this app is mg/dL —
+ * the field says so, `saveGlucose` writes only `'mg/dL'`, and there is no
+ * patient unit preference anywhere. A patient who thinks in mmol/L and types
+ * their real reading of **5.6** would have it stored as 5.6 **mg/dL**: a
+ * profound hypoglycaemia that never happened. The engine has always converted
+ * a reading that ARRIVES labelled `mmol/L` correctly (`readGlucose`); what it
+ * could not do is notice that a *typed* number was never in mg/dL at all.
+ *
+ * WHY 20. The whole plausible mmol/L range for a living person (roughly
+ * 1–33 mmol/L) sits below 20, and no mg/dL reading a patient can act on sits
+ * below it either — 20 mg/dL is already deep unconsciousness. So a typed value
+ * under 20 is far more likely to be mmol/L than a real mg/dL reading. This is
+ * NOT a new clinical threshold: it is the bound `aiLogger` has always applied
+ * to a spoken reading (`value < 20 || value > 900` → rejected). This constant
+ * names that existing rule and extends it to the surface that lacked it.
+ *
+ * The rule is deliberately REFUSAL, never conversion: silently multiplying by
+ * 18 would invent a reading the patient did not give. The screen asks them to
+ * confirm in mg/dL instead.
+ */
+export const MIN_TYPED_MGDL = 20;
+
+/** The highest mg/dL reading this app will accept as typed. `aiLogger`'s
+ *  existing upper bound, applied to the manual field too. */
+export const MAX_TYPED_MGDL = 900;
+
+/**
+ * Is a TYPED glucose value plausible as mg/dL (P7-005)?
+ *
+ * `false` means "do not store this as mg/dL" — it does not mean the patient is
+ * wrong, and it never converts. A value below {@link MIN_TYPED_MGDL} is very
+ * likely a mmol/L reading; the caller must ask rather than assume.
+ *
+ * Pure and threshold-free beyond the two bounds above, so the bolus screen,
+ * the log screen and the tests share exactly one rule.
+ */
+export function isPlausibleTypedMgdl(value: number | null | undefined): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return false;
+  return value >= MIN_TYPED_MGDL && value <= MAX_TYPED_MGDL;
+}
+
+/**
+ * Does a typed number look like a mmol/L reading that was meant as mg/dL?
+ *
+ * Used only to choose the WORDING of the refusal — "did you mean 101 mg/dL?"
+ * is more useful than a bare rejection. The suggestion is shown, never stored:
+ * the patient re-enters the value themselves.
+ */
+export function looksLikeMmol(value: number | null | undefined): boolean {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value > 0 &&
+    value < MIN_TYPED_MGDL
+  );
+}
+
 /** Whether a parameter came from the patient's profile or from the fallback. */
 export type ParamSource = 'profile' | 'fallback';
 
@@ -117,7 +178,9 @@ export type BolusFlag =
   | 'glucoseInvalid' // a reading was supplied that cannot be interpreted
   | 'carbsUnknown' // the carbohydrate is a placeholder, not a measurement
   | 'defaultIsf' // the correction factor is the app fallback, not the patient's
-  | 'defaultTarget'; // the target range is the app fallback, not the patient's
+  | 'defaultTarget' // the target range is the app fallback, not the patient's
+  /* ── P7-011 disclosure: NOT a change to the IOB rule ─────────────────── */
+  | 'mixedInsulinUncounted'; // a premixed dose is active but excluded from IOB
 
 /**
  * Which meal-of-day ratio applies. Patients enter U per 10 g of carbs per
@@ -369,6 +432,33 @@ export interface BolusResult {
 // breakfast ratio of 1.5 for 43 g → 6.5 U, not a coarse 0.5-step guess).
 const roundDose = (v: number) => Math.round(v * 10) / 10;
 
+/**
+ * Is a PREMIXED dose still inside the action window while being excluded from
+ * IOB (finding P7-011)?
+ *
+ * This function changes NOTHING about the dose. `computeIOB` still counts only
+ * `rapid`, exactly as before, because how much of a premix is rapid — and over
+ * what duration it decays — is a clinical question the app has no answer for
+ * (RU-11 Q4–Q7). What was missing is that the omission was *silent*: a patient
+ * with 20 U of premix active saw a dose computed as if nothing were on board,
+ * with nothing on screen saying so.
+ *
+ * So this reports the fact only, so the screen can disclose it. It uses the
+ * same `DIA_HOURS` window `computeIOB` uses, purely to avoid warning about a
+ * dose that is certainly finished; it does NOT model premix decay and does not
+ * imply that window is clinically right for a premix.
+ */
+export function hasUncountedMixedInsulin(logs: InsulinLog[], now: Date): boolean {
+  const cutoff = now.getTime() - DIA_HOURS * 3600e3;
+  for (const l of logs ?? []) {
+    if (l.insulin_type !== 'mixed') continue;
+    const t = new Date(l.created_at).getTime();
+    if (t < cutoff || t > now.getTime()) continue;
+    if (l.dose > 0) return true;
+  }
+  return false;
+}
+
 /** Rapid insulin still active (linear decay over DIA_HOURS). */
 export function computeIOB(logs: InsulinLog[], now: Date): BolusResult['iobDoses'] {
   const out: BolusResult['iobDoses'] = [];
@@ -459,7 +549,25 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
   const mealSugar = meal ? Math.round(meal.result.sugar ?? 0) : null;
   const mealCalories = meal ? Math.round(meal.result.calories ?? 0) : null;
   const mealName = meal ? meal.result.food_name || null : null;
-  if (meal && carbs > 0 && (meal.result.sugar ?? 0) / Math.max(1, carbs) > 0.4) {
+  /*
+   * NUTR-A8 — the ratio must describe ONE meal.
+   *
+   * This used to divide the last meal's sugar by the carbohydrate the patient
+   * TYPED. Those are not necessarily the same meal: the field can be seeded
+   * from a different meal, edited by hand, or handed over from the programme,
+   * so a sugary breakfast could flag a savoury dinner (or hide itself behind a
+   * large typed carbohydrate). The comparison is now between the meal's own
+   * sugar and the meal's own carbohydrate.
+   *
+   * THE THRESHOLD IS UNCHANGED (> 0.4) and remains an RU-3/RU-6 question. Only
+   * the two operands are corrected. A meal whose carbohydrate is unknown
+   * (Step 10) cannot support the ratio at all, so the flag is withheld rather
+   * than computed from a placeholder — the same "withhold rather than invent"
+   * rule the quality gate uses.
+   */
+  const mealCarbs = meal?.result.carbohydrates ?? 0;
+  const mealCarbsKnown = meal ? meal.result.carbs_known !== false : false;
+  if (meal && mealCarbsKnown && mealCarbs > 0 && (meal.result.sugar ?? 0) / mealCarbs > 0.4) {
     flags.push('sugarHeavy');
   }
 
@@ -500,6 +608,13 @@ export function computeSmartBolus(inputs: BolusInputs): BolusResult {
   const iobDoses = computeIOB(inputs.insulinLogs, now);
   const iob = iobDoses.reduce((s, d) => s + d.remaining, 0);
   if (iob > 0.1) flags.push('iob');
+  // P7-011 — DISCLOSURE ONLY. `iob` above is unchanged: a premixed dose still
+  // contributes nothing, because how much of it is rapid is an RU-11 decision.
+  // The flag exists so the screen cannot present that omission as a complete
+  // picture of active insulin.
+  if (hasUncountedMixedInsulin(inputs.insulinLogs, now)) {
+    flags.push('mixedInsulinUncounted');
+  }
 
   /* 4 — recent exercise (last 4 h; intense counts for 6 h) */
   let activityFactor = 1;

@@ -1,3 +1,4 @@
+import { carbStatus } from '@/services/nutrition/carbProvenance';
 import type { ActivityLog, GlucoseLog, InsulinLog, MealScan, Profile } from '@/types';
 
 /* ────────────────────────────────────────────────────────────
@@ -25,6 +26,12 @@ export interface DayPoint {
   max: number | null;
   count: number;
   carbs: number;
+  /**
+   * True when at least one meal on this day had an unknown carbohydrate, so
+   * `carbs` is a LOWER BOUND rather than the day's total (finding NUTR-A11).
+   * The number itself is unchanged — this only says how it may be read.
+   */
+  carbsAreFloor: boolean;
   insulin: number;
 }
 
@@ -79,6 +86,18 @@ export interface ReportStats {
   mealsCount: number;
   totalCarbs: number;
   avgCarbsPerDay: number | null;
+  /**
+   * True when any meal in the window had an unknown carbohydrate, so
+   * `totalCarbs` and `avgCarbsPerDay` are LOWER BOUNDS (finding NUTR-A11).
+   *
+   * A plate whose carbohydrate is a floor has been rendered honestly on every
+   * patient surface since Step 22B, but this report — the one a clinician
+   * reads — still summed `result.carbohydrates` blind. Same rule, same
+   * helper (`carbStatus`), applied here. No sum changed.
+   */
+  carbsAreFloor: boolean;
+  /** How many meals in the window contributed an unknown carbohydrate. */
+  unknownCarbMeals: number;
   avgSugarPerDay: number | null;
 
   activitySessions: number;
@@ -166,6 +185,7 @@ export function buildReportStats(args: {
       max: null,
       count: 0,
       carbs: 0,
+      carbsAreFloor: false,
       insulin: 0,
     });
   }
@@ -184,7 +204,11 @@ export function buildReportStats(args: {
   }
   for (const m of mealsP) {
     const row = dayMap.get(isoDay(new Date(m.created_at)));
-    if (row) row.carbs += m.result.carbohydrates ?? 0;
+    if (!row) continue;
+    // The sum is unchanged — an unknown carbohydrate still contributes its
+    // placeholder 0, exactly as before. Only the FLAG is new.
+    row.carbs += m.result.carbohydrates ?? 0;
+    if (carbStatus(m.result) !== 'known') row.carbsAreFloor = true;
   }
   for (const l of insulin) {
     const row = dayMap.get(isoDay(new Date(l.created_at)));
@@ -214,6 +238,9 @@ export function buildReportStats(args: {
 
   /* ── Food ── */
   const totalCarbs = mealsP.reduce((s, m) => s + (m.result.carbohydrates ?? 0), 0);
+  // NUTR-A11: one meal with an unknown carbohydrate makes the window's total a
+  // floor, the same strictness `plateCarbStatus` applies within a plate.
+  const unknownCarbMeals = mealsP.filter((m) => carbStatus(m.result) !== 'known').length;
   const totalSugar = mealsP.reduce((s, m) => s + (m.result.sugar ?? 0), 0);
   const mealDays = new Set(mealsP.map((m) => isoDay(new Date(m.created_at)))).size;
 
@@ -255,6 +282,8 @@ export function buildReportStats(args: {
     mealsCount: mealsP.length,
     totalCarbs: Math.round(totalCarbs),
     avgCarbsPerDay: mealDays ? Math.round(totalCarbs / mealDays) : null,
+    carbsAreFloor: unknownCarbMeals > 0,
+    unknownCarbMeals,
     avgSugarPerDay: mealDays ? Math.round(totalSugar / mealDays) : null,
 
     activitySessions: activities.length,

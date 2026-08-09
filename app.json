@@ -14,7 +14,8 @@
       "bundleIdentifier": "com.nabil.glucoai",
       "infoPlist": {
         "NSCameraUsageDescription": "GluciAI uses the camera to analyze your meals with AI.",
-        "NSPhotoLibraryUsageDescription": "GluciAI lets you import meal photos for AI analysis."
+        "NSPhotoLibraryUsageDescription": "GluciAI lets you import meal photos for AI analysis.",
+        "NSMicrophoneUsageDescription": "GluciAI uses the microphone so you can talk to the AI assistant and log your meals, glucose and insulin by voice."
       }
     },
     "android": {
