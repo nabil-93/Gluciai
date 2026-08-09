@@ -300,14 +300,26 @@ something else first.
 
 ## S3 — the same thing, named two ways
 
-### S3-1 · Three names for one indicator, on one screen
+### S3-1 · Three names for one indicator, on one screen — PARTIALLY FIXED
 
 - the strip under the photo: **"Indice GluciAI"** (`analysis.mealGrade`)
 - the ring in the card below: **"Repère GluciAI"** (`analysis.scoreTitle`)
-- the explanatory line between them: **"Le score santé"** (`analysis.giScoreScope`)
+- ~~the explanatory line between them: **"Le score santé"**~~ (`analysis.giScoreScope`)
 
 Nothing tells the patient these are the same thing except one sentence buried
 in `mealGradeNote`.
+
+**The third name is gone.** `giScoreScope` was the **last surviving instance of
+the name 22D Phase 2 retired** — the spec required `analysis.healthScore` to be
+*"deleted, not aliased, so no surface can keep rendering 'Score santé'"*, and
+this one sentence kept rendering it in fr and en. It now uses the interim name
+Phase 2 adopted. **No new name was invented**; this completes an already-approved
+rename. A fixture now fails if the retired name reappears in any locale.
+
+**Still open:** the strip ("Indice GluciAI") and the ring ("Repère GluciAI") are
+two names for one number. Reconciling them is **not** engineering-safe — the
+strip is the A–E letter that a product decision explicitly restored, so renaming
+it is a product call, and its bands belong to RU-3 **D10**.
 
 ### S3-2 · "Charge glucidique" directly above "Charge glycémique"
 
@@ -316,12 +328,25 @@ the same card as *"Charge glycémique · 50 · Élevé"*. One letter apart, two
 different quantities, both described as "très élevée / élevée", both in grams-
 adjacent units. There is no chance a patient distinguishes them.
 
-### S3-3 · Two vocabularies for one three-colour scale
+### S3-3 · Two vocabularies for one three-colour scale — ✅ FIXED
 
 The GI meter reads **Bas / Modéré / Élevé** (`analysis.giLow…`), the GL tag
 reads **Bas / Moyen / Élevé** (`result.low/medium/high`,
 [scan-result.tsx:1301](../src/app/scan-result.tsx#L1301)). Same colours, same
 three-step logic, two different middle words.
+
+**Closed — wording only.** What settled it: **German and Arabic already used one
+word for both** ("Mittel", "متوسط"), so fr/en were outliers rather than a
+deliberate distinction. `result.medium` now matches `analysis.giModerate` in all
+four locales. `result.low/medium/high` is consumed **only** by the GL tag (two
+sites, both in `scan-result`), so nothing else was affected.
+
+**No threshold, band, colour or classification moved** — `giBand`, `glBand`,
+`glycemicLoad`, `GL_LOW_MAX` and `GL_MEDIUM_MAX` are untouched, and a plate that
+read "medium" still reads "medium". GI and GL remain **different quantities with
+different cut-offs**; whether those cut-offs should agree stays with RU-3 (D10,
+and the GL 20.4 rounding boundary). Pinned in
+`tests/domain/glycemicVocabulary.golden.test.ts`.
 
 ### S3-4 · Sugar thresholds that do not nest
 

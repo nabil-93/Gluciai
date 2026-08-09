@@ -28,7 +28,7 @@
     "scoreUnavailableNoData": "Es konnte kein Lebensmittel erkannt werden — die App hat keine Grundlage für eine Bewertung. Die angezeigten Werte sind Platzhalter-Nullen.",
     "scoreUnavailableCarbs": "Ein Teil der Kohlenhydrate ist unbekannt: Die Summe ist ein Mindestwert und reicht für keine Bewertung.",
     "scoreUnavailableFix": "Ergänze oder korrigiere die erkannten Lebensmittel, um eine Bewertung zu erhalten.",
-    "giScoreScope": "Der GI bewertet, wie schnell die Kohlenhydrate aufgenommen werden. Der Gesundheitswert wiegt auch Zucker, Ballaststoffe, Eiweiß, Natrium und Kalorien — beide sagen nicht dasselbe.",
+    "giScoreScope": "Der GI bewertet, wie schnell die Kohlenhydrate aufgenommen werden. Der GluciAI-Indikator wiegt auch Zucker, Ballaststoffe, Eiweiß, Natrium und Kalorien — beide sagen nicht dasselbe.",
     "burnEstimated": "Geschätzt für dein Gewicht ({{kg}} kg) bei mittlerer Intensität (MET-Referenzwerte). Nur ein Richtwert: Alter, Fitness und Gelände fließen nicht ein.",
     "burnEstimatedDefault": "Kein Gewicht im Profil: geschätzt für eine Standardperson von 70 kg bei mittlerer Intensität. Trage dein Gewicht ein für einen passenden Wert.",
     "goalEstimated": "Ziel geschätzt aus deinem Profil (Gewicht, Größe, Alter, Geschlecht) und einer angenommenen leichten Aktivität.",
