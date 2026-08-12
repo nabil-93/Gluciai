@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SUPPORTED_LANGUAGES, setAppLanguage, type LanguageCode } from '@/i18n';
 import { useFrameDimensions } from '@/lib/appFrame';
+import { notify } from '@/lib/confirm';
 import { useAppStore } from '@/store/useAppStore';
 
 /* Welcome — "Smart Nutrition" hero landing, from the
@@ -304,7 +305,11 @@ export default function WelcomeScreen() {
 
   const pickLanguage = async (code: LanguageCode) => {
     setMenuOpen(false);
-    await setAppLanguage(code);
+    const { restartRequired } = await setAppLanguage(code);
+    // See profile-edit.tsx and src/i18n/direction.ts: on native the layout
+    // direction only changes at the next launch, and the patient has to be
+    // told rather than left with Arabic text in a left-to-right screen.
+    if (restartRequired) notify(t('common.restartTitle'), t('common.restartBody'));
   };
 
   const start = () => {

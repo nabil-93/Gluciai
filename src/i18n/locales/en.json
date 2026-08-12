@@ -166,7 +166,9 @@
     "savedLocal": "Saved on this device — waiting to sync",
     "savedFailed": "Not saved to your account yet — kept here and re-sent at the next sync",
     "close": "Close",
-    "viewPhoto": "View photo"
+    "viewPhoto": "View photo",
+    "restartTitle": "Restart the app",
+    "restartBody": "The language has changed. Fully close GluciAI and reopen it so the layout is displayed in the right direction."
   },
   "language": {
     "title": "Choose your language",
@@ -512,7 +514,16 @@
     "eveningReason": "Daily recap",
     "firedTitle": "It's time! ⏰",
     "followTitle": "Quick check 🤔",
-    "followBody": "\"{{msg}}\" — did you do it? Open the assistant and tell me, I'll log it."
+    "followBody": "\"{{msg}}\" — did you do it? Open the assistant and tell me, I'll log it.",
+    "notifyGlucoseTitle": "Glucose check 🩸",
+    "notifyGlucoseLearned": "You usually measure around {{hour}}:00 — time to check your glucose.",
+    "notifyGlucoseDefault": "Remember to measure your glucose today.",
+    "notifyInsulinTitle": "Long-acting insulin 💉",
+    "notifyInsulinBody": "You usually inject your long-acting insulin around {{hour}}:00.",
+    "notifyBreakfastTitle": "Breakfast 🍽️",
+    "notifyBreakfastBody": "Don't forget to scan your breakfast to track your carbs.",
+    "notifyEveningTitle": "Daily recap 📊",
+    "notifyEveningBody": "Take a look at your day: glucose, meals and injections."
   },
   "insights": {
     "hypoTitle": "Low glucose detected",
@@ -626,7 +637,9 @@
     "scanFailed": "Analysis unavailable right now. Check your connection and try again.",
     "noDetect": "We couldn't identify this meal with confidence. Take a closer, well-lit photo.",
     "serviceBusy": "The analysis service is very busy right now. This is not your connection — try again in a moment.",
-    "stillTrying": "The service is busy — retrying…"
+    "stillTrying": "The service is busy — retrying…",
+    "openSettings": "Open settings",
+    "permissionBlocked": "Camera access was denied. Enable it in your phone settings to scan your meals."
   },
   "result": {
     "title": "Meal analysis",

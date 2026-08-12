@@ -4,6 +4,7 @@ import * as Localization from 'expo-localization';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { I18nManager, Platform } from 'react-native';
 
+import { directionRestartRequired, isRTL } from './direction';
 import en from './locales/en.json';
 import fr from './locales/fr.json';
 import ar from './locales/ar.json';
@@ -20,26 +21,53 @@ export type LanguageCode = (typeof SUPPORTED_LANGUAGES)[number]['code'];
 
 const STORAGE_KEY = 'glucoai.language';
 
-export function isRTL(lang: string) {
-  return lang === 'ar';
-}
+/** Re-exported from the pure leaf so the 20+ existing `import { isRTL } from
+ *  '@/i18n'` call sites are untouched. */
+export { isRTL } from './direction';
 
-/** Apply layout direction. On web we can flip live; native needs a reload to fully apply. */
-export function applyDirection(lang: string) {
+/**
+ * Apply layout direction.
+ *
+ * On web the flip is live. On native `forceRTL` only takes effect at the next
+ * launch, so this REPORTS whether a restart is now owed instead of leaving the
+ * patient with Arabic text in a left-to-right layout and no explanation. See
+ * ./direction.ts for why that is the fix and why it is not an OTA reload.
+ *
+ * @returns `restartRequired` — true only when the direction actually changed on
+ *          a native platform.
+ */
+export function applyDirection(lang: string): { restartRequired: boolean } {
   const rtl = isRTL(lang);
-  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const isWeb = Platform.OS === 'web';
+
+  if (isWeb && typeof document !== 'undefined') {
     document.documentElement.dir = rtl ? 'rtl' : 'ltr';
     document.documentElement.lang = lang;
-  } else {
-    I18nManager.allowRTL(rtl);
-    I18nManager.forceRTL(rtl);
+    return { restartRequired: false };
   }
+
+  // Read the CURRENT direction before asking for the new one — afterwards
+  // `I18nManager.isRTL` still reports the running context's direction, but
+  // reading first keeps the comparison obvious.
+  const restartRequired = directionRestartRequired(I18nManager.isRTL, lang, isWeb);
+  I18nManager.allowRTL(rtl);
+  I18nManager.forceRTL(rtl);
+  return { restartRequired };
 }
 
-export async function setAppLanguage(lang: LanguageCode) {
+/**
+ * Switch the app language.
+ *
+ * @returns `restartRequired` — the caller must tell the patient. Both call
+ *          sites (profile-edit, welcome) do; a new one must too, or Arabic
+ *          silently renders left-to-right again.
+ */
+export async function setAppLanguage(
+  lang: LanguageCode
+): Promise<{ restartRequired: boolean }> {
   await AsyncStorage.setItem(STORAGE_KEY, lang);
   await i18n.changeLanguage(lang);
-  applyDirection(lang);
+  return applyDirection(lang);
 }
 
 export async function getStoredLanguage(): Promise<LanguageCode | null> {

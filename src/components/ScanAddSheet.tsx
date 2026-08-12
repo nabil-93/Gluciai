@@ -36,6 +36,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 
 import { Spinner } from '@/components/ui/Spinner';
+import { permissionAction, requestOrOpenSettings } from '@/lib/permissions';
 import { analyzeMealImage, type ScanStage } from '@/services/ai';
 import { prepareImageForVision, scanErrorKey } from '@/services/visionCapture';
 import { formatPortion } from '@/services/nutrition/portionUnit';
@@ -273,9 +274,22 @@ export function ScanAddSheet({
             {!permission?.granted ? (
               <View style={styles.permBox}>
                 <Text style={styles.permTitle}>{t('scanner.permissionTitle')}</Text>
-                <Text style={styles.permDesc}>{t('scanner.permissionDesc')}</Text>
-                <Pressable style={styles.primaryBtn} onPress={() => requestPermission()}>
-                  <Text style={styles.primaryBtnText}>{t('scanner.grantPermission')}</Text>
+                <Text style={styles.permDesc}>
+                  {permissionAction(permission) === 'settings'
+                    ? t('scanner.permissionBlocked')
+                    : t('scanner.permissionDesc')}
+                </Text>
+                {/* Routes to Settings once the OS refuses to prompt again —
+                    see src/lib/permissions.ts. */}
+                <Pressable
+                  style={styles.primaryBtn}
+                  onPress={() => requestOrOpenSettings(permission, requestPermission)}
+                >
+                  <Text style={styles.primaryBtnText}>
+                    {permissionAction(permission) === 'settings'
+                      ? t('scanner.openSettings')
+                      : t('scanner.grantPermission')}
+                  </Text>
                 </Pressable>
                 <Pressable style={styles.ghostBtn} onPress={pickFromLibrary}>
                   <Text style={styles.ghostBtnText}>{t('scanner.gallery')}</Text>

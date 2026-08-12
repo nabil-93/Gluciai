@@ -166,7 +166,9 @@
     "savedLocal": "Enregistré sur cet appareil — synchronisation en attente",
     "savedFailed": "Pas encore enregistré dans votre compte — conservé ici et renvoyé à la prochaine synchronisation",
     "close": "Fermer",
-    "viewPhoto": "Voir la photo"
+    "viewPhoto": "Voir la photo",
+    "restartTitle": "Redémarrez l'application",
+    "restartBody": "La langue a changé. Fermez complètement GluciAI et rouvrez-la pour que la mise en page s'affiche dans le bon sens."
   },
   "language": {
     "title": "Choisissez votre langue",
@@ -512,7 +514,16 @@
     "eveningReason": "Récapitulatif quotidien",
     "firedTitle": "C'est l'heure ! ⏰",
     "followTitle": "Petit contrôle 🤔",
-    "followBody": "« {{msg}} » — l'avez-vous fait ? Ouvrez l'assistant et dites-le-moi, je l'enregistre."
+    "followBody": "« {{msg}} » — l'avez-vous fait ? Ouvrez l'assistant et dites-le-moi, je l'enregistre.",
+    "notifyGlucoseTitle": "Contrôle glycémie 🩸",
+    "notifyGlucoseLearned": "Vous mesurez d'habitude vers {{hour}}h — c'est le moment de vérifier votre glycémie.",
+    "notifyGlucoseDefault": "Pensez à mesurer votre glycémie aujourd'hui.",
+    "notifyInsulinTitle": "Insuline lente 💉",
+    "notifyInsulinBody": "Vous injectez d'habitude votre insuline lente vers {{hour}}h.",
+    "notifyBreakfastTitle": "Petit-déjeuner 🍽️",
+    "notifyBreakfastBody": "N'oubliez pas de scanner votre petit-déjeuner pour suivre vos glucides.",
+    "notifyEveningTitle": "Bilan du jour 📊",
+    "notifyEveningBody": "Jetez un œil à votre journée : glycémie, repas et injections."
   },
   "insights": {
     "hypoTitle": "Glycémie basse détectée",
@@ -626,7 +637,9 @@
     "scanFailed": "Analyse impossible pour le moment. Vérifiez votre connexion et réessayez.",
     "noDetect": "Nous n'avons pas pu identifier ce repas avec certitude. Reprenez une photo plus proche et bien éclairée.",
     "serviceBusy": "Le service d'analyse est très sollicité en ce moment. Ce n'est pas votre connexion — réessayez dans quelques instants.",
-    "stillTrying": "Le service est occupé — nouvelle tentative en cours…"
+    "stillTrying": "Le service est occupé — nouvelle tentative en cours…",
+    "openSettings": "Ouvrir les réglages",
+    "permissionBlocked": "L'accès à la caméra a été refusé. Activez-le dans les réglages de votre téléphone pour scanner vos repas."
   },
   "result": {
     "title": "Analyse du repas",

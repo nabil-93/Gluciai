@@ -6,6 +6,18 @@
 // exactly that account. Their rows in public.* are removed automatically by
 // the `on delete cascade` foreign keys to auth.users.
 //
+// STORAGE IS NOT COVERED BY THAT CASCADE (audit finding C-9).
+//
+// `on delete cascade` reaches public.* only. Every uploaded file lives in
+// storage.objects, which has no foreign key to auth.users, so deleting the
+// account used to leave every meal photo and avatar in place — and two of the
+// three per-user buckets are PUBLIC, so those files stayed fetchable at a
+// stable URL by anyone who had ever seen one, forever, after the patient asked
+// to be erased.
+//
+// Both App Store guideline 5.1.1(v) and GDPR erasure expect the images to go
+// with the account. So the objects are removed FIRST, then the auth user.
+//
 // Deploy: supabase functions deploy delete-account
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
@@ -42,6 +54,50 @@ Deno.serve(async (req) => {
     }
     const uid = userData.user.id;
 
+    // ── 1. The patient's files, before the account that identifies them ────
+    //
+    // Every per-user upload is keyed by `<uid>/…`:
+    //   profile-images   <uid>/avatar-*.jpg      (public bucket)
+    //   meal-images      <uid>/meal-*.jpg        (public bucket)
+    //   medical-reports  <uid>/…                 (private bucket)
+    //
+    // `dish-images` is deliberately absent: it holds app-owned dish artwork
+    // shared by every patient, not personal data, and is not keyed by uid.
+    //
+    // Order matters. Removing the objects first means a failure leaves the
+    // account intact and the operation can simply be retried; deleting the
+    // user first would strand the files with no uid left to find them by.
+    const storageErrors: string[] = [];
+    for (const bucket of ['profile-images', 'meal-images', 'medical-reports']) {
+      try {
+        const { data: files, error: listErr } = await admin.storage
+          .from(bucket)
+          .list(uid, { limit: 1000 });
+        if (listErr) {
+          storageErrors.push(`${bucket}: ${listErr.message}`);
+          continue;
+        }
+        if (!files || files.length === 0) continue;
+        const paths = files.map((f) => `${uid}/${f.name}`);
+        const { error: rmErr } = await admin.storage.from(bucket).remove(paths);
+        if (rmErr) storageErrors.push(`${bucket}: ${rmErr.message}`);
+      } catch (e) {
+        storageErrors.push(`${bucket}: ${String(e)}`);
+      }
+    }
+
+    // A file that could not be removed must NOT be reported as an erasure.
+    // Failing here leaves the account usable so the patient can retry, which
+    // is the honest outcome — the alternative is deleting their login and
+    // telling them their data is gone while their photos are still served.
+    if (storageErrors.length > 0) {
+      return json(
+        { error: 'Could not delete stored files', detail: storageErrors },
+        500
+      );
+    }
+
+    // ── 2. The account itself; public.* cascades from here ─────────────────
     const { error: delErr } = await admin.auth.admin.deleteUser(uid);
     if (delErr) return json({ error: delErr.message }, 500);
 

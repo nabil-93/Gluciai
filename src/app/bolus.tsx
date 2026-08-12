@@ -25,8 +25,11 @@ import {
 import {
   computeSmartBolus,
   guessMealTime,
+  isPlausibleTypedMgdl,
   localDoseCheck,
+  looksLikeMmol,
   MAX_SAFE_BOLUS,
+  MMOL_TO_MGDL,
   type BolusResult,
   type DoseRisk,
 } from '@/services/bolusEngine';
@@ -195,18 +198,58 @@ export default function BolusScreen() {
    */
   const carbsValue = parseDecimal(carbs);
   const glucoseValue = parseDecimal(glucose);
+
+  /*
+   * P7-005 ON THE DOSING SCREEN (audit finding B-4).
+   *
+   * `log-glucose.tsx` has refused an implausible typed mg/dL reading since
+   * Step 13, and `bolusEngine.ts` documents that rule as covering "the surface
+   * that lacked it". It did not: this screen parsed the field and handed it
+   * straight to the engine as mg/dL, with no guard and nothing on screen.
+   *
+   * The dangerous case is not the one that reads as a hypo. It is a patient who
+   * thinks in mmol/L typing their real 18.0 — read as 18 mg/dL, which trips the
+   * hypo guard and returns 0 U, telling someone at 324 mg/dL that they are
+   * hypoglycaemic. Refusing is safe; refusing SILENTLY is not.
+   *
+   * Same rule, same two keys, same refusal-never-conversion policy as the log
+   * screen — deliberately not a second, subtly different guard.
+   */
+  const glucoseUnitWarning =
+    glucoseValue !== undefined &&
+    glucoseValue > 0 &&
+    !isPlausibleTypedMgdl(glucoseValue);
+  const glucoseMmolSuggestion =
+    glucoseValue !== undefined && looksLikeMmol(glucoseValue)
+      ? Math.round(glucoseValue * MMOL_TO_MGDL)
+      : null;
+  /**
+   * The reading the engine is allowed to see.
+   *
+   * A value this screen has just judged implausible as mg/dL is not a reading,
+   * so it is WITHHELD rather than asserted: the engine takes its existing
+   * `absent` path and reports `noGlucose` — no correction, and the preview says
+   * the reading is missing instead of showing a phantom hypo derived from a
+   * mmol/L number. The ENGINE is untouched; this is the screen declining to
+   * state something it does not believe.
+   *
+   * Resolved here, outside the memo, so the memo body stays plain property
+   * reads. A function call inside it defeats the React Compiler's
+   * `preserve-manual-memoization` check.
+   */
+  const engineGlucose = glucoseUnitWarning ? null : (glucoseValue ?? null);
   /** The two fields as the engine's input contract, memoised so the preview's
    *  dependency list stays exhaustive. */
   const engineInput = useMemo(
     () => ({
       carbs: carbsValue ?? 0,
       carbsKnown: carbsValue !== undefined,
-      glucose: glucoseValue ?? null,
+      glucose: engineGlucose,
       // This screen's fields, labels and chips are all mg/dL, and `saveGlucose`
       // stores only mg/dL — stated explicitly rather than left to a default.
       glucoseUnit: 'mg/dL' as const,
     }),
-    [carbsValue, glucoseValue]
+    [carbsValue, engineGlucose]
   );
 
   /* Context the engine will use — shown as chips before calculating */
@@ -259,6 +302,10 @@ export default function BolusScreen() {
   };
 
   const calculate = async () => {
+    // The CTA is already disabled in this state; this is the same belt-and-
+    // braces refusal `log-glucose.save()` keeps, so no future caller can reach
+    // a dose through a reading the screen rejected (B-4).
+    if (glucoseUnitWarning) return;
     const result = computeSmartBolus({
       ...engineInput,
       profile,
@@ -515,6 +562,19 @@ export default function BolusScreen() {
                     />
                     <Text style={styles.unit}>mg/dL</Text>
                   </View>
+                  {/* B-4 — refuse, never convert. The mg/dL equivalent is
+                      offered so the patient can retype it themselves; nothing
+                      is stored or dosed from it. Same wording as the log
+                      screen, deliberately. */}
+                  {glucoseUnitWarning ? (
+                    <View style={styles.unitWarn}>
+                      <Text style={styles.unitWarnText}>
+                        {glucoseMmolSuggestion !== null
+                          ? t('log.unitLooksMmol', { mgdl: glucoseMmolSuggestion })
+                          : t('log.unitOutOfRange')}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             </View>
@@ -745,14 +805,19 @@ export default function BolusScreen() {
 
             <Pressable
               onPress={calculate}
-              disabled={!carbs && !glucose}
+              // A dose must not be produced from a reading the screen has
+              // refused (B-4), exactly as `log-glucose` refuses to save one.
+              disabled={(!carbs && !glucose) || glucoseUnitWarning}
               style={{ marginTop: 4 }}
             >
               <LinearGradient
                 colors={['#2ec983', '#1fbc78']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
-                style={[styles.ctaBig, !carbs && !glucose && { opacity: 0.5 }]}
+                style={[
+                  styles.ctaBig,
+                  ((!carbs && !glucose) || glucoseUnitWarning) && { opacity: 0.5 },
+                ]}
               >
                 <Text style={styles.ctaText}>🤖 {t('bolus.calculate')}</Text>
                 <Text style={styles.ctaArrow}>→</Text>
@@ -1295,6 +1360,22 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 2 },
   bigInput: { fontFamily: F800, fontSize: 36, color: INK, minWidth: 80, padding: 0 },
   unit: { fontFamily: F600, fontSize: 15, color: '#98A2B3' },
+  /* B-4 — the implausible-reading notice. Same palette and shape as
+     log-glucose.tsx's, so one refusal does not look like two different states
+     on two screens. */
+  unitWarn: {
+    marginTop: 10,
+    backgroundColor: '#FFF4E5',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  unitWarnText: {
+    fontFamily: F600,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8A4B00',
+  },
   prefillHint: { fontFamily: F700, fontSize: 12, color: '#0e7a4d' },
 
   /* ── Composer: the two dose-driving numbers grouped in one card ── */

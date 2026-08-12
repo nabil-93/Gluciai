@@ -164,9 +164,14 @@ export default function ProfileEditScreen() {
   };
 
   const onLanguage = async (code: LanguageCode) => {
-    await setAppLanguage(code);
+    const { restartRequired } = await setAppLanguage(code);
     set('language', code);
     await saveProfile({ ...draft, language: code });
+    // Native applies `forceRTL` only at the next launch, so switching into or
+    // out of Arabic leaves the strings translated and the layout unmirrored
+    // until the app is restarted. Saying so is the whole fix — see
+    // src/i18n/direction.ts. `t` already resolves in the NEW language here.
+    if (restartRequired) notify(t('common.restartTitle'), t('common.restartBody'));
   };
 
   const onDelete = async () => {

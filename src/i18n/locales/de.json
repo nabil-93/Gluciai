@@ -166,7 +166,9 @@
     "savedLocal": "Auf diesem Gerät gespeichert — Synchronisierung ausstehend",
     "savedFailed": "Noch nicht in deinem Konto gespeichert — hier behalten und bei der nächsten Synchronisierung erneut gesendet",
     "close": "Schließen",
-    "viewPhoto": "Foto ansehen"
+    "viewPhoto": "Foto ansehen",
+    "restartTitle": "App neu starten",
+    "restartBody": "Die Sprache wurde geändert. Schließen Sie GluciAI vollständig und öffnen Sie die App erneut, damit das Layout in der richtigen Richtung angezeigt wird."
   },
   "language": {
     "title": "Wähle deine Sprache",
@@ -512,7 +514,16 @@
     "eveningReason": "Tägliche Zusammenfassung",
     "firedTitle": "Es ist so weit! ⏰",
     "followTitle": "Kurze Nachfrage 🤔",
-    "followBody": "„{{msg}}“ — hast du es gemacht? Öffne den Assistenten und sag es mir, ich trage es ein."
+    "followBody": "„{{msg}}“ — hast du es gemacht? Öffne den Assistenten und sag es mir, ich trage es ein.",
+    "notifyGlucoseTitle": "Blutzuckerkontrolle 🩸",
+    "notifyGlucoseLearned": "Sie messen normalerweise gegen {{hour}} Uhr — Zeit für Ihren Blutzucker.",
+    "notifyGlucoseDefault": "Denken Sie daran, heute Ihren Blutzucker zu messen.",
+    "notifyInsulinTitle": "Langzeitinsulin 💉",
+    "notifyInsulinBody": "Sie spritzen Ihr Langzeitinsulin normalerweise gegen {{hour}} Uhr.",
+    "notifyBreakfastTitle": "Frühstück 🍽️",
+    "notifyBreakfastBody": "Vergessen Sie nicht, Ihr Frühstück zu scannen, um Ihre Kohlenhydrate zu erfassen.",
+    "notifyEveningTitle": "Tagesbilanz 📊",
+    "notifyEveningBody": "Werfen Sie einen Blick auf Ihren Tag: Blutzucker, Mahlzeiten und Injektionen."
   },
   "insights": {
     "hypoTitle": "Niedriger Blutzucker erkannt",
@@ -626,7 +637,9 @@
     "scanFailed": "Analyse momentan nicht möglich. Prüfe deine Verbindung und versuche es erneut.",
     "noDetect": "Wir konnten diese Mahlzeit nicht sicher erkennen. Mache ein näheres, gut beleuchtetes Foto.",
     "serviceBusy": "Der Analysedienst ist gerade stark ausgelastet. Es liegt nicht an deiner Verbindung — versuche es gleich noch einmal.",
-    "stillTrying": "Der Dienst ist ausgelastet — neuer Versuch läuft…"
+    "stillTrying": "Der Dienst ist ausgelastet — neuer Versuch läuft…",
+    "openSettings": "Einstellungen öffnen",
+    "permissionBlocked": "Der Kamerazugriff wurde verweigert. Aktivieren Sie ihn in den Telefoneinstellungen, um Ihre Mahlzeiten zu scannen."
   },
   "result": {
     "title": "Mahlzeiten-Analyse",

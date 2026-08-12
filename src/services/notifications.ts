@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
+import i18n from '@/i18n';
 import { useAppStore } from '@/store/useAppStore';
 
 /**
@@ -160,14 +161,37 @@ export async function refreshSmartReminders(): Promise<void> {
     const { glucoseLogs, insulinLogs, meals, profile } =
       useAppStore.getState();
 
+    /*
+     * THESE STRINGS USED TO BE HARDCODED FRENCH.
+     *
+     * `getPlannedReminders(t)` above already localizes what the Rappels screen
+     * PREVIEWS, but this function — the one that actually schedules the OS
+     * notification — took no `t` and wrote French literals. So a German or
+     * Arabic patient read the reminder translated inside the app and received
+     * it in French on their lock screen. Scheduling is native-only, which is
+     * why no web review could ever surface it.
+     *
+     * The copy is deliberately NOT shared with the screen's: the screen states
+     * the habit ("Vous mesurez d'habitude vers 9h.") and the notification is a
+     * call to action ("…c'est le moment de vérifier votre glycémie."). Both are
+     * intentional, so both are keyed rather than merged.
+     *
+     * The French values in `reminders.notify*` are byte-identical to the
+     * literals they replace, so French output does not move.
+     *
+     * `i18n.t` is read here rather than passed in, matching `mealScore.ts` —
+     * it keeps the caller in (tabs)/_layout.tsx unchanged.
+     */
+    const t = i18n.t.bind(i18n);
+
     // 1 — Glucose reminder at the user's usual measurement hour (or 9:00)
     const gHour = usualHour(glucoseLogs.slice(0, 30).map((g) => g.created_at));
     await schedule(
       'glucose-reminder',
-      'Contrôle glycémie 🩸',
+      t('reminders.notifyGlucoseTitle'),
       gHour !== null
-        ? `Vous mesurez d'habitude vers ${gHour}h — c'est le moment de vérifier votre glycémie.`
-        : "Pensez à mesurer votre glycémie aujourd'hui.",
+        ? t('reminders.notifyGlucoseLearned', { hour: gHour })
+        : t('reminders.notifyGlucoseDefault'),
       gHour ?? 9
     );
 
@@ -182,8 +206,8 @@ export async function refreshSmartReminders(): Promise<void> {
       if (iHour !== null) {
         await schedule(
           'insulin-long-reminder',
-          'Insuline lente 💉',
-          `Vous injectez d'habitude votre insuline lente vers ${iHour}h.`,
+          t('reminders.notifyInsulinTitle'),
+          t('reminders.notifyInsulinBody', { hour: iHour }),
           iHour
         );
       }
@@ -197,8 +221,8 @@ export async function refreshSmartReminders(): Promise<void> {
     if (morningMeals >= 3) {
       await schedule(
         'breakfast-reminder',
-        'Petit-déjeuner 🍽️',
-        "N'oubliez pas de scanner votre petit-déjeuner pour suivre vos glucides.",
+        t('reminders.notifyBreakfastTitle'),
+        t('reminders.notifyBreakfastBody'),
         9,
         30
       );
@@ -207,8 +231,8 @@ export async function refreshSmartReminders(): Promise<void> {
     // 4 — Evening recap
     await schedule(
       'evening-recap',
-      'Bilan du jour 📊',
-      'Jetez un œil à votre journée : glycémie, repas et injections.',
+      t('reminders.notifyEveningTitle'),
+      t('reminders.notifyEveningBody'),
       21
     );
   } catch {

@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton, LockedScreen, ProgressRing } from '@/components/ui';
 import { useFrameDimensions } from '@/lib/appFrame';
+import { permissionAction, requestOrOpenSettings } from '@/lib/permissions';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { analyzeMealImage, type ScanStage } from '@/services/ai';
 import { setPendingScan } from '@/services/scanSession';
@@ -121,6 +122,8 @@ function ScanScreen() {
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useFrameDimensions();
   const [permission, requestPermission] = useCameraPermissions();
+  /** The OS will no longer show the prompt — the only way back is Settings. */
+  const camBlocked = permissionAction(permission) === 'settings';
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   // Flash cycles off → auto → on. "on" = continuous torch (works on Android
   // web via track constraint; iOS browsers have no torch API). "auto" lets
@@ -438,11 +441,22 @@ function ScanScreen() {
           </View>
           <Text style={styles.permTitle}>{t('scanner.title')}</Text>
           <Text style={styles.permDesc}>
-            {isWeb ? t('scanner.webUpload') : t('scanner.permissionDesc')}
+            {isWeb
+              ? t('scanner.webUpload')
+              : camBlocked
+                ? t('scanner.permissionBlocked')
+                : t('scanner.permissionDesc')}
           </Text>
           {error ? <Text style={styles.error}>{error}</Text> : null}
           {!isWeb ? (
-            <AppButton label={t('scanner.grantPermission')} onPress={requestPermission} style={{ alignSelf: 'stretch' }} />
+            /* Once the OS will no longer show the prompt, `requestPermission`
+               resolves denied instantly and the button does nothing — so it
+               routes to Settings instead. See src/lib/permissions.ts. */
+            <AppButton
+              label={camBlocked ? t('scanner.openSettings') : t('scanner.grantPermission')}
+              onPress={() => requestOrOpenSettings(permission, requestPermission)}
+              style={{ alignSelf: 'stretch' }}
+            />
           ) : null}
           <AppButton
             label={t('scanner.gallery')}

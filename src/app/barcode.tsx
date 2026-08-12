@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { AppButton, BevelCard, HeroScreen, Spinner } from '@/components/ui';
+import { permissionAction, requestOrOpenSettings } from '@/lib/permissions';
 import {
   WebBarcodeScanner,
   webBarcodeSupported,
@@ -309,9 +310,16 @@ export default function BarcodeScreen() {
               </View>
             ) : null}
             {!isWeb && permission && !permission.granted ? (
+              /* A permanently denied permission cannot be re-prompted — the
+                 button routes to Settings instead of doing nothing.
+                 See src/lib/permissions.ts. */
               <AppButton
-                label={t('barcode.allowCamera')}
-                onPress={requestPermission}
+                label={
+                  permissionAction(permission) === 'settings'
+                    ? t('scanner.openSettings')
+                    : t('barcode.allowCamera')
+                }
+                onPress={() => requestOrOpenSettings(permission, requestPermission)}
                 style={{ marginBottom: 14 }}
               />
             ) : null}

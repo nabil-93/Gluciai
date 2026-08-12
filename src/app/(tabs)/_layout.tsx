@@ -15,7 +15,7 @@ import { hydrateFromServer } from '@/services/sync';
 import { colors } from '@/theme';
 
 export default function TabsLayout() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   // Smart Notification Engine: build reminders from the user's habits.
   // Also sync the per-account feature locks set from the admin dashboard,
@@ -35,6 +35,22 @@ export default function TabsLayout() {
       stopPresence();
     };
   }, []);
+
+  /*
+   * Reschedule the OS reminders when the language changes.
+   *
+   * The notification text is resolved at SCHEDULING time, not at delivery, so
+   * a patient who switches language mid-session would keep receiving the
+   * previous language until the next cold start. Kept as its own effect rather
+   * than added to the dependency list above, which would also re-run the
+   * server hydration and the presence heartbeat on every language change.
+   *
+   * `refreshSmartReminders` cancels all scheduled notifications before
+   * rebuilding, so re-running it is idempotent and cannot duplicate a reminder.
+   */
+  useEffect(() => {
+    refreshSmartReminders();
+  }, [i18n.language]);
 
   return (
     <TabBarVisibilityProvider>
