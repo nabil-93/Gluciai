@@ -387,12 +387,45 @@ function renderLogin(errMsg) {
     const btn = document.getElementById('lbtn');
     const err = document.getElementById('lerr');
     btn.disabled = true; btn.textContent = 'Connexion…'; err.classList.remove('show');
-    const { error } = await db.auth.signInWithPassword({
-      email: document.getElementById('lemail').value.trim(),
-      password: document.getElementById('lpass').value,
-    });
+    /*
+     * A FAILED SIGN-IN IS NOT ALWAYS A WRONG PASSWORD.
+     *
+     * This used to report EVERY error as "Email ou mot de passe incorrect",
+     * including a network failure. Combined with the old service worker —
+     * which turned any dropped request into "TypeError: Load failed" — a
+     * perfectly correct password was reported as wrong, with no way to tell
+     * the two apart from the screen. Supabase's auth log showed those
+     * sign-ins SUCCEEDING while the panel claimed they had failed.
+     *
+     * Credentials stay deliberately vague ("email OR password"): that is what
+     * stops the form being used to discover which addresses exist. Only the
+     * NETWORK case is split out, because that is the one the user can act on.
+     */
+    let error = null;
+    try {
+      ({ error } = await db.auth.signInWithPassword({
+        email: document.getElementById('lemail').value.trim(),
+        password: document.getElementById('lpass').value,
+      }));
+    } catch (e) {
+      // signInWithPassword can THROW, not just return an error, when the
+      // request never reaches the server at all.
+      error = e || new Error('network');
+    }
     if (error) {
-      err.textContent = 'Email ou mot de passe incorrect.'; err.classList.add('show');
+      const msg = String(error.message || '').toLowerCase();
+      const isNetwork =
+        error.name === 'TypeError' ||
+        msg.includes('load failed') ||
+        msg.includes('failed to fetch') ||
+        msg.includes('network') ||
+        error.status === 0 ||
+        error.status >= 500;
+      err.textContent = isNetwork
+        ? 'Connexion au serveur impossible. Vérifiez votre réseau et réessayez.'
+        : 'Email ou mot de passe incorrect.';
+      err.classList.add('show');
+      console.warn('[panel login]', error.status ?? '', error.message ?? error);
       btn.disabled = false; btn.textContent = 'Se connecter';
       return;
     }
