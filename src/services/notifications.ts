@@ -4,6 +4,8 @@ import * as Notifications from 'expo-notifications';
 import i18n from '@/i18n';
 import { useAppStore } from '@/store/useAppStore';
 
+import { reminderPayload, type ReminderType } from './notificationRoute';
+
 /**
  * Smart Notification Engine — reminders generated from the user's own
  * behavior (usual measurement/injection times), rescheduled daily.
@@ -21,16 +23,32 @@ function usualHour(dates: string[], minSamples = 3): number | null {
   return hours[Math.floor(hours.length / 2)];
 }
 
+/**
+ * NOTIF-1: every scheduled reminder now carries WHICH reminder it is.
+ *
+ * The content used to be `{ title, body, sound: false }` and nothing else, so a
+ * tap could only cold-open the app at its default route — the reminder told the
+ * patient to check their glucose and then did not take them there. `data` is
+ * the type only (see notificationRoute.ts): a payload survives in the shade and
+ * on a lost phone, so it says which reminder fired and nothing about the
+ * patient.
+ */
 async function schedule(
   identifier: string,
   title: string,
   body: string,
   hour: number,
-  minute = 0
+  minute = 0,
+  type?: ReminderType
 ) {
   await Notifications.scheduleNotificationAsync({
     identifier,
-    content: { title, body, sound: false },
+    content: {
+      title,
+      body,
+      sound: false,
+      ...(type ? { data: reminderPayload(type) } : {}),
+    },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour,
@@ -131,11 +149,31 @@ export function getPlannedReminders(t?: TFn): PlannedReminder[] {
 }
 
 /**
+ * What actually happened when the schedule was (re)built.
+ *
+ * WHY THIS EXISTS. `refreshSmartReminders` used to return `void` and swallow
+ * every failure — including a denied permission — in a bare `catch {}`. The
+ * Rappels screen therefore set `activated = true` unconditionally and told the
+ * patient "Rappels activés ✓" when the OS had refused and NOTHING was
+ * scheduled. A patient relying on an insulin reminder was told it was on when
+ * it was not.
+ *
+ *   'scheduled'   reminders are really registered with the OS
+ *   'denied'      the patient refused, or the OS will no longer ask
+ *   'unavailable' web, simulator, or the platform threw
+ */
+export type ReminderScheduleResult = 'scheduled' | 'denied' | 'unavailable';
+
+/**
  * (Re)build the smart reminder schedule from current data.
  * Call on app start and after significant data changes.
+ *
+ * Returns what happened so a caller that shows the patient a confirmation can
+ * tell the truth. The two fire-and-forget callers in `(tabs)/_layout.tsx`
+ * ignore the value, which is why this stays a return rather than a throw.
  */
-export async function refreshSmartReminders(): Promise<void> {
-  if (Platform.OS === 'web') return;
+export async function refreshSmartReminders(): Promise<ReminderScheduleResult> {
+  if (Platform.OS === 'web') return 'unavailable';
 
   try {
     if (!initialized) {
@@ -153,7 +191,9 @@ export async function refreshSmartReminders(): Promise<void> {
     const perms = await Notifications.getPermissionsAsync();
     if (!perms.granted) {
       const req = await Notifications.requestPermissionsAsync();
-      if (!req.granted) return;
+      // The patient said no (or the OS will no longer ask). Nothing is
+      // scheduled — the caller must NOT report success.
+      if (!req.granted) return 'denied';
     }
 
     await Notifications.cancelAllScheduledNotificationsAsync();
@@ -192,7 +232,9 @@ export async function refreshSmartReminders(): Promise<void> {
       gHour !== null
         ? t('reminders.notifyGlucoseLearned', { hour: gHour })
         : t('reminders.notifyGlucoseDefault'),
-      gHour ?? 9
+      gHour ?? 9,
+      0,
+      'glucose'
     );
 
     // 2 — Long insulin reminder at the usual injection hour
@@ -208,7 +250,9 @@ export async function refreshSmartReminders(): Promise<void> {
           'insulin-long-reminder',
           t('reminders.notifyInsulinTitle'),
           t('reminders.notifyInsulinBody', { hour: iHour }),
-          iHour
+          iHour,
+          0,
+          'insulin-long'
         );
       }
     }
@@ -224,7 +268,8 @@ export async function refreshSmartReminders(): Promise<void> {
         t('reminders.notifyBreakfastTitle'),
         t('reminders.notifyBreakfastBody'),
         9,
-        30
+        30,
+        'breakfast'
       );
     }
 
@@ -233,9 +278,16 @@ export async function refreshSmartReminders(): Promise<void> {
       'evening-recap',
       t('reminders.notifyEveningTitle'),
       t('reminders.notifyEveningBody'),
-      21
+      21,
+      0,
+      'evening'
     );
+
+    return 'scheduled';
   } catch {
-    // Notifications unavailable (permissions, simulator…) — fail silently
+    // Notifications unavailable (permissions, simulator…). Still not an error
+    // the patient can act on, but it is NOT success and must not be shown as
+    // "activated" — hence 'unavailable' rather than the old silent return.
+    return 'unavailable';
   }
 }

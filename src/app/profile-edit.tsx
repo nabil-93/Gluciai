@@ -16,6 +16,7 @@ import { Spinner } from '@/components/ui';
 import { DoctorLinkCard } from '@/components/DoctorLinkCard';
 import { SUPPORTED_LANGUAGES, setAppLanguage, type LanguageCode } from '@/i18n';
 import { changePassword, deleteAccount } from '@/services/account';
+import { accountErrorKey } from '@/services/accountErrors';
 import { saveProfile } from '@/services/data';
 import { confirmAsync, notify } from '@/lib/confirm';
 import { useAppStore } from '@/store/useAppStore';
@@ -156,7 +157,11 @@ export default function ProfileEditScreen() {
         setPw2('');
         setPwMsg({ ok: true, text: t('profile.passwordChanged') });
       } else {
-        setPwMsg({ ok: false, text: r.error ?? t('profile.error') });
+        // The backend's own sentence must not reach the patient — it is always
+        // English and can name provider internals. Same mapping as the
+        // deletion path below and as auth.tsx (BUG-A3).
+        if (__DEV__) console.warn('[changePassword]', r.error);
+        setPwMsg({ ok: false, text: t(accountErrorKey(r.error)) });
       }
     } finally {
       setBusy(false);
@@ -170,8 +175,17 @@ export default function ProfileEditScreen() {
     // Native applies `forceRTL` only at the next launch, so switching into or
     // out of Arabic leaves the strings translated and the layout unmirrored
     // until the app is restarted. Saying so is the whole fix — see
-    // src/i18n/direction.ts. `t` already resolves in the NEW language here.
-    if (restartRequired) notify(t('common.restartTitle'), t('common.restartBody'));
+    // src/i18n/direction.ts.
+    //
+    // BUG-A1: `t` is the one this component closed over on its last render, so
+    // it still resolves in the PREVIOUS language — verified on the emulator,
+    // where choosing العربية produced an English dialog. `lng` pins the
+    // lookup to the language just chosen.
+    if (restartRequired)
+      notify(
+        t('common.restartTitle', { lng: code }),
+        t('common.restartBody', { lng: code })
+      );
   };
 
   const onDelete = async () => {
@@ -191,7 +205,22 @@ export default function ProfileEditScreen() {
         router.dismissAll();
       } catch {}
       router.replace('/auth');
-    } else notify(t('profile.error'), r.error ?? '');
+    } else {
+      /*
+       * A FAILED ERASURE MUST NOT EXPLAIN ITSELF IN BACKEND ENGLISH.
+       *
+       * `r.error` here is `error.message` from the edge function, `String(e)`
+       * from a raw throw, or the function's own body — which for a storage
+       * failure carries a `detail` array naming buckets. None of that is for
+       * the patient to read, and none of it translates.
+       *
+       * The condition is mapped to a vetted key instead, so an Arabic screen
+       * gets Arabic. `storageCleanupFailed` is worth its own wording: it is
+       * the one failure where the account still exists and retrying is right.
+       */
+      if (__DEV__) console.warn('[deleteAccount]', r.error);
+      notify(t('profile.error'), t(accountErrorKey(r.error)));
+    }
   };
 
   const titles: Record<Section, string> = {

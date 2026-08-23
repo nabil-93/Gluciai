@@ -1,5 +1,5 @@
 import { getSession, pickSessions, type WorkoutLevel } from '@/data/workouts';
-import { isDemoMode, supabase } from '@/lib/supabase';
+import { currentUserId, isDemoMode, supabase } from '@/lib/supabase';
 import { buildHealthContext } from '@/services/ai';
 import { saveMeal } from '@/services/data';
 import { buildDayEvents, dayTotals } from '@/services/dayLog';
@@ -691,8 +691,7 @@ export function workoutForDay(program: Program, dayIndex: number): string | null
 /** Insert the program row and return it with its server id. */
 export async function saveProgram(p: Omit<Program, 'id'>): Promise<Program | null> {
   if (isDemoMode || !supabase) return { ...p, id: 'local' };
-  const { data: auth } = await supabase.auth.getUser();
-  const uid = auth?.user?.id;
+  const uid = await currentUserId();
   if (!uid) return null;
 
   // Only one program may be active at a time (a second live budget would
@@ -738,8 +737,7 @@ export async function saveProgram(p: Omit<Program, 'id'>): Promise<Program | nul
 /** Store a generated stretch of days. */
 export async function saveDays(programId: string, days: ProgramDay[]): Promise<boolean> {
   if (isDemoMode || !supabase || programId === 'local') return true;
-  const { data: auth } = await supabase.auth.getUser();
-  const uid = auth?.user?.id;
+  const uid = await currentUserId();
   if (!uid) return false;
 
   const rows = days.map((d) => ({
@@ -787,12 +785,7 @@ export type LoadResult =
 /** The signed-in user's id, or null when signed out / in demo mode. */
 export async function currentAuthUserId(): Promise<string | null> {
   if (isDemoMode || !supabase) return null;
-  try {
-    const { data } = await supabase.auth.getUser();
-    return data.user?.id ?? null;
-  } catch {
-    return null;
-  }
+  return currentUserId();
 }
 
 export async function loadProgram(
@@ -800,8 +793,7 @@ export async function loadProgram(
   id?: string
 ): Promise<LoadResult> {
   if (isDemoMode || !supabase) return { status: 'unavailable' };
-  const { data: auth } = await supabase.auth.getUser();
-  const uid = auth?.user?.id;
+  const uid = await currentUserId();
   if (!uid) return { status: 'unavailable' };
 
   const query = supabase.from('programs').select('*').eq('user_id', uid);
@@ -896,8 +888,7 @@ export interface ProgramSummary {
 /** Every parcours on the account, newest first. */
 export async function listPrograms(): Promise<ProgramSummary[]> {
   if (isDemoMode || !supabase) return [];
-  const { data: auth } = await supabase.auth.getUser();
-  const uid = auth?.user?.id;
+  const uid = await currentUserId();
   if (!uid) return [];
 
   const { data: rows } = await supabase
@@ -978,8 +969,7 @@ export async function setProgramStatus(
   status: Program['status']
 ): Promise<boolean> {
   if (isDemoMode || !supabase || id === 'local') return true;
-  const { data: auth } = await supabase.auth.getUser();
-  const uid = auth?.user?.id;
+  const uid = await currentUserId();
   if (!uid) return false;
 
   if (status === 'active') {

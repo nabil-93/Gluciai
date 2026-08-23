@@ -239,7 +239,8 @@
     "continueWithApple": "Mit Apple fortfahren",
     "comingSoon": "Demnächst verfügbar",
     "securityNote": "Deine Daten sind sicher und geschützt.\nWir verwenden modernste Verschlüsselung.",
-    "phone": "Telefonnummer (WhatsApp)"
+    "phone": "Telefonnummer (WhatsApp)",
+    "slowServer": "Der Server braucht lange… wir versuchen es weiter."
   },
   "wizard": {
     "progress": "Schritt {{current}} von {{total}}",
@@ -1764,7 +1765,10 @@
     "webNote": "📱 Benachrichtigungen werden auf iPhone und Android aktiviert — im Web zeigt diese Vorschau, was geplant wird.",
     "activated": "✓ Erinnerungen aktiv",
     "activate": "Benachrichtigungen aktivieren",
-    "footNote": "Die Zeiten passen sich automatisch an, je mehr du erfasst."
+    "footNote": "Die Zeiten passen sich automatisch an, je mehr du erfasst.",
+    "permissionDenied": "Benachrichtigungen sind für GluciAI deaktiviert. Ohne Berechtigung kann keine Erinnerung geplant werden.",
+    "openSettings": "Einstellungen öffnen",
+    "unavailable": "Erinnerungen sind auf diesem Gerät nicht verfügbar."
   },
   "coachChat": {
     "subtitle": "Kennt all deine Gesundheitsdaten",
@@ -2326,5 +2330,83 @@
     "genericGood": "Alles in Ordnung — behalte deine regelmäßige Kontrolle bei.",
     "genericWatch": "Ein Punkt zum Beobachten — folge dem Tipp unten.",
     "genericAdvice": "Erfasse weiterhin deine Messwerte, Mahlzeiten und Aktivitäten."
+  },
+  "authError": {
+    "invalidCredentials": "E-Mail oder Passwort ist falsch.",
+    "emailTaken": "Mit dieser E-Mail existiert bereits ein Konto.",
+    "weakPassword": "Passwort zu kurz — mindestens 6 Zeichen verwenden.",
+    "invalidEmail": "Ungültige E-Mail-Adresse.",
+    "rateLimited": "Zu viele Versuche. Versuche es in einigen Minuten erneut.",
+    "emailNotConfirmed": "Bestätige deine E-Mail, bevor du dich anmeldest.",
+    "network": "Keine Verbindung. Prüfe dein Netzwerk und versuche es erneut.",
+    "generic": "Anmeldung fehlgeschlagen. Bitte erneut versuchen.",
+    "timeout": "Der Server antwortet zu langsam. Bitte erneut versuchen."
+  },
+  "accountError": {
+    "network": "Keine Verbindung. Prüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
+    "sessionExpired": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an und versuchen Sie es nochmals.",
+    "storageCleanupFailed": "Ihre Dateien konnten nicht gelöscht werden. Ihr Konto ist unverändert — bitte erneut versuchen.",
+    "weakPassword": "Passwort zu kurz — verwenden Sie mindestens 6 Zeichen.",
+    "samePassword": "Das neue Passwort muss sich vom alten unterscheiden.",
+    "rateLimited": "Zu viele Versuche. Versuchen Sie es in einigen Minuten erneut.",
+    "generic": "Der Vorgang ist fehlgeschlagen. Bitte erneut versuchen."
+  },
+  "reportPage": {
+    "title": "Arztbericht",
+    "periodLabel": "Analysierter Zeitraum",
+    "periodRange": "{{from}} bis {{to}}",
+    "rangeDays_one": "{{count}} T",
+    "rangeDays_other": "{{count}} T",
+    "ea1cLabel": "Geschätzter HbA1c",
+    "ea1cHint_one": "Berechnet aus deinem Glukosemittelwert ({{avg}} mg/dL) über {{count}} Messung — nur Richtwerte, sie ersetzen keine Laboranalyse.",
+    "ea1cHint_other": "Berechnet aus deinem Glukosemittelwert ({{avg}} mg/dL) über {{count}} Messungen — nur Richtwerte, sie ersetzen keine Laboranalyse.",
+    "thinData": "{{perDay}} Messung/Tag im Durchschnitt — zu wenig, damit diese Prozentwerte aussagekräftig sind. Ziele auf mindestens 3 Messungen pro Tag.",
+    "tirTitle": "Zeit im Zielbereich",
+    "tirInTarget": "im Zielbereich {{low}}–{{high}} mg/dL",
+    "tirGoal": "Klinisches Ziel: ≥ 70 %",
+    "bandVeryHigh": "Sehr hoch (> 250)",
+    "bandHigh": "Hoch (> {{high}})",
+    "bandInRange": "Ziel ({{low}}–{{high}})",
+    "bandLow": "Niedrig (< {{low}})",
+    "bandVeryLow": "Sehr niedrig (< 54)",
+    "noData": "Keine Messungen in diesem Zeitraum.",
+    "trendTitle": "Durchschnittliche Glukose pro Tag",
+    "bySlotTitle": "Nach Tageszeit",
+    "slotCount_one": "{{count}} Mess.",
+    "slotCount_other": "{{count}} Mess.",
+    "detailTitle": "Details des Zeitraums",
+    "statCv": "Variabilität (CV)",
+    "statSd": "Standardabweichung",
+    "statMinMax": "Min / Max",
+    "statPerDay": "Messungen / Tag",
+    "statLows": "Unterzuckerungen",
+    "statHighs": "Überzuckerungen",
+    "statInsulinPerDay": "Insulin / Tag",
+    "statRapidLong": "Schnell / Lang",
+    "statCarbsPerDay": "Kohlenhydrate / Tag",
+    "statSugarPerDay": "Zucker / Tag",
+    "statMeals": "Erfasste Mahlzeiten",
+    "statActivity": "Aktivität",
+    "weeklyTitle": "KI-Zusammenfassung der Woche",
+    "generatePdf": "PDF erstellen / Drucken",
+    "pdfHint_one": "Das PDF umfasst diesen Zeitraum ({{count}} Tag), die Diagramme, die Details nach Tageszeit und die letzten Messungen.",
+    "pdfHint_other": "Das PDF umfasst diesen Zeitraum ({{count}} Tage), die Diagramme, die Details nach Tageszeit und die letzten Messungen.",
+    "slot": {
+      "night": "Nacht (0–6 h)",
+      "morning": "Morgen (6–12 h)",
+      "afternoon": "Nachmittag (12–18 h)",
+      "evening": "Abend (18–24 h)"
+    }
+  },
+  "calendarPage": {
+    "today": "Heute",
+    "legendInRange": "≥70% im Ziel",
+    "legendMid": "40–70%",
+    "legendLow": "<40%"
+  },
+  "notFoundPage": {
+    "title": "Seite nicht gefunden",
+    "body": "Dieser Link führt zu keinem GluciAI-Bildschirm. Er ist möglicherweise veraltet oder unvollständig.",
+    "cta": "Zurück zur Startseite"
   }
 }

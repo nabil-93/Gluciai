@@ -17,9 +17,45 @@ const ANON_KEY =
    patient's token — so promo_codes came back empty, creating one failed
    with "violates row-level security policy", and admin-ops answered
    unauthorized. A dedicated key keeps the two sessions apart. */
+const PANEL_AUTH_KEY = 'gluciai-panel-auth';
+/* Backstop against a socket the server never closes — not a target: a healthy
+   /auth/v1/token answers in a few hundred milliseconds. */
+const SIGN_IN_TIMEOUT_MS = 60000;
+const SLOW_HINT_AFTER_MS = 6000;
 const db = createClient(SUPABASE_URL, ANON_KEY, {
-  auth: { storageKey: 'gluciai-panel-auth' },
+  auth: { storageKey: PANEL_AUTH_KEY },
 });
+
+/* Never let an auth call hold the screen forever.
+   `signInWithPassword`, `getSession` and `signOut` have no deadline of their
+   own: they wait for as long as the server keeps the socket open. Every
+   "Connexion…" that stayed on the button and every logout that appeared to do
+   nothing was one of those waits. Resolves to `fallback` when the time is up;
+   the request itself is simply no longer waited on. */
+function withTimeout(promise, ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve({ timedOut: true }), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve({ value: v }); },
+      (e) => { clearTimeout(timer); resolve({ error: e || new Error('failed') }); }
+    );
+  });
+}
+
+/* Delete the stored session by hand.
+   supabase-js revokes on the server BEFORE it removes the local copy, and it
+   returns early on a network failure — so a sign-out that could not reach the
+   server left the session in localStorage and the next load walked straight
+   back into the dashboard. Signing out has to be something the browser can do
+   alone. (The value can be split across `<key>.0`, `<key>.1`, … so the prefix
+   is what gets cleared, not just the exact key.) */
+function clearPanelSession() {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k === PANEL_AUTH_KEY || k.startsWith(PANEL_AUTH_KEY + '.') || k.startsWith(PANEL_AUTH_KEY + '-'))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch (_) { /* private mode / storage disabled — nothing else to try */ }
+}
 const app = document.getElementById('app');
 
 let me = null; // { id, role: 'admin'|'doctor', name, email }
@@ -173,10 +209,14 @@ function modal(html) {
    on any non-JSON response — which left "Création…" on screen forever with
    no message, and looked exactly like the feature being broken. */
 async function adminOp(payload) {
-  let session = null;
-  try {
-    ({ data: { session } } = await db.auth.getSession());
-  } catch { /* fall through to the same message */ }
+  // Bounded like every other auth call here: getSession refreshes an expired
+  // token, which is a network round-trip, and an unanswered one used to leave
+  // the calling button on "Création…" with nothing to show for it.
+  const sess = await withTimeout(db.auth.getSession(), 15000);
+  if (sess.timedOut) {
+    return { ok: false, error: 'Le serveur met trop de temps à répondre. Réessaie.' };
+  }
+  const session = sess.value?.data?.session ?? null;
 
   if (!session?.access_token) {
     return { ok: false, error: 'Session expirée — reconnecte-toi.' };
@@ -337,11 +377,25 @@ function lightbox(url, caption) {
 
 /* ── Auth / boot ── */
 async function boot() {
-  const { data: { session } } = await db.auth.getSession();
+  const sess = await withTimeout(db.auth.getSession(), 20000);
+  if (sess.timedOut) return renderLogin('Le serveur met trop de temps à répondre. Rechargez la page.');
+  if (sess.error) return renderLogin('Connexion au serveur impossible. Vérifiez votre réseau.');
+  const session = sess.value && sess.value.data && sess.value.data.session;
   if (!session) return renderLogin();
-  const { data: prof } = await db.from('profiles').select('role,name,email').eq('user_id', session.user.id).maybeSingle();
+
+  /* A FAILED READ IS NOT A REFUSED ROLE.
+     This used to sign the user out whenever `prof` came back empty — and a
+     dropped request comes back empty too. One flaky moment and an admin was
+     thrown out with "Accès réservé…", which reads like their account lost its
+     rights. Only an answer that actually arrived may end the session. */
+  const { data: prof, error: profErr } = await db
+    .from('profiles').select('role,name,email').eq('user_id', session.user.id).maybeSingle();
+  if (profErr) {
+    return renderLogin('Impossible de vérifier votre compte (réseau). Réessayez.');
+  }
   if (!prof || (prof.role !== 'admin' && prof.role !== 'doctor')) {
-    await db.auth.signOut();
+    await withTimeout(db.auth.signOut({ scope: 'local' }), 5000);
+    clearPanelSession();
     return renderLogin('Accès réservé aux médecins et administrateurs.');
   }
   me = { id: session.user.id, role: prof.role, name: prof.name || '', email: prof.email || session.user.email };
@@ -401,17 +455,33 @@ function renderLogin(errMsg) {
      * stops the form being used to discover which addresses exist. Only the
      * NETWORK case is split out, because that is the one the user can act on.
      */
-    let error = null;
-    try {
-      ({ error } = await db.auth.signInWithPassword({
+    /* And a sign-in that never answers is not a wrong password either.
+       There was no deadline on this call, so a request the server never
+       replied to left "Connexion…" on the button for good. It now gives up
+       and says so — and after a few seconds it says the wait is the server's,
+       so nobody is left wondering whether the click registered. */
+    const slowNote = setTimeout(() => {
+      err.textContent = 'Le serveur met du temps à répondre… patientez.';
+      err.classList.add('show');
+    }, SLOW_HINT_AFTER_MS);
+
+    const res = await withTimeout(
+      db.auth.signInWithPassword({
         email: document.getElementById('lemail').value.trim(),
         password: document.getElementById('lpass').value,
-      }));
-    } catch (e) {
-      // signInWithPassword can THROW, not just return an error, when the
-      // request never reaches the server at all.
-      error = e || new Error('network');
+      }),
+      SIGN_IN_TIMEOUT_MS
+    );
+    clearTimeout(slowNote);
+    if (res.timedOut) {
+      err.textContent = 'Le serveur met trop de temps à répondre. Réessayez.';
+      err.classList.add('show');
+      btn.disabled = false; btn.textContent = 'Se connecter';
+      return;
     }
+    // signInWithPassword can THROW, not just return an error, when the
+    // request never reaches the server at all.
+    const error = res.error || (res.value && res.value.error) || null;
     if (error) {
       const msg = String(error.message || '').toLowerCase();
       const isNetwork =
@@ -429,6 +499,7 @@ function renderLogin(errMsg) {
       btn.disabled = false; btn.textContent = 'Se connecter';
       return;
     }
+    err.classList.remove('show');
     boot();
   });
 }
@@ -476,10 +547,14 @@ function shell(active, title, sub, bodyHTML) {
     btn.disabled = true;
     // Drop our in-memory identity FIRST so any stray route() call bails out.
     me = null;
-    // Clear the local session even if the server revoke fails or throws
-    // (offline / already-expired token) — otherwise a stale session lingers
-    // and boot() bounces us back into the dashboard.
-    try { await db.auth.signOut(); } catch (_) { /* local session is cleared regardless */ }
+    // Clear the local session even if the server revoke fails, throws, or
+    // never answers — otherwise a stale session lingers and boot() bounces us
+    // back into the dashboard. The revoke is asked for and bounded; the
+    // browser-side deletion below is what actually ends the session here, so
+    // a server that is slow or unreachable can no longer keep someone signed
+    // in against their will.
+    await withTimeout(db.auth.signOut({ scope: 'local' }), 4000);
+    clearPanelSession();
     // Reset the URL WITHOUT firing hashchange → route → boot (that re-entry
     // races renderLogin and can re-render the dashboard on a stale read).
     // replaceState does not emit hashchange, so we land on login deterministically.

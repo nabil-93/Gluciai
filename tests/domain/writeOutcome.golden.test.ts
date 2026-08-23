@@ -31,8 +31,9 @@ const UID = '11111111-2222-3333-4444-555555555555';
 
 vi.mock('@/lib/supabase', () => ({
   isDemoMode: false,
+  currentUserId: async () => UID,
   supabase: {
-    auth: { getUser: async () => ({ data: { user: { id: UID } } }) },
+    auth: {},
     from: (table: string) => ({
       insert: (payload: any) => {
         inserted.push({ table, payload });

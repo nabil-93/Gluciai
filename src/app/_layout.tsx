@@ -30,6 +30,7 @@ import * as Sentry from '@sentry/react-native';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { initI18n } from '@/i18n';
 import { observabilityOptions } from '@/lib/observability';
+import { useNotificationRouting } from '@/services/notificationRouting';
 import { colors } from '@/theme';
 
 /* Expo Router wraps this layout — and therefore every route beneath it that
@@ -78,6 +79,11 @@ function RootLayout() {
       .catch(() => {})
       .finally(() => setReady(true));
   }, []);
+
+  /* NOTIF-1: a tapped reminder must reach the screen it asked the patient to
+     use. Mounted at the root so it covers foreground, background and cold
+     start; the routing rule itself is pure and unit-tested. */
+  useNotificationRouting();
 
   useEffect(() => {
     if (ready && fontsLoaded) {

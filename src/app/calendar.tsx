@@ -20,7 +20,7 @@ const dowLabels = (locale: string) =>
 export default function CalendarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { glucoseLogs, meals, insulinLogs, profile } = useAppStore();
   const DOW = useMemo(() => dowLabels(i18n.language), [i18n.language]);
 
@@ -128,11 +128,12 @@ export default function CalendarScreen() {
         </Pressable>
       </View>
 
-      {/* Legend */}
+      {/* Legend — the band thresholds are numbers, but "dans la cible" is a
+          sentence and has to follow the app language like everything else. */}
       <View style={styles.legend}>
-        <LegendDot color={colors.glucoseInRange} label="≥70% dans la cible" />
-        <LegendDot color={colors.glucoseHigh} label="40–70%" />
-        <LegendDot color={colors.glucoseLow} label="<40%" />
+        <LegendDot color={colors.glucoseInRange} label={t('calendarPage.legendInRange')} />
+        <LegendDot color={colors.glucoseHigh} label={t('calendarPage.legendMid')} />
+        <LegendDot color={colors.glucoseLow} label={t('calendarPage.legendLow')} />
       </View>
 
       <View style={styles.dowRow}>
@@ -187,7 +188,7 @@ export default function CalendarScreen() {
         style={[styles.todayBtn, { bottom: Math.max(insets.bottom, 12) + 16 }]}
         onPress={close}
       >
-        <Text style={styles.todayBtnText}>Aujourd'hui</Text>
+        <Text style={styles.todayBtnText}>{t('calendarPage.today')}</Text>
       </Pressable>
     </View>
   );
@@ -287,7 +288,10 @@ const styles = StyleSheet.create({
   },
   todayBtn: {
     position: 'absolute',
-    left: 16,
+    // `start`, not `left`: absolute offsets are NOT auto-mirrored by RTL the
+    // way margins and row direction are, so `left` would leave this button on
+    // the wrong side of an Arabic screen.
+    start: 16,
     backgroundColor: colors.surface,
     borderRadius: 999,
     paddingVertical: 14,

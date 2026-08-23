@@ -54,6 +54,9 @@ vi.mock('@/services/nutrition/cache', () => ({
 vi.mock('@/services/nutrition/providers/remote', () => ({
   fatSecretProvider: { id: 'fatsecret', label: 'FatSecret', trust: 0.8, search: vi.fn(async () => null) },
   edamamProvider: { id: 'edamam', label: 'Edamam', trust: 0.8, search: vi.fn(async () => null) },
+  // F-1: USDA proxies through the same Edge Function as the two above.
+  usdaRemoteProvider: { id: 'usda', label: 'USDA FoodData Central', trust: 0.95, search: vi.fn(async () => null) },
+  usdaGtinProvider: { id: 'usda', label: 'USDA FoodData Central', trust: 0.95, search: vi.fn(async () => null) },
 }));
 
 const { analyzeMealImage } = await import('@/services/ai');

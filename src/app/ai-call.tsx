@@ -17,7 +17,7 @@ import { DeleteConfirmCard, LoggerConfirmCard } from '@/components/LoggerConfirm
 import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
 import { isRTL } from '@/i18n';
 import { nowMs } from '@/lib/clock';
-import { isDemoMode, supabase } from '@/lib/supabase';
+import { currentUserId, isDemoMode, supabase } from '@/lib/supabase';
 import { buildHealthContext, sendChatMessage } from '@/services/ai';
 import {
   LIVE_LOG_TOOLS,
@@ -581,8 +581,7 @@ function AiCallScreen() {
     if (isDemoMode || !supabase) return;
     void (async () => {
       try {
-        const { data: u } = await supabase.auth.getUser();
-        const uid = u.user?.id;
+        const uid = await currentUserId();
         if (!uid) return;
         await supabase.from('call_logs').insert({
           user_id: uid,

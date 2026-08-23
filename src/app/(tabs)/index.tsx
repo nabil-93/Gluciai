@@ -2403,7 +2403,12 @@ export default function HomeScreen() {
                   </View>
                 </View>
                 <Text style={styles.tlTime}>
-                  {new Date(item.time).toLocaleTimeString('fr-FR', {
+                  {/* The timeline clock follows the app language like every
+                      other date on this screen (see the header, which already
+                      uses i18n.language). It was pinned to 'fr-FR', so an
+                      Arabic or German patient read French-formatted times in
+                      an otherwise translated timeline. */}
+                  {new Date(item.time).toLocaleTimeString(i18n.language, {
                     hour: '2-digit',
                     minute: '2-digit',
                   })}

@@ -239,7 +239,8 @@
     "continueWithApple": "Continue with Apple",
     "comingSoon": "Coming soon",
     "securityNote": "Your data is secure and protected.\nWe use state-of-the-art encryption.",
-    "phone": "Phone number (WhatsApp)"
+    "phone": "Phone number (WhatsApp)",
+    "slowServer": "The server is slow to answer… still trying."
   },
   "wizard": {
     "progress": "Step {{current}} of {{total}}",
@@ -1764,7 +1765,10 @@
     "webNote": "📱 Notifications activate on iPhone and Android — on the web, this preview shows what will be scheduled.",
     "activated": "✓ Reminders on",
     "activate": "Enable notifications",
-    "footNote": "The times readjust automatically as you keep logging."
+    "footNote": "The times readjust automatically as you keep logging.",
+    "permissionDenied": "Notifications are turned off for GluciAI. Without permission, no reminder can be scheduled.",
+    "openSettings": "Open settings",
+    "unavailable": "Reminders are not available on this device."
   },
   "coachChat": {
     "subtitle": "It knows all your health data",
@@ -2326,5 +2330,83 @@
     "genericGood": "All is well — keep up your regular tracking.",
     "genericWatch": "Something to watch — follow the advice below.",
     "genericAdvice": "Keep logging your readings, meals and activities."
+  },
+  "authError": {
+    "invalidCredentials": "Incorrect email or password.",
+    "emailTaken": "An account already exists with this email.",
+    "weakPassword": "Password too short — use at least 6 characters.",
+    "invalidEmail": "Invalid email address.",
+    "rateLimited": "Too many attempts. Try again in a few minutes.",
+    "emailNotConfirmed": "Confirm your email before signing in.",
+    "network": "No connection. Check your network and try again.",
+    "generic": "Sign-in failed. Please try again.",
+    "timeout": "The server is taking too long to answer. Please try again."
+  },
+  "accountError": {
+    "network": "No connection. Check your network and try again.",
+    "sessionExpired": "Your session has expired. Sign in again and retry.",
+    "storageCleanupFailed": "Your files could not be deleted. Your account is intact — please try again.",
+    "weakPassword": "Password too short — use at least 6 characters.",
+    "samePassword": "The new password must be different from the old one.",
+    "rateLimited": "Too many attempts. Try again in a few minutes.",
+    "generic": "The operation failed. Please try again."
+  },
+  "reportPage": {
+    "title": "Doctor report",
+    "periodLabel": "Period analysed",
+    "periodRange": "{{from}} to {{to}}",
+    "rangeDays_one": "{{count}} d",
+    "rangeDays_other": "{{count}} d",
+    "ea1cLabel": "Estimated HbA1c",
+    "ea1cHint_one": "Calculated from your average glucose ({{avg}} mg/dL) over {{count}} reading — indicative only, they do not replace a laboratory analysis.",
+    "ea1cHint_other": "Calculated from your average glucose ({{avg}} mg/dL) over {{count}} readings — indicative only, they do not replace a laboratory analysis.",
+    "thinData": "{{perDay}} reading/day on average — too few for these percentages to be representative. Aim for at least 3 readings a day.",
+    "tirTitle": "Time in range",
+    "tirInTarget": "in target {{low}}–{{high}} mg/dL",
+    "tirGoal": "Clinical goal: ≥ 70 %",
+    "bandVeryHigh": "Very high (> 250)",
+    "bandHigh": "High (> {{high}})",
+    "bandInRange": "Target ({{low}}–{{high}})",
+    "bandLow": "Low (< {{low}})",
+    "bandVeryLow": "Very low (< 54)",
+    "noData": "No readings in this period.",
+    "trendTitle": "Average glucose per day",
+    "bySlotTitle": "By time of day",
+    "slotCount_one": "{{count}} rdg",
+    "slotCount_other": "{{count}} rdgs",
+    "detailTitle": "Period detail",
+    "statCv": "Variability (CV)",
+    "statSd": "Standard deviation",
+    "statMinMax": "Min / Max",
+    "statPerDay": "Readings / day",
+    "statLows": "Hypoglycaemias",
+    "statHighs": "Hyperglycaemias",
+    "statInsulinPerDay": "Insulin / day",
+    "statRapidLong": "Rapid / Long",
+    "statCarbsPerDay": "Carbs / day",
+    "statSugarPerDay": "Sugars / day",
+    "statMeals": "Meals tracked",
+    "statActivity": "Activity",
+    "weeklyTitle": "AI summary of the week",
+    "generatePdf": "Generate PDF / Print",
+    "pdfHint_one": "The PDF covers this period ({{count}} day), the charts, the by-time-of-day detail and the latest readings.",
+    "pdfHint_other": "The PDF covers this period ({{count}} days), the charts, the by-time-of-day detail and the latest readings.",
+    "slot": {
+      "night": "Night (0–6 h)",
+      "morning": "Morning (6–12 h)",
+      "afternoon": "Afternoon (12–18 h)",
+      "evening": "Evening (18–24 h)"
+    }
+  },
+  "calendarPage": {
+    "today": "Today",
+    "legendInRange": "≥70% in target",
+    "legendMid": "40–70%",
+    "legendLow": "<40%"
+  },
+  "notFoundPage": {
+    "title": "Page not found",
+    "body": "This link does not match any GluciAI screen. It may be outdated or incomplete.",
+    "cta": "Back to home"
   }
 }

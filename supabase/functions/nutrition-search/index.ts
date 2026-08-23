@@ -59,6 +59,8 @@ Deno.serve(async (req) => {
     let hit: Hit | null = null;
     if (provider === 'fatsecret') hit = await searchFatSecret(query);
     else if (provider === 'edamam') hit = await searchEdamam(query);
+    else if (provider === 'usda') hit = await searchUsda(query);
+    else if (provider === 'usda_gtin') hit = await searchUsdaGtin(query);
     else return json({ error: `unknown provider: ${provider}` }, 400);
 
     return json({ hit });
@@ -173,6 +175,160 @@ async function searchEdamam(query: string): Promise<Hit | null> {
     food_id: food.foodId ? String(food.foodId) : undefined,
     per100g,
   };
+}
+
+/* ──────────────────────────────── USDA ──────────────────────────────── */
+
+/*
+ * F-1 — THE USDA KEY MOVED HERE.
+ *
+ * The client used to read `process.env.EXPO_PUBLIC_USDA_API_KEY`. Anything
+ * named `EXPO_PUBLIC_*` is INLINED INTO THE BUNDLE at build time, so the key
+ * shipped inside the APK and could be lifted straight out of it. Worse, it
+ * fell back to `DEMO_KEY`, which USDA caps at 30 requests/hour and 50/day —
+ * so an unset build variable silently reduced branded-food lookup to nothing,
+ * invisibly, because the provider chain swallows failures by design.
+ *
+ * The key now lives only in this function's secrets, alongside FatSecret's and
+ * Edamam's, and reaches USDA from the server. The client calls this proxy and
+ * receives the same normalized shape it already handled — no nutrient values,
+ * no precedence, and no provenance semantics change.
+ *
+ * Secret (optional — the provider is skipped when it is missing, exactly like
+ * the other two):
+ *   supabase secrets set USDA_API_KEY=...
+ *
+ * NOTE: no `DEMO_KEY` fallback. A key-less deployment returns null and the
+ * engine falls through, which is honest. Silently running on a 50/day quota
+ * looks like "USDA rarely matches" rather than "USDA is not configured".
+ */
+
+/** FDC nutrient numbers, per 100 g. Both the legacy and current ids. */
+const FDC_NUTRIENTS = {
+  energy: ['208', '1008'],
+  protein: ['203', '1003'],
+  fat: ['204', '1004'],
+  carbs: ['205', '1005'],
+  fiber: ['291', '1079'],
+  sugar: ['269', '2000'],
+  sodium: ['307', '1093'],
+} as const;
+
+interface FdcNutrient {
+  nutrientNumber?: string;
+  nutrientId?: number;
+  value?: number;
+}
+
+interface FdcFood {
+  fdcId?: number;
+  description?: string;
+  brandOwner?: string;
+  foodNutrients?: FdcNutrient[];
+}
+
+/**
+ * The value FDC published, or null when this food carries no such nutrient.
+ *
+ * This is the whole reason the port had to be done by hand rather than by
+ * moving the URL: a published 0 is a MEASUREMENT and must arrive as 0, while
+ * an absent row must arrive as null. Collapsing the two would hand the client
+ * a measured "0 g of carbohydrate" for a food nobody measured — and that
+ * number reaches a bolus.
+ */
+function fdcPick(
+  nutrients: FdcNutrient[],
+  numbers: readonly string[]
+): number | null {
+  for (const n of nutrients) {
+    const num = n.nutrientNumber ?? String(n.nutrientId ?? '');
+    if (numbers.includes(num) && typeof n.value === 'number') return n.value;
+  }
+  return null;
+}
+
+/** Shared shape-builder for both USDA entry points. */
+function fdcHit(food: FdcFood): Hit | null {
+  const nutrients = food.foodNutrients ?? [];
+  if (!nutrients.length) return null;
+
+  const calories = fdcPick(nutrients, FDC_NUTRIENTS.energy);
+  // Same gate the client applied: no energy → not a described food.
+  if (calories === null || !(calories > 0)) return null;
+
+  const name = food.description?.trim();
+  if (!name) return null;
+
+  return {
+    matched_food: name,
+    food_id: food.fdcId !== undefined ? String(food.fdcId) : undefined,
+    per100g: {
+      calories,
+      carbs: fdcPick(nutrients, FDC_NUTRIENTS.carbs),
+      sugar: fdcPick(nutrients, FDC_NUTRIENTS.sugar),
+      protein: fdcPick(nutrients, FDC_NUTRIENTS.protein),
+      fat: fdcPick(nutrients, FDC_NUTRIENTS.fat),
+      fiber: fdcPick(nutrients, FDC_NUTRIENTS.fiber),
+      sodium: fdcPick(nutrients, FDC_NUTRIENTS.sodium),
+      // USDA does not publish a glycemic index.
+      glycemic_index: null,
+    },
+  };
+}
+
+async function fdcSearch(params: string): Promise<FdcFood | null> {
+  const key = Deno.env.get('USDA_API_KEY');
+  if (!key) return null;
+  const res = await fetch(
+    `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}&${params}`
+  );
+  if (!res.ok) return null;
+  const data = (await res.json()) as { foods?: FdcFood[] };
+  return data.foods?.[0] ?? null;
+}
+
+/** Generic food search — the `usdaProvider` path. */
+async function searchUsda(query: string): Promise<Hit | null> {
+  const food = await fdcSearch(
+    `query=${encodeURIComponent(query)}` +
+      `&dataType=${encodeURIComponent('Foundation,SR Legacy')}` +
+      `&pageSize=1&sortBy=dataType.keyword`
+  );
+  return food ? fdcHit(food) : null;
+}
+
+/**
+ * Branded foods indexed by GTIN/UPC — the barcode path.
+ *
+ * ONLY AN EXACT GTIN MATCH IS TRUSTED. `/foods/search` is a TEXT search: given
+ * a code it does not hold, it happily returns unrelated branded foods, and
+ * accepting the first one would attach another product's carbohydrate figure
+ * to the thing in the patient's hand. The device-side version enforced this
+ * and the rule moves here unchanged — leading zeros normalised on both sides,
+ * because FDC and the scanner disagree about them.
+ */
+async function searchUsdaGtin(barcode: string): Promise<Hit | null> {
+  const key = Deno.env.get('USDA_API_KEY');
+  if (!key) return null;
+  const res = await fetch(
+    `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}` +
+      `&query=${encodeURIComponent(barcode)}&dataType=${encodeURIComponent('Branded')}&pageSize=5`
+  );
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    foods?: (FdcFood & { gtinUpc?: string; brandName?: string })[];
+  };
+  const strip = (s: string) => s.replace(/^0+/, '');
+  const food = (data.foods ?? []).find(
+    (f) => strip(String(f.gtinUpc ?? '')) === strip(barcode)
+  );
+  if (!food) return null;
+
+  const hit = fdcHit(food);
+  if (!hit) return null;
+  // The brand is part of how a patient recognises a scanned product.
+  const brand = food.brandOwner ?? food.brandName;
+  return brand ? { ...hit, matched_food: `${brand} ${hit.matched_food}`.trim() } : hit;
 }
 
 /* ─────────────────────────────── HELPERS ────────────────────────────── */

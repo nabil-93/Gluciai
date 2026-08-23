@@ -3,13 +3,16 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { AppButton, FadeInView, HeroScreen, HERO_INK, HERO_MUTED } from '@/components/ui';
 import { nowMs } from '@/lib/clock';
 import { carbStatus } from '@/services/nutrition/carbProvenance';
 import { SOURCE_LABEL } from '@/services/nutrition/engine';
-import { BAND_COLORS, buildReportHtml, SLOT_FR } from '@/services/reportHtml';
+// SLOT_FR is no longer imported here: the screen looks its slot labels up
+// through i18n. It stays exported for buildReportHtml, whose PDF is French.
+import { BAND_COLORS, buildReportHtml } from '@/services/reportHtml';
 import { buildReportStats, trendGeometry } from '@/services/reportStats';
 import { getWeeklySummary } from '@/services/weeklyReport';
 import { useAppStore } from '@/store/useAppStore';
@@ -21,21 +24,33 @@ const F700 = 'PlusJakartaSans_700Bold';
 const F800 = 'PlusJakartaSans_800ExtraBold';
 
 /** The windows a consultation is actually held over. */
-const RANGES = [
-  { days: 7, label: '7 j' },
-  { days: 14, label: '14 j' },
-  { days: 30, label: '30 j' },
-  { days: 90, label: '90 j' },
-];
+const RANGE_DAYS = [7, 14, 30, 90] as const;
 
 /* Shared with the PDF so the screen and the printed document cannot drift. */
 const BAND = BAND_COLORS;
 
-const fmtD = (d: Date) =>
-  d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+/*
+ * DATES AND NUMBERS FOLLOW THE APP LANGUAGE.
+ *
+ * Every formatter on this screen used to be pinned to 'fr-FR', so an Arabic or
+ * German patient read "15 janvier 2026" and "6,4" inside an otherwise
+ * translated screen. `Intl` is given the active language instead — the same
+ * convention as journal.tsx and activity.tsx.
+ *
+ * These take the locale as an argument rather than reading i18n at module
+ * scope: a module-level formatter is built once at import time and would
+ * freeze the language of the very first render for the life of the process.
+ */
+const fmtD = (d: Date, locale: string) =>
+  d.toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
+
+/** Decimal separator follows the language too (6.4 vs 6,4 vs ٦٫٤). */
+const fmtN = (n: number, locale: string) => n.toLocaleString(locale);
 
 export default function ReportScreen() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
   const { profile, glucoseLogs, insulinLogs, meals, activityLogs } = useAppStore();
   const [generating, setGenerating] = useState(false);
   const [days, setDays] = useState(30);
@@ -121,24 +136,37 @@ export default function ReportScreen() {
   const thin = stats.count > 0 && stats.perDay < 1;
 
   return (
-    <HeroScreen title="Rapport médecin" glyph="report" tint="#4E6B87" onClose={close} height={200}>
+    <HeroScreen
+      title={t('reportPage.title')}
+      glyph="report"
+      tint="#4E6B87"
+      onClose={close}
+      height={200}
+    >
       {/* ── The window this whole report is about ── */}
       <FadeInView>
         <View style={styles.periodCard}>
-          <Text style={styles.periodLabel}>Période analysée</Text>
+          <Text style={styles.periodLabel}>{t('reportPage.periodLabel')}</Text>
+          {/* One key, not "du" + date + "au" + date: word order differs by
+              language and Arabic reads right-to-left. */}
           <Text style={styles.periodRange}>
-            du {fmtD(stats.from)} au {fmtD(stats.to)}
+            {t('reportPage.periodRange', {
+              from: fmtD(stats.from, locale),
+              to: fmtD(stats.to, locale),
+            })}
           </Text>
           <View style={styles.rangeRow}>
-            {RANGES.map((r) => {
-              const on = r.days === days;
+            {RANGE_DAYS.map((d) => {
+              const on = d === days;
               return (
                 <Pressable
-                  key={r.days}
-                  onPress={() => setDays(r.days)}
+                  key={d}
+                  onPress={() => setDays(d)}
                   style={[styles.rangeChip, on && styles.rangeChipOn]}
                 >
-                  <Text style={[styles.rangeText, on && styles.rangeTextOn]}>{r.label}</Text>
+                  <Text style={[styles.rangeText, on && styles.rangeTextOn]}>
+                    {t('reportPage.rangeDays', { count: d })}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -156,33 +184,37 @@ export default function ReportScreen() {
         >
           <View style={styles.ea1cRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.ea1cLabel}>HbA1c estimée</Text>
+              <Text style={styles.ea1cLabel}>{t('reportPage.ea1cLabel')}</Text>
               <View style={styles.ea1cValueRow}>
                 <Text style={styles.ea1cValue}>
-                  {stats.ea1c !== null ? stats.ea1c.toLocaleString('fr-FR') : '—'}
+                  {stats.ea1c !== null ? fmtN(stats.ea1c, locale) : '—'}
                 </Text>
                 <Text style={styles.ea1cUnit}>%</Text>
               </View>
             </View>
             <View style={styles.gmiBox}>
+              {/* GMI is the internationally used acronym for this index — a
+                  clinical identifier, not a sentence, so it is not translated. */}
               <Text style={styles.gmiLabel}>GMI</Text>
               <Text style={styles.gmiValue}>
-                {stats.gmi !== null ? `${stats.gmi.toLocaleString('fr-FR')} %` : '—'}
+                {stats.gmi !== null ? `${fmtN(stats.gmi, locale)} %` : '—'}
               </Text>
             </View>
           </View>
+          {/* `count` drives i18next pluralization, so each language applies its
+              own rule — Arabic has six plural forms, French has two. */}
           <Text style={styles.ea1cHint}>
-            Calculées depuis la moyenne glycémique ({stats.avg ?? '—'} mg/dL) sur{' '}
-            {stats.count} mesure{stats.count > 1 ? 's' : ''} — indicatives, elles ne remplacent
-            pas l&apos;analyse de laboratoire.
+            {t('reportPage.ea1cHint', {
+              avg: stats.avg ?? '—',
+              count: stats.count,
+            })}
           </Text>
         </LinearGradient>
 
         {thin ? (
           <View style={styles.warnCard}>
             <Text style={styles.warnText}>
-              ⚠️ {stats.perDay.toLocaleString('fr-FR')} mesure/jour en moyenne — trop peu pour que
-              ces pourcentages soient représentatifs. Visez au moins 3 mesures par jour.
+              ⚠️ {t('reportPage.thinData', { perDay: fmtN(stats.perDay, locale) })}
             </Text>
           </View>
         ) : null}
@@ -190,15 +222,19 @@ export default function ReportScreen() {
 
       {/* ── Time in range, banded ── */}
       <FadeInView delay={110}>
-        <Text style={styles.sectionTitle}>Temps dans les cibles</Text>
+        <Text style={styles.sectionTitle}>{t('reportPage.tirTitle')}</Text>
         <View style={styles.card}>
           <View style={styles.tirHead}>
             <Text style={[styles.tirBig, { color: tirGood ? BAND.inRange : BAND.high }]}>
-              {stats.count ? `${stats.inRangePct.toLocaleString('fr-FR')} %` : '—'}
+              {stats.count ? `${fmtN(stats.inRangePct, locale)} %` : '—'}
             </Text>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.tirLabel}>dans la cible {low}–{high} mg/dL</Text>
-              <Text style={styles.tirHint}>Objectif clinique : ≥ 70 %</Text>
+              {/* The 70/180 bounds are the patient's own targets — values, not
+                  copy. Only the sentence around them is translated. */}
+              <Text style={styles.tirLabel}>
+                {t('reportPage.tirInTarget', { low, high })}
+              </Text>
+              <Text style={styles.tirHint}>{t('reportPage.tirGoal')}</Text>
             </View>
           </View>
 
@@ -221,15 +257,15 @@ export default function ReportScreen() {
                 )}
               </View>
               <View style={styles.legend}>
-                <LegendRow color={BAND.veryHigh} label={`Très élevé (> 250)`} pct={stats.veryHighPct} />
-                <LegendRow color={BAND.high} label={`Élevé (> ${high})`} pct={stats.highPct} />
-                <LegendRow color={BAND.inRange} label={`Cible (${low}–${high})`} pct={stats.inRangePct} />
-                <LegendRow color={BAND.low} label={`Bas (< ${low})`} pct={stats.lowPct} />
-                <LegendRow color={BAND.veryLow} label={`Très bas (< 54)`} pct={stats.veryLowPct} />
+                <LegendRow color={BAND.veryHigh} label={t('reportPage.bandVeryHigh')} pct={stats.veryHighPct} locale={locale} />
+                <LegendRow color={BAND.high} label={t('reportPage.bandHigh', { high })} pct={stats.highPct} locale={locale} />
+                <LegendRow color={BAND.inRange} label={t('reportPage.bandInRange', { low, high })} pct={stats.inRangePct} locale={locale} />
+                <LegendRow color={BAND.low} label={t('reportPage.bandLow', { low })} pct={stats.lowPct} locale={locale} />
+                <LegendRow color={BAND.veryLow} label={t('reportPage.bandVeryLow')} pct={stats.veryLowPct} locale={locale} />
               </View>
             </>
           ) : (
-            <Text style={styles.empty}>Aucune mesure sur la période.</Text>
+            <Text style={styles.empty}>{t('reportPage.noData')}</Text>
           )}
         </View>
       </FadeInView>
@@ -237,7 +273,7 @@ export default function ReportScreen() {
       {/* ── The curve ── */}
       {trend ? (
         <FadeInView delay={160}>
-          <Text style={styles.sectionTitle}>Moyenne glycémique par jour</Text>
+          <Text style={styles.sectionTitle}>{t('reportPage.trendTitle')}</Text>
           <View style={styles.card}>
             <Svg width="100%" height={186} viewBox={`0 0 ${trend.width} ${trend.height}`}>
               <Rect
@@ -294,12 +330,17 @@ export default function ReportScreen() {
 
       {/* ── Where the trouble sits ── */}
       <FadeInView delay={200}>
-        <Text style={styles.sectionTitle}>Par moment de la journée</Text>
+        <Text style={styles.sectionTitle}>{t('reportPage.bySlotTitle')}</Text>
         <View style={styles.card}>
           {stats.bySlot.map((s) => (
             <View key={s.key} style={styles.slotRow}>
-              <Text style={styles.slotLabel}>{SLOT_FR[s.key]}</Text>
-              <Text style={styles.slotCount}>{s.count} mes.</Text>
+              {/* `s.key` is the internal slot identifier (night/morning/…) and
+                  stays untranslated; only its LABEL is looked up. SLOT_FR
+                  remains for the French PDF, which is a French document. */}
+              <Text style={styles.slotLabel}>{t(`reportPage.slot.${s.key}`)}</Text>
+              <Text style={styles.slotCount}>
+                {t('reportPage.slotCount', { count: s.count })}
+              </Text>
               <Text
                 style={[
                   styles.slotAvg,
@@ -324,26 +365,28 @@ export default function ReportScreen() {
 
       {/* ── Variability, insulin, food ── */}
       <FadeInView delay={240}>
-        <Text style={styles.sectionTitle}>Détail de la période</Text>
+        <Text style={styles.sectionTitle}>{t('reportPage.detailTitle')}</Text>
         <View style={styles.grid}>
-          <Stat label="Variabilité (CV)" value={stats.cv !== null ? `${stats.cv.toLocaleString('fr-FR')} %` : '—'} color={stats.cv !== null && stats.cv > 36 ? BAND.high : BAND.inRange} />
-          <Stat label="Écart-type" value={stats.sd !== null ? `${stats.sd} mg/dL` : '—'} color={colors.ai} />
-          <Stat label="Min / Max" value={stats.min !== null ? `${stats.min} / ${stats.max}` : '—'} color={HERO_INK} />
-          <Stat label="Mesures / jour" value={stats.count ? stats.perDay.toLocaleString('fr-FR') : '—'} color={colors.ai} />
-          <Stat label="Hypoglycémies" value={String(stats.lows)} color={BAND.low} />
-          <Stat label="Hyperglycémies" value={String(stats.highs)} color={BAND.high} />
-          <Stat label="Insuline / jour" value={stats.avgInsulinPerDay !== null ? `${stats.avgInsulinPerDay.toLocaleString('fr-FR')} U` : '—'} color={colors.ai} />
-          <Stat label="Rapide / Lente" value={`${stats.rapidU.toLocaleString('fr-FR')} / ${stats.longU.toLocaleString('fr-FR')} U`} color={colors.carbs} />
-          <Stat label="Glucides / jour" value={stats.avgCarbsPerDay !== null ? `${stats.avgCarbsPerDay} g` : '—'} color={colors.carbs} />
-          <Stat label="Sucres / jour" value={stats.avgSugarPerDay !== null ? `${stats.avgSugarPerDay} g` : '—'} color={colors.protein} />
-          <Stat label="Repas suivis" value={String(stats.mealsCount)} color={colors.protein} />
-          <Stat label="Activité" value={`${stats.totalActivityMin} min`} color={colors.primary} />
+          {/* Units (mg/dL, U, g, min) are measurement symbols, not prose, and
+              stay as they are — only the labels around them are translated. */}
+          <Stat label={t('reportPage.statCv')} value={stats.cv !== null ? `${fmtN(stats.cv, locale)} %` : '—'} color={stats.cv !== null && stats.cv > 36 ? BAND.high : BAND.inRange} />
+          <Stat label={t('reportPage.statSd')} value={stats.sd !== null ? `${stats.sd} mg/dL` : '—'} color={colors.ai} />
+          <Stat label={t('reportPage.statMinMax')} value={stats.min !== null ? `${stats.min} / ${stats.max}` : '—'} color={HERO_INK} />
+          <Stat label={t('reportPage.statPerDay')} value={stats.count ? fmtN(stats.perDay, locale) : '—'} color={colors.ai} />
+          <Stat label={t('reportPage.statLows')} value={String(stats.lows)} color={BAND.low} />
+          <Stat label={t('reportPage.statHighs')} value={String(stats.highs)} color={BAND.high} />
+          <Stat label={t('reportPage.statInsulinPerDay')} value={stats.avgInsulinPerDay !== null ? `${fmtN(stats.avgInsulinPerDay, locale)} U` : '—'} color={colors.ai} />
+          <Stat label={t('reportPage.statRapidLong')} value={`${fmtN(stats.rapidU, locale)} / ${fmtN(stats.longU, locale)} U`} color={colors.carbs} />
+          <Stat label={t('reportPage.statCarbsPerDay')} value={stats.avgCarbsPerDay !== null ? `${stats.avgCarbsPerDay} g` : '—'} color={colors.carbs} />
+          <Stat label={t('reportPage.statSugarPerDay')} value={stats.avgSugarPerDay !== null ? `${stats.avgSugarPerDay} g` : '—'} color={colors.protein} />
+          <Stat label={t('reportPage.statMeals')} value={String(stats.mealsCount)} color={colors.protein} />
+          <Stat label={t('reportPage.statActivity')} value={`${stats.totalActivityMin} min`} color={colors.primary} />
         </View>
       </FadeInView>
 
       {/* ── What the week said ── */}
       <FadeInView delay={280}>
-        <Text style={styles.sectionTitle}>Résumé IA de la semaine</Text>
+        <Text style={styles.sectionTitle}>{t('reportPage.weeklyTitle')}</Text>
         <View style={styles.card}>
           {weekly.observations.map((o, i) => (
             <Text key={`o${i}`} style={styles.weeklyLine}>📋 {o}</Text>
@@ -357,26 +400,42 @@ export default function ReportScreen() {
         </View>
 
         <AppButton
-          label="📄 Générer le PDF / Imprimer"
+          label={`📄 ${t('reportPage.generatePdf')}`}
           onPress={generate}
           loading={generating}
           style={{ marginTop: 18 }}
         />
+        {/* The generated PDF is a French clinical document by design
+            (`<html lang="fr">` in reportHtml.ts). The button and this hint are
+            patient-facing UI and follow the app language; the document they
+            produce deliberately does not. */}
         <Text style={styles.footHint}>
-          Le PDF reprend cette période ({stats.days} jours), les graphiques, le détail par moment
-          de la journée et les dernières mesures.
+          {t('reportPage.pdfHint', { count: stats.days })}
         </Text>
       </FadeInView>
     </HeroScreen>
   );
 }
 
-function LegendRow({ color, label, pct }: { color: string; label: string; pct: number }) {
+function LegendRow({
+  color,
+  label,
+  pct,
+  locale,
+}: {
+  color: string;
+  label: string;
+  pct: number;
+  /* Passed in rather than read from i18n here: this component re-renders with
+     its parent, so the percentage follows the language on the same frame the
+     label does. */
+  locale: string;
+}) {
   return (
     <View style={styles.legendRow}>
       <View style={[styles.legendDot, { backgroundColor: color }]} />
       <Text style={styles.legendLabel}>{label}</Text>
-      <Text style={styles.legendPct}>{pct.toLocaleString('fr-FR')} %</Text>
+      <Text style={styles.legendPct}>{fmtN(pct, locale)} %</Text>
     </View>
   );
 }
@@ -499,7 +558,12 @@ const styles = StyleSheet.create({
   },
   slotLabel: { flex: 1, minWidth: 0, fontFamily: F600, fontSize: 12.5, color: HERO_INK },
   slotCount: { fontFamily: F500, fontSize: 11, color: '#9AA8A0' },
-  slotAvg: { fontFamily: F800, fontSize: 16, minWidth: 44, textAlign: 'right' },
+  /* `auto`, not `right`. React Native has no `textAlign: 'end'` — the values
+     are left/right/center/auto/justify — and a hardcoded `right` pins this
+     number to the side an Arabic row no longer ends on. `auto` resolves
+     against the text's own direction, so it lands on the trailing edge in
+     both LTR and RTL. */
+  slotAvg: { fontFamily: F800, fontSize: 16, minWidth: 44, textAlign: 'auto' },
 
   /* Grid */
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },

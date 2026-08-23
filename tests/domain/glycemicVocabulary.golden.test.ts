@@ -113,3 +113,42 @@ describe('22D Phase 2 — the retired name does not survive anywhere', () => {
     }
   });
 });
+
+/**
+ * BUG-A1 — the RTL restart dialog must speak the language the patient just
+ * chose, not the one they left.
+ *
+ * Found on the Android emulator: selecting العربية applied Arabic strings and
+ * mirrored the layout, but the "Restart the app" dialog appeared in ENGLISH —
+ * at the one moment the patient has demonstrated they may not read it. The
+ * four translations already existed; the bug was that `t` came from the
+ * component's previous render and still resolved in the OLD language.
+ *
+ * The fix pins the lookup with i18next's `lng` option. These fixtures pin the
+ * translations themselves, so a future edit cannot silently blank one and
+ * re-introduce an untranslated safety dialog.
+ */
+describe('BUG-A1 — the restart dialog is translated in every locale', () => {
+  it.each(LOCALES)('%s: has a non-empty restart title and body', (l) => {
+    const c = locale(l).common;
+    expect(typeof c.restartTitle, `${l}.common.restartTitle`).toBe('string');
+    expect(c.restartTitle.trim().length, `${l}.common.restartTitle`).toBeGreaterThan(0);
+    expect(typeof c.restartBody, `${l}.common.restartBody`).toBe('string');
+    expect(c.restartBody.trim().length, `${l}.common.restartBody`).toBeGreaterThan(0);
+  });
+
+  it('each locale has its OWN wording — no locale silently falls back to English', () => {
+    const titles = LOCALES.map((l) => locale(l).common.restartTitle);
+    // Four locales, four distinct strings: a duplicate would mean one language
+    // is showing another's text, which is exactly the defect being closed.
+    expect(new Set(titles).size).toBe(LOCALES.length);
+  });
+
+  it('the call sites pin the lookup to the language just chosen', () => {
+    for (const f of ['src/app/welcome.tsx', 'src/app/profile-edit.tsx']) {
+      const s = readFileSync(path.resolve(process.cwd(), f), 'utf8');
+      expect(s, f).toContain("t('common.restartTitle', { lng: code })");
+      expect(s, f).toContain("t('common.restartBody', { lng: code })");
+    }
+  });
+});

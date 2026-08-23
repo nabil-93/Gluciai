@@ -1,6 +1,6 @@
 import { healthyFoodAIIndex } from '@/data/healthyFoods';
 import { searchMoroccanFood } from '@/data/moroccanFoods';
-import { isDemoMode, supabase } from '@/lib/supabase';
+import { currentUserId, isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import type { FoodItemResult, NutritionResult, Profile } from '@/types';
 
@@ -768,8 +768,7 @@ export async function sendChatMessage(
   if (mode === 'chat' && lastUser) {
     void (async () => {
       try {
-        const { data: u } = await supabase.auth.getUser();
-        const uid = u.user?.id;
+        const uid = await currentUserId();
         if (!uid) return;
         await supabase.from('chat_history').insert([
           { user_id: uid, role: 'user', message: lastUser.content, language },
@@ -817,8 +816,7 @@ export async function sendChatVoice(
 
   void (async () => {
     try {
-      const { data: u } = await supabase.auth.getUser();
-      const uid = u.user?.id;
+      const uid = await currentUserId();
       if (!uid) return;
       await supabase.from('chat_history').insert([
         {

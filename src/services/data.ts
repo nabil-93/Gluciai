@@ -1,4 +1,4 @@
-import { isDemoMode, supabase } from '@/lib/supabase';
+import { currentUserId as authUserId, isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import type {
   ActivityIntensity,
@@ -59,8 +59,8 @@ function newEventId(): string {
 
 async function currentUserId(): Promise<string> {
   if (isDemoMode || !supabase) return 'demo-user';
-  const { data } = await supabase.auth.getUser();
-  return data.user?.id ?? 'demo-user';
+  // Local read of the stored session — see `currentUserId` in lib/supabase.
+  return (await authUserId()) ?? 'demo-user';
 }
 
 /**

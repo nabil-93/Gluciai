@@ -32,6 +32,9 @@ vi.mock('@/services/nutrition/cache', () => ({
 vi.mock('@/services/nutrition/providers/remote', () => ({
   fatSecretProvider: { id: 'fatsecret', label: 'FatSecret', trust: 0.8, search: vi.fn() },
   edamamProvider: { id: 'edamam', label: 'Edamam', trust: 0.8, search: vi.fn() },
+  // F-1: USDA proxies through the same Edge Function as the two above.
+  usdaRemoteProvider: { id: 'usda', label: 'USDA FoodData Central', trust: 0.95, search: vi.fn(async () => null) },
+  usdaGtinProvider: { id: 'usda', label: 'USDA FoodData Central', trust: 0.95, search: vi.fn(async () => null) },
 }));
 
 const { inserts, addedMeals } = vi.hoisted(() => ({
@@ -41,12 +44,11 @@ const { inserts, addedMeals } = vi.hoisted(() => ({
 
 vi.mock('@/lib/supabase', () => ({
   isDemoMode: false,
+  // Who is signed in is now read from the stored session, not fetched from
+  // /auth/v1/user on every write — so that is what the mock provides.
+  currentUserId: async () => '11111111-2222-3333-4444-555555555555',
   supabase: {
-    auth: {
-      getUser: async () => ({
-        data: { user: { id: '11111111-2222-3333-4444-555555555555' } },
-      }),
-    },
+    auth: {},
     from: (table: string) => ({
       insert: (payload: any) => {
         inserts.push({ table, payload });

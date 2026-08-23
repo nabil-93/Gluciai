@@ -86,38 +86,73 @@ const fdc = (nutrients: { nutrientNumber: string; value: number }[]) => ({
   foods: [{ fdcId: 1, description: 'Test food', foodNutrients: nutrients }],
 });
 
+/*
+ * F-1 — USDA NOW ARRIVES THROUGH THE EDGE FUNCTION.
+ *
+ * The provider used to call `api.nal.usda.gov` from the device with a key
+ * bundled into the APK (`EXPO_PUBLIC_USDA_API_KEY`, falling back to
+ * `DEMO_KEY`). It now proxies through `nutrition-search`, exactly like
+ * FatSecret and Edamam, so these fixtures drive `remoteHit` instead of a
+ * stubbed FDC URL.
+ *
+ * THE ASSERTIONS BELOW ARE UNCHANGED. What is being pinned is the behaviour
+ * that matters clinically — an absent carbohydrate row stays unknown, a
+ * published 0 stays a known zero, a real value is passed through untouched —
+ * and moving the transport must not move any of it. The Edge Function returns
+ * `null` for a nutrient FDC does not publish, which is what carries the
+ * distinction across the wire.
+ */
 describe('usdaProvider — carbohydrate provenance', () => {
-  const energy = { nutrientNumber: '1008', value: 120 };
+  /** What the Edge Function sends back for a food with 120 kcal. */
+  const proxied = (carbs: number | null) => ({
+    matched_food: 'Test food',
+    food_id: '1',
+    per100g: {
+      calories: 120,
+      carbs,
+      sugar: null,
+      protein: null,
+      fat: null,
+      fiber: null,
+      sodium: null,
+      glycemic_index: null,
+    },
+  });
 
   it('reports an absent carbohydrate row as unknown, not as 0 g', async () => {
-    stubFetch([{ match: 'api.nal.usda.gov', body: fdc([energy]) }]);
+    remoteHit.value = proxied(null);
     const hit = await usdaProvider.search('anything');
     expect(hit!.per100g.carbs).toBe(0);
     expect(hit!.per100g.carbs_known).toBe(false);
   });
 
   it('keeps a published 0 as a known zero', async () => {
-    stubFetch([
-      {
-        match: 'api.nal.usda.gov',
-        body: fdc([energy, { nutrientNumber: '1005', value: 0 }]),
-      },
-    ]);
+    remoteHit.value = proxied(0);
     const hit = await usdaProvider.search('anything');
     expect(hit!.per100g.carbs).toBe(0);
     expect(hit!.per100g.carbs_known).toBe(true);
   });
 
   it('leaves a normal value exactly as it was', async () => {
-    stubFetch([
-      {
-        match: 'api.nal.usda.gov',
-        body: fdc([energy, { nutrientNumber: '1005', value: 27.4 }]),
-      },
-    ]);
+    remoteHit.value = proxied(27.4);
     const hit = await usdaProvider.search('anything');
     expect(hit!.per100g.carbs).toBe(27.4);
     expect(hit!.per100g.carbs_known).toBe(true);
+  });
+
+  it('still files its answers under USDA provenance', async () => {
+    // The proxy must not change WHO answered — `SOURCE_LABEL`, the report and
+    // the doctor panel all read this.
+    remoteHit.value = proxied(12);
+    const hit = await usdaProvider.search('anything');
+    expect(hit!.source).toBe('usda');
+  });
+
+  it('sends no USDA key from the device — the request carries only a query', async () => {
+    remoteHit.value = proxied(12);
+    await usdaProvider.search('anything');
+    // Nothing reached api.nal.usda.gov from the client at all.
+    expect(requested.some((u) => u.includes('api.nal.usda.gov'))).toBe(false);
   });
 });
 
@@ -428,44 +463,42 @@ describe('lookupBarcodeMulti — the sharpest instance', () => {
     expect(p!.per100g.carbs_known).toBe(false);
   });
 
+  /*
+   * F-1: the branded/GTIN lookup proxies through the Edge Function now, so
+   * these drive `remoteHit` rather than a stubbed `dataType=Branded` URL. The
+   * exact-GTIN rule that used to live here moved into the function with it —
+   * FDC's endpoint is a text search and would otherwise attach an unrelated
+   * product's carbohydrate to a scanned barcode.
+   *
+   * `stubFetch([])` leaves Open Food Facts unanswered so the chain falls
+   * through to USDA, which is the path under test. The assertions are the
+   * originals.
+   */
+  const brandedProxy = (name: string, carbs: number | null, calories: number) => ({
+    matched_food: name,
+    per100g: {
+      calories,
+      carbs,
+      sugar: null,
+      protein: null,
+      fat: null,
+      fiber: null,
+      sodium: null,
+      glycemic_index: null,
+    },
+  });
+
   it('a branded USDA record with no carbohydrate row is unknown too', async () => {
-    stubFetch([
-      {
-        match: 'dataType=Branded',
-        body: {
-          foods: [
-            {
-              gtinUpc: '777777777777',
-              description: 'Branded thing',
-              foodNutrients: [{ nutrientId: 1008, value: 200 }],
-            },
-          ],
-        },
-      },
-    ]);
+    stubFetch([]);
+    remoteHit.value = brandedProxy('Branded thing', null, 200);
     const p = await lookupBarcodeMulti('777777777777');
     expect(p!.nutritionKnown).toBe(true);
     expect(p!.per100g.carbs_known).toBe(false);
   });
 
   it('a branded USDA record WITH the row keeps its value', async () => {
-    stubFetch([
-      {
-        match: 'dataType=Branded',
-        body: {
-          foods: [
-            {
-              gtinUpc: '888888888888',
-              description: 'Branded bread',
-              foodNutrients: [
-                { nutrientId: 1008, value: 260 },
-                { nutrientId: 1005, value: 49 },
-              ],
-            },
-          ],
-        },
-      },
-    ]);
+    stubFetch([]);
+    remoteHit.value = brandedProxy('Branded bread', 49, 260);
     const p = await lookupBarcodeMulti('888888888888');
     expect(p!.per100g).toMatchObject({ carbs: 49, carbs_known: true });
   });

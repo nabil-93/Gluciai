@@ -1,4 +1,4 @@
-import { isDemoMode, supabase } from '@/lib/supabase';
+import { currentUserId, isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 
 /** Feature keys managed from the admin dashboard (feature_access table). */
@@ -66,8 +66,7 @@ export function planStatus(locked: string[]): PlanStatus {
 export async function refreshFeatureLocks() {
   if (isDemoMode || !supabase) return;
   try {
-    const { data: userData } = await supabase.auth.getUser();
-    const uid = userData.user?.id;
+    const uid = await currentUserId();
     if (!uid) return;
     const { data, error } = await supabase
       .from('feature_access')

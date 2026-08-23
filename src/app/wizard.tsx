@@ -21,8 +21,13 @@ import { isRTL } from '@/i18n';
 import { useFrameDimensions } from '@/lib/appFrame';
 import { confirmAsync } from '@/lib/confirm';
 import { parseDecimal, parsePositive, sanitizeDecimal } from '@/lib/num';
-import { isDemoMode, supabase } from '@/lib/supabase';
+import { currentUser, isDemoMode, supabase } from '@/lib/supabase';
+import { authErrorKey } from '@/services/authErrors';
 import { saveProfile } from '@/services/data';
+import {
+  clearPendingRegistration,
+  getPendingRegistration,
+} from '@/services/pendingRegistration';
 import { useAppStore } from '@/store/useAppStore';
 import type { DiabetesType, InsulinType, Profile } from '@/types';
 
@@ -407,6 +412,8 @@ export default function WizardScreen() {
   const [doctorPhone, setDoctorPhone] = useState('');
   const [consents, setConsents] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
+  /** Localized failure of the final commit (sign-up). Keeps the patient here. */
+  const [submitError, setSubmitError] = useState<string | null>(null);
   /* Doctor promo code (optional): links the patient to their doctor + discount */
   const [promoCode, setPromoCode] = useState('');
   const [promoState, setPromoState] = useState<'idle' | 'checking' | 'ok' | 'bad'>('idle');
@@ -507,7 +514,65 @@ export default function WizardScreen() {
       return;
     }
     // Finish
+    if (saving) return; // double-tap guard: one account, one request
     setSaving(true);
+    setSubmitError(null);
+
+    /*
+     * THE ACCOUNT IS CREATED HERE — the final commit of onboarding.
+     *
+     * `auth.tsx` used to sign the patient up before this wizard even started,
+     * so every abandoned onboarding left a real `auth.users` row with no
+     * profile: an account they never completed and which blocked their own
+     * email. Registration is now held in memory and spent here, once, when
+     * there is a complete profile to store alongside it.
+     *
+     * On failure nothing is created: the patient stays on this step with a
+     * localized message and their answers intact, and can retry. The account
+     * is never created twice — `clearPendingRegistration()` runs only after a
+     * confirmed success.
+     */
+    const pending = getPendingRegistration();
+    if (pending && !isDemoMode && supabase) {
+      try {
+        const { error: signUpErr } = await supabase.auth.signUp({
+          email: pending.email,
+          password: pending.password,
+          options: { data: { name: pending.name, phone: pending.phone } },
+        });
+        if (signUpErr) throw signUpErr;
+        // The `handle_new_user` trigger inserts only user_id/email/role — it
+        // does NOT copy the phone out of the sign-up metadata, and
+        // `saveProfile` below has no phone field either. `auth.tsx` used to
+        // write it here; moving the sign-up must not silently drop it, or the
+        // dashboard loses the number it reaches the patient on. Best-effort:
+        // a failure must not undo an account that already exists.
+        if (pending.phone.trim() || pending.name.trim()) {
+          try {
+            const u = await currentUser();
+            if (u) {
+              await supabase
+                .from('profiles')
+                .update({
+                  phone: pending.phone.trim() || undefined,
+                  name: pending.name.trim() || undefined,
+                })
+                .eq('user_id', u.id);
+            }
+          } catch {
+            // Non-fatal: the account exists and onboarding must complete.
+          }
+        }
+        clearPendingRegistration();
+      } catch (e: any) {
+        if (__DEV__) console.warn('[wizard signUp]', e?.code ?? e?.status ?? '', e?.message);
+        // No account, no profile, no navigation — and the answers stay put.
+        setSubmitError(t(authErrorKey(e)));
+        setSaving(false);
+        return;
+      }
+    }
+
     // Save under the REAL signed-in account so the profile reaches Supabase
     // (saveProfile skips the server upsert for 'demo-user'). Without this the
     // whole wizard — targets, insulin, emergency contact, doctor, address —
@@ -515,13 +580,16 @@ export default function WizardScreen() {
     let uid = 'demo-user';
     // Keep the name captured at sign-up: the wizard never asks for it, and an
     // empty value here would otherwise overwrite it on the server.
-    let existingName = useAppStore.getState().profile?.name ?? '';
+    // The wizard never asks for a name, so it comes from the registration form
+    // — now held in `pending` rather than already written to the server.
+    let existingName =
+      useAppStore.getState().profile?.name || pending?.name?.trim() || '';
     if (!isDemoMode && supabase) {
       try {
-        const { data } = await supabase.auth.getUser();
-        uid = data.user?.id ?? 'demo-user';
+        const u = await currentUser();
+        uid = u?.id ?? 'demo-user';
         if (!existingName) {
-          existingName = (data.user?.user_metadata?.name as string) ?? '';
+          existingName = (u?.user_metadata?.name as string) ?? '';
         }
       } catch {
         // stay on 'demo-user' → local-only save, retried on next launch
@@ -1145,6 +1213,12 @@ export default function WizardScreen() {
           paddingBottom: Math.max(insets.bottom, 8) + 2,
         }}
       >
+        {/* The final commit creates the account. When it fails the patient
+            stays here with their answers intact and a localized reason — never
+            a silent failure and never a false "welcome". */}
+        {submitError ? (
+          <Text style={styles.submitError}>{submitError}</Text>
+        ) : null}
         <Pressable onPress={next} disabled={!canContinue || saving}>
           <LinearGradient
             colors={['#2ec983', '#1fbc78']}
@@ -1517,6 +1591,14 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   ctaText: { fontFamily: N700, fontSize: 17, color: '#ffffff' },
+  submitError: {
+    fontFamily: N700,
+    fontSize: 13.5,
+    lineHeight: 19,
+    color: '#C81E1E',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
   ctaArrow: { position: 'absolute', right: 22 },
   backWrap: {
     height: 28,

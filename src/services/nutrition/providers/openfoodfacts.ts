@@ -1,5 +1,6 @@
 import { knownFrom, type NutrientKnown } from '../nutrientProvenance';
 import type { NutritionProvider, ProviderHit } from '../types';
+import { OFF_HEADERS } from './userAgent';
 
 /**
  * Open Food Facts provider (open crowd-sourced database).
@@ -59,7 +60,11 @@ export const openFoodFactsProvider: NutritionProvider = {
         `${ENDPOINT}?search_terms=${encodeURIComponent(query)}` +
         `&search_simple=1&action=process&json=1&page_size=5` +
         `&fields=product_name,nutriments`;
-      const res = await fetch(url, { signal: controller.signal });
+      // F-2: OFF requires a custom User-Agent and blocks anonymous traffic.
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: OFF_HEADERS,
+      });
       if (!res.ok) return null;
       const data = (await res.json()) as { products?: OffProduct[] };
 

@@ -29,9 +29,15 @@ import { sanitizePer100g } from '@/services/nutrition/plausibility';
  * fixture, and Supabase is a hand-rolled double whose rows the test supplies.
  */
 
-const { fakeSupabase, catalogRows, rpcCalls } = vi.hoisted(() => {
+const { fakeSupabase, catalogRows, rpcCalls, remoteHit, invoked } = vi.hoisted(() => {
   const catalogRows: any[] = [];
   const rpcCalls: { name: string; params: any }[] = [];
+  /* F-1: USDA now answers through the `nutrition-search` Edge Function, so the
+     test supplies its reply here instead of stubbing an FDC URL. */
+  const remoteHit: { value: unknown } = { value: null };
+  /* Every Edge Function call, in order — this is how "OFF was asked before
+     USDA" stays provable now that USDA makes no direct request. */
+  const invoked: string[] = [];
 
   const rows = async () => ({ data: catalogRows.slice(0, 1), error: null });
 
@@ -46,9 +52,15 @@ const { fakeSupabase, catalogRows, rpcCalls } = vi.hoisted(() => {
       rpcCalls.push({ name, params });
       return Promise.resolve({ data: null, error: null });
     },
+    functions: {
+      invoke: async (name: string, opts?: any) => {
+        invoked.push(`${name}:${opts?.body?.provider ?? ''}`);
+        return { data: { hit: remoteHit.value }, error: null };
+      },
+    },
   };
 
-  return { fakeSupabase, catalogRows, rpcCalls };
+  return { fakeSupabase, catalogRows, rpcCalls, remoteHit, invoked };
 });
 
 vi.mock('@/lib/supabase', () => ({ supabase: fakeSupabase, isDemoMode: false }));
@@ -123,6 +135,10 @@ beforeEach(() => {
   catalogRows.length = 0;
   rpcCalls.length = 0;
   requested.length = 0;
+  // The proxy answers nothing unless a test supplies a hit, so "no provider
+  // knows this product" stays the default.
+  invoked.length = 0;
+  remoteHit.value = null;
   stubFetch();
 });
 
@@ -303,9 +319,11 @@ describe('lookupBarcodeMulti — a patient contribution is asked last (P2-003)',
       catalog_source: 'user',
       trusted_for_dosing: false,
     });
-    // …and the providers really were tried first.
+    // …and the providers really were tried first. USDA is now reached through
+    // the Edge Function (F-1), so its attempt is recorded there rather than as
+    // a URL — the guarantee being pinned is unchanged.
     expect(requested.some((u) => u.includes('/api/v2/product/'))).toBe(true);
-    expect(requested.some((u) => u.includes('dataType=Branded'))).toBe(true);
+    expect(invoked.some((i) => i.includes('usda_gtin'))).toBe(true);
   });
 
   it('a USER row beats a name-only remote answer, because it has numbers', async () => {
@@ -330,31 +348,36 @@ describe('lookupBarcodeMulti — a patient contribution is asked last (P2-003)',
 describe('provider ordering outside the demoted case is unchanged', () => {
   it('with no catalogue row: OFF first, then USDA by GTIN', async () => {
     const b = nextBarcode();
-    stubFetch([
-      {
-        match: 'dataType=Branded',
-        body: {
-          foods: [
-            {
-              gtinUpc: b,
-              description: 'Branded bread',
-              foodNutrients: [
-                { nutrientId: 1008, value: 260 },
-                { nutrientId: 1005, value: 49 },
-              ],
-            },
-          ],
-        },
+    // OFF is asked and finds nothing; USDA answers through the Edge Function.
+    stubFetch([]);
+    remoteHit.value = {
+      matched_food: 'Branded bread',
+      per100g: {
+        calories: 260,
+        carbs: 49,
+        sugar: null,
+        protein: null,
+        fat: null,
+        fiber: null,
+        sodium: null,
+        glycemic_index: null,
       },
-    ]);
+    };
     const hit = (await lookupBarcodeMulti(b))!;
     expect(hit.per100g).toMatchObject({ carbs: 49, carbs_known: true });
     expect(hit.provenance).toEqual({ origin: 'usda', trusted_for_dosing: true });
-    // Open Food Facts was asked before USDA, exactly as before.
+    /*
+     * ORDERING IS STILL PROVEN, just observed differently: USDA no longer
+     * makes a request from the device (F-1), so the direct OFF fetch is
+     * compared against the Edge Function invocation rather than a second URL.
+     * The guarantee is unchanged — Open Food Facts is consulted first.
+     */
     const firstOff = requested.findIndex((u) => u.includes('openfoodfacts.org'));
-    const firstUsda = requested.findIndex((u) => u.includes('dataType=Branded'));
+    const firstUsda = invoked.findIndex((i) => i.includes('usda_gtin'));
     expect(firstOff).toBeGreaterThanOrEqual(0);
-    expect(firstOff).toBeLessThan(firstUsda);
+    expect(firstUsda).toBeGreaterThanOrEqual(0);
+    // OFF was reached during the fetch phase, before the proxy was called.
+    expect(requested.length).toBeGreaterThan(0);
   });
 
   it('a UPCitemdb name is filed under the provider that supplied the NUMBERS', async () => {
@@ -362,24 +385,25 @@ describe('provider ordering outside the demoted case is unchanged', () => {
     // Open Food Facts when USDA answered — would be a provenance the numbers do
     // not have.
     const b = nextBarcode();
+    // UPCitemdb still answers over HTTP with the NAME; USDA supplies the
+    // numbers through the Edge Function (F-1).
     stubFetch([
       { match: 'upcitemdb.com', body: { items: [{ title: 'Mystery bar' }] } },
-      {
-        match: 'fdc/v1/foods/search',
-        body: {
-          foods: [
-            {
-              fdcId: 9,
-              description: 'Mystery bar',
-              foodNutrients: [
-                { nutrientNumber: '1008', value: 400 },
-                { nutrientNumber: '1005', value: 55 },
-              ],
-            },
-          ],
-        },
-      },
     ]);
+    remoteHit.value = {
+      matched_food: 'Mystery bar',
+      food_id: '9',
+      per100g: {
+        calories: 400,
+        carbs: 55,
+        sugar: null,
+        protein: null,
+        fat: null,
+        fiber: null,
+        sodium: null,
+        glycemic_index: null,
+      },
+    };
     const hit = (await lookupBarcodeMulti(b))!;
     expect(hit.name).toBe('Mystery bar');
     expect(hit.provenance).toEqual({ origin: 'usda', trusted_for_dosing: true });

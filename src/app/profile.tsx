@@ -252,8 +252,14 @@ export default function ProfileScreen() {
   const profile = useAppStore((s) => s.profile);
   const lockedFeatures = useAppStore((s) => s.lockedFeatures);
   const wizardDone = useAppStore((s) => s.wizardDone);
+  const [signingOut, setSigningOut] = React.useState(false);
 
-  if (!profile) return <Redirect href={wizardDone ? '/(tabs)' : '/auth'} />;
+  // While signing out the store is deliberately empty and `onSignOut` is
+  // already navigating; letting this Redirect fire from inside a modal is
+  // what used to drop the patient back on the tabs instead of the login form.
+  if (!profile && !signingOut)
+    return <Redirect href={wizardDone ? '/(tabs)' : '/auth'} />;
+  if (!profile) return <View style={styles.root} />;
 
   const pickAvatar = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -270,6 +276,7 @@ export default function ProfileScreen() {
   };
 
   const onSignOut = async () => {
+    if (signingOut) return; // one tap, one sign-out
     const ok = await confirmAsync({
       title: t('profile.signOut'),
       message: t('profile.signOutConfirm'),
@@ -278,15 +285,30 @@ export default function ProfileScreen() {
       destructive: true,
     });
     if (!ok) return;
-    await signOut();
-    // Profile is a modal: dismiss it (and anything stacked) first, otherwise
-    // replace() swaps the modal's content and the app can fall back to the
-    // tabs instead of the login screen. Then make /auth the fresh root, so
-    // there's no back-history into the signed-out account.
+    setSigningOut(true);
+    /*
+     * LEAVE FIRST, THEN FORGET.
+     *
+     * This used to `await signOut()` before navigating, so the screen sat
+     * there for as long as `/auth/v1/logout` took to answer — and if it never
+     * did, the patient was left on their profile with no sign anything had
+     * happened. Signing out is a decision, not a request: the login screen
+     * comes up now, and `signOut()` does the local wipe synchronously before
+     * it ever touches the network.
+     *
+     * Profile is a modal, so dismiss it (and anything stacked) first —
+     * otherwise replace() swaps the modal's content and the app falls back to
+     * the tabs. Then /auth becomes the fresh root, with no back-history into
+     * the signed-out account.
+     */
+    // `canDismiss()` first: calling dismissAll with nothing stacked (the web
+    // build, where /profile can be opened as a plain URL) logs a POP_TO_TOP
+    // navigator warning for something that was never a problem.
     try {
-      router.dismissAll();
+      if (router.canDismiss?.()) router.dismissAll();
     } catch {}
     router.replace('/auth');
+    await signOut();
   };
 
   const openEdit = (section: string) =>
@@ -564,7 +586,11 @@ export default function ProfileScreen() {
         {/* Sign out */}
         <Pressable
           onPress={onSignOut}
-          style={({ pressed }) => [styles.logoutBtn, pressed && { opacity: 0.7 }]}
+          disabled={signingOut}
+          style={({ pressed }) => [
+            styles.logoutBtn,
+            (pressed || signingOut) && { opacity: 0.7 },
+          ]}
         >
           <LogoutIcon />
           <Text style={styles.logoutText}>{t('profile.signOut')}</Text>

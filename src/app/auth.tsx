@@ -15,9 +15,29 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Spinner } from '@/components/ui';
-import { isDemoMode, supabase } from '@/lib/supabase';
-import { hydrateFromServer } from '@/services/sync';
+import {
+  isDemoMode,
+  setCachedUserId,
+  supabase,
+  withTimeout,
+} from '@/lib/supabase';
+import { authErrorKey } from '@/services/authErrors';
+import { setPendingRegistration } from '@/services/pendingRegistration';
 import { useAppStore } from '@/store/useAppStore';
+import { useProgramStore } from '@/store/useProgramStore';
+
+/* A sign-in that never answers must still end. This is a backstop against a
+ * socket the server keeps open forever — not a target: a healthy
+ * /auth/v1/token replies in a few hundred milliseconds. */
+const SIGN_IN_TIMEOUT_MS = 60_000;
+/* After this long the patient is told the server is being slow, rather than
+ * being left to guess whether the button did anything. */
+const SLOW_HINT_AFTER_MS = 6000;
+/** What a sign-in resolves to. `null` is the deadline sentinel — supabase
+ *  never answers with it, so the two can never be confused. */
+type SignInResult = Awaited<
+  ReturnType<NonNullable<typeof supabase>['auth']['signInWithPassword']>
+>;
 
 const N500 = 'Nunito_500Medium';
 const N600 = 'Nunito_600SemiBold';
@@ -127,6 +147,7 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [slow, setSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isRegister = mode === 'register';
@@ -155,42 +176,73 @@ export default function AuthScreen() {
       goAfterAuth(!isRegister);
       return;
     }
+    // REGISTRATION IS DEFERRED. Creating the account here left an orphaned
+    // `auth.users` row behind every abandoned wizard — an account the patient
+    // never completed, cannot use, and which blocks their own email. The form
+    // is held in memory and the LAST onboarding step creates the account, so
+    // the backend hears about the patient only when there is a full profile to
+    // store. Nothing reaches the server from this screen any more.
+    if (isRegister) {
+      setPendingRegistration({ email, password, name, phone });
+      goAfterAuth(false);
+      return;
+    }
     setLoading(true);
+    setSlow(false);
+    const slowTimer = setTimeout(() => setSlow(true), SLOW_HINT_AFTER_MS);
     try {
-      if (isRegister) {
-        const { error: err } = await supabase.auth.signUp({
-          email,
+      const outcome = await withTimeout<SignInResult | null>(
+        supabase.auth.signInWithPassword({
+          // Phone keyboards add a trailing space and capitalise the first
+          // letter often enough that an otherwise correct address was being
+          // reported back as a wrong password.
+          email: email.trim(),
           password,
-          options: { data: { name, phone } },
-        });
-        if (err) throw err;
-        // The signup trigger created the profile row — attach the phone so
-        // the dashboard can reach the patient (WhatsApp renewal reminders).
-        if (phone.trim()) {
-          const { data: u } = await supabase.auth.getUser();
-          if (u.user) {
-            await supabase
-              .from('profiles')
-              .update({ phone: phone.trim(), name: name || undefined })
-              .eq('user_id', u.user.id);
-          }
-        }
-      } else {
-        const { error: err } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (err) throw err;
-        // Pull the account's full history (profile, meals + photos, insulin,
-        // glucose, activity, measures, chat) so a fresh install / new phone
-        // shows everything the user ever recorded.
-        await hydrateFromServer();
+        }),
+        SIGN_IN_TIMEOUT_MS,
+        null
+      );
+      if (!outcome) {
+        setError(t('authError.timeout'));
+        return;
+      }
+      const { data, error: err } = outcome;
+      if (err) throw err;
+
+      /*
+       * STRAIGHT IN — the history follows.
+       *
+       * This used to `await hydrateFromServer()` before navigating: ten
+       * tables, up to five thousand rows each, and a re-push of anything the
+       * server had not seen, all in front of the first screen. The patient
+       * had already been authenticated and was still watching a spinner.
+       *
+       * What actually had to happen before rendering is the ACCOUNT SWITCH
+       * guard — on a shared phone the previous person's data must be gone
+       * before a screen can show it. That is a local wipe and takes no time
+       * at all. The pull is started by the tabs layout on mount, which is
+       * also what refreshes it on every later open, so there is exactly one
+       * owner of it and no duplicate request.
+       */
+      const uid = data.session?.user?.id ?? data.user?.id ?? null;
+      if (uid) {
+        setCachedUserId(uid);
+        useAppStore.getState().claimAccount(uid);
+        useProgramStore.getState().adoptUser(uid);
       }
       goAfterAuth(!isRegister);
     } catch (e: any) {
-      setError(e.message ?? t('common.error'));
+      // BUG-A3 — the patient must never read the backend's own sentence. It is
+      // always English (so an Arabic screen showed "Invalid login
+      // credentials"), and it can carry provider detail they should not see.
+      // The condition is mapped to a vetted i18n key and translated in the
+      // language that is actually active; the original is kept for the log.
+      if (__DEV__) console.warn('[auth]', e?.code ?? e?.status ?? '', e?.message);
+      setError(t(authErrorKey(e)));
     } finally {
+      clearTimeout(slowTimer);
       setLoading(false);
+      setSlow(false);
     }
   };
 
@@ -280,6 +332,9 @@ export default function AuthScreen() {
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
+        {slow && !error ? (
+          <Text style={styles.slowNote}>{t('auth.slowServer')}</Text>
+        ) : null}
 
         {/* Demo note */}
         {isDemoMode ? (
@@ -376,6 +431,14 @@ const styles = StyleSheet.create({
     fontFamily: N600,
     fontSize: 14,
     color: '#e5484d',
+    marginTop: 10,
+    marginLeft: 2,
+  },
+  slowNote: {
+    fontFamily: N600,
+    fontSize: 13.5,
+    lineHeight: 18,
+    color: '#8a93a3',
     marginTop: 10,
     marginLeft: 2,
   },

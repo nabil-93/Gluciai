@@ -163,6 +163,16 @@ interface AppState {
    * (AI journal, corrections…) belonging to the previous account.
    */
   hydrateServer: (snapshot: ServerSnapshot, switchedAccount: boolean) => void;
+  /**
+   * Take ownership of the persisted data for `uid`, WITHOUT the network.
+   *
+   * Called the instant a sign-in succeeds, before anything renders. If what
+   * is on the device belongs to someone else it is wiped here — locally, in
+   * one synchronous `set` — so the dashboard can open immediately instead of
+   * waiting on a full server pull just to be sure it is not about to show the
+   * previous patient's glucose. `hydrateFromServer` then fills it in.
+   */
+  claimAccount: (uid: string) => void;
   resetAll: () => void;
 }
 
@@ -428,6 +438,20 @@ export const useAppStore = create<AppState>()(
             }
           }
           return { ...base, conversations, activeConversationId };
+        }),
+      claimAccount: (uid) =>
+        set((s) => {
+          if (s.accountUserId === uid) return s;
+          // No owner recorded yet: a first sign-in on a device that has only
+          // ever held this person's own wizard answers. Adopt, do not wipe.
+          if (s.accountUserId === null) return { accountUserId: uid };
+          // Someone else's account. Everything data-shaped goes now.
+          return {
+            ...initialData,
+            languageChosen: s.languageChosen,
+            onboardingDone: s.onboardingDone,
+            accountUserId: uid,
+          };
         }),
       // Sign-out wipes the ACCOUNT (data + wizardDone/session), but keeps
       // device-level onboarding — language and the intro carousel — just like

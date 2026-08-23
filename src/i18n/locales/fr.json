@@ -239,7 +239,8 @@
     "continueWithApple": "Continuer avec Apple",
     "comingSoon": "Bientôt disponible",
     "securityNote": "Tes données sont sécurisées et protégées.\nNous utilisons un chiffrement de pointe.",
-    "phone": "Numéro de téléphone (WhatsApp)"
+    "phone": "Numéro de téléphone (WhatsApp)",
+    "slowServer": "Le serveur met du temps à répondre… on continue d'essayer."
   },
   "wizard": {
     "progress": "Étape {{current}} sur {{total}}",
@@ -1764,7 +1765,10 @@
     "webNote": "📱 Les notifications s'activent sur iPhone et Android — sur le web, cet aperçu montre ce qui sera programmé.",
     "activated": "✓ Rappels activés",
     "activate": "Activer les notifications",
-    "footNote": "Les horaires se réajustent automatiquement au fil de vos enregistrements."
+    "footNote": "Les horaires se réajustent automatiquement au fil de vos enregistrements.",
+    "permissionDenied": "Les notifications sont désactivées pour GluciAI. Sans autorisation, aucun rappel ne peut être programmé.",
+    "openSettings": "Ouvrir les réglages",
+    "unavailable": "Les rappels ne sont pas disponibles sur cet appareil."
   },
   "coachChat": {
     "subtitle": "Il connaît toutes vos données de santé",
@@ -2326,5 +2330,83 @@
     "genericGood": "Tout va bien — continuez votre suivi régulier.",
     "genericWatch": "Un point à surveiller — suivez le conseil ci-dessous.",
     "genericAdvice": "Continuez à enregistrer vos mesures, repas et activités."
+  },
+  "authError": {
+    "invalidCredentials": "E-mail ou mot de passe incorrect.",
+    "emailTaken": "Un compte existe déjà avec cet e-mail.",
+    "weakPassword": "Mot de passe trop court — utilisez au moins 6 caractères.",
+    "invalidEmail": "Adresse e-mail invalide.",
+    "rateLimited": "Trop de tentatives. Réessayez dans quelques minutes.",
+    "emailNotConfirmed": "Confirmez votre e-mail avant de vous connecter.",
+    "network": "Pas de connexion. Vérifiez votre réseau et réessayez.",
+    "generic": "La connexion a échoué. Réessayez.",
+    "timeout": "Le serveur met trop de temps à répondre. Réessayez."
+  },
+  "accountError": {
+    "network": "Pas de connexion. Vérifiez votre réseau et réessayez.",
+    "sessionExpired": "Votre session a expiré. Reconnectez-vous et réessayez.",
+    "storageCleanupFailed": "Vos fichiers n'ont pas pu être supprimés. Votre compte est intact — réessayez.",
+    "weakPassword": "Mot de passe trop court — utilisez au moins 6 caractères.",
+    "samePassword": "Le nouveau mot de passe doit être différent de l'ancien.",
+    "rateLimited": "Trop de tentatives. Réessayez dans quelques minutes.",
+    "generic": "L'opération a échoué. Réessayez."
+  },
+  "reportPage": {
+    "title": "Rapport médecin",
+    "periodLabel": "Période analysée",
+    "periodRange": "du {{from}} au {{to}}",
+    "rangeDays_one": "{{count}} j",
+    "rangeDays_other": "{{count}} j",
+    "ea1cLabel": "HbA1c estimée",
+    "ea1cHint_one": "Calculées depuis la moyenne glycémique ({{avg}} mg/dL) sur {{count}} mesure — indicatives, elles ne remplacent pas l’analyse de laboratoire.",
+    "ea1cHint_other": "Calculées depuis la moyenne glycémique ({{avg}} mg/dL) sur {{count}} mesures — indicatives, elles ne remplacent pas l’analyse de laboratoire.",
+    "thinData": "{{perDay}} mesure/jour en moyenne — trop peu pour que ces pourcentages soient représentatifs. Visez au moins 3 mesures par jour.",
+    "tirTitle": "Temps dans les cibles",
+    "tirInTarget": "dans la cible {{low}}–{{high}} mg/dL",
+    "tirGoal": "Objectif clinique : ≥ 70 %",
+    "bandVeryHigh": "Très élevé (> 250)",
+    "bandHigh": "Élevé (> {{high}})",
+    "bandInRange": "Cible ({{low}}–{{high}})",
+    "bandLow": "Bas (< {{low}})",
+    "bandVeryLow": "Très bas (< 54)",
+    "noData": "Aucune mesure sur la période.",
+    "trendTitle": "Moyenne glycémique par jour",
+    "bySlotTitle": "Par moment de la journée",
+    "slotCount_one": "{{count}} mes.",
+    "slotCount_other": "{{count}} mes.",
+    "detailTitle": "Détail de la période",
+    "statCv": "Variabilité (CV)",
+    "statSd": "Écart-type",
+    "statMinMax": "Min / Max",
+    "statPerDay": "Mesures / jour",
+    "statLows": "Hypoglycémies",
+    "statHighs": "Hyperglycémies",
+    "statInsulinPerDay": "Insuline / jour",
+    "statRapidLong": "Rapide / Lente",
+    "statCarbsPerDay": "Glucides / jour",
+    "statSugarPerDay": "Sucres / jour",
+    "statMeals": "Repas suivis",
+    "statActivity": "Activité",
+    "weeklyTitle": "Résumé IA de la semaine",
+    "generatePdf": "Générer le PDF / Imprimer",
+    "pdfHint_one": "Le PDF reprend cette période ({{count}} jour), les graphiques, le détail par moment de la journée et les dernières mesures.",
+    "pdfHint_other": "Le PDF reprend cette période ({{count}} jours), les graphiques, le détail par moment de la journée et les dernières mesures.",
+    "slot": {
+      "night": "Nuit (0–6 h)",
+      "morning": "Matin (6–12 h)",
+      "afternoon": "Après-midi (12–18 h)",
+      "evening": "Soir (18–24 h)"
+    }
+  },
+  "calendarPage": {
+    "today": "Aujourd’hui",
+    "legendInRange": "≥70% dans la cible",
+    "legendMid": "40–70%",
+    "legendLow": "<40%"
+  },
+  "notFoundPage": {
+    "title": "Page introuvable",
+    "body": "Ce lien ne correspond à aucun écran de GluciAI. Il est peut-être ancien ou incomplet.",
+    "cta": "Retour à l’accueil"
   }
 }

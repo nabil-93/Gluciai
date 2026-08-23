@@ -1,4 +1,4 @@
-import { isDemoMode, supabase } from '@/lib/supabase';
+import { currentUserId, isDemoMode, supabase } from '@/lib/supabase';
 import {
   generateDay,
   isoDay,
@@ -271,8 +271,7 @@ export async function saveShoppingWeek(
   if (isDemoMode || !supabase || programId === 'local') {
     return { ...week, id: `local-${week.weekIndex}` };
   }
-  const { data: auth } = await supabase.auth.getUser();
-  const uid = auth?.user?.id;
+  const uid = await currentUserId();
   if (!uid) return null;
 
   const { data, error } = await supabase

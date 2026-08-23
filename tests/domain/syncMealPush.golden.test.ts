@@ -67,12 +67,9 @@ function makeQuery(table: string) {
 
 vi.mock('@/lib/supabase', () => ({
   isDemoMode: false,
+  currentUserId: async () => '11111111-2222-3333-4444-555555555555',
   supabase: {
-    auth: {
-      getUser: async () => ({
-        data: { user: { id: '11111111-2222-3333-4444-555555555555' } },
-      }),
-    },
+    auth: {},
     from: (table: string) => makeQuery(table),
   },
 }));

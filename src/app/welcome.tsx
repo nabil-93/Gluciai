@@ -309,7 +309,18 @@ export default function WelcomeScreen() {
     // See profile-edit.tsx and src/i18n/direction.ts: on native the layout
     // direction only changes at the next launch, and the patient has to be
     // told rather than left with Arabic text in a left-to-right screen.
-    if (restartRequired) notify(t('common.restartTitle'), t('common.restartBody'));
+    // BUG-A1 (found on the emulator): `t` here is the one this component
+    // closed over on its last render, so it still resolves in the PREVIOUS
+    // language — a patient who just chose العربية was shown an English
+    // "Restart the app" dialog, at the one moment they have demonstrated they
+    // may not read English. Resolving against `code` explicitly is
+    // language-agnostic and needs no re-render. The four translations already
+    // existed; only which one is picked changes.
+    if (restartRequired)
+      notify(
+        t('common.restartTitle', { lng: code }),
+        t('common.restartBody', { lng: code })
+      );
   };
 
   const start = () => {

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { BevelTabBar } from '@/components/ui';
@@ -12,10 +12,57 @@ import { refreshSmartReminders } from '@/services/notifications';
 import { checkReminders } from '@/services/reminders';
 import { startPresence } from '@/services/presence';
 import { hydrateFromServer } from '@/services/sync';
+import { hasStoredSession, isDemoMode, supabase } from '@/lib/supabase';
+import { useAppStore } from '@/store/useAppStore';
 import { colors } from '@/theme';
 
 export default function TabsLayout() {
   const { t, i18n } = useTranslation();
+  const router = useRouter();
+
+  /*
+   * A SESSION THAT IS GONE MUST TAKE THE PATIENT TO THE LOGIN SCREEN.
+   *
+   * Routing into the app is decided from persisted local flags — that is
+   * deliberate, it is what lets the app open offline. But the flags say
+   * nothing about whether the token is still valid. Two ways they can
+   * disagree with reality:
+   *
+   *   · the refresh token was revoked or expired while the app was closed;
+   *   · a sign-out failed to delete the stored session (fixed in
+   *     services/account, but older installs still carry the mess).
+   *
+   * Either way every request comes back empty and the patient sits in front
+   * of a dashboard that has quietly stopped working. Checked once on mount,
+   * and again whenever supabase reports the session ended.
+   *
+   * BEING OFFLINE IS NOT BEING SIGNED OUT. The mount check asks whether a
+   * session is STORED, never whether one can be refreshed right now — a
+   * patient with no bars keeps their app. Only supabase itself declaring the
+   * session over (a refresh the server actively rejected) ends it.
+   */
+  useEffect(() => {
+    if (isDemoMode || !supabase) return;
+    let alive = true;
+    const leave = () => {
+      if (!alive) return;
+      useAppStore.getState().resetAll();
+      router.replace('/auth');
+    };
+    void hasStoredSession().then((stored) => {
+      // Nothing stored AND local state that claims an account: they are
+      // signed out. A store with no account recorded has never synced and is
+      // left alone.
+      if (!stored && useAppStore.getState().accountUserId) leave();
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') leave();
+    });
+    return () => {
+      alive = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [router]);
 
   // Smart Notification Engine: build reminders from the user's habits.
   // Also sync the per-account feature locks set from the admin dashboard,

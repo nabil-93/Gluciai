@@ -2,6 +2,7 @@ import type { ProductProvenance } from '@/types';
 import type { BarcodeProduct } from './openfoodfacts';
 import { openFoodFactsProvider } from './openfoodfacts';
 import { usdaProvider } from './usda';
+import { usdaGtinProvider } from './remote';
 import {
   barcodeVariants,
   readNutriments,
@@ -14,6 +15,7 @@ import {
   saveToCatalog,
   type CatalogSource,
 } from './productCatalog';
+import { OFF_HEADERS } from './userAgent';
 
 /* ────────────────────────────────────────────────────────────
  * MULTI-SOURCE BARCODE LOOKUP
@@ -72,10 +74,16 @@ export type BarcodeResult = BarcodeProduct & {
   provenance: ProductProvenance;
 };
 
+/**
+ * F-2: Open Food Facts requires a custom User-Agent on every call and blocks
+ * unidentified traffic. Sending it on requests that do not need it is
+ * harmless, so it is applied here rather than threaded through each caller.
+ * Timeout, `r.ok` handling and the never-throw contract are untouched.
+ */
 function timeoutFetch(url: string, ms: number): Promise<Response | null> {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), ms);
-  return fetch(url, { signal: c.signal })
+  return fetch(url, { signal: c.signal, headers: OFF_HEADERS })
     .then((r) => (r.ok ? r : null))
     .catch(() => null)
     .finally(() => clearTimeout(t));
@@ -153,60 +161,43 @@ async function offProduct(barcode: string, api: 'v2' | 'v0'): Promise<BarcodeRes
 
 /* ── USDA branded foods (indexed by GTIN/UPC) ─────────────── */
 
-const USDA_KEY = process.env.EXPO_PUBLIC_USDA_API_KEY || 'DEMO_KEY';
-
-/** FDC nutrient ids for the values we keep, per 100 g. */
-const FDC = {
-  calories: [1008, 208],
-  protein: [1003, 203],
-  fat: [1004, 204],
-  carbs: [1005, 205],
-  fiber: [1079, 291],
-  sugar: [2000, 269],
-  sodium: [1093, 307],
-} as const;
-
-function fdcValue(nutrients: any[], ids: readonly number[]): number | null {
-  for (const n of nutrients ?? []) {
-    const id = n?.nutrientId ?? parseInt(String(n?.nutrientNumber ?? ''), 10);
-    if (ids.includes(id) && typeof n?.value === 'number') return n.value;
-  }
-  return null;
-}
-
+/**
+ * F-1: this used to call `api.nal.usda.gov` directly with
+ * `process.env.EXPO_PUBLIC_USDA_API_KEY || 'DEMO_KEY'` — a key inlined into
+ * the bundle at build time and extractable from the APK, silently degrading
+ * to a 50-request/day quota when unset.
+ *
+ * The request now goes through the `nutrition-search` Edge Function, which
+ * owns the key. The exact-GTIN rule moved with it: FDC's endpoint is a text
+ * search, so a code it does not hold returns unrelated products, and only a
+ * matching `gtinUpc` is accepted (see `searchUsdaGtin`).
+ *
+ * The RESULT is unchanged — same `BarcodeResult` shape, same
+ * `provenance: { origin: 'usda', trusted_for_dosing: true }`, same
+ * absent-carbohydrate handling. `usdaGtinProvider` reports `source: 'usda'`
+ * and `carbs_known` exactly as the direct call did.
+ */
 async function usdaByGtin(barcode: string): Promise<BarcodeResult | null> {
-  const url =
-    `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${USDA_KEY}` +
-    `&query=${encodeURIComponent(barcode)}&dataType=Branded&pageSize=5`;
-  const data = await json(url, 7000);
-  const foods: any[] = data?.foods ?? [];
-  // Only trust an exact GTIN match — the endpoint is a text search and will
-  // happily return unrelated foods for a code it doesn't have.
-  const hit = foods.find(
-    (f) => String(f?.gtinUpc ?? '').replace(/^0+/, '') === barcode.replace(/^0+/, '')
-  );
+  const hit = await usdaGtinProvider.search(barcode);
   if (!hit) return null;
 
-  const calories = fdcValue(hit.foodNutrients, FDC.calories);
-  if (calories === null) return null;
-
-  // A branded FDC record is only as complete as the label its manufacturer
-  // submitted; the carbohydrate row is regularly absent.
-  const carbs = fdcValue(hit.foodNutrients, FDC.carbs);
-
+  const p = hit.per100g;
   return {
     barcode,
-    name: String(hit.description ?? '').trim() || `Product ${barcode}`,
-    brand: hit.brandOwner || hit.brandName || undefined,
+    name: hit.matchedName.trim() || `Product ${barcode}`,
+    // The proxy prefixes the brand onto the name, which is what a patient
+    // reads on the shelf; there is no separate brand field to carry.
     per100g: {
-      calories: Math.round(calories),
-      carbs: carbs ?? 0,
-      carbs_known: carbs !== null,
-      sugar: fdcValue(hit.foodNutrients, FDC.sugar) ?? 0,
-      protein: fdcValue(hit.foodNutrients, FDC.protein) ?? 0,
-      fat: fdcValue(hit.foodNutrients, FDC.fat) ?? 0,
-      fiber: fdcValue(hit.foodNutrients, FDC.fiber) ?? 0,
-      sodium: Math.round(fdcValue(hit.foodNutrients, FDC.sodium) ?? 0),
+      calories: Math.round(p.calories),
+      carbs: p.carbs,
+      // Preserved end to end: an absent FDC carbohydrate row stays unknown
+      // rather than becoming a measured 0 g that could reach a dose.
+      carbs_known: p.carbs_known,
+      sugar: p.sugar,
+      protein: p.protein,
+      fat: p.fat,
+      fiber: p.fiber,
+      sodium: Math.round(p.sodium ?? 0),
     },
     nutritionKnown: true,
     provenance: { origin: 'usda', trusted_for_dosing: true },

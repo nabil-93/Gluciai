@@ -12,6 +12,8 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton, BevelCard, ChevronLeft } from '@/components/ui';
+import { notify } from '@/lib/confirm';
+import { requestOrOpenSettings } from '@/lib/permissions';
 import {
   getPlannedReminders,
   refreshSmartReminders,
@@ -29,6 +31,8 @@ export default function RappelsScreen() {
   const insets = useSafeAreaInsets();
   const [activating, setActivating] = useState(false);
   const [activated, setActivated] = useState(false);
+  /** The OS refused. Shown with a way out, never as a dead end. */
+  const [denied, setDenied] = useState(false);
 
   const reminders = useMemo(() => getPlannedReminders(t), [t]);
   const isWeb = Platform.OS === 'web';
@@ -38,15 +42,42 @@ export default function RappelsScreen() {
     else router.replace('/(tabs)');
   };
 
+  /*
+   * "Rappels activés ✓" MUST MEAN THE OS ACCEPTED THEM.
+   *
+   * This used to `await refreshSmartReminders()` and then set `activated`
+   * unconditionally. That call swallowed a denied permission and every
+   * platform failure, so a patient who refused the OS prompt — or whose
+   * device could not schedule at all — was still shown the success state.
+   * Someone relying on an insulin reminder was told it was on when nothing
+   * had been registered.
+   *
+   * The service now reports what happened, and only 'scheduled' is success.
+   */
   const activate = async () => {
     setActivating(true);
+    setDenied(false);
     try {
-      await refreshSmartReminders();
-      setActivated(true);
+      const result = await refreshSmartReminders();
+      if (result === 'scheduled') setActivated(true);
+      else if (result === 'denied') setDenied(true);
+      else notify(t('rappelsPage.title'), t('rappelsPage.unavailable'));
     } finally {
       setActivating(false);
     }
   };
+
+  /*
+   * Once the OS will no longer show the prompt, asking again resolves
+   * `denied` immediately and the button does nothing — the B-3 defect. The
+   * shared helper sends the patient to Settings instead. Notification
+   * permissions expose no `canAskAgain` here, so we pass the shape the
+   * decision needs: we have just been refused, and on iOS that is final.
+   */
+  const fixPermission = () =>
+    requestOrOpenSettings({ granted: false, canAskAgain: false }, async () => {
+      await activate();
+    });
 
   const fmt = (h: number, m: number) =>
     `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -97,13 +128,29 @@ export default function RappelsScreen() {
             <Text style={styles.webNoteText}>{t('rappelsPage.webNote')}</Text>
           </View>
         ) : (
-          <AppButton
-            label={activated ? t('rappelsPage.activated') : t('rappelsPage.activate')}
-            onPress={activate}
-            loading={activating}
-            disabled={activated}
-            style={{ marginTop: 18 }}
-          />
+          <>
+            <AppButton
+              label={activated ? t('rappelsPage.activated') : t('rappelsPage.activate')}
+              onPress={activate}
+              loading={activating}
+              disabled={activated}
+              style={{ marginTop: 18 }}
+            />
+            {/* A refusal is not a dead end: say so in the patient's language
+                and offer the only action that can still work. */}
+            {denied ? (
+              <View style={styles.deniedBox}>
+                <Text style={styles.deniedText}>
+                  {t('rappelsPage.permissionDenied')}
+                </Text>
+                <Pressable onPress={fixPermission} hitSlop={8}>
+                  <Text style={styles.deniedLink}>
+                    {t('rappelsPage.openSettings')}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </>
         )}
 
         <Text style={styles.footNote}>{t('rappelsPage.footNote')}</Text>
@@ -182,5 +229,26 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     marginTop: 14,
+  },
+  deniedBox: {
+    marginTop: 12,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+  },
+  deniedText: {
+    fontFamily: F600,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: '#B91C1C',
+    // No explicit textAlign: RTL is inherited from the app's layout direction,
+    // so Arabic mirrors with the rest of the screen.
+  },
+  deniedLink: {
+    fontFamily: F700,
+    fontSize: 12.5,
+    color: '#5b4ce0',
+    textDecorationLine: 'underline',
   },
 });

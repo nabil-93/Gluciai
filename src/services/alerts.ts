@@ -1,4 +1,4 @@
-import { isDemoMode, supabase } from '@/lib/supabase';
+import { currentUserId, isDemoMode, supabase } from '@/lib/supabase';
 
 /** Contact button shown under an alert (mirrors app_alerts.cta). */
 export type AlertCta = 'none' | 'support' | 'doctor';
@@ -18,8 +18,7 @@ export interface AppAlertData {
 export async function fetchPendingAlert(): Promise<AppAlertData | null> {
   if (isDemoMode || !supabase) return null;
   try {
-    const { data: userData } = await supabase.auth.getUser();
-    const uid = userData.user?.id;
+    const uid = await currentUserId();
     if (!uid) return null;
     const { data } = await supabase
       .from('app_alerts')

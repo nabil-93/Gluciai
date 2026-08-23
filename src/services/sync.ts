@@ -1,4 +1,4 @@
-import { isDemoMode, supabase } from '@/lib/supabase';
+import { currentUserId, isDemoMode, supabase } from '@/lib/supabase';
 import { mirrorColumn } from '@/services/nutrition/nutrientProvenance';
 import { useAppStore } from '@/store/useAppStore';
 import { useProgramStore } from '@/store/useProgramStore';
@@ -261,21 +261,35 @@ const mapLabReport = (r: any): LabReport => ({
 });
 
 /**
+ * The pull in flight, if any.
+ *
+ * Two places ask for a hydrate on the way into the app and they can overlap.
+ * Running it twice means twice the ten queries, twice the offline re-push,
+ * and two writers racing to replace the same store. A second caller joins the
+ * run that is already going instead.
+ */
+let inFlight: Promise<boolean> | null = null;
+
+/**
  * Pull the signed-in user's complete history from Supabase and replace the
  * local store with it. Returns true when the store was hydrated. Safe to
- * call anytime: it no-ops offline / signed out, and never partially wipes
- * local data (all fetches must succeed before the store is touched).
+ * call anytime: it no-ops offline / signed out, never runs twice at once, and
+ * never partially wipes local data (all fetches must succeed before the store
+ * is touched).
  */
-export async function hydrateFromServer(): Promise<boolean> {
-  if (isDemoMode || !supabase) return false;
+export function hydrateFromServer(): Promise<boolean> {
+  if (isDemoMode || !supabase) return Promise.resolve(false);
+  if (inFlight) return inFlight;
+  inFlight = runHydrate().finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
 
-  let uid: string | undefined;
-  try {
-    const { data } = await supabase.auth.getUser();
-    uid = data.user?.id;
-  } catch {
-    return false;
-  }
+async function runHydrate(): Promise<boolean> {
+  if (!supabase) return false;
+
+  const uid = await currentUserId();
   if (!uid) return false;
 
   const prevState = useAppStore.getState();

@@ -1,7 +1,15 @@
-import { isDemoMode, supabase } from '@/lib/supabase';
+import {
+  clearAuthStorage,
+  currentUserId,
+  isDemoMode,
+  setCachedUserId,
+  supabase,
+  withTimeout,
+} from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import { useProgramStore } from '@/store/useProgramStore';
 import { saveProfile } from './data';
+import { clearPendingRegistration } from './pendingRegistration';
 
 /* ────────────────────────────────────────────────────────────
  * ACCOUNT SERVICE
@@ -40,8 +48,7 @@ export async function uploadAvatar(
   }
 
   try {
-    const { data: userData } = await supabase.auth.getUser();
-    const uid = userData.user?.id;
+    const uid = await currentUserId();
     if (!uid) {
       await saveProfile({ ...profile, avatar_url: localUri });
       return localUri;
@@ -99,16 +106,56 @@ export async function changePassword(
 
 /* ────────────────────────── SIGN OUT ────────────────────────── */
 
-/** Sign out of Supabase and wipe all local state. */
+/** How long the server-side revoke may hold the screen before we stop
+ *  waiting for it. Long enough for a healthy round-trip, short enough that
+ *  the patient never wonders whether the button worked. */
+const SIGN_OUT_REVOKE_TIMEOUT_MS = 4000;
+
+/**
+ * Sign out. Local first, and unconditionally.
+ *
+ * WHAT WAS WRONG. This awaited `supabase.auth.signOut()` and only wiped the
+ * device in the `finally`. Two failures came out of that ordering:
+ *
+ *  1. NOTHING HAPPENED FOR AS LONG AS THE SERVER TOOK. The call has no
+ *     deadline of its own, so a slow or unanswering `/auth/v1/logout` froze
+ *     the profile screen with no feedback. The patient taps again, and again.
+ *  2. A FAILED REVOKE LEFT THEM SIGNED IN. supabase-js revokes the token
+ *     before it deletes the local copy, and it RETURNS EARLY on a network
+ *     error — so the stored session survived a sign-out that reported no
+ *     problem, and the next launch signed the same account straight back in.
+ *     On a shared phone that is the previous person's data opening by itself.
+ *
+ * Now: the device forgets the account immediately (local, instant, cannot
+ * fail), the stored session is deleted by hand so nothing can resurrect it,
+ * and the server-side revoke is attempted with a bound. The revoke still
+ * matters — it is what kills the refresh token on other devices — but it is
+ * no longer what decides whether this one is signed out.
+ */
 export async function signOut(): Promise<void> {
-  try {
-    if (!isDemoMode && supabase) await supabase.auth.signOut();
-  } finally {
-    useAppStore.getState().resetAll();
-    // The parcours lives in its own store, so resetAll() does not reach it.
-    // Leaving it behind showed the next account this one's program.
-    useProgramStore.getState().adoptUser(null);
-  }
+  // 1. Forget the account here, first and always.
+  useAppStore.getState().resetAll();
+  // The parcours lives in its own store, so resetAll() does not reach it.
+  // Leaving it behind showed the next account this one's program.
+  useProgramStore.getState().adoptUser(null);
+  // A half-finished registration holds a password in memory. Signing out is
+  // an explicit "not this person any more", so it must not survive.
+  clearPendingRegistration();
+  setCachedUserId(null);
+
+  if (isDemoMode || !supabase) return;
+
+  // 2. Ask the server to revoke, but do not let it hold the screen. `local`
+  //    scope: this device's refresh token, which is the one being abandoned.
+  await withTimeout(
+    supabase.auth.signOut({ scope: 'local' }).then(() => undefined),
+    SIGN_OUT_REVOKE_TIMEOUT_MS,
+    undefined
+  );
+
+  // 3. Whatever came back — success, error, or a request still in flight —
+  //    the session must not be on this device any more.
+  await clearAuthStorage();
 }
 
 /* ──────────────────────── DELETE ACCOUNT ─────────────────────── */
@@ -127,9 +174,10 @@ export async function deleteAccount(): Promise<ActionResult> {
   try {
     const { error } = await supabase.functions.invoke('delete-account');
     if (error) return { ok: false, error: error.message };
-    await supabase.auth.signOut().catch(() => {});
-    useAppStore.getState().resetAll();
-    useProgramStore.getState().adoptUser(null);
+    // The account is gone server-side; the teardown below is the same
+    // bounded, always-completes one sign-out uses, so a slow revoke cannot
+    // leave a deleted account's session sitting on the phone.
+    await signOut();
     return { ok: true };
   } catch (e) {
     return { ok: false, error: String(e) };

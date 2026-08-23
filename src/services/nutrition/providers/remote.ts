@@ -48,9 +48,16 @@ function numOrNull(v: unknown): number | null {
 }
 
 function makeRemoteProvider(
-  id: Extract<NutritionSource, 'fatsecret' | 'edamam'>,
+  id: Extract<NutritionSource, 'fatsecret' | 'edamam' | 'usda'>,
   label: string,
-  nutritionConfidence: number
+  nutritionConfidence: number,
+  /*
+   * What the Edge Function should be asked for. Defaults to `id`, which is
+   * what FatSecret and Edamam want. USDA needs two different FDC queries —
+   * generic foods vs branded/GTIN — that both come back as source `'usda'`,
+   * so the wire name is separated from the provenance id.
+   */
+  remoteProvider: string = id
 ): NutritionProvider {
   return {
     id,
@@ -61,7 +68,7 @@ function makeRemoteProvider(
       try {
         const { data, error } = await supabase.functions.invoke(
           'nutrition-search',
-          { body: { provider: id, query } }
+          { body: { provider: remoteProvider, query } }
         );
         if (error || !data || data.error) return null;
 
@@ -121,3 +128,27 @@ export const fatSecretProvider = makeRemoteProvider(
 
 /** Edamam — recipe/food nutrition API. */
 export const edamamProvider = makeRemoteProvider('edamam', 'Edamam', 0.8);
+
+/*
+ * USDA FoodData Central (finding F-1). Keyed, so it proxies like the two
+ * above rather than calling FDC from the device with a bundled key.
+ *
+ * Confidence stays 0.95 — the value this provider carried when it called FDC
+ * directly — so the engine's provider ordering does not move. Both entry
+ * points report `source: 'usda'`: the GTIN search is the same database
+ * answering a barcode instead of a name, and inventing a second provenance
+ * value would change what every downstream consumer reads.
+ */
+export const usdaRemoteProvider = makeRemoteProvider(
+  'usda',
+  'USDA FoodData Central',
+  0.95
+);
+
+/** USDA branded foods, indexed by GTIN/UPC — the barcode entry point. */
+export const usdaGtinProvider = makeRemoteProvider(
+  'usda',
+  'USDA FoodData Central',
+  0.95,
+  'usda_gtin'
+);

@@ -3,7 +3,7 @@ import { Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 
-import { isDemoMode, supabase } from '@/lib/supabase';
+import { currentUserId, isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import { SUPPORT_WHATSAPP as SUPPORT_WA } from '@/config/support';
 import {
@@ -31,8 +31,7 @@ export function AppAlert() {
     let alive = true;
     let unsub = () => {};
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      const uid = data.user?.id;
+      const uid = await currentUserId();
       if (!uid || !alive) return;
       const pending = await fetchPendingAlert();
       if (alive && pending) setAlert((cur) => cur ?? pending);
