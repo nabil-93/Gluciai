@@ -16,7 +16,11 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, LockedScreen } from '@/components/ui';
-import { DeleteConfirmCard, LoggerConfirmCard } from '@/components/LoggerConfirmCard';
+import {
+  DeleteConfirmCard,
+  guessMeal,
+  LoggerConfirmCard,
+} from '@/components/LoggerConfirmCard';
 import { isRTL } from '@/i18n';
 import { uniqueId } from '@/lib/clock';
 import {
@@ -32,6 +36,7 @@ import {
   type LoggerAction,
 } from '@/services/aiLogger';
 import { markReminder, pendingFollowUps } from '@/services/reminders';
+import { cardAnswer } from '@/services/loggerGate';
 import { useAppStore } from '@/store/useAppStore';
 
 const F500 = 'PlusJakartaSans_500Medium';
@@ -223,9 +228,47 @@ function AiLogScreen() {
   const send = async (text: string) => {
     const content = text.trim();
     if (!content || thinking) return;
+
+    /* The card asks a yes/no question and so does the assistant. Answering
+     * it in words used to start a fresh turn, and the two lines below threw
+     * the card away first — the patient said yes and the entry vanished.
+     * Handled here, without a round-trip, exactly like the chat and the
+     * call. Only a WHOLE-message yes/no counts. */
+    if (pendingAction || pendingDelete) {
+      const answer = cardAnswer(content);
+      if (answer) {
+        setInput('');
+        pushBubble('user', content);
+        if (answer === 'no') {
+          setPendingAction(null);
+          setPendingDelete(null);
+          pushBubble('assistant', t('logger.canceled'));
+          return;
+        }
+        // Same as the chat: `thinking` shows the save is running AND closes
+        // this function to re-entry, so a second impatient "wah" cannot
+        // start a second save of the same entry.
+        setThinking(true);
+        try {
+          if (pendingAction) {
+            await confirm(
+              pendingAction.type === 'meal' && !pendingAction.meal_type
+                ? { ...pendingAction, meal_type: guessMeal() }
+                : pendingAction
+            );
+          } else if (pendingDelete) {
+            await confirmDelete(pendingDelete);
+          }
+        } finally {
+          setThinking(false);
+        }
+        return;
+      }
+    }
+
     setInput('');
-    setPendingAction(null);
-    setPendingDelete(null);
+    // The open proposal is left standing: it is resolved by the patient or
+    // replaced by the logger's next one, never by them typing something else.
     // Replying to an "other"-kind follow-up counts as its answer.
     if (followUpIdsRef.current.length) {
       followUpIdsRef.current.forEach((rid) => markReminder(rid, 'done'));
@@ -264,12 +307,14 @@ function AiLogScreen() {
   };
 
   const confirmDelete = async (target: DeleteTarget) => {
+    // Withdrawn before the save, not after: the card is confirmable two
+    // ways now (tap, or typing "wah"), and only one of them guards itself.
+    setPendingDelete(null);
     try {
       await applyDeleteTarget(target);
-      setPendingDelete(null);
       pushBubble('assistant', t('logger.deleted'));
       addAiJournalEntry({
-        id: `del-${Date.now()}`,
+        id: uniqueId('del'),
         icon: '🗑️',
         title: t('logger.journalDeleteTitle'),
         body: target.summary,
@@ -277,21 +322,22 @@ function AiLogScreen() {
         created_at: new Date().toISOString(),
       });
     } catch {
+      setPendingDelete(target); // nothing was deleted — let them retry
       pushBubble('assistant', t('logger.error'));
     }
   };
 
   const confirm = async (action: LoggerAction) => {
+    setPendingAction(null); // withdraw first — see confirmDelete above
     try {
       await applyLoggerAction(action);
-      setPendingAction(null);
       pushBubble(
         'assistant',
         action.type === 'reminder' ? t('logger.reminderSet') : t('logger.added')
       );
       // Trace in the AI coach journal so the robot's log shows it too.
       addAiJournalEntry({
-        id: `log-${Date.now()}`,
+        id: uniqueId('log'),
         icon: action.type === 'reminder' ? '⏰' : action.type === 'note' ? '📝' : '📝',
         title: t('logger.journalTitle'),
         body: actionSummary(action),
@@ -299,6 +345,7 @@ function AiLogScreen() {
         created_at: new Date().toISOString(),
       });
     } catch {
+      setPendingAction(action); // nothing was saved — let them retry
       pushBubble('assistant', t('logger.error'));
     }
   };
@@ -318,8 +365,6 @@ function AiLogScreen() {
 
   const sendVoiceNote = async (audio: { mimeType: string; data: string }) => {
     if (thinking) return;
-    setPendingAction(null);
-    setPendingDelete(null);
     setThinking(true);
     try {
       const turn = await sendLoggerMessage(

@@ -17,7 +17,11 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, LockedScreen, Spinner } from '@/components/ui';
-import { DeleteConfirmCard, LoggerConfirmCard } from '@/components/LoggerConfirmCard';
+import {
+  DeleteConfirmCard,
+  guessMeal,
+  LoggerConfirmCard,
+} from '@/components/LoggerConfirmCard';
 import { VoiceRecorderBar } from '@/components/VoiceRecorderBar';
 import {
   getHealthyFood,
@@ -41,6 +45,7 @@ import {
   type DeleteTarget,
   type LoggerAction,
 } from '@/services/aiLogger';
+import { cardAnswer, skipLoggerExtraction } from '@/services/loggerGate';
 import { bumpUsage, isFeatureExhausted, QuotaError, usageFor } from '@/services/usage';
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
@@ -407,6 +412,16 @@ function AiChatScreen() {
    * ("f l3cha" alone would never match the keyword filter). */
   const loggerPendingRef = useRef(false);
 
+  /* Which turn is current.
+   *
+   * The chat answer and the extraction are two requests, and the typing
+   * indicator comes down when the ANSWER lands — so the patient can start
+   * the next turn while the previous extraction is still in flight. A late
+   * one would then post its card, or re-arm the follow-up flag, on top of a
+   * conversation that has already moved on. Each turn takes a number and a
+   * result is only applied if its turn is still the current one. */
+  const turnRef = useRef(0);
+
   /** Last messages (user + assistant) as logger context, oldest first. */
   const loggerHistory = (extra: { role: 'user' | 'assistant'; content: string }[]) =>
     [...messages.map((m) => ({ role: m.role, content: m.content })), ...extra]
@@ -418,13 +433,24 @@ function AiChatScreen() {
     else router.replace('/(tabs)');
   };
 
-  const onNew = () => {
-    newConversation();
+  /**
+   * Leaving a thread abandons everything that belonged to it: the card that
+   * was waiting for an answer, the half-finished logger question, and any
+   * extraction still in flight (bumping the turn makes a late one a no-op).
+   * A proposal built from one conversation must never surface under another.
+   */
+  const leaveThread = () => {
     setPendingAction(null);
     setPendingDelete(null);
     loggerPendingRef.current = false;
+    turnRef.current++;
     setInput('');
     setDrawerOpen(false);
+  };
+
+  const onNew = () => {
+    newConversation();
+    leaveThread();
   };
 
   /* ── Delete flow: resolve the request against today's entries and show
@@ -443,12 +469,12 @@ function AiChatScreen() {
   };
 
   const confirmDelete = async (target: DeleteTarget) => {
+    setPendingDelete(null); // withdraw first — see confirmLog
     try {
       await applyDeleteTarget(target);
-      setPendingDelete(null);
       addChatMessage(chatMsg('del', 'assistant', t('logger.deleted')));
       addAiJournalEntry({
-        id: `del-${Date.now()}`,
+        id: uniqueId('del'),
         icon: '🗑️',
         title: t('logger.journalDeleteTitle'),
         body: target.summary,
@@ -456,6 +482,7 @@ function AiChatScreen() {
         created_at: new Date().toISOString(),
       });
     } catch {
+      setPendingDelete(target); // nothing was deleted — let them retry
       addChatMessage(chatMsg('dele', 'assistant', t('logger.error')));
     }
   };
@@ -519,6 +546,54 @@ function AiChatScreen() {
   const send = async (text: string) => {
     const content = text.trim();
     if (!content || thinking) return;
+
+    /* THE PATIENT ANSWERED THE CARD IN WORDS.
+     *
+     * The assistant asks out loud — "wach n'confirmiha? goul liya wah" — and
+     * on a CALL a spoken yes works: the model calls confirm_entry. In the chat
+     * it did not. Typing "wah" started an ordinary turn, and the two lines
+     * that used to sit at the top of this function cleared the card before
+     * anything else happened. The patient answered the question they were
+     * asked and watched their entry disappear.
+     *
+     * A typed yes is a confirmation like any other, given while the card is
+     * on screen naming exactly what will be saved or deleted. cardAnswer()
+     * only matches when the WHOLE message is the answer, so "oui mais change
+     * la portion" still goes through the normal turn below. */
+    if (pendingAction || pendingDelete) {
+      const answer = cardAnswer(content);
+      if (answer) {
+        setInput('');
+        addChatMessage(chatMsg('u', 'user', content));
+        if (answer === 'no') {
+          setPendingAction(null);
+          setPendingDelete(null);
+          addChatMessage(chatMsg('lc', 'assistant', t('logger.canceled')));
+          return;
+        }
+        // `thinking` both shows the save is happening and closes this
+        // function to re-entry, so an impatient second "wah" cannot start a
+        // second save of the same entry.
+        setThinking(true);
+        try {
+          if (pendingAction) {
+            // Same default the card itself applies, so an entry lands in the
+            // same meal slot whichever way the patient said yes.
+            await confirmLog(
+              pendingAction.type === 'meal' && !pendingAction.meal_type
+                ? { ...pendingAction, meal_type: guessMeal() }
+                : pendingAction
+            );
+          } else if (pendingDelete) {
+            await confirmDelete(pendingDelete);
+          }
+        } finally {
+          setThinking(false);
+        }
+        return;
+      }
+    }
+
     // Message quota spent? Show the lock instead of sending (server enforces too).
     if (!isDemoMode && supabase) {
       const stat = usageFor(useAppStore.getState().usage, 'ai_chat');
@@ -528,20 +603,28 @@ function AiChatScreen() {
       }
     }
     setInput('');
-    setPendingAction(null);
-    setPendingDelete(null);
+    /* The card is NOT cleared here any more. A pending proposal is an open
+     * offer: it stands until the patient confirms it, cancels it, or the
+     * logger replaces it with a new one. Wiping it because they typed
+     * something else is how an entry got lost mid-conversation. */
 
     const userMessage = chatMsg('u', 'user', content);
     addChatMessage(userMessage);
     setThinking(true);
 
-    // "rani dert 6 unités", "klit tajine", "zid liya…" — when the message
-    // states something loggable (or the logger is waiting for a missing
-    // detail from the previous turn), extract it in parallel with the
-    // normal answer and offer to save it (always behind an explicit
-    // confirmation). The last few messages go along so answers like
-    // "f l3cha" complete the entry started earlier.
-    const shouldExtract = looksLoggable(content) || loggerPendingRef.current;
+    // "rani dert 6 unités", "klit tajine", "zid liya…" — extract in parallel
+    // with the normal answer and offer to save it (always behind an explicit
+    // confirmation). The last few messages go along so answers like "f l3cha"
+    // complete the entry started earlier.
+    //
+    // Everything is extracted EXCEPT what cannot possibly be an event (a bare
+    // greeting or thank-you). See services/loggerGate: a positive keyword
+    // filter used to decide this, and every phrasing it did not know was an
+    // entry the patient asked for and never got — while the chat model was
+    // telling them to confirm the card it had suppressed.
+    const wasArmed = loggerPendingRef.current;
+    const turn = ++turnRef.current;
+    const shouldExtract = !skipLoggerExtraction(content) || wasArmed;
     const extraction = shouldExtract
       ? sendLoggerMessage(
           loggerHistory([{ role: 'user', content }]),
@@ -557,43 +640,77 @@ function AiChatScreen() {
       const reply = await sendChatMessage(history, i18n.language, profile);
       addChatMessage(chatMsg('a', 'assistant', reply));
       bumpUsage('ai_chat'); // reflect the message just spent
-      const extracted = await extraction;
-      if (extracted?.remove) {
-        loggerPendingRef.current = false;
-        handleDeleteRequest(extracted.remove);
-      } else if (extracted?.action) {
-        loggerPendingRef.current = false;
-        setPendingAction(extracted.action);
-      } else if (extracted && extracted.reply && looksLoggable(content)) {
-        // The logger needs one more detail (e.g. which meal of the day):
-        // surface its short question and keep extraction armed so the
-        // patient's next answer finishes the entry.
-        loggerPendingRef.current = true;
-        addChatMessage(chatMsg('lq', 'assistant', extracted.reply));
-      } else {
-        loggerPendingRef.current = false;
-      }
     } catch (e) {
       if (e instanceof QuotaError) setQuotaHit(true);
       else addChatMessage(chatMsg('e', 'assistant', t('common.error')));
     } finally {
       setThinking(false);
     }
+
+    // Awaited OUTSIDE the try above, deliberately: an answer that failed
+    // (network, quota) must not also throw away an entry the logger did
+    // manage to extract.
+    applyExtraction(await extraction, content, wasArmed, turn);
   };
 
+  /**
+   * What the logger came back with: a delete to resolve, an entry to offer,
+   * or one more question before it can build the entry.
+   *
+   * `wasArmed` is whether a logger question was ALREADY open when this turn
+   * started. Without it the follow-up chain broke on its second step: the
+   * question was only surfaced when the message matched the keyword filter,
+   * so "assiette moyenne" — a perfectly good answer to "quelle portion ?" —
+   * silently disarmed the logger and the entry was never built.
+   */
+  const applyExtraction = (
+    extracted: Awaited<ReturnType<typeof sendLoggerMessage>> | null,
+    content: string,
+    wasArmed: boolean,
+    turn: number
+  ) => {
+    if (turn !== turnRef.current) return; // a newer turn owns the screen
+    if (extracted?.remove) {
+      loggerPendingRef.current = false;
+      handleDeleteRequest(extracted.remove);
+    } else if (extracted?.action) {
+      loggerPendingRef.current = false;
+      setPendingAction(extracted.action);
+    } else if (extracted?.reply && (wasArmed || looksLoggable(content))) {
+      // The logger needs one more detail (e.g. which meal of the day):
+      // surface its short question and keep extraction armed so the
+      // patient's next answer finishes the entry.
+      loggerPendingRef.current = true;
+      addChatMessage(chatMsg('lq', 'assistant', extracted.reply));
+    } else {
+      loggerPendingRef.current = false;
+    }
+  };
+
+  /**
+   * ONE PROPOSAL, ONE ENTRY.
+   *
+   * The card used to come down only AFTER the save resolved, which left a
+   * window where it was still on screen and still tappable. That was
+   * harmless while tapping was the only way to confirm — the button guards
+   * itself — but a typed "wah" is a second door into the same function, and
+   * two doors onto an un-disarmed card is a duplicate insulin dose in the
+   * patient's history. The proposal is withdrawn first and put back only if
+   * the save actually failed, which is the same order the voice call uses.
+   */
   const confirmLog = async (action: LoggerAction) => {
+    setPendingAction(null);
     try {
       await applyLoggerAction(action);
-      setPendingAction(null);
-      addChatMessage({
-        id: `${Date.now()}-log`,
-        role: 'assistant',
-        content:
-          action.type === 'reminder' ? t('logger.reminderSet') : t('logger.added'),
-        created_at: new Date().toISOString(),
-      });
+      addChatMessage(
+        chatMsg(
+          'log',
+          'assistant',
+          action.type === 'reminder' ? t('logger.reminderSet') : t('logger.added')
+        )
+      );
       addAiJournalEntry({
-        id: `log-${Date.now()}`,
+        id: uniqueId('log'),
         icon: action.type === 'reminder' ? '⏰' : '📝',
         title: t('logger.journalTitle'),
         body: actionSummary(action),
@@ -601,12 +718,8 @@ function AiChatScreen() {
         created_at: new Date().toISOString(),
       });
     } catch {
-      addChatMessage({
-        id: `${Date.now()}-loge`,
-        role: 'assistant',
-        content: t('logger.error'),
-        created_at: new Date().toISOString(),
-      });
+      setPendingAction(action); // nothing was saved — let them retry
+      addChatMessage(chatMsg('loge', 'assistant', t('logger.error')));
     }
   };
 
@@ -622,8 +735,10 @@ function AiChatScreen() {
         return;
       }
     }
-    setPendingAction(null);
-    setPendingDelete(null);
+    // The open card is left alone, exactly as in send(): a proposal stands
+    // until the patient resolves it or the logger replaces it.
+    const wasArmed = loggerPendingRef.current;
+    const turn = ++turnRef.current;
     setThinking(true);
     try {
       const history = messages.map((m) => ({ role: m.role, content: m.content }));
@@ -639,28 +754,39 @@ function AiChatScreen() {
       );
       addChatMessage(chatMsg('a', 'assistant', reply));
       bumpUsage('ai_chat'); // a voice message counts as one chat message
-      // If the spoken message was loggable (or the logger is waiting on a
-      // missing detail), extract + offer the confirm card.
-      if (heard && (looksLoggable(heard) || loggerPendingRef.current)) {
-        sendLoggerMessage(
+
+      // Said out loud rather than typed, but it is the same answer to the
+      // same card — treat it the same way.
+      if (heard && (pendingAction || pendingDelete)) {
+        const answer = cardAnswer(heard);
+        if (answer === 'no') {
+          setPendingAction(null);
+          setPendingDelete(null);
+          addChatMessage(chatMsg('lc', 'assistant', t('logger.canceled')));
+          return;
+        }
+        if (answer === 'yes') {
+          if (pendingAction) {
+            await confirmLog(
+              pendingAction.type === 'meal' && !pendingAction.meal_type
+                ? { ...pendingAction, meal_type: guessMeal() }
+                : pendingAction
+            );
+          } else if (pendingDelete) {
+            await confirmDelete(pendingDelete);
+          }
+          return;
+        }
+      }
+
+      // Same rule as the typed path: extract unless the words cannot be an
+      // event at all.
+      if (heard && (!skipLoggerExtraction(heard) || wasArmed)) {
+        const ex = await sendLoggerMessage(
           loggerHistory([{ role: 'user', content: heard }]),
           i18n.language
-        )
-          .then((ex) => {
-            if (ex?.remove) {
-              loggerPendingRef.current = false;
-              handleDeleteRequest(ex.remove);
-            } else if (ex?.action) {
-              loggerPendingRef.current = false;
-              setPendingAction(ex.action);
-            } else if (ex?.reply && looksLoggable(heard)) {
-              loggerPendingRef.current = true;
-              addChatMessage(chatMsg('lq', 'assistant', ex.reply));
-            } else {
-              loggerPendingRef.current = false;
-            }
-          })
-          .catch(() => {});
+        ).catch(() => null);
+        applyExtraction(ex, heard, wasArmed, turn);
       }
     } catch (e) {
       if (e instanceof QuotaError) setQuotaHit(true);
@@ -894,7 +1020,7 @@ function AiChatScreen() {
                         style={{ flex: 1, minWidth: 0 }}
                         onPress={() => {
                           selectConversation(c.id);
-                          setDrawerOpen(false);
+                          leaveThread();
                         }}
                       >
                         <Text style={styles.convTitle} numberOfLines={1}>

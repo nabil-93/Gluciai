@@ -30,8 +30,12 @@ const MEAL_MOMENTS: { key: MealType; emoji: string }[] = [
 ];
 
 /** When the AI didn't say which meal it was, guess from the time of day so
- *  the patient sees a sensible slot pre-selected (they can still change it). */
-function guessMeal(): MealType {
+ *  the patient sees a sensible slot pre-selected (they can still change it).
+ *
+ *  Exported because the card is no longer the only way to confirm: the chat
+ *  also accepts a typed "wah"/"oui", and an entry must land in the same slot
+ *  whichever way the patient said yes. */
+export function guessMeal(): MealType {
   const h = new Date().getHours();
   if (h < 11) return 'breakfast';
   if (h < 16) return 'lunch';

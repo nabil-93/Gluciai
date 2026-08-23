@@ -27,10 +27,12 @@ import {
   applyLoggerAction,
   findDeleteTargets,
   liveLogInstruction,
+  sendLoggerMessage,
   type DeletableKind,
   type DeleteTarget,
   type LoggerAction,
 } from '@/services/aiLogger';
+import { cardAnswer, skipLoggerExtraction } from '@/services/loggerGate';
 import {
   GATE_RMS_FIRST_TURN,
   GATE_RMS_STEADY,
@@ -1102,10 +1104,76 @@ ${liveLogInstruction(langName)}`;
     synth.speak(u);
   };
 
+  /**
+   * THE FALLBACK ENGINE COULD NOT LOG ANYTHING.
+   *
+   * When Gemini Live is unavailable the call falls back to this loop:
+   * browser speech-to-text + the ordinary chat model + speech synthesis. It
+   * has no function calling, so none of the log_* tools exist here — and
+   * nothing replaced them. The chat model's own prompt promises the patient
+   * a confirmation card ("tell them to confirm the green card"), so on a
+   * fallback call the assistant kept offering to record things and no card
+   * could ever appear. Same failure as the chat had, on the other surface.
+   *
+   * The logger is asked separately here, exactly as the chat does it, and
+   * fills the SAME pending proposal the live engine uses — so the card, the
+   * confirm/cancel buttons, the dedup guard and the journal trace are all
+   * shared. What the fallback still cannot do is ask a follow-up question
+   * of its own: a second synthesized voice over the model's answer would be
+   * worse than the patient repeating themselves with the detail.
+   */
+  const proposeFromLogger = (
+    turn: Awaited<ReturnType<typeof sendLoggerMessage>> | null
+  ) => {
+    if (!turn || endedRef.current) return;
+    const cur = pendingRef.current;
+    if (turn.remove) {
+      const target = findDeleteTargets(turn.remove)[0];
+      if (!target) return;
+      // Already the open proposal → leave the patient's card alone.
+      if (cur?.kind === 'delete' && cur.target.rowId === target.rowId) return;
+      setPendingSafe({ id: `p${++pendingSeqRef.current}`, kind: 'delete', target });
+      return;
+    }
+    if (!turn.action) return;
+    // Same dedup window the live engine uses, so re-stating an entry that
+    // was just saved does not offer it a second time.
+    const sig = actionSignature(turn.action);
+    const last = sig ? recentSigRef.current.get(sig) : undefined;
+    if (sig && last && nowMs() - last < DUP_WINDOW_MS) return;
+    // A DIFFERENT entry replaces the open one, exactly as the live engine
+    // does when it re-proposes. Refusing would quietly drop whatever the
+    // patient just said, which is the failure this whole change is about.
+    if (cur?.kind === 'log' && actionSignature(cur.action) === sig) return;
+    setPendingSafe({ id: `p${++pendingSeqRef.current}`, kind: 'log', action: turn.action });
+  };
+
   const handleClassicSpeech = async (text: string) => {
     stopClassicListening();
     setStatusSafe('thinking');
+
+    // A card is on screen and the patient answered it out loud. On the live
+    // engine the model turns that into confirm_entry; here nothing did.
+    if (pendingRef.current) {
+      const answer = cardAnswer(text);
+      if (answer === 'yes') {
+        await confirmPendingTap();
+        startClassicListening();
+        return;
+      }
+      if (answer === 'no') {
+        cancelPendingTap();
+        startClassicListening();
+        return;
+      }
+    }
+
     historyRef.current = [...historyRef.current, { role: 'user', content: text }];
+    const extraction = skipLoggerExtraction(text)
+      ? Promise.resolve(null)
+      : sendLoggerMessage(historyRef.current.slice(-6), i18n.language).catch(
+          () => null
+        );
     try {
       const reply = await sendChatMessage(
         historyRef.current,
@@ -1123,6 +1191,8 @@ ${liveLogInstruction(langName)}`;
       setAdvice(t('common.error'));
       startClassicListening();
     }
+    // Outside the try: a failed answer must not also lose the entry.
+    proposeFromLogger(await extraction);
   };
 
   const startClassicLoop = () => {
