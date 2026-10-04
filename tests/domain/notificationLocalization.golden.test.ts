@@ -177,10 +177,18 @@ describe('the language in a scheduled notification is the one selected then', ()
 
   it('rescheduling cancels first, so it cannot duplicate a reminder', () => {
     const s = src('src/services/notifications.ts');
-    const cancelAt = s.indexOf('cancelAllScheduledNotificationsAsync');
+    const cancelAt = s.indexOf('await cancelSmartReminders();');
     const firstSchedule = s.indexOf("await schedule(\n      'glucose-reminder'");
     expect(cancelAt).toBeGreaterThan(-1);
     expect(firstSchedule).toBeGreaterThan(cancelAt);
+  });
+
+  it('…and cancels only its OWN four reminders, never the assistant ones (C-10)', () => {
+    const s = src('src/services/notifications.ts');
+    expect(s).not.toContain('cancelAllScheduledNotificationsAsync');
+    for (const id of ['glucose-reminder', 'insulin-long-reminder', 'breakfast-reminder', 'evening-recap']) {
+      expect(s).toContain(`'${id}'`);
+    }
   });
 
   it('the previewed reminders re-render on language change', () => {

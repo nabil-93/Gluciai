@@ -9,7 +9,7 @@ import { AppAlert } from '@/components/AppAlert';
 import { refreshFeatureLocks } from '@/services/features';
 import { refreshUsage } from '@/services/usage';
 import { refreshSmartReminders } from '@/services/notifications';
-import { checkReminders } from '@/services/reminders';
+import { checkReminders, syncAiReminderNotifications } from '@/services/reminders';
 import { startPresence } from '@/services/presence';
 import { hydrateFromServer } from '@/services/sync';
 import { hasStoredSession, isDemoMode, supabase } from '@/lib/supabase';
@@ -72,7 +72,11 @@ export default function TabsLayout() {
     refreshSmartReminders();
     refreshFeatureLocks();
     refreshUsage();
-    hydrateFromServer().then(() => checkReminders());
+    hydrateFromServer().then(() => {
+      checkReminders();
+      // Pending assistant reminders → real OS notifications (store audit C-10).
+      void syncAiReminderNotifications();
+    });
     // "Dernière connexion" heartbeat for the dashboard (now + on foreground).
     const stopPresence = startPresence();
     // AI reminders tick: fire due ones + "did you do it?" follow-ups.

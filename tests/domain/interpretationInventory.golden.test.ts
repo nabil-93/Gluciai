@@ -430,11 +430,16 @@ describe('§5/§6 KNOWN-BAD — five daily-target implementations', () => {
     expect(s).toContain(': 30;'); // age fallback 30, programEngine says 35
   });
 
-  it('and three screens hold flat tables instead', () => {
-    expect(src('src/app/nutrition.tsx')).toContain(
-      'const GOALS = { kcal: 2000, carbs: 250, protein: 90, fat: 65, fiber: 30 };'
-    );
-    expect(src('src/app/(tabs)/index.tsx')).toContain('const CARB_GOAL = 250;');
+  it('FIXED (store audit C-02) — no screen holds a flat carbohydrate GOAL any more', () => {
+    // The nutrition page keeps a labelled REFERENCE for energy/protein/fat/fibre
+    // (the patient's own estimate, else the EU reference intakes) and shows the
+    // day's carbohydrate as a fact — no 250 g objective, no "objectif atteint".
+    const nutrition = src('src/app/nutrition.tsx');
+    expect(nutrition).not.toContain('carbs: 250');
+    expect(nutrition).toContain('const EU_REFERENCE = { kcal: 2000, protein: 50, fat: 70, fiber: 25 };');
+    expect(nutrition).toContain("computeProgramTargets({ profile, goal: 'stabilize', activityLevel: 'light' })");
+    expect(src('src/app/(tabs)/index.tsx')).not.toContain('CARB_GOAL');
+    // The dish page's decorative rings still use an indicative reference.
     expect(src('src/app/healthy-food.tsx')).toContain('food.calories / 2000');
     expect(src('src/app/healthy-food.tsx')).toContain('food.carbs / 250');
   });
@@ -442,7 +447,7 @@ describe('§5/§6 KNOWN-BAD — five daily-target implementations', () => {
   it('the same 2000 kcal patient is told three different protein targets', () => {
     // scan-result: goal × 25 % ÷ 4 = 125 g · nutrition page: 90 g · dish page: 100 g
     expect(Math.round((2000 * 0.25) / 4)).toBe(125);
-    expect(src('src/app/nutrition.tsx')).toContain('protein: 90');
+    expect(src('src/app/nutrition.tsx')).toContain('protein: 50'); // EU reference intake
     expect(src('src/app/healthy-food.tsx')).toContain('food.protein / 100');
   });
 
@@ -465,9 +470,12 @@ describe('§5/§6 KNOWN-BAD — five daily-target implementations', () => {
     expect(buildHighlights({ ...plate({ carbs: 76 }), categories: [] })).toContain('carb_heavy');
   });
 
-  it('KNOWN-BAD — the home ring calls a low-carb day "under target"', () => {
-    /** S1-4, BLOCKED: PHASE 7. */
-    expect(src('src/app/(tabs)/index.tsx')).toContain('if (value < goal * 0.6) return zones[0];');
+  it('FIXED (store audit C-01/C-02) — the home rings no longer judge carbs or insulin', () => {
+    const home = src('src/app/(tabs)/index.tsx');
+    expect(home).not.toContain('zoneForGoal');
+    expect(home).not.toContain('INSULIN_GOAL');
+    expect(home).toContain('DAY_TOTAL_ZONE');
+    expect(src('src/app/insulin.tsx')).not.toContain('DAILY_GOAL');
   });
 
   it('KNOWN-BAD — the calorie chip is personalised, the penalty is flat', () => {

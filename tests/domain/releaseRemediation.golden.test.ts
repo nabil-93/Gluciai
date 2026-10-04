@@ -216,17 +216,25 @@ describe('B-4 · the bolus glucose field carries the P7-005 guard', () => {
   });
 
   it('disables the calculate action while the reading is refused', () => {
-    expect(bolus()).toMatch(/disabled=\{\(!carbs && !glucose\) \|\| glucoseUnitWarning\}/);
+    // Since store audit C-06 the CTA is also closed without a fresh reading or
+    // without the patient's own ratio / correction factor (`blocked`).
+    expect(bolus()).toMatch(/disabled=\{blocked \|\| glucoseUnitWarning\}/);
+    expect(bolus()).toMatch(/const blocked = needsGlucose \|\| needsRatio \|\| needsIsf;/);
   });
 
   it('calculate() refuses even if the CTA is somehow reachable', () => {
-    expect(bolus()).toMatch(/if \(glucoseUnitWarning\) return;/);
+    expect(bolus()).toMatch(/if \(glucoseUnitWarning \|\| blocked\) return;/);
   });
 
-  it('reuses the log screen’s wording rather than inventing a second refusal', () => {
+  it('reuses the log screen’s refusal rather than inventing a second one', () => {
+    // C-04: the "looks like mmol/L ≈ 22 mg/dL" sentence mis-read g/L (1,20 =
+    // 120 mg/dL) as a hypo. Both screens now share ONE component offering both
+    // readings, plus the same out-of-range wording.
     const body = bolus();
-    expect(body).toMatch(/log\.unitLooksMmol/);
+    expect(body).toMatch(/<GlucoseUnitHelp/);
     expect(body).toMatch(/log\.unitOutOfRange/);
+    expect(body).not.toMatch(/log\.unitLooksMmol/);
+    expect(src('src/app/log-glucose.tsx')).toMatch(/<GlucoseUnitHelp/);
   });
 });
 

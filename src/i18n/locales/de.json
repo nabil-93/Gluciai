@@ -332,7 +332,7 @@
     "insulinPlanHint": "Der KI-Assistent nutzt diese Angaben, um genau zu wissen, welches Insulin du wann verwendest — und verwechselt nie schnell und langsam.",
     "mealRatiosTitle": "Dein Insulin pro 10 g Kohlenhydrate",
     "mealRatiosSub": "Wie viele Einheiten schnelles Insulin nimmst du für 10 g Kohlenhydrate? Der Wert ist oft bei jeder Mahlzeit anders.",
-    "mealRatiosHint": "Das sind die Werte deines Arztes. Die KI und der Dosisrechner nutzen sie für eine exakte Berechnung bei jeder Mahlzeit. Du kannst sie jederzeit unter Profil → Medizinisch ändern.",
+    "mealRatiosHint": "Übernimm genau die Werte, die dein Arzt verordnet hat. Der Dosisrechner öffnet sich nur mit deinen eigenen Werten. Du kannst sie später unter Profil → Medizinisch eintragen.",
     "ratioBreakfast": "Frühstück",
     "ratioLunch": "Mittagessen",
     "ratioDinner": "Abendessen",
@@ -344,7 +344,8 @@
     "bolusStepSub": "Das, das Sie zu den Mahlzeiten spritzen — beginnen wir damit.",
     "bolusStepHint": "Richten Sie zuerst Ihr schnelles Insulin vollständig ein (Name, Verhältnisse pro Mahlzeit, Korrekturfaktor). Das lange Insulin folgt direkt danach.",
     "basalStepTitle": "Ihr langes Insulin",
-    "basalStepSub": "Name, Dosis und Zeitpunkt der Injektion."
+    "basalStepSub": "Name, Dosis und Zeitpunkt der Injektion.",
+    "skipUnknown": "Ich kenne sie noch nicht"
   },
   "home": {
     "goodMorning": "Guten Morgen",
@@ -367,30 +368,6 @@
     "addMeal": "Mahlzeit hinzufügen",
     "addInjection": "Injektion hinzufügen",
     "noCarbsToday": "Heute keine Kohlenhydrate",
-    "carbsLowLabel": "Niedrig",
-    "carbsLowTitle": "Niedrige Zufuhr",
-    "carbsLowDesc": "Deine Kohlenhydrate liegen unter dem Tagesziel.",
-    "carbsGoodLabel": "Normal",
-    "carbsGoodTitle": "Normale Zufuhr",
-    "carbsGoodDesc": "Deine Kohlenhydrate liegen nahe am Tagesziel.",
-    "carbsModLabel": "Moderat",
-    "carbsModTitle": "Hohe Zufuhr",
-    "carbsModDesc": "Deine Kohlenhydrate liegen etwas über dem Ziel.",
-    "carbsHighLabel": "Hoch",
-    "carbsHighTitle": "Sehr hohe Zufuhr",
-    "carbsHighDesc": "Deine Kohlenhydrate liegen deutlich über dem Ziel.",
-    "insulinLowLabel": "Niedrig",
-    "insulinLowTitle": "Niedrige Dosis",
-    "insulinLowDesc": "Dein Insulin liegt unter dem Tagesziel.",
-    "insulinGoodLabel": "Normal",
-    "insulinGoodTitle": "Normale Dosis",
-    "insulinGoodDesc": "Dein Insulin liegt nahe am Tagesziel.",
-    "insulinModLabel": "Moderat",
-    "insulinModTitle": "Hohe Dosis",
-    "insulinModDesc": "Dein Insulin liegt etwas über dem Ziel.",
-    "insulinHighLabel": "Hoch",
-    "insulinHighTitle": "Sehr hohe Dosis",
-    "insulinHighDesc": "Dein Insulin liegt deutlich über dem Ziel.",
     "scanFood": "Essen scannen",
     "noMeals": "Noch keine Mahlzeiten. Scanne deine erste Mahlzeit!",
     "lastReading": "Letzte Messung",
@@ -474,7 +451,14 @@
     "riskLabel": "Blutzucker-Risikoniveau",
     "mealsTitle": "Deine Mahlzeiten",
     "chronik": "Chronik",
-    "viewFullHistory": "Gesamten Verlauf ansehen"
+    "viewFullHistory": "Gesamten Verlauf ansehen",
+    "dayTotal": "Tagessumme",
+    "mealsLogged_one": "{{count}} Mahlzeit erfasst",
+    "mealsLogged_other": "{{count}} Mahlzeiten erfasst",
+    "injectionsLogged_one": "{{count}} Injektion erfasst",
+    "injectionsLogged_other": "{{count}} Injektionen erfasst",
+    "carbsNoGoalNote": "Kein vorgegebenes Ziel: Deinen Kohlenhydratbedarf legst du mit deinem Arzt fest.",
+    "insulinNoGoalNote": "Summe der erfassten Dosen. Die App setzt kein Insulinziel – das entscheidet dein Arzt."
   },
   "notifications": {
     "open": "Benachrichtigungen ({{count}} ungelesen)",
@@ -904,7 +888,10 @@
     "errGlucoseGoal": "Das Blutzuckerziel muss zwischen 40 und 600 mg/dL liegen.",
     "saveError": "Speichern fehlgeschlagen — deine Änderungen wurden nicht gespeichert. Prüfe die Werte und versuche es erneut.",
     "sectionSupport": "Support & Hilfe",
-    "subSupport": "WhatsApp, Assistent, Fragen"
+    "subSupport": "WhatsApp, Assistent, Fragen",
+    "errTargetRange": "Plausible Zielwerte: unten zwischen 50 und 150 mg/dL, oben zwischen 100 und 300 mg/dL.",
+    "errCorrection": "Der Korrekturfaktor muss zwischen 5 und 400 mg/dL pro 1 E liegen.",
+    "errBirthDate": "Ungültiges Geburtsdatum – Format JJJJ-MM-TT (z. B. 1990-05-21)."
   },
   "log": {
     "glucoseTitle": "Blutzucker erfassen",
@@ -924,8 +911,10 @@
     "daysAgo": "vor {{n}} T.",
     "notesHintInsulin": "Injektionsstelle, Kontext…",
     "todayTotal": "{{total}} E {{type}} heute",
-    "unitLooksMmol": "Das sieht nach einem mmol/L-Wert aus. Diese App speichert in mg/dL — in mg/dL wären das etwa {{mgdl}}. Bitte gib den Wert in mg/dL ein.",
-    "unitOutOfRange": "Wert außerhalb des erwarteten mg/dL-Bereichs (20–900). Bitte überprüfe die Eingabe."
+    "unitOutOfRange": "Wert außerhalb des erwarteten mg/dL-Bereichs (20–900). Bitte überprüfe die Eingabe.",
+    "unitAmbiguous": "Dieser Wert ist nicht in mg/dL. In welcher Einheit zeigt dein Messgerät ihn an?",
+    "unitPickGl": "{{mgdl}} mg/dL (war in g/L)",
+    "unitPickMmol": "{{mgdl}} mg/dL (war in mmol/L)"
   },
   "tabs": {
     "home": "Start",
@@ -1248,7 +1237,11 @@
     "cappedTitle": "Dosis auf das Maximum der App begrenzt ({{max}} U)",
     "cappedBody": "Die Berechnung ergab {{raw}} U. Die App zeigt nie mehr als {{max}} U: diese Obergrenze ist eine Grenze der App, keine für dich empfohlene Dosis. Prüfe die eingegebenen Kohlenhydrate und sprich vor dem Spritzen mit deiner Ärztin oder deinem Arzt.",
     "mixedIobTitle": "Mischinsulin nicht berücksichtigt",
-    "mixedIobBody": "Du hast kürzlich eine Dosis Mischinsulin gespritzt. Die App weiß nicht, welcher Anteil davon schnell wirkt, daher wird sie NICHT von dieser Dosis abgezogen. Dein aktives Insulin kann höher sein als angezeigt — kläre das vor der Injektion mit deiner Ärztin oder deinem Arzt."
+    "mixedIobBody": "Du hast kürzlich eine Dosis Mischinsulin gespritzt. Die App weiß nicht, welcher Anteil davon schnell wirkt, daher wird sie NICHT von dieser Dosis abgezogen. Dein aktives Insulin kann höher sein als angezeigt — kläre das vor der Injektion mit deiner Ärztin oder deinem Arzt.",
+    "blockedTitle": "Bevor eine Dosis berechnet werden kann",
+    "needGlucose": "Miss jetzt deinen Blutzucker und gib ihn ein (Messung jünger als 30 Min.).",
+    "missCorrNoDefault": "Dein Korrekturfaktor (von deinem Arzt verordnet)",
+    "glucoseStale": "Letzter Blutzucker: {{value}} mg/dL ({{ago}}) – zu alt für eine Dosisberechnung."
   },
   "day": {
     "emptyTitle": "Nichts an diesem Tag",
@@ -1700,9 +1693,6 @@
     "hello": "Hallo {{name}} 👋",
     "helloNoName": "Hallo 👋",
     "subtitle": "Hier ist deine Insulin-Übersicht für heute.",
-    "goal": "Ziel: {{n}} U",
-    "goalShort": "Ziel {{n}} U",
-    "ofGoal": "{{pct}}% des Tagesziels",
     "unitsShort": "Einheiten (U)",
     "aiTip": "KI-Tipp",
     "tipBalanced": "Dein Insulin ist heute gut ausbalanciert.",
@@ -1731,7 +1721,8 @@
     "calTitle": "Gespritztes Insulin",
     "calCaption": "Ein Ringdrittel pro Insulinart",
     "calHint": "Grau = diese Art wurde an dem Tag nicht gespritzt.",
-    "totalDay": "Gesamt an diesem Tag"
+    "totalDay": "Gesamt an diesem Tag",
+    "rapidShare": "{{pct}} % der heutigen Einheiten waren schnell wirkendes Insulin"
   },
   "foodsPage": {
     "title": "Marokkanische Küche",
@@ -1813,8 +1804,6 @@
     "hello": "Hallo {{name}} 👋",
     "helloNoName": "Hallo 👋",
     "subtitle": "Hier ist deine Ernährungsübersicht für heute.",
-    "remaining": "{{n}} g übrig",
-    "goalReached": "Ziel erreicht",
     "fiber": "Ballaststoffe",
     "aiCoach": "KI-Coach",
     "aiTitle": "Ernährungs-Assistent",
@@ -1847,11 +1836,14 @@
     "pickDay": "Tag wählen",
     "mealCount": "{{count}} Mahlzeiten",
     "calTitle": "Kohlenhydrate des Tages",
-    "calCaption": "Ziel: {{goal}} g Kohlenhydrate / Tag",
-    "calGoalOk": "Im Ziel",
-    "calGoalOver": "Ziel überschritten",
-    "calHint": "Der Ring füllt sich mit den Kohlenhydraten des Tages.",
-    "mealsTitleDay": "Mahlzeiten an diesem Tag"
+    "calCaption": "Ein voller Ring markiert einen Tag, an dem du Mahlzeiten erfasst hast.",
+    "calHint": "Tippe auf einen Tag, um seine Mahlzeiten zu sehen.",
+    "mealsTitleDay": "Mahlzeiten an diesem Tag",
+    "noGoalNote": "Kein vorgegebenes Ziel: Dein Kohlenhydratbudget legst du mit deinem Arzt fest.",
+    "carbsEnergyShare": "der Kalorien aus Kohlenhydraten",
+    "refFromProfile": "Richtwerte, geschätzt aus Gewicht, Größe und Alter – keine medizinischen Ziele.",
+    "refDefault": "EU-Referenzmengen für einen durchschnittlichen Erwachsenen – vervollständige dein Profil für passende Richtwerte.",
+    "calLogged": "Mahlzeiten erfasst"
   },
   "menuScanPage": {
     "title": "Restaurantmenü",
@@ -1897,7 +1889,8 @@
     "homeTitle": "Bringen Sie mich nach Hause",
     "homeHint": "Tippen, um meine Adresse in Google Maps zu öffnen.",
     "homeMissing": "Keine Adresse hinterlegt",
-    "homeAdd": "Adresse im Profil hinzufügen"
+    "homeAdd": "Adresse im Profil hinzufügen",
+    "callLabel": "Notruf"
   },
   "barcodePage": {
     "sugarWarning": "{{sugar}} g Zucker — achte auf deinen Blutzucker.",

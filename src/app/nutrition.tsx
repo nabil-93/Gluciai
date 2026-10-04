@@ -32,6 +32,7 @@ import {
   carbUnit,
   plateCarbStatus,
 } from '@/services/nutrition/interpret';
+import { computeProgramTargets } from '@/services/programEngine';
 import { getRecommendations } from '@/services/recommendations';
 import { setPendingScan } from '@/services/scanSession';
 import { useAppStore } from '@/store/useAppStore';
@@ -48,7 +49,21 @@ const GREEN = '#1FB268';
 const GREEN_D = '#159A57';
 
 /** Daily targets for a diabetic meal plan. */
-const GOALS = { kcal: 2000, carbs: 250, protein: 90, fat: 65, fiber: 30 };
+/*
+ * NO CARBOHYDRATE "OBJECTIVE" (store audit C-02).
+ *
+ * This page measured every patient against 250 g of carbohydrate a day and
+ * celebrated the ring filling up ("objectif atteint"). A diabetic's carbohydrate
+ * budget is individual and belongs to their care team, so the day's carbs are
+ * now shown as a total, split by meal, with the share of the day's energy they
+ * provided — facts, not a target.
+ *
+ * Calories, protein, fat and fibre keep a REFERENCE (labelled as such, never as
+ * an objective): the patient's own maintenance estimate when height and weight
+ * are known (the same Mifflin-St Jeor engine "Mon Programme" uses), otherwise
+ * the EU reference intakes for an average adult (Reg. 1169/2011 Annex XIII).
+ */
+const EU_REFERENCE = { kcal: 2000, protein: 50, fat: 70, fiber: 25 };
 /** Fixed diameter of the "objectif atteint" ring (device-width independent). */
 const RING = 168;
 
@@ -279,16 +294,29 @@ export default function NutritionScreen() {
     return map;
   }, [meals]);
 
+  /* A day with meals logged gets a full ring — "you recorded this day" —
+     instead of a fill measured against an invented carbohydrate goal. */
   const ringFor = (d: Date): DayRing => {
     const carbs = carbsByDay.get(d.toDateString());
     if (!carbs) return null;
-    const ratio = carbs / GOALS.carbs;
-    return {
-      kind: 'progress',
-      value: Math.min(1, ratio),
-      color: ratio > 1 ? '#F97316' : GREEN,
-    };
+    return { kind: 'progress', value: 1, color: GREEN };
   };
+
+  /** Reference intakes for the macro row (see the header comment). */
+  const reference = useMemo(() => {
+    if (profile?.weight && profile?.height) {
+      const tg = computeProgramTargets({ profile, goal: 'stabilize', activityLevel: 'light' });
+      return {
+        kcal: tg.dailyKcal,
+        protein: tg.proteinG,
+        fat: tg.fatG,
+        // 14 g of fibre per 1000 kcal (Dietary Guidelines for Americans).
+        fiber: Math.round((tg.dailyKcal / 1000) * 14),
+        fromProfile: true,
+      };
+    }
+    return { ...EU_REFERENCE, fromProfile: false };
+  }, [profile]);
 
   const dayLabel = (offset: number) => {
     if (offset === 0) return t('nutritionPage.today');
@@ -351,8 +379,14 @@ export default function NutritionScreen() {
     router.push('/scan-result');
   };
 
-  const carbsPct = Math.min(1, totals.carbs / GOALS.carbs);
-  const remaining = Math.max(0, GOALS.carbs - Math.round(totals.carbs));
+  /** Share of the day's energy that came from carbohydrate (4 kcal / g). */
+  const carbEnergyShare =
+    totals.kcal > 0 ? Math.min(1, (totals.carbs * 4) / totals.kcal) : 0;
+  /** The day's carbs per meal moment, for the split bar. */
+  const carbSplit = MEAL_ORDER.map((slot) => ({
+    slot,
+    carbs: bySlot[slot].carbs,
+  })).filter((s) => s.carbs > 0);
 
   /* ── Is the day's carbohydrate a TOTAL or a floor? (finding NUTR-A9) ──
      The analysis screen has said so since Step 10; this page summed the same
@@ -456,14 +490,23 @@ export default function NutritionScreen() {
                 </Text>
                 <Text style={styles.carbsUnit}>{carbUnit(dayCarbs)}</Text>
               </View>
-              <Text style={styles.carbsGoal}>/ {GOALS.carbs} g</Text>
-              <View style={styles.carbsTrack}>
-                <View style={[styles.carbsFill, { width: `${Math.max(14, carbsPct * 100)}%` }]} />
-                <Text style={styles.carbsPctText}>{Math.round(carbsPct * 100)}%</Text>
-              </View>
-              <Text style={styles.carbsRemaining}>
-                {t('nutritionPage.remaining', { n: remaining })}
+              <Text style={styles.carbsGoal}>
+                {t('nutritionPage.mealsAdded', { count: todayMeals.length })}
               </Text>
+              {/* How the day's carbs were spread across its meals — one
+                  segment per meal moment, widest = most carbs. */}
+              <View style={styles.carbsTrack}>
+                {carbSplit.map((s, i) => (
+                  <View
+                    key={s.slot}
+                    style={[
+                      styles.carbsSplitSeg,
+                      { flex: s.carbs, opacity: 1 - i * 0.18 },
+                    ]}
+                  />
+                ))}
+              </View>
+              <Text style={styles.carbsRemaining}>{t('nutritionPage.noGoalNote')}</Text>
               {/* Why the number carries a "≥": said once, under the figure it
                   qualifies, rather than left for the patient to infer. */}
               {dayCarbs.kind !== 'exact' ? (
@@ -472,11 +515,13 @@ export default function NutritionScreen() {
             </LinearGradient>
 
             <View style={styles.ringWrap}>
-              <ObjectiveRing size={RING} pct={carbsPct} />
+              <ObjectiveRing size={RING} pct={carbEnergyShare} />
               <View style={styles.ringCenter} pointerEvents="none">
                 <LeafIcon />
-                <Text style={styles.ringPct}>{Math.round(carbsPct * 100)}%</Text>
-                <Text style={styles.ringLabel}>{t('nutritionPage.goalReached')}</Text>
+                <Text style={styles.ringPct}>
+                  {totals.kcal > 0 ? `${Math.round(carbEnergyShare * 100)}%` : '—'}
+                </Text>
+                <Text style={styles.ringLabel}>{t('nutritionPage.carbsEnergyShare')}</Text>
               </View>
             </View>
           </FadeInView>
@@ -490,7 +535,7 @@ export default function NutritionScreen() {
             chipBg="#FEECDF"
             name={t('nutritionPage.calories')}
             value={totals.kcal}
-            goal={GOALS.kcal}
+            goal={reference.kcal}
             unit="kcal"
             color="#F97316"
             track="#FCE9DC"
@@ -500,7 +545,7 @@ export default function NutritionScreen() {
             chipBg="#F0EBFD"
             name={t('nutritionPage.protein')}
             value={totals.protein}
-            goal={GOALS.protein}
+            goal={reference.protein}
             unit="g"
             color="#8B5CF6"
             track="#EDE7FC"
@@ -510,7 +555,7 @@ export default function NutritionScreen() {
             chipBg="#FEF3E0"
             name={t('nutritionPage.fat')}
             value={totals.fat}
-            goal={GOALS.fat}
+            goal={reference.fat}
             unit="g"
             color="#F5A524"
             track="#FBEECF"
@@ -520,12 +565,15 @@ export default function NutritionScreen() {
             chipBg="#E4F6EC"
             name={t('nutritionPage.fiber')}
             value={totals.fiber}
-            goal={GOALS.fiber}
+            goal={reference.fiber}
             unit="g"
             color={GREEN}
             track="#DFF2E7"
           />
         </FadeInView>
+        <Text style={styles.refNote}>
+          {t(reference.fromProfile ? 'nutritionPage.refFromProfile' : 'nutritionPage.refDefault')}
+        </Text>
 
         {/* ── AI Coach ── */}
         <FadeInView delay={160} style={{ paddingHorizontal: 20, marginTop: 18 }}>
@@ -540,7 +588,7 @@ export default function NutritionScreen() {
               <Text style={styles.coachTitle}>{t('nutritionPage.recoTitle')}</Text>
               {(recommendations.length
                 ? recommendations
-                : [{ icon: '💡', text: t('nutritionPage.remaining', { n: remaining }) }]
+                : [{ icon: '💡', text: t('nutritionPage.noGoalNote') }]
               )
                 .slice(0, 2)
                 .map((r, i) => (
@@ -679,12 +727,9 @@ export default function NutritionScreen() {
         onClose={() => setPickerOpen(false)}
         ringFor={ringFor}
         title={t('nutritionPage.calTitle')}
-        caption={t('nutritionPage.calCaption', { goal: GOALS.carbs })}
+        caption={t('nutritionPage.calCaption')}
         hint={t('nutritionPage.calHint')}
-        legend={[
-          { color: GREEN, label: t('nutritionPage.calGoalOk') },
-          { color: '#F97316', label: t('nutritionPage.calGoalOver') },
-        ]}
+        legend={[{ color: GREEN, label: t('nutritionPage.calLogged') }]}
       />
 
       {/* ── AI Coach — full-screen chat (text + voice) ── */}
@@ -789,24 +834,15 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 99,
     backgroundColor: 'rgba(255,255,255,0.28)',
-    justifyContent: 'center',
+    flexDirection: 'row',
     overflow: 'hidden',
   },
-  carbsFill: {
-    position: 'absolute',
-    // Same reason as the card above: a progress bar has to grow FROM the edge
-    // the language starts at, or an Arabic day at 40 % fills from the wrong end.
-    start: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 99,
+  // One segment per meal moment; the row lays out from the language's start
+  // edge, so Arabic reads its first meal on the right like everything else.
+  carbsSplitSeg: {
+    height: '100%',
     backgroundColor: 'rgba(255,255,255,0.9)',
-  },
-  carbsPctText: {
-    fontFamily: F800,
-    fontSize: 12,
-    color: GREEN_D,
-    marginStart: 9,
+    marginEnd: 2,
   },
   carbsRemaining: { fontFamily: F600, fontSize: 14, color: 'rgba(255,255,255,0.92)', marginTop: 12 },
   /* On the green gradient, so it keeps a high-contrast white; wraps freely
@@ -845,7 +881,16 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   ringPct: { fontFamily: F800, fontSize: 28, color: INK },
-  ringLabel: { fontFamily: F600, fontSize: 12.5, color: '#63736A' },
+  // Kept inside the ring's face (RING − 2 × track): the label is a full
+  // sentence now and wraps, centred, instead of running past the ring.
+  ringLabel: {
+    fontFamily: F600,
+    fontSize: 11.5,
+    lineHeight: 15,
+    color: '#63736A',
+    textAlign: 'center',
+    maxWidth: RING - 56,
+  },
 
   macroCard: {
     marginTop: 16,
@@ -862,6 +907,15 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   macroCol: { flex: 1, minWidth: 0, gap: 7, paddingHorizontal: 6 },
+  /** What the macro row's "/ x" figures are: a reference, never a goal. */
+  refNote: {
+    fontFamily: F500,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: '#7C8B82',
+    marginHorizontal: 26,
+    marginTop: 8,
+  },
   macroColBorder: { borderLeftWidth: 1, borderLeftColor: '#EDF1EE' },
   macroHead: { alignItems: 'flex-start', gap: 6, minWidth: 0 },
   macroChip: {

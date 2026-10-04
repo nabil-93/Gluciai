@@ -245,7 +245,9 @@ describe('FIXED IN STEP 18 — DATA-1: the row says which of the three happened'
   it('the surfaces that claim persistence now read the outcome', () => {
     const read = (p: string) => readFileSync(path.resolve(process.cwd(), p), 'utf8');
     const bolus = read('src/app/bolus.tsx');
-    expect(bolus).toContain("const log = await saveInsulin(dose, 'rapid', note);");
+    expect(bolus).toContain(
+      "const log = await saveInsulin(dose, 'rapid', note, undefined, engine.mealTime);"
+    );
     expect(bolus).toContain('setSaveState(savedStateKey(log));');
     const scan = read('src/app/scan-result.tsx');
     expect(scan).toContain('setSaveState(savedStateKey(row));');

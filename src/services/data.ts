@@ -409,7 +409,15 @@ export async function saveProfile(profile: Profile): Promise<{ ok: boolean }> {
       ...profile,
       updated_at: new Date().toISOString(),
     });
-    if (error) return { ok: false };
+    if (error) {
+      /* THE SERVER SAID NO — SO DOES THE DEVICE (store audit C-07).
+         The local profile used to keep the rejected values until the next
+         hydrate, so the dose calculator computed with ratios / targets the
+         server had refused (a CHECK constraint, RLS) while the screen said
+         "not saved". Roll back to what was there before. */
+      if (before) useAppStore.getState().setProfile(before);
+      return { ok: false };
+    }
   }
 
   // Record what actually changed (skip the wizard's very first save).

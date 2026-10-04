@@ -392,16 +392,23 @@ export default function WizardScreen() {
   const [weight, setWeight] = useState('');
   const [diabetesType, setDiabetesType] = useState<DiabetesType>();
   const [insulinTypes, setInsulinTypes] = useState<InsulinType[]>([]);
-  /* Per-meal ratios: units of rapid insulin per 10 g of carbs (doctor-set) */
-  const [ratioBreakfast, setRatioBreakfast] = useState('1');
-  const [ratioLunch, setRatioLunch] = useState('1');
-  const [ratioDinner, setRatioDinner] = useState('1');
+  /* Per-meal ratios: units of rapid insulin per 10 g of carbs (doctor-set).
+   *
+   * START EMPTY (store audit C-03). These used to open pre-filled with 1 / 1 /
+   * 1 and the correction factor with 50, so a patient could tap "Next" through
+   * the whole medical part and the dose calculator then used numbers nobody had
+   * prescribed — presented to them as "the figures your doctor gave you". A
+   * prescription must be typed by the person who has it, or explicitly left
+   * for later ("I don't know them yet"), which keeps the calculator closed. */
+  const [ratioBreakfast, setRatioBreakfast] = useState('');
+  const [ratioLunch, setRatioLunch] = useState('');
+  const [ratioDinner, setRatioDinner] = useState('');
   /* Which insulins the patient actually uses */
   const [bolusName, setBolusName] = useState('');
   const [basalName, setBasalName] = useState('');
   const [basalDose, setBasalDose] = useState('');
   const [basalTime, setBasalTime] = useState<'morning' | 'evening' | 'both'>();
-  const [correction, setCorrection] = useState('50');
+  const [correction, setCorrection] = useState('');
   const [targetLow, setTargetLow] = useState('70');
   const [targetHigh, setTargetHigh] = useState('180');
   const [glucoseGoal, setGlucoseGoal] = useState('180');
@@ -452,7 +459,6 @@ export default function WizardScreen() {
   };
 
   const key = STEPS[step];
-  const usesInsulin = insulinTypes.length > 0;
   /* Rapid or mixed insulin covers meals → per-meal ratios + correction apply */
   const usesMealInsulin =
     insulinTypes.includes('rapid') || insulinTypes.includes('mixed');
@@ -467,8 +473,11 @@ export default function WizardScreen() {
       case 'diabetes':
         return !!diabetesType;
       case 'carbRatio':
-        // The AI's dose math depends on these three numbers — require them.
+        // The dose calculator depends on these three numbers — require them,
+        // unless the patient chooses "I don't know them yet" (skipUnknown).
         return !!num(ratioBreakfast) && !!num(ratioLunch) && !!num(ratioDinner);
+      case 'correction':
+        return !!num(correction);
       case 'target': {
         const lo = parseDecimal(targetLow);
         const hi = parseDecimal(targetHigh);
@@ -479,7 +488,7 @@ export default function WizardScreen() {
       default:
         return true;
     }
-  }, [key, num, diabetesType, ratioBreakfast, ratioLunch, ratioDinner, targetLow, targetHigh, allConsented]);
+  }, [key, num, diabetesType, ratioBreakfast, ratioLunch, ratioDinner, correction, targetLow, targetHigh, allConsented]);
 
   const toggleInsulin = (type: InsulinType) => {
     setInsulinTypes((prev) =>
@@ -640,6 +649,18 @@ export default function WizardScreen() {
       setWizardDone();
       router.replace('/(tabs)');
     }
+  };
+
+  /** "I don't know them yet": leave this prescription step empty and move on.
+   *  The fields are cleared so a half-typed value is never saved. */
+  const skipUnknown = () => {
+    if (key === 'carbRatio') {
+      setRatioBreakfast('');
+      setRatioLunch('');
+      setRatioDinner('');
+    }
+    if (key === 'correction') setCorrection('');
+    setStep(nextApplicable(step));
   };
 
   const back = () => {
@@ -1255,6 +1276,11 @@ export default function WizardScreen() {
             )}
           </LinearGradient>
         </Pressable>
+        {key === 'carbRatio' || key === 'correction' ? (
+          <Pressable onPress={skipUnknown} hitSlop={8} style={styles.skipWrap}>
+            <Text style={styles.skipText}>{t('wizard.skipUnknown')}</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.backWrap}>
           {step > 0 ? (
             <Pressable onPress={back} hitSlop={10}>
@@ -1607,6 +1633,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   backText: { fontFamily: N700, fontSize: 14.5, color: '#7b8494' },
+  skipWrap: { alignItems: 'center', paddingTop: 10 },
+  skipText: { fontFamily: N700, fontSize: 14, color: GREEN, textAlign: 'center' },
 
   /* Consent step */
   consentCard: {

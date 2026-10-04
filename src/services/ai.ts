@@ -5,7 +5,6 @@ import { useAppStore } from '@/store/useAppStore';
 import type { FoodItemResult, NutritionResult, Profile } from '@/types';
 
 import { buildAIDayJournal } from './dayLog';
-import { guessMealTime, ratioForMeal } from './bolusEngine';
 import { asQuotaError } from './usage';
 import { analyzePlate, resolveFood } from './nutrition/engine';
 import { applyPortionLearning } from './nutrition/learning';
@@ -482,7 +481,8 @@ export function buildHealthContext(): string {
         `height ${p.height ?? '?'} cm; weight ${p.weight ?? '?'} kg; gender ${p.gender ?? '?'}.`
     );
     // Per-meal insulin plan — the numbers the patient entered from their
-    // doctor's prescription. Any dose talk MUST use these, never generics.
+    // doctor's prescription. Context only: the assistant never turns them into
+    // a dose (store audit B-02) — the deterministic calculator does that.
     const ratios: string[] = [];
     if (p.insulin_per_10g_breakfast) {
       ratios.push(`breakfast ${p.insulin_per_10g_breakfast} U per 10 g carbs`);
@@ -498,18 +498,17 @@ export function buildHealthContext(): string {
     lines.push(
       hasPlan
         ? `INSULIN PLAN (entered by the patient from their doctor's prescription — ` +
-            `for ANY dose question use the ratio of the RIGHT meal, these exact numbers): ` +
+            `CONTEXT ONLY: never compute a dose from it; dose questions go to the app's dose calculator): ` +
             (ratios.length
               ? `meal ratios: ${ratios.join('; ')}. `
-              : 'meal ratios: NOT SET — ask the patient for them (or Profile → Medical). ') +
+              : 'meal ratios: NOT SET (Profile → Medical). ') +
             `Meal (rapid) insulin: ${p.bolus_insulin_name || 'not set'}. ` +
             `Basal (slow) insulin: ${p.basal_insulin_name || 'not set'}` +
             (p.basal_dose ? ` ${p.basal_dose} U/day` : '') +
             (p.basal_time ? `, injected ${p.basal_time === 'both' ? 'morning and evening' : `in the ${p.basal_time}`}` : '') +
             `. The per-meal ratios apply ONLY to the meal (rapid) insulin, never to the basal.`
-        : `INSULIN PLAN: not configured yet — when doses come up, ask the patient to fill ` +
-            `Profile → Medical settings (units per 10 g of carbs for breakfast/lunch/dinner, ` +
-            `insulin names, basal dose) so calculations are exact.`
+        : `INSULIN PLAN: not configured yet (Profile → Medical settings: units per 10 g of ` +
+            `carbs for breakfast/lunch/dinner, insulin names, basal dose).`
     );
   } else {
     lines.push('Profile: not filled in yet.');
@@ -613,16 +612,15 @@ export function buildHealthContext(): string {
   // patient's FULL situation (sick? new targets? new ratio?) before advising.
   const statusNote =
     activityStatus === 'sick'
-      ? 'ILLNESS raises glucose and insulin resistance — expect roughly +10–15% insulin needs.'
+      ? 'ILLNESS can raise glucose and insulin resistance — advise closer glucose monitoring and contacting their doctor.'
       : activityStatus === 'injured'
-        ? 'REDUCED activity (injury): less exercise lowers insulin sensitivity — the app already adds ~+8% to the calculated dose.'
+        ? 'REDUCED activity (injury): less exercise can lower insulin sensitivity.'
         : activityStatus === 'paused'
-          ? 'training PAUSED, so less daily activity than usual — the app already adds ~+8% to the calculated dose.'
-          : 'usual activity level — no status adjustment.';
+          ? 'training PAUSED, so less daily activity than usual.'
+          : 'usual activity level.';
   lines.push(
     `Patient status right now: ${activityStatus} — ${statusNote} ` +
-      `ALWAYS take this status into account BEFORE proposing any insulin dose, ` +
-      `and state how it changed the number.`
+      `Take this status into account in any advice (never as a dose).`
   );
   // Free-text notes the patient told the assistant ("drank water", "had a
   // coffee", "feeling stressed") — these can affect glucose/insulin, so the
@@ -631,8 +629,7 @@ export function buildHealthContext(): string {
   const todayNotes = notes.filter((e) => isToday(e.created_at));
   if (todayNotes.length) {
     lines.push(
-      `Notes today (things the patient reported — consider them for advice ` +
-        `and dosing): ` +
+      `Notes today (things the patient reported — consider them for advice): ` +
         todayNotes
           .sort((a, b) => a.created_at.localeCompare(b.created_at))
           .map((e) => `${time(e.created_at)}→"${e.payload.text}"`)
@@ -740,14 +737,12 @@ export async function sendChatMessage(
             : food.glycemic_index > 55
               ? `Son index glycémique est modéré (${food.glycemic_index}).`
               : `Bon point : son index glycémique est bas (${food.glycemic_index}).`;
-      const ratio = profile?.carb_ratio;
-      const bolusNote = ratio
-        ? ` Avec votre ratio (1 U / ${ratio} g), une portion ≈ ${Math.round((food.carbs / ratio) * 10) / 10} U.`
-        : '';
+      // No dose estimate here either: the assistant never turns a ratio into
+      // units (store audit B-02) — that is the calculator's job.
       return (
         `${food.emoji} ${food.name_fr} (${food.name_ar}) — pour ${food.serving_size} : ` +
         `${food.calories} kcal, ${food.carbs} g de glucides (dont ${food.sugar} g de sucre), ` +
-        `${food.protein} g de protéines, ${food.fiber} g de fibres. ${giNote}${bolusNote}\n\n` +
+        `${food.protein} g de protéines, ${food.fiber} g de fibres. ${giNote}\n\n` +
         `Source : Base marocaine · Estimation éducative — pas un avis médical.`
       );
     }
@@ -895,21 +890,9 @@ export async function checkModifiedDoseAI(
   }
 }
 
-/**
- * Informational insulin estimate from carbs + profile ratios.
- * Formula-based (never AI): carbs / ratio. The full calculation with glucose
- * correction lives in `services/bolusEngine.ts` (`computeSmartBolus`) — the
- * only dose calculation in this codebase since Step 14 removed a dead
- * duplicate that used to sit in `services/data.ts`.
- * NEVER presented as a prescription — the UI always shows the disclaimer.
+/*
+ * REMOVED (store audit B-02) — `estimateInsulin`, a second carbs ÷ ratio dose
+ * formula with no caller anywhere in the app. `computeSmartBolus` in
+ * `services/bolusEngine.ts` is the only dose calculation in this codebase; a
+ * dead lookalike is how the next "quick dose number" would have crept back in.
  */
-export function estimateInsulin(
-  carbs: number,
-  profile: Profile | null
-): number | null {
-  // Per-meal plan first (U per 10 g at the current meal moment), then the
-  // legacy global carb_ratio. No plan at all → null (never a made-up dose).
-  const r = ratioForMeal(profile, guessMealTime(new Date()));
-  if (r.source === 'default') return null;
-  return Math.round((carbs / r.gPerU) * 10) / 10;
-}

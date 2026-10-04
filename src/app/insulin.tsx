@@ -40,8 +40,15 @@ const GREEN_D = '#159A57';
 const PURPLE = '#8B5CF6';
 const ORANGE = '#F97316';
 
-/** Soft daily reference used for the ring + the bar-chart objective line. */
-const DAILY_GOAL = 30;
+/*
+ * NO DAILY INSULIN "OBJECTIVE" (store audit C-01).
+ *
+ * This page used to measure every patient against a hardcoded 30 U/day — a
+ * ring, a bar and a chart line saying "x % of the daily objective". Insulin is
+ * not a target to reach: a patient prescribed 18 U read "60 % of the
+ * objective", which reads as "take more". The ring now shows the day's SPLIT
+ * (rapid vs everything else), which is a fact about the doses actually taken.
+ */
 
 const TYPE_COLOR: Record<InsulinType, string> = {
   rapid: GREEN_D,
@@ -265,9 +272,9 @@ export default function InsulinScreen() {
   const rapidToday = sumBy('rapid');
   const longToday = sumBy('long');
   const mixedToday = sumBy('mixed');
-  const goalPct = Math.min(1, totalToday / DAILY_GOAL);
-
   const share = (v: number) => (totalToday > 0 ? Math.round((v / totalToday) * 100) : 0);
+  /** Share of the day's units that were rapid (meal) insulin, 0..1. */
+  const rapidFrac = totalToday > 0 ? rapidToday / totalToday : 0;
 
   const CHART_H = 150;
 
@@ -309,16 +316,19 @@ export default function InsulinScreen() {
   const chart = useMemo(() => {
     const src = chartRange === 'week' ? week : dayBars;
     const isPct = chartUnit === '%';
-    const ref = chartRange === 'week' ? DAILY_GOAL : Math.max(1, totalToday);
+    // "%" is each bar's share of the period shown (the week's units, or the
+    // day's) — never a share of an invented objective.
+    const periodTotal = src.reduce((s, b) => s + b.total, 0);
+    const ref = Math.max(1, periodTotal);
     const bars = src.map((b) => ({
       label: b.label,
       val: isPct ? (b.total / ref) * 100 : b.total,
       color: b.color,
       frac: (b as { frac?: number }).frac,
     }));
-    const maxVal = Math.max(...bars.map((b) => b.val), isPct ? 100 : DAILY_GOAL);
+    const maxVal = Math.max(...bars.map((b) => b.val), isPct ? 100 : 1);
     return { bars, maxVal, isPct };
-  }, [chartRange, chartUnit, week, dayBars, totalToday]);
+  }, [chartRange, chartUnit, week, dayBars]);
 
   // Injections list (last 7 days) for the "recent" card + its modal.
   const recentAll = useMemo(() => {
@@ -437,25 +447,23 @@ export default function InsulinScreen() {
                 </View>
                 <View style={styles.goalPill}>
                   <Text style={styles.goalPillText}>
-                    {t('insulinPage.goal', { n: DAILY_GOAL })}
+                    {t('insulinPage.injCount', { count: today.length })}
                   </Text>
                 </View>
               </View>
               <View style={styles.totalRingWrap}>
-                <TotalRing size={92} pct={goalPct} />
+                <TotalRing size={92} pct={rapidFrac} />
                 <View style={styles.totalRingCenter} pointerEvents="none">
-                  <Text style={styles.totalRingTop}>
-                    {totalToday} / {DAILY_GOAL} U
-                  </Text>
-                  <Text style={styles.totalRingPct}>{Math.round(goalPct * 100)}%</Text>
+                  <Text style={styles.totalRingTop}>{rapidToday} U</Text>
+                  <Text style={styles.totalRingPct}>{t('insulinPage.rapid')}</Text>
                 </View>
               </View>
             </View>
             <View style={styles.totalBar}>
-              <View style={[styles.totalBarFill, { width: `${goalPct * 100}%` }]} />
+              <View style={[styles.totalBarFill, { width: `${rapidFrac * 100}%` }]} />
             </View>
             <Text style={styles.totalFoot}>
-              {t('insulinPage.ofGoal', { pct: Math.round(goalPct * 100) })}
+              {t('insulinPage.rapidShare', { pct: share(rapidToday) })}
             </Text>
           </LinearGradient>
 
@@ -525,18 +533,6 @@ export default function InsulinScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ height: CHART_H, position: 'relative' }}>
-                    {/* Daily objective line — only meaningful in week · U mode */}
-                    {chartRange === 'week' && !chart.isPct ? (
-                      <>
-                        <View style={[styles.objLine, { top: CHART_H * (1 - DAILY_GOAL / chart.maxVal) }]} />
-                        <View style={[styles.objPill, { top: CHART_H * (1 - DAILY_GOAL / chart.maxVal) - 9 }]}>
-                          <Text style={styles.objPillText}>
-                            {t('insulinPage.goalShort', { n: DAILY_GOAL })}
-                          </Text>
-                        </View>
-                      </>
-                    ) : null}
-
                     {chartRange === 'week' ? (
                       /* Week: one evenly-spaced bar per day. */
                       <View style={styles.barsRow}>
@@ -992,23 +988,6 @@ const styles = StyleSheet.create({
     width: 20,
   },
   axisText: { fontFamily: F600, fontSize: 11, color: '#9AA8A0' },
-  objLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    borderTopWidth: 1.5,
-    borderColor: '#B7DFC8',
-    borderStyle: 'dashed',
-  },
-  objPill: {
-    position: 'absolute',
-    right: 0,
-    backgroundColor: '#E4F6EC',
-    borderRadius: 99,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  objPillText: { fontFamily: F700, fontSize: 10.5, color: GREEN_D },
   barsRow: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'flex-end' },
   barCol: { flex: 1, alignItems: 'center', gap: 6 },
   barValue: { fontFamily: F700, fontSize: 11, color: '#9AA8A0' },

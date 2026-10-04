@@ -33,7 +33,11 @@ export type ReminderType =
   | 'glucose'
   | 'insulin-long'
   | 'breakfast'
-  | 'evening';
+  | 'evening'
+  /** A reminder the patient asked the assistant for ("remind me in 1 h to
+   *  take my insulin") — scheduled by services/reminders.ts (store audit C-10).
+   *  Its BODY is the patient's own words; the payload still carries no data. */
+  | 'ai-reminder';
 
 /**
  * What travels inside the notification.
@@ -61,7 +65,8 @@ export type ReminderRoute =
   | '/glucose'
   | '/insulin'
   | '/(tabs)'
-  | '/rappels';
+  | '/rappels'
+  | '/ai-log';
 
 /**
  * The safe destination when a notification is unknown, malformed, or absent.
@@ -93,6 +98,9 @@ const ROUTES: Record<ReminderType, ReminderRoute> = {
   'insulin-long': '/insulin',
   breakfast: FALLBACK_ROUTE,
   evening: FALLBACK_ROUTE,
+  // The logging assistant, which greets with "did you do it?" for a fired
+  // reminder and logs the answer.
+  'ai-reminder': '/ai-log',
 };
 
 /** Reminder types that deliberately have no screen of their own. */
@@ -101,7 +109,11 @@ export const NO_DEDICATED_DESTINATION: ReminderType[] = ['breakfast', 'evening']
 /** Is this a reminder type the app knows? */
 export function isReminderType(v: unknown): v is ReminderType {
   return (
-    v === 'glucose' || v === 'insulin-long' || v === 'breakfast' || v === 'evening'
+    v === 'glucose' ||
+    v === 'insulin-long' ||
+    v === 'breakfast' ||
+    v === 'evening' ||
+    v === 'ai-reminder'
   );
 }
 

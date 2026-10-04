@@ -153,6 +153,16 @@ export interface RotaryDialProps {
   children?: React.ReactNode;
   /** Captions under the two ends of the arc. Defaults to the 0..100 scale. */
   scaleLabels?: [string, string];
+  /**
+   * Show the number only — no pointer, no lit ticks, no 0/100 scale.
+   *
+   * For a figure that has no target to be measured against (a day's insulin
+   * units, a day's carbohydrate when the patient has no prescribed budget).
+   * The green → red arc and a pointer riding it read as "too little / too
+   * much"; for a value with no clinical reference that judgement is invented
+   * (store audit C-01 / C-02).
+   */
+  neutral?: boolean;
 }
 
 // Sweep timings (ms) — like an instrument cluster self-test:
@@ -176,6 +186,7 @@ export function RotaryDial({
   animateDelay = 0,
   children,
   scaleLabels,
+  neutral = false,
 }: RotaryDialProps) {
   const target = Math.max(0, Math.min(100, value));
   const reduceMotion = useReduceMotion();
@@ -300,7 +311,7 @@ export function RotaryDial({
         {/* Colored tick ring — ticks up to the value light up vividly,
             the rest stay in the soft resting tone. */}
         {TICKS.map((t, i) => {
-          const on = !hideNumber && pct > 0 && t.f <= frac + 1e-6;
+          const on = !neutral && !hideNumber && pct > 0 && t.f <= frac + 1e-6;
           return (
             <Line
               key={i}
@@ -317,7 +328,7 @@ export function RotaryDial({
         })}
 
         {/* Teal pointer */}
-        <Polygon points={pointer} fill={POINTER_COLOR} />
+        {neutral ? null : <Polygon points={pointer} fill={POINTER_COLOR} />}
 
         {/* Empty-state dash */}
         {hideNumber ? (
@@ -349,32 +360,36 @@ export function RotaryDial({
       {/* 0 / 100 labels, centered on the source anchor points
           (x≈341/1254=27.2%, x≈912/1254=72.7%, baseline y≈1014/1254=80.9%,
           font-size 60/1254≈4.8%). */}
-      <Text
-        style={[
-          styles.scaleLabel,
-          {
-            left: size * 0.272 - size * 0.15,
-            width: size * 0.3,
-            top: size * 0.75,
-            fontSize: size * 0.048,
-          },
-        ]}
-      >
-        {scaleLabels?.[0] ?? '0'}
-      </Text>
-      <Text
-        style={[
-          styles.scaleLabel,
-          {
-            left: size * 0.727 - size * 0.15,
-            width: size * 0.3,
-            top: size * 0.75,
-            fontSize: size * 0.048,
-          },
-        ]}
-      >
-        {scaleLabels?.[1] ?? '100'}
-      </Text>
+      {neutral ? null : (
+        <>
+          <Text
+            style={[
+              styles.scaleLabel,
+              {
+                left: size * 0.272 - size * 0.15,
+                width: size * 0.3,
+                top: size * 0.75,
+                fontSize: size * 0.048,
+              },
+            ]}
+          >
+            {scaleLabels?.[0] ?? '0'}
+          </Text>
+          <Text
+            style={[
+              styles.scaleLabel,
+              {
+                left: size * 0.727 - size * 0.15,
+                width: size * 0.3,
+                top: size * 0.75,
+                fontSize: size * 0.048,
+              },
+            ]}
+          >
+            {scaleLabels?.[1] ?? '100'}
+          </Text>
+        </>
+      )}
     </View>
   );
 }

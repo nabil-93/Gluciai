@@ -332,7 +332,7 @@
     "insulinPlanHint": "The AI assistant uses this to know exactly which insulin you use and when — and never mixes up rapid and slow.",
     "mealRatiosTitle": "Your insulin per 10 g of carbs",
     "mealRatiosSub": "How many units of rapid insulin do you take for 10 g of carbs? It is often different at each meal.",
-    "mealRatiosHint": "These are the numbers your doctor prescribed. The AI and the dose calculator use them for an exact calculation at every meal. You can change them anytime in Profile → Medical.",
+    "mealRatiosHint": "Copy exactly the numbers your doctor prescribed. The dose calculator only opens with your own numbers. You can add them later in Profile → Medical.",
     "ratioBreakfast": "Breakfast",
     "ratioLunch": "Lunch",
     "ratioDinner": "Dinner",
@@ -344,7 +344,8 @@
     "bolusStepSub": "The one you take with meals — let’s set it up first.",
     "bolusStepHint": "Set up your rapid insulin fully first (name, per-meal ratios, correction factor). Your long insulin comes right after.",
     "basalStepTitle": "Your long insulin",
-    "basalStepSub": "Its name, dose and time of injection."
+    "basalStepSub": "Its name, dose and time of injection.",
+    "skipUnknown": "I don't know them yet"
   },
   "home": {
     "goodMorning": "Good morning",
@@ -367,30 +368,6 @@
     "addMeal": "Add meal",
     "addInjection": "Add injection",
     "noCarbsToday": "No carbs today",
-    "carbsLowLabel": "Low",
-    "carbsLowTitle": "Low intake",
-    "carbsLowDesc": "Your carbs are below today's goal.",
-    "carbsGoodLabel": "Normal",
-    "carbsGoodTitle": "Normal intake",
-    "carbsGoodDesc": "Your carbs are close to today's goal.",
-    "carbsModLabel": "Moderate",
-    "carbsModTitle": "High intake",
-    "carbsModDesc": "Your carbs are slightly above the goal.",
-    "carbsHighLabel": "High",
-    "carbsHighTitle": "Very high intake",
-    "carbsHighDesc": "Your carbs are well above the goal.",
-    "insulinLowLabel": "Low",
-    "insulinLowTitle": "Low dose",
-    "insulinLowDesc": "Your insulin is below today's goal.",
-    "insulinGoodLabel": "Normal",
-    "insulinGoodTitle": "Normal dose",
-    "insulinGoodDesc": "Your insulin is close to today's goal.",
-    "insulinModLabel": "Moderate",
-    "insulinModTitle": "High dose",
-    "insulinModDesc": "Your insulin is slightly above the goal.",
-    "insulinHighLabel": "High",
-    "insulinHighTitle": "Very high dose",
-    "insulinHighDesc": "Your insulin is well above the goal.",
     "scanFood": "Scan food",
     "noMeals": "No meals yet. Scan your first meal!",
     "lastReading": "Last reading",
@@ -474,7 +451,14 @@
     "riskLabel": "Glucose risk level",
     "mealsTitle": "Your meals",
     "chronik": "Timeline",
-    "viewFullHistory": "View full history"
+    "viewFullHistory": "View full history",
+    "dayTotal": "Today's total",
+    "mealsLogged_one": "{{count}} meal logged",
+    "mealsLogged_other": "{{count}} meals logged",
+    "injectionsLogged_one": "{{count}} injection logged",
+    "injectionsLogged_other": "{{count}} injections logged",
+    "carbsNoGoalNote": "No imposed target: your carbohydrate needs are set with your doctor.",
+    "insulinNoGoalNote": "Total of the doses you logged. The app sets no insulin target — your doctor decides."
   },
   "notifications": {
     "open": "Notifications ({{count}} unread)",
@@ -904,7 +888,10 @@
     "errGlucoseGoal": "The glucose objective must be between 40 and 600 mg/dL.",
     "saveError": "Save failed — your changes were not saved. Check your values and try again.",
     "sectionSupport": "Support & Help",
-    "subSupport": "WhatsApp, assistant, questions"
+    "subSupport": "WhatsApp, assistant, questions",
+    "errTargetRange": "Plausible targets: low between 50 and 150 mg/dL, high between 100 and 300 mg/dL.",
+    "errCorrection": "The correction factor must be between 5 and 400 mg/dL per 1 U.",
+    "errBirthDate": "Invalid date of birth — use YYYY-MM-DD (e.g. 1990-05-21)."
   },
   "log": {
     "glucoseTitle": "Log glucose",
@@ -924,8 +911,10 @@
     "daysAgo": "{{n}} d ago",
     "notesHintInsulin": "Injection site, context…",
     "todayTotal": "{{total}} U of {{type}} today",
-    "unitLooksMmol": "That looks like a mmol/L reading. This app records mg/dL — in mg/dL that would be about {{mgdl}}. Please enter the value in mg/dL.",
-    "unitOutOfRange": "Value outside the expected mg/dL range (20–900). Please check what you entered."
+    "unitOutOfRange": "Value outside the expected mg/dL range (20–900). Please check what you entered.",
+    "unitAmbiguous": "This value is not in mg/dL. Which unit does your meter show?",
+    "unitPickGl": "{{mgdl}} mg/dL (it was g/L)",
+    "unitPickMmol": "{{mgdl}} mg/dL (it was mmol/L)"
   },
   "tabs": {
     "home": "Home",
@@ -1248,7 +1237,11 @@
     "cappedTitle": "Dose limited to the app's maximum ({{max}} U)",
     "cappedBody": "The calculation came to {{raw}} U. The app never shows more than {{max}} U: this ceiling is a limit of the app, not a dose recommended for you. Check the carbohydrates you entered, and talk to your doctor before injecting.",
     "mixedIobTitle": "Mixed insulin not counted",
-    "mixedIobBody": "You have a recent premixed insulin dose. The app does not know what share of it is rapid, so it is NOT deducted from this dose. Your active insulin may therefore be higher than shown — check with your doctor before injecting."
+    "mixedIobBody": "You have a recent premixed insulin dose. The app does not know what share of it is rapid, so it is NOT deducted from this dose. Your active insulin may therefore be higher than shown — check with your doctor before injecting.",
+    "blockedTitle": "Before a dose can be calculated",
+    "needGlucose": "Measure your glucose now and enter it (a reading under 30 min old).",
+    "missCorrNoDefault": "Your correction factor (prescribed by your doctor)",
+    "glucoseStale": "Last glucose: {{value}} mg/dL ({{ago}}) — too old to calculate a dose."
   },
   "day": {
     "emptyTitle": "Nothing that day",
@@ -1700,9 +1693,6 @@
     "hello": "Hi {{name}} 👋",
     "helloNoName": "Hi 👋",
     "subtitle": "Here's your insulin overview for today.",
-    "goal": "Goal: {{n}} U",
-    "goalShort": "Goal {{n}} U",
-    "ofGoal": "{{pct}}% of the daily goal",
     "unitsShort": "Units (U)",
     "aiTip": "AI Tip",
     "tipBalanced": "Your insulin is well balanced today.",
@@ -1731,7 +1721,8 @@
     "calTitle": "Insulin injected",
     "calCaption": "One third of the ring per insulin type",
     "calHint": "Grey = that type was not injected that day.",
-    "totalDay": "Total that day"
+    "totalDay": "Total that day",
+    "rapidShare": "{{pct}}% of today's units were rapid insulin"
   },
   "foodsPage": {
     "title": "Moroccan cuisine",
@@ -1813,8 +1804,6 @@
     "hello": "Hi {{name}} 👋",
     "helloNoName": "Hi 👋",
     "subtitle": "Here's your nutrition overview for today.",
-    "remaining": "{{n}} g left",
-    "goalReached": "Goal reached",
     "fiber": "Fiber",
     "aiCoach": "AI Coach",
     "aiTitle": "Nutrition assistant",
@@ -1847,11 +1836,14 @@
     "pickDay": "Pick a day",
     "mealCount": "{{count}} meals",
     "calTitle": "Carbs for the day",
-    "calCaption": "Goal: {{goal}} g of carbs / day",
-    "calGoalOk": "Within goal",
-    "calGoalOver": "Over goal",
-    "calHint": "The ring fills with the carbs eaten that day.",
-    "mealsTitleDay": "Meals that day"
+    "calCaption": "A full ring marks a day on which you logged meals.",
+    "calHint": "Tap a day to see its meals.",
+    "mealsTitleDay": "Meals that day",
+    "noGoalNote": "No imposed target: your carbohydrate budget is set with your doctor.",
+    "carbsEnergyShare": "of calories came from carbs",
+    "refFromProfile": "References estimated from your weight, height and age — not medical targets.",
+    "refDefault": "EU reference intakes for an average adult — complete your profile for references that fit you.",
+    "calLogged": "Meals logged"
   },
   "menuScanPage": {
     "title": "Restaurant menu",
@@ -1897,7 +1889,8 @@
     "homeTitle": "Take me home",
     "homeHint": "Tap to open my address in Google Maps.",
     "homeMissing": "No address saved",
-    "homeAdd": "Add your address in the profile"
+    "homeAdd": "Add your address in the profile",
+    "callLabel": "Emergency"
   },
   "barcodePage": {
     "sugarWarning": "{{sugar}} g of sugar — watch your glucose.",

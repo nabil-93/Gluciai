@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedRobot, ChevronLeft, FadeInView, Spinner } from '@/components/ui';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { ComposerHero } from '@/components/bolus/ComposerHero';
+import { GlucoseUnitHelp } from '@/components/GlucoseUnitHelp';
 import { DoseHero } from '@/components/bolus/DoseHero';
 import {
   checkModifiedDoseAI,
@@ -29,13 +30,13 @@ import {
   localDoseCheck,
   looksLikeMmol,
   MAX_SAFE_BOLUS,
-  MMOL_TO_MGDL,
   type BolusResult,
   type DoseRisk,
 } from '@/services/bolusEngine';
 import { consumeBolusHandoff, type BolusHandoff } from '@/services/bolusHandoff';
 import { savedStateKey, saveInsulin } from '@/services/data';
 import { carbSeed, seedCarbsFromMeal } from '@/services/nutrition/carbProvenance';
+import { nowMs } from '@/lib/clock';
 import { parseDecimal, sanitizeDecimal } from '@/lib/num';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
@@ -82,6 +83,14 @@ function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
 }
 
+/**
+ * How old a reading may be and still pre-fill the glucose field (store audit
+ * C-05). This used to be "the first reading of today" — a 07:00 value of 250
+ * would still sit in the field at 19:00 and drive a correction. Past this age
+ * the field starts empty and the screen asks for a fresh measurement.
+ */
+const GLUCOSE_FRESH_MIN = 30;
+
 /** Narrow a route param to a real meal slot before trusting it. */
 function isMealType(v: unknown): v is MealType {
   return v === 'breakfast' || v === 'lunch' || v === 'dinner' || v === 'snack';
@@ -96,7 +105,18 @@ export default function BolusScreen() {
   const { profile, glucoseLogs, insulinLogs, activityLogs, meals, activityStatus } =
     useAppStore();
 
-  const lastGlucose = glucoseLogs.find((g) => isToday(g.created_at));
+  /* The newest reading, and whether it is recent enough to dose from. */
+  const newestGlucose = glucoseLogs[0];
+  const glucoseAgeMin = newestGlucose
+    ? Math.round((nowMs() - new Date(newestGlucose.created_at).getTime()) / 60000)
+    : null;
+  const lastGlucose =
+    newestGlucose && glucoseAgeMin !== null && glucoseAgeMin >= 0 && glucoseAgeMin <= GLUCOSE_FRESH_MIN
+      ? newestGlucose
+      : undefined;
+  /** A reading exists today but is too old to pre-fill — said out loud. */
+  const staleGlucose =
+    !lastGlucose && newestGlucose && isToday(newestGlucose.created_at) ? newestGlucose : undefined;
   const lastMeal = meals.find((m) => isToday(m.created_at));
 
   /* Another screen can hand this one the plate it is about to cover — the
@@ -219,10 +239,8 @@ export default function BolusScreen() {
     glucoseValue !== undefined &&
     glucoseValue > 0 &&
     !isPlausibleTypedMgdl(glucoseValue);
-  const glucoseMmolSuggestion =
-    glucoseValue !== undefined && looksLikeMmol(glucoseValue)
-      ? Math.round(glucoseValue * MMOL_TO_MGDL)
-      : null;
+  /** Under the mg/dL floor: a g/L or mmol/L reading — the patient picks (C-04). */
+  const glucoseAmbiguousUnit = glucoseValue !== undefined && looksLikeMmol(glucoseValue);
   /**
    * The reading the engine is allowed to see.
    *
@@ -301,11 +319,28 @@ export default function BolusScreen() {
     else router.replace('/(tabs)');
   };
 
+  /*
+   * WHAT MUST BE TRUE BEFORE A DOSE IS SHOWN (store audit C-06 / C-03).
+   *
+   *  · a glucose reading typed now (or pre-filled from one under
+   *    GLUCOSE_FRESH_MIN) — a dose computed with no reading has no hypo guard;
+   *  · the patient's OWN meal ratio when there are carbohydrates to cover —
+   *    the engine would otherwise fall back to a generic 10 g/U;
+   *  · the patient's OWN correction factor — the fallback would be 50.
+   *
+   * The engine still reports these as flags; this is the screen refusing to
+   * turn a fallback into a number someone injects.
+   */
+  const needsGlucose = engineGlucose === null;
+  const needsRatio = (carbsValue ?? 0) > 0 && preview.ratioSource === 'default';
+  const needsIsf = preview.isfSource === 'fallback';
+  const blocked = needsGlucose || needsRatio || needsIsf;
+
   const calculate = async () => {
     // The CTA is already disabled in this state; this is the same belt-and-
     // braces refusal `log-glucose.save()` keeps, so no future caller can reach
     // a dose through a reading the screen rejected (B-4).
-    if (glucoseUnitWarning) return;
+    if (glucoseUnitWarning || blocked) return;
     const result = computeSmartBolus({
       ...engineInput,
       profile,
@@ -356,7 +391,7 @@ export default function BolusScreen() {
       // What the write actually achieved travels back with the row (DATA-1):
       // "saved" alone was said for a dose the server had refused, which is the
       // one the doctor's dashboard would then be missing.
-      const log = await saveInsulin(dose, 'rapid', note);
+      const log = await saveInsulin(dose, 'rapid', note, undefined, engine.mealTime);
       setSaveState(savedStateKey(log));
       setSaved(true);
       setAlert(null);
@@ -566,14 +601,27 @@ export default function BolusScreen() {
                       offered so the patient can retype it themselves; nothing
                       is stored or dosed from it. Same wording as the log
                       screen, deliberately. */}
-                  {glucoseUnitWarning ? (
+                  {glucoseAmbiguousUnit ? (
+                    <GlucoseUnitHelp
+                      value={glucoseValue}
+                      onPick={(mgdl) => setGlucose(String(mgdl))}
+                    />
+                  ) : glucoseUnitWarning ? (
                     <View style={styles.unitWarn}>
-                      <Text style={styles.unitWarnText}>
-                        {glucoseMmolSuggestion !== null
-                          ? t('log.unitLooksMmol', { mgdl: glucoseMmolSuggestion })
-                          : t('log.unitOutOfRange')}
-                      </Text>
+                      <Text style={styles.unitWarnText}>{t('log.unitOutOfRange')}</Text>
                     </View>
+                  ) : null}
+                  {/* C-05 — an older reading is named, never silently used. */}
+                  {!glucose && staleGlucose && glucoseAgeMin !== null ? (
+                    <Text style={styles.seedNote}>
+                      {t('bolus.glucoseStale', {
+                        value: staleGlucose.value,
+                        ago:
+                          glucoseAgeMin < 60
+                            ? t('log.minutesAgo', { n: glucoseAgeMin })
+                            : t('log.hoursAgo', { n: Math.round(glucoseAgeMin / 60) }),
+                      })}
+                    </Text>
                   ) : null}
                 </View>
               </View>
@@ -790,9 +838,15 @@ export default function BolusScreen() {
                 <View style={styles.chip}>
                   <Text style={styles.chipText}>
                     ⚙️{' '}
-                    {preview.uPer10g
-                      ? `${preview.uPer10g} U/10g · ISF ${preview.correctionFactor}`
-                      : `1U/${preview.ratio}g · ISF ${preview.correctionFactor}`}
+                    {/* A fallback is never shown as if it were the patient's
+                        own parameter — "—" until they enter it. */}
+                    {preview.ratioSource === 'default'
+                      ? '— U/10g'
+                      : preview.uPer10g
+                        ? `${preview.uPer10g} U/10g`
+                        : `1U/${preview.ratio}g`}
+                    {' · ISF '}
+                    {preview.isfSource === 'fallback' ? '—' : preview.correctionFactor}
                   </Text>
                 </View>
                 {preview.bolusInsulinName ? (
@@ -803,11 +857,34 @@ export default function BolusScreen() {
               </View>
             </View>
 
+            {/* What is still missing before a dose can be shown — each line
+                says what to do, and profile gaps tap through to Profile. */}
+            {blocked ? (
+              <View style={styles.blockCard}>
+                <Text style={styles.blockTitle}>🛑 {t('bolus.blockedTitle')}</Text>
+                {needsGlucose ? (
+                  <Text style={styles.blockLine}>• {t('bolus.needGlucose')}</Text>
+                ) : null}
+                {needsRatio ? (
+                  <Text style={styles.blockLine}>• {t('bolus.missRatio')}</Text>
+                ) : null}
+                {needsIsf ? (
+                  <Text style={styles.blockLine}>• {t('bolus.missCorrNoDefault')}</Text>
+                ) : null}
+                {needsRatio || needsIsf ? (
+                  <Pressable onPress={goMedical} hitSlop={6}>
+                    <Text style={styles.blockLink}>{t('bolus.completeCta')} →</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
             <Pressable
               onPress={calculate}
               // A dose must not be produced from a reading the screen has
-              // refused (B-4), exactly as `log-glucose` refuses to save one.
-              disabled={(!carbs && !glucose) || glucoseUnitWarning}
+              // refused (B-4), exactly as `log-glucose` refuses to save one —
+              // nor without a fresh reading and the patient's own parameters.
+              disabled={blocked || glucoseUnitWarning}
               style={{ marginTop: 4 }}
             >
               <LinearGradient
@@ -816,7 +893,7 @@ export default function BolusScreen() {
                 end={{ x: 0, y: 1 }}
                 style={[
                   styles.ctaBig,
-                  ((!carbs && !glucose) || glucoseUnitWarning) && { opacity: 0.5 },
+                  (blocked || glucoseUnitWarning) && { opacity: 0.5 },
                 ]}
               >
                 <Text style={styles.ctaText}>🤖 {t('bolus.calculate')}</Text>
@@ -1322,6 +1399,17 @@ export default function BolusScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f9fafe' },
+  blockCard: {
+    backgroundColor: '#FFF4E5',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    gap: 4,
+  },
+  blockTitle: { fontFamily: F800, fontSize: 14, color: '#9A3412', marginBottom: 2 },
+  blockLine: { fontFamily: F600, fontSize: 13, lineHeight: 18, color: '#7C2D12' },
+  blockLink: { fontFamily: F800, fontSize: 13.5, color: '#C2410C', marginTop: 6 },
   headRow: {
     flexDirection: 'row',
     alignItems: 'center',

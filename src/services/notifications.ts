@@ -14,6 +14,26 @@ import { reminderPayload, type ReminderType } from './notificationRoute';
 
 let initialized = false;
 
+/**
+ * The four identifiers this engine owns. Rescheduling cancels THESE, not every
+ * scheduled notification: the old cancel-everything call also
+ * wiped the reminders the patient asked the assistant for (store audit C-10).
+ */
+export const SMART_REMINDER_IDS = [
+  'glucose-reminder',
+  'insulin-long-reminder',
+  'breakfast-reminder',
+  'evening-recap',
+] as const;
+
+async function cancelSmartReminders(): Promise<void> {
+  await Promise.all(
+    SMART_REMINDER_IDS.map((id) =>
+      Notifications.cancelScheduledNotificationAsync(id).catch(() => undefined)
+    )
+  );
+}
+
 /** Median hour-of-day of a series of timestamps (null if too few). */
 function usualHour(dates: string[], minSamples = 3): number | null {
   const hours = dates
@@ -196,7 +216,7 @@ export async function refreshSmartReminders(): Promise<ReminderScheduleResult> {
       if (!req.granted) return 'denied';
     }
 
-    await Notifications.cancelAllScheduledNotificationsAsync();
+    await cancelSmartReminders();
 
     const { glucoseLogs, insulinLogs, meals, profile } =
       useAppStore.getState();

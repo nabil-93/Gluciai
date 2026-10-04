@@ -1,9 +1,12 @@
 import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import i18next from 'i18next';
 
 import { isDemoMode, supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import type { AiReminder } from '@/types';
+
+import { reminderPayload } from './notificationRoute';
 
 /* ────────────────────────────────────────────────────────────
  * AI REMINDERS ENGINE
@@ -37,6 +40,85 @@ function browserNotify(title: string, body: string) {
       new Notification(title, { body });
     }
   } catch {}
+}
+
+/* ── OS notifications for AI reminders (store audit C-10) ──────────────
+ * The minute tick below only runs while the app is OPEN. On a phone that is
+ * almost never the case an hour later, so "remind me in 1 h to take my
+ * insulin" used to fire into an app nobody was looking at — no sound, no
+ * banner — while the assistant had promised an alert. Every pending reminder
+ * is now also a real local notification scheduled with the OS.
+ *
+ * The notification BODY is the patient's own sentence (what they asked to be
+ * reminded of); the data payload stays the typed `{ kind, type }` and carries
+ * nothing about them. */
+const osId = (reminderId: string) => `ai-reminder-${reminderId}`;
+
+async function notificationsAllowed(ask: boolean): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    const perms = await Notifications.getPermissionsAsync();
+    if (perms.granted) return true;
+    if (!ask || !perms.canAskAgain) return false;
+    return (await Notifications.requestPermissionsAsync()).granted;
+  } catch {
+    return false;
+  }
+}
+
+async function scheduleOsReminder(r: AiReminder, ask: boolean): Promise<void> {
+  const due = new Date(r.due_at);
+  if (!(due.getTime() > Date.now() + 5_000)) return; // past or imminent: the tick fires it
+  if (!(await notificationsAllowed(ask))) return;
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: osId(r.id),
+      content: {
+        title: i18next.t('reminders.firedTitle'),
+        body: r.message,
+        sound: true,
+        data: reminderPayload('ai-reminder'),
+      },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: due },
+    });
+  } catch {
+    // A reminder that cannot be scheduled still fires in-app via the tick.
+  }
+}
+
+function cancelOsReminder(reminderId: string) {
+  if (Platform.OS === 'web') return;
+  Notifications.cancelScheduledNotificationAsync(osId(reminderId)).catch(() => undefined);
+}
+
+/**
+ * Make the OS schedule match the store: every PENDING future reminder has a
+ * notification, nothing else does. Run after a server hydrate — reminders
+ * created on another device, or whose id changed when an offline row was
+ * re-pushed, get their notification here. Never asks for permission.
+ */
+export async function syncAiReminderNotifications(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const have = new Set(
+      scheduled.map((n) => n.identifier).filter((id) => id.startsWith('ai-reminder-'))
+    );
+    const pending = useAppStore
+      .getState()
+      .aiReminders.filter((r) => r.status === 'pending' && new Date(r.due_at).getTime() > Date.now());
+    const want = new Set(pending.map((r) => osId(r.id)));
+    for (const id of have) {
+      if (!want.has(id)) {
+        await Notifications.cancelScheduledNotificationAsync(id).catch(() => undefined);
+      }
+    }
+    for (const r of pending) {
+      if (!have.has(osId(r.id))) await scheduleOsReminder(r, false);
+    }
+  } catch {
+    // best effort — the in-app tick still covers an open app
+  }
 }
 
 /** Ask once, lazily, when the patient creates their first reminder. */
@@ -88,11 +170,16 @@ export async function createAiReminder(
     created_at: row?.created_at ?? new Date().toISOString(),
   };
   s.addAiReminder(reminder);
+  // The patient just asked for this alert — the one moment it is right to ask
+  // the OS for permission if it was never granted.
+  await scheduleOsReminder(reminder, true);
   return reminder;
 }
 
 export function markReminder(id: string, status: AiReminder['status']) {
   useAppStore.getState().updateAiReminder(id, { status });
+  // Done / missed / fired: a queued OS alert for it would be stale or a duplicate.
+  if (status !== 'pending') cancelOsReminder(id);
   if (!isDemoMode && supabase && UUID_RE.test(id)) {
     supabase
       .from('ai_reminders')

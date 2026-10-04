@@ -49,7 +49,6 @@ import {
   carbFigure,
   carbStatus,
   carbText,
-  carbUnit,
   plateCarbStatus,
 } from '@/services/nutrition/interpret';
 import { setPendingScan } from '@/services/scanSession';
@@ -84,8 +83,16 @@ const TYPE_KEY: Record<InsulinType, string> = {
   mixed: 'home.insulinMixed',
 };
 
-const CARB_GOAL = 250;
-const INSULIN_GOAL = 40;
+/*
+ * NO UNIVERSAL CARB OR INSULIN "GOAL" (store audit C-01 / C-02).
+ *
+ * This screen used to judge every patient against 250 g of carbohydrate and
+ * 40 U of insulin a day — the same two numbers for a child with type 1, a
+ * pregnant woman and an adult with type 2 — and coloured the day "Dose basse /
+ * en dessous de l'objectif" when a patient took the 20 U they were prescribed.
+ * Neither number came from the patient or their doctor. Both cards now show
+ * the day's total as a fact, with no zone, no pointer and no target.
+ */
 
 /* ── Peek-carousel geometry ──
  * Each metric is its own card. The carousel bleeds edge-to-edge (full
@@ -97,9 +104,6 @@ const CARD_GAP = 14;
 /** Snap step for a given carousel viewport width. */
 const strideFor = (viewW: number) => Math.round(viewW * CARD_RATIO) + CARD_GAP;
 
-function isToday(iso: string) {
-  return new Date(iso).toDateString() === new Date().toDateString();
-}
 function sameDay(iso: string, ref: Date) {
   return new Date(iso).toDateString() === ref.toDateString();
 }
@@ -526,6 +530,7 @@ function RingCard({
   sub,
   onPress,
   animateDelay = 0,
+  neutral = false,
 }: {
   progress: number;
   valueText: string;
@@ -535,6 +540,8 @@ function RingCard({
   onPress: () => void;
   /** Stagger for the startup sweep so the row fires left-to-right. */
   animateDelay?: number;
+  /** A total with no target: number only, no pointer or lit arc. */
+  neutral?: boolean;
 }) {
   // Size the dial to the measured card width so it visually dominates
   // the card (~98% of the width), staying crisp across screen sizes.
@@ -552,8 +559,9 @@ function RingCard({
         size={dialSize}
         value={hasData ? progress * 100 : 0}
         displayValue={valueText}
-        animateOnMount
+        animateOnMount={!neutral}
         animateDelay={animateDelay}
+        neutral={neutral}
       />
       <Text style={styles.ringLabel} numberOfLines={1}>
         {label}
@@ -801,67 +809,24 @@ function zoneFor(value: number, low: number, high: number): GlyZone {
   return GLY_ZONES[3];
 }
 
-/* ── Carbs / Insuline zones ──
- * Same 4-colour scale as glucose (bleu = trop bas · vert = bon · jaune =
- * un peu trop · rouge = beaucoup trop), but measured against a daily
- * goal. The green band sits around the goal; below it is blue, moderately
- * over is yellow, well over is red. Reused so both extra pages share the
- * exact glucose architecture (ring + curve + alert + slider). */
-function makeGoalZones(
-  metric: 'carbs' | 'insulin'
-): [GlyZone, GlyZone, GlyZone, GlyZone] {
-  const P = `home.${metric}`; // i18n prefix, e.g. home.carbsLowTitle
-  const zone = (
-    key: GlyZone['key'],
-    color: string,
-    pale: string,
-    strong: string,
-    tint: string,
-    alertBg: string,
-    icon: string,
-    band: string
-  ): GlyZone => ({
-    key,
-    color,
-    pale,
-    strong,
-    tint,
-    alertBg,
-    icon,
-    labelKey: `${P}${band}Label`,
-    alertTitleKey: `${P}${band}Title`,
-    alertDescKey: `${P}${band}Desc`,
-  });
-  return [
-    zone('low', '#3b82f6', '#dbeafe', '#3b82f6', 'rgba(59,130,246,0.28)', 'rgba(211,229,255,0.55)', 'i', 'Low'),
-    zone('normal', '#22b95e', '#cdeed9', '#3fc873', 'rgba(63,200,115,0.28)', 'rgba(63,200,115,0.14)', '✓', 'Good'),
-    zone('moderate', '#f5b60a', '#fbeab9', '#f6bc1c', 'rgba(246,188,28,0.3)', 'rgba(250,235,190,0.5)', '!', 'Mod'),
-    zone('high', '#ef4444', '#fbd0d0', '#f05656', 'rgba(240,86,86,0.3)', 'rgba(252,215,215,0.55)', '!', 'High'),
-  ];
-}
-const CARB_ZONES = makeGoalZones('carbs');
-const INSULIN_ZONES = makeGoalZones('insulin');
-
-/**
- * Map a value to a zone against a daily goal. Below 60% of goal = blue
- * (under-target), 60–110% = green (on target), 110–150% = yellow, above
- * = red. Same shape as glucose's zoneFor.
- */
-function zoneForGoal(
-  value: number,
-  goal: number,
-  zones: [GlyZone, GlyZone, GlyZone, GlyZone]
-): GlyZone {
-  if (value < goal * 0.6) return zones[0];
-  if (value <= goal * 1.1) return zones[1];
-  if (value <= goal * 1.5) return zones[2];
-  return zones[3];
-}
-
-/** 0..1 slider position of a value on its 0 → 1.6×goal Bas→Haut scale. */
-function goalSliderFrac(value: number, goal: number): number {
-  return Math.max(0, Math.min(1, value / (goal * 1.6)));
-}
+/* ── Carbs / Insuline: a day total, never a verdict ──
+ * One calm colour and the label "total du jour". No band, no knob, no
+ * Bas→Haut slider: without a target that came from the patient's doctor there
+ * is nothing honest to colour these numbers against (store audit C-01/C-02).
+ * Glucose keeps its zones — those are measured against the patient's OWN
+ * target range. */
+const DAY_TOTAL_ZONE: GlyZone = {
+  key: 'normal',
+  color: '#17a56d',
+  pale: '#dcefe4',
+  strong: '#8fd3ae',
+  tint: 'rgba(23,165,109,0.2)',
+  alertBg: 'rgba(23,165,109,0.1)',
+  icon: 'i',
+  labelKey: 'home.dayTotal',
+  alertTitleKey: 'home.dayTotal',
+  alertDescKey: 'home.dayTotal',
+};
 
 /**
  * 0..1 position of a reading along the Bas→Haut slider. The target range
@@ -908,8 +873,9 @@ function GlucoseRing({
   zone: GlyZone | null;
   /** Localized status label shown in the centre pill */
   zoneLabel: string;
-  /** 0..1 position along the Bas→Haut scale (drives the knob) */
-  frac: number;
+  /** 0..1 position along the Bas→Haut scale (drives the knob). `null` for a
+   *  total that has no scale at all — no knob is drawn. */
+  frac: number | null;
   width?: number;
   emptyText?: string;
 }) {
@@ -947,7 +913,7 @@ function GlucoseRing({
     };
   });
   // The mockup's demo states ride between -46° and +74°; map the same span.
-  const knob = pt(-55 + 150 * frac, 130);
+  const knob = pt(-55 + 150 * (frac ?? 0), 130);
 
   return (
     <View style={{ width, height: Math.round(H * s) }}>
@@ -986,7 +952,7 @@ function GlucoseRing({
         />
 
         {/* Knob riding the ring */}
-        {value != null ? (
+        {value != null && frac != null ? (
           <>
             <Circle cx={knob.x} cy={knob.y + 2} r={13.5} fill="rgba(0,0,0,0.14)" />
             <Circle cx={knob.x} cy={knob.y} r={13} fill="#ffffff" />
@@ -1051,6 +1017,7 @@ function MetricPage({
   sliderFrac,
   ringWidth,
   emptyText,
+  neutralNote,
   sliderColors,
   leftLabel,
   rightLabel,
@@ -1068,9 +1035,12 @@ function MetricPage({
   /** Resolved alert strings (glucose passes zone copy; carbs/insulin pass totals) */
   alertTitle: string;
   alertDesc: string;
-  sliderFrac: number;
+  /** `null` = a total with no scale: the slider is replaced by `neutralNote`. */
+  sliderFrac: number | null;
   ringWidth: number;
   emptyText: string;
+  /** Shown in place of the slider when `sliderFrac` is null. */
+  neutralNote?: string;
   /** 6-stop Bas→Haut gradient for this metric's slider */
   sliderColors: string[];
   leftLabel: string;
@@ -1148,8 +1118,15 @@ function MetricPage({
         </View>
       )}
 
-      {/* Constant top padding (reserves the % bubble's headroom on data
-          cards) so an empty card is exactly as tall as a filled one. */}
+      {/* A total with no scale: a plain note instead of a Bas→Haut slider,
+          in a box of the same height so the three cards stay aligned. */}
+      {sliderFrac == null ? (
+        <View style={[styles.glySliderCard, styles.glyNeutralCard]}>
+          <Text style={styles.glyNeutralNote}>{neutralNote}</Text>
+        </View>
+      ) : (
+      /* Constant top padding (reserves the % bubble's headroom on data
+          cards) so an empty card is exactly as tall as a filled one. */
       <View style={[styles.glySliderCard, { paddingTop: 46 }]}>
         <View style={styles.glySliderRow}>
           <Text style={[styles.glySliderEnd, { color: '#3b82f6' }]}>
@@ -1197,6 +1174,7 @@ function MetricPage({
           ))}
         </View>
       </View>
+      )}
 
       <Pressable style={styles.glyAddBtn} onPress={onAdd}>
         <Svg width={13} height={13} viewBox="0 0 24 24">
@@ -1434,11 +1412,8 @@ export default function HomeScreen() {
   // running total vs the daily goal), a Bas→Haut slider position, and the
   // day's entries plotted on the 24 h curve (cumulative through the day,
   // so the line climbs toward the goal like a real intake curve).
-  const carbZone = totalCarbs > 0 ? zoneForGoal(totalCarbs, CARB_GOAL, CARB_ZONES) : null;
-  const insulinZone =
-    totalInsulin > 0 ? zoneForGoal(totalInsulin, INSULIN_GOAL, INSULIN_ZONES) : null;
-  const carbSliderFrac = goalSliderFrac(totalCarbs, CARB_GOAL);
-  const insulinSliderFrac = goalSliderFrac(totalInsulin, INSULIN_GOAL);
+  const carbZone = totalCarbs > 0 ? DAY_TOTAL_ZONE : null;
+  const insulinZone = totalInsulin > 0 ? DAY_TOTAL_ZONE : null;
 
   // Plain loops (not .map with a captured running sum): closures that
   // reassign outer variables block React Compiler memoization.
@@ -1957,9 +1932,10 @@ export default function HomeScreen() {
                   unit="g"
                   zone={carbZone}
                   zoneLabel={carbZone ? t(carbZone.labelKey) : ''}
-                  alertTitle={`${carbFigure(carbView).full} / ${CARB_GOAL} g`}
-                  alertDesc={carbZone ? t(carbZone.alertDescKey) : ''}
-                  sliderFrac={carbSliderFrac}
+                  alertTitle={carbFigure(carbView).full}
+                  alertDesc={t('home.mealsLogged', { count: dayMeals.length })}
+                  sliderFrac={null}
+                  neutralNote={t('home.carbsNoGoalNote')}
                   ringWidth={glyRingW}
                   emptyText={t('home.noCarbsToday')}
                   sliderColors={['#3b82f6', '#2fb463', '#8fce5a', '#f4c534', '#f59e2b', '#ef4444']}
@@ -1997,9 +1973,10 @@ export default function HomeScreen() {
                   unit="U"
                   zone={insulinZone}
                   zoneLabel={insulinZone ? t(insulinZone.labelKey) : ''}
-                  alertTitle={`${totalInsulin} U / ${INSULIN_GOAL} U`}
-                  alertDesc={insulinZone ? t(insulinZone.alertDescKey) : ''}
-                  sliderFrac={insulinSliderFrac}
+                  alertTitle={`${totalInsulin} U`}
+                  alertDesc={t('home.injectionsLogged', { count: dayInsulin.length })}
+                  sliderFrac={null}
+                  neutralNote={t('home.insulinNoGoalNote')}
                   ringWidth={glyRingW}
                   emptyText={t('home.noInjectionToday')}
                   sliderColors={['#3b82f6', '#2fb463', '#8fce5a', '#f4c534', '#f59e2b', '#ef4444']}
@@ -2108,20 +2085,22 @@ export default function HomeScreen() {
             animateDelay={0}
           />
           <RingCard
-            progress={Math.min(1, totalCarbs / CARB_GOAL)}
+            progress={0}
+            neutral
             valueText={carbTotalText}
             hasData={totalCarbs > 0}
             label={t('home.ringCarbs')}
-            sub={`${carbTotalText}${carbUnit(carbView)} / ${CARB_GOAL}g`}
+            sub={carbFigure(carbView).full}
             onPress={() => router.push(dayHref('/nutrition'))}
             animateDelay={140}
           />
           <RingCard
-            progress={Math.min(1, totalInsulin / 40)}
+            progress={0}
+            neutral
             valueText={`${totalInsulin}`}
             hasData={totalInsulin > 0}
             label={t('home.ringInsulin')}
-            sub={`${totalInsulin}U`}
+            sub={`${totalInsulin} U`}
             onPress={() => router.push(dayHref('/insulin'))}
             animateDelay={280}
           />
@@ -2763,6 +2742,15 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   glySliderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  // Same footprint as the slider card (46 top + row + scale + 14 bottom).
+  glyNeutralCard: { paddingTop: 14, minHeight: 108, justifyContent: 'center' },
+  glyNeutralNote: {
+    fontFamily: F500,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: '#6f8a78',
+    textAlign: 'center',
+  },
   glySliderEnd: { fontFamily: F700, fontSize: 16 },
   glySliderTrackWrap: { flex: 1, height: 14, justifyContent: 'center' },
   glySliderTrack: { height: 14, borderRadius: 7 },

@@ -143,6 +143,38 @@ export function looksLikeMmol(value: number | null | undefined): boolean {
   );
 }
 
+/** g/L → mg/dL. 1 g/L is 100 mg/dL by definition (1 L = 10 dL). */
+export const GL_TO_MGDL = 100;
+
+/** Highest value read as a plausible g/L reading (6 g/L = 600 mg/dL). */
+export const MAX_PLAUSIBLE_GL = 6;
+
+/**
+ * The mg/dL readings a typed value under {@link MIN_TYPED_MGDL} could stand
+ * for (store audit C-04).
+ *
+ * WHY. Morocco and France report glucose in g/L — "1,20" is 120 mg/dL. The old
+ * refusal assumed any small number was mmol/L and offered "≈ 22 mg/dL" for 1,20:
+ * a severe hypoglycaemia that never happened, one tap from being stored. A small
+ * number is ambiguous, so BOTH readings are offered and the patient — who knows
+ * which unit their meter shows — picks one. Nothing is converted silently.
+ *
+ *   · `gl`   — the value as g/L, when it is a plausible g/L reading (≤ 6);
+ *   · `mmol` — the value as mmol/L.
+ *
+ * Both null when the value is not an under-range typed reading at all.
+ */
+export function unitCandidates(
+  value: number | null | undefined
+): { gl: number | null; mmol: number | null } {
+  if (!looksLikeMmol(value)) return { gl: null, mmol: null };
+  const v = value as number;
+  return {
+    gl: v <= MAX_PLAUSIBLE_GL ? Math.round(v * GL_TO_MGDL) : null,
+    mmol: Math.round(v * MMOL_TO_MGDL),
+  };
+}
+
 /** Whether a parameter came from the patient's profile or from the fallback. */
 export type ParamSource = 'profile' | 'fallback';
 

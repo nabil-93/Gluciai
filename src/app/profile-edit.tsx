@@ -107,8 +107,28 @@ export default function ProfileEditScreen() {
   const medicalError = (p: Profile): string | null => {
     const inRange = (v: number | undefined, min: number, max: number) =>
       v == null || (v >= min && v <= max);
+    // A half-typed or impossible date ("2023-99-99") made the server reject
+    // the whole profile, losing every other edit with it.
+    if (p.birth_date) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(p.birth_date);
+      const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+      const valid =
+        !!m &&
+        !!d &&
+        d.getFullYear() === Number(m[1]) &&
+        d.getMonth() === Number(m[2]) - 1 &&
+        d.getDate() === Number(m[3]) &&
+        Number(m[1]) >= 1900 &&
+        d.getTime() <= Date.now();
+      if (!valid) return t('profile.errBirthDate');
+    }
     if (Number(p.target_low) > 0 && Number(p.target_high) > 0 && Number(p.target_high) <= Number(p.target_low))
       return t('profile.errTargetOrder');
+    // Plausible clinical ranges (store audit C-08). A typo here becomes the
+    // calculator's input, so an impossible value is refused before saving.
+    if (!inRange(p.target_low, 50, 150) || !inRange(p.target_high, 100, 300))
+      return t('profile.errTargetRange');
+    if (!inRange(p.correction_factor, 5, 400)) return t('profile.errCorrection');
     for (const r of [p.insulin_per_10g_breakfast, p.insulin_per_10g_lunch, p.insulin_per_10g_dinner])
       if (!inRange(r, 0.1, 20)) return t('profile.errRatio');
     if (!inRange(p.basal_dose, 1, 200)) return t('profile.errBasalDose');
@@ -350,20 +370,17 @@ export default function ProfileEditScreen() {
                 placeholder="180"
               />
               <Text style={styles.tirHint}>{t('profile.glucoseGoalHint')}</Text>
-              <View style={styles.row2}>
-                <NumField
-                  flex
-                  label={t('profile.carbRatio')}
-                  numValue={draft.carb_ratio ?? undefined}
-                  onChangeNum={(v) => setNum('carb_ratio', v)}
-                />
-                <NumField
-                  flex
-                  label={t('profile.correctionFactor')}
-                  numValue={draft.correction_factor ?? undefined}
-                  onChangeNum={(v) => setNum('correction_factor', v)}
-                />
-              </View>
+              {/* The legacy single ratio (grams per unit) is no longer
+                  editable here (store audit C-08): shown beside the per-meal
+                  ratios (units per 10 g) it invited a "1" typed in the wrong
+                  unit — 1 g/U instead of 1 U/10 g, a tenfold dose. The
+                  per-meal plan below is the one the calculator reads. */}
+              <NumField
+                label={`${t('profile.correctionFactor')} (mg/dL · 1 U)`}
+                numValue={draft.correction_factor ?? undefined}
+                onChangeNum={(v) => setNum('correction_factor', v)}
+                placeholder="50"
+              />
 
               {/* Per-meal plan: U of rapid insulin per 10 g of carbs — the
                   numbers the bolus calculator and the AI actually use. */}

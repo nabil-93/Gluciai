@@ -3,15 +3,9 @@
   "generatedFrom": "npm run lint (expo lint)",
   "counts": {
     "errors": 4,
-    "warnings": 2
+    "warnings": 0
   },
   "findings": [
-    {
-      "file": "src/app/(tabs)/index.tsx",
-      "line": 100,
-      "rule": "@typescript-eslint/no-unused-vars",
-      "severity": "warning"
-    },
     {
       "file": "src/app/ai-chat.tsx",
       "line": 516,
@@ -23,12 +17,6 @@
       "line": 333,
       "rule": "react-hooks/set-state-in-effect",
       "severity": "error"
-    },
-    {
-      "file": "src/app/wizard.tsx",
-      "line": 455,
-      "rule": "@typescript-eslint/no-unused-vars",
-      "severity": "warning"
     },
     {
       "file": "src/components/InstallPrompt.tsx",

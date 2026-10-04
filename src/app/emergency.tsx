@@ -10,8 +10,10 @@ import {
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Localization from 'expo-localization';
 
 import { BevelCard, ChevronLeft } from '@/components/ui';
+import { emergencyNumberFor } from '@/services/emergencyNumber';
 import { useAppStore } from '@/store/useAppStore';
 import { colors, shadows } from '@/theme';
 
@@ -19,16 +21,6 @@ function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
 }
 
-/** Medical-emergency number per app language — the patient picked the
- *  language of the country they live in / call for help in:
- *  fr = SAMU France (15), ar = SAMU Maroc (141), de = Notruf Deutschland
- *  (112), en = USA (911). The label is what locals call the service. */
-const EMERGENCY: Record<string, { num: string; label: string }> = {
-  fr: { num: '15', label: 'SAMU' },
-  ar: { num: '141', label: 'الإسعاف' },
-  de: { num: '112', label: 'Notruf' },
-  en: { num: '911', label: 'Emergency' },
-};
 
 export default function EmergencyScreen() {
   const router = useRouter();
@@ -44,10 +36,18 @@ export default function EmergencyScreen() {
     else router.replace('/(tabs)');
   };
 
-  const call = (num: string) => Linking.openURL(`tel:${num.replace(/\s/g, '')}`);
+  // A device with no phone app (tablet, simulator) rejects tel: — never let
+  // that surface as an unhandled error on the emergency screen.
+  const call = (num: string) =>
+    Linking.openURL(`tel:${num.replace(/\s/g, '')}`).catch(() => {});
 
   const lang = (i18n.language || 'en').split('-')[0];
-  const sos = EMERGENCY[lang] ?? EMERGENCY.en;
+  /* The number follows the PHONE'S COUNTRY, not the app language (store audit
+     C-09) — see services/emergencyNumber.ts. */
+  const sos = {
+    num: emergencyNumberFor(Localization.getLocales()[0]?.regionCode),
+    label: t('emergencyPage.callLabel'),
+  };
   /** The medical ID card is read out loud to bystanders — Arabic script
    *  must flow right-to-left when the app language is Arabic. */
   const rtl = lang === 'ar';
@@ -58,7 +58,7 @@ export default function EmergencyScreen() {
       `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
         profile.home_address
       )}`
-    );
+    ).catch(() => {});
   };
 
   const dType = profile?.diabetes_type ?? 'type2';

@@ -332,7 +332,7 @@
     "insulinPlanHint": "L'assistant IA utilise ces informations pour savoir exactement quelle insuline tu utilises et à quel moment — et ne jamais confondre rapide et lente.",
     "mealRatiosTitle": "Ton insuline pour 10 g de glucides",
     "mealRatiosSub": "Combien d'unités d'insuline rapide prends-tu pour 10 g de glucides ? Le chiffre est souvent différent à chaque repas.",
-    "mealRatiosHint": "Ce sont les chiffres prescrits par ton médecin. L'IA et le calculateur de dose les utilisent pour un calcul exact à chaque repas. Tu peux les modifier à tout moment dans Profil → Médical.",
+    "mealRatiosHint": "Recopie exactement les chiffres prescrits par ton médecin. Le calculateur de dose ne s'ouvre qu'avec tes propres chiffres. Tu peux les ajouter plus tard dans Profil → Médical.",
     "ratioBreakfast": "Petit-déjeuner",
     "ratioLunch": "Déjeuner",
     "ratioDinner": "Dîner",
@@ -344,7 +344,8 @@
     "bolusStepSub": "Celle que vous prenez aux repas — commençons par elle.",
     "bolusStepHint": "Renseignez d’abord votre insuline rapide en entier (nom, ratios par repas, facteur de correction). L’insuline lente viendra juste après.",
     "basalStepTitle": "Votre insuline lente",
-    "basalStepSub": "Le nom, la dose et le moment de l’injection."
+    "basalStepSub": "Le nom, la dose et le moment de l’injection.",
+    "skipUnknown": "Je ne les connais pas encore"
   },
   "home": {
     "goodMorning": "Bonjour",
@@ -367,30 +368,6 @@
     "addMeal": "Ajouter un repas",
     "addInjection": "Ajouter une injection",
     "noCarbsToday": "Aucun glucide aujourd'hui",
-    "carbsLowLabel": "Bas",
-    "carbsLowTitle": "Apport bas",
-    "carbsLowDesc": "Vos glucides sont en dessous de l'objectif du jour.",
-    "carbsGoodLabel": "Normal",
-    "carbsGoodTitle": "Apport normal",
-    "carbsGoodDesc": "Vos glucides sont proches de l'objectif du jour.",
-    "carbsModLabel": "Modéré",
-    "carbsModTitle": "Apport élevé",
-    "carbsModDesc": "Vos glucides sont légèrement au-dessus de l'objectif.",
-    "carbsHighLabel": "Élevé",
-    "carbsHighTitle": "Apport très élevé",
-    "carbsHighDesc": "Vos glucides sont bien au-dessus de l'objectif.",
-    "insulinLowLabel": "Bas",
-    "insulinLowTitle": "Dose basse",
-    "insulinLowDesc": "Votre insuline est en dessous de l'objectif du jour.",
-    "insulinGoodLabel": "Normal",
-    "insulinGoodTitle": "Dose normale",
-    "insulinGoodDesc": "Votre insuline est proche de l'objectif du jour.",
-    "insulinModLabel": "Modéré",
-    "insulinModTitle": "Dose élevée",
-    "insulinModDesc": "Votre insuline est légèrement au-dessus de l'objectif.",
-    "insulinHighLabel": "Élevé",
-    "insulinHighTitle": "Dose très élevée",
-    "insulinHighDesc": "Votre insuline est bien au-dessus de l'objectif.",
     "scanFood": "Scanner un repas",
     "noMeals": "Aucun repas. Scannez votre premier repas !",
     "lastReading": "Dernière mesure",
@@ -474,7 +451,14 @@
     "riskLabel": "Niveau de risque glycémique",
     "mealsTitle": "Vos repas",
     "chronik": "Chronologie",
-    "viewFullHistory": "Voir tout l'historique"
+    "viewFullHistory": "Voir tout l'historique",
+    "dayTotal": "Total du jour",
+    "mealsLogged_one": "{{count}} repas enregistré",
+    "mealsLogged_other": "{{count}} repas enregistrés",
+    "injectionsLogged_one": "{{count}} injection enregistrée",
+    "injectionsLogged_other": "{{count}} injections enregistrées",
+    "carbsNoGoalNote": "Aucun objectif imposé : tes besoins en glucides se fixent avec ton médecin.",
+    "insulinNoGoalNote": "Total des doses enregistrées. L'app ne fixe aucun objectif d'insuline — c'est ton médecin qui décide."
   },
   "notifications": {
     "open": "Notifications ({{count}} non lues)",
@@ -904,7 +888,10 @@
     "errGlucoseGoal": "L'objectif de glycémie doit être entre 40 et 600 mg/dL.",
     "saveError": "Échec de l'enregistrement — vos modifications n'ont pas été sauvegardées. Vérifiez vos valeurs et réessayez.",
     "sectionSupport": "Support & Aide",
-    "subSupport": "WhatsApp, assistant, questions"
+    "subSupport": "WhatsApp, assistant, questions",
+    "errTargetRange": "Cibles plausibles : basse entre 50 et 150 mg/dL, haute entre 100 et 300 mg/dL.",
+    "errCorrection": "Le facteur de correction doit être entre 5 et 400 mg/dL pour 1 U.",
+    "errBirthDate": "Date de naissance invalide — format AAAA-MM-JJ (ex. 1990-05-21)."
   },
   "log": {
     "glucoseTitle": "Enregistrer la glycémie",
@@ -924,8 +911,10 @@
     "daysAgo": "il y a {{n}} j",
     "notesHintInsulin": "Site d’injection, contexte…",
     "todayTotal": "{{total}} U de {{type}} aujourd’hui",
-    "unitLooksMmol": "Cette valeur ressemble à une mesure en mmol/L. Cette application enregistre en mg/dL — en mg/dL, ce serait environ {{mgdl}}. Saisissez la valeur en mg/dL.",
-    "unitOutOfRange": "Valeur hors de la plage attendue en mg/dL (20–900). Vérifiez la valeur saisie."
+    "unitOutOfRange": "Valeur hors de la plage attendue en mg/dL (20–900). Vérifiez la valeur saisie.",
+    "unitAmbiguous": "Cette valeur n'est pas en mg/dL. Dans quelle unité ton lecteur l'affiche-t-il ?",
+    "unitPickGl": "{{mgdl}} mg/dL (c'était en g/L)",
+    "unitPickMmol": "{{mgdl}} mg/dL (c'était en mmol/L)"
   },
   "tabs": {
     "home": "Accueil",
@@ -1248,7 +1237,11 @@
     "cappedTitle": "Dose limitée au maximum de l'application ({{max}} U)",
     "cappedBody": "Le calcul donnait {{raw}} U. L'application n'affiche jamais plus de {{max}} U : ce plafond est une limite de l'application, ce n'est pas une dose recommandée pour vous. Vérifiez les glucides saisis, et parlez-en à votre médecin avant d'injecter.",
     "mixedIobTitle": "Insuline mixte non comptée",
-    "mixedIobBody": "Vous avez une dose d'insuline mixte (prémélangée) récente. L'application ne sait pas quelle part en est rapide, donc elle n'est PAS déduite de cette dose. L'insuline encore active peut donc être supérieure à celle affichée — vérifiez avec votre médecin avant d'injecter."
+    "mixedIobBody": "Vous avez une dose d'insuline mixte (prémélangée) récente. L'application ne sait pas quelle part en est rapide, donc elle n'est PAS déduite de cette dose. L'insuline encore active peut donc être supérieure à celle affichée — vérifiez avec votre médecin avant d'injecter.",
+    "blockedTitle": "Avant de calculer une dose",
+    "needGlucose": "Mesure ta glycémie maintenant et saisis-la (mesure de moins de 30 min).",
+    "missCorrNoDefault": "Ton facteur de correction (prescrit par ton médecin)",
+    "glucoseStale": "Dernière glycémie : {{value}} mg/dL ({{ago}}) — trop ancienne pour calculer une dose."
   },
   "day": {
     "emptyTitle": "Rien ce jour-là",
@@ -1700,9 +1693,6 @@
     "hello": "Bonjour {{name}} 👋",
     "helloNoName": "Bonjour 👋",
     "subtitle": "Voici ton suivi d'insuline aujourd'hui.",
-    "goal": "Objectif : {{n}} U",
-    "goalShort": "Objectif {{n}} U",
-    "ofGoal": "{{pct}}% de l'objectif quotidien",
     "unitsShort": "Unités (U)",
     "aiTip": "Conseil IA",
     "tipBalanced": "Ton insuline est bien équilibrée aujourd'hui.",
@@ -1731,7 +1721,8 @@
     "calTitle": "Insuline injectée",
     "calCaption": "Un tiers d'anneau par type d'insuline",
     "calHint": "Gris = ce type n'a pas été injecté ce jour-là.",
-    "totalDay": "Total ce jour-là"
+    "totalDay": "Total ce jour-là",
+    "rapidShare": "{{pct}} % des unités du jour en insuline rapide"
   },
   "foodsPage": {
     "title": "Cuisine marocaine",
@@ -1813,8 +1804,6 @@
     "hello": "Bonjour {{name}} 👋",
     "helloNoName": "Bonjour 👋",
     "subtitle": "Voici ton suivi nutritionnel aujourd'hui.",
-    "remaining": "{{n}} g restants",
-    "goalReached": "Objectif atteint",
     "fiber": "Fibres",
     "aiCoach": "AI Coach",
     "aiTitle": "Assistant nutrition",
@@ -1847,11 +1836,14 @@
     "pickDay": "Choisir un jour",
     "mealCount": "{{count}} repas",
     "calTitle": "Glucides du jour",
-    "calCaption": "Objectif : {{goal}} g de glucides / jour",
-    "calGoalOk": "Dans l'objectif",
-    "calGoalOver": "Objectif dépassé",
-    "calHint": "L'anneau se remplit selon les glucides mangés ce jour-là.",
-    "mealsTitleDay": "Repas de ce jour-là"
+    "calCaption": "Un anneau plein marque un jour où tu as enregistré des repas.",
+    "calHint": "Touche un jour pour voir ses repas.",
+    "mealsTitleDay": "Repas de ce jour-là",
+    "noGoalNote": "Pas d'objectif imposé : ton budget de glucides se fixe avec ton médecin.",
+    "carbsEnergyShare": "des calories viennent des glucides",
+    "refFromProfile": "Repères estimés d'après ton poids, ta taille et ton âge — pas des objectifs médicaux.",
+    "refDefault": "Repères de l'UE pour un adulte moyen — complète ton profil pour des repères adaptés.",
+    "calLogged": "Repas enregistrés"
   },
   "menuScanPage": {
     "title": "Menu restaurant",
@@ -1897,7 +1889,8 @@
     "homeTitle": "Ramenez-moi chez moi",
     "homeHint": "Appuyez pour ouvrir mon adresse dans Google Maps.",
     "homeMissing": "Aucune adresse enregistrée",
-    "homeAdd": "Ajoutez votre adresse dans le profil"
+    "homeAdd": "Ajoutez votre adresse dans le profil",
+    "callLabel": "Urgences"
   },
   "barcodePage": {
     "sugarWarning": "{{sugar}} g de sucre — attention à la glycémie.",

@@ -99,6 +99,13 @@ describe('NOTIFICATION → DESTINATION map', () => {
     expect(routeForNotification(reminderPayload('insulin-long'))).toBe('/insulin');
   });
 
+  it('an assistant reminder opens the logging assistant (C-10)', () => {
+    expect(isReminderType('ai-reminder')).toBe(true);
+    expect(routeForNotification(reminderPayload('ai-reminder'))).toBe('/ai-log');
+    // Same privacy rule as every other reminder: kind + type, nothing more.
+    expect(notificationPayloadIsSafe(reminderPayload('ai-reminder'))).toBe(true);
+  });
+
   it('breakfast and evening have NO DEDICATED DESTINATION and land safely', () => {
     // Opening the camera straight from a notification is an intrusive product
     // decision, and the "daily recap" is the dashboard itself — so both route

@@ -7,11 +7,8 @@ import { useTranslation } from 'react-i18next';
 import { ActionGlyph, FadeInView, HeroScreen, HERO_INK, HERO_MUTED, Spinner } from '@/components/ui';
 import { nowMs } from '@/lib/clock';
 import { parseDecimal, sanitizeDecimal } from '@/lib/num';
-import {
-  isPlausibleTypedMgdl,
-  looksLikeMmol,
-  MMOL_TO_MGDL,
-} from '@/services/bolusEngine';
+import { GlucoseUnitHelp } from '@/components/GlucoseUnitHelp';
+import { isPlausibleTypedMgdl, looksLikeMmol } from '@/services/bolusEngine';
 import { saveGlucose } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
@@ -72,9 +69,8 @@ export default function LogGlucoseScreen() {
    * a reading, and storing 5.6 mg/dL would record a hypo that never happened.
    */
   const unitWarning = num > 0 && !isPlausibleTypedMgdl(num);
-  const mmolSuggestion = looksLikeMmol(num)
-    ? Math.round(num * MMOL_TO_MGDL)
-    : null;
+  /** Under the mg/dL floor: a g/L or mmol/L reading — the patient picks which. */
+  const ambiguousUnit = looksLikeMmol(num);
 
   const save = async () => {
     if (!num || num <= 0) return;
@@ -124,15 +120,14 @@ export default function LogGlucoseScreen() {
             <Text style={styles.unit}>mg/dL</Text>
           </View>
 
-          {/* P7-005 — refuse, never convert. The suggestion is shown so the
-              patient can retype it themselves; nothing is stored from it. */}
-          {unitWarning ? (
+          {/* P7-005 / C-04 — refuse, never convert silently. A small number is
+              offered as BOTH readings (g/L and mmol/L) and the patient taps the
+              one their meter shows; anything else is simply out of range. */}
+          {ambiguousUnit ? (
+            <GlucoseUnitHelp value={num} onPick={(mgdl) => setValue(String(mgdl))} />
+          ) : unitWarning ? (
             <View style={styles.unitWarn}>
-              <Text style={styles.unitWarnText}>
-                {mmolSuggestion !== null
-                  ? t('log.unitLooksMmol', { mgdl: mmolSuggestion })
-                  : t('log.unitOutOfRange')}
-              </Text>
+              <Text style={styles.unitWarnText}>{t('log.unitOutOfRange')}</Text>
             </View>
           ) : null}
 
@@ -142,7 +137,7 @@ export default function LogGlucoseScreen() {
             <View style={[styles.scaleSeg, { backgroundColor: '#FFE2CC' }]} />
             <View style={[styles.scaleSeg, styles.scaleMid, { backgroundColor: '#C9F2DF' }]} />
             <View style={[styles.scaleSeg, { backgroundColor: '#FBE4C4' }]} />
-            {num > 0 ? (
+            {num > 0 && !unitWarning ? (
               <View
                 style={[
                   styles.scaleMark,
@@ -152,7 +147,7 @@ export default function LogGlucoseScreen() {
             ) : null}
           </View>
 
-          {num > 0 ? (
+          {num > 0 && !unitWarning ? (
             <View style={styles.statusRow}>
               <View style={[styles.zonePill, { backgroundColor: z.bg }]}>
                 <View style={[styles.zoneDot, { backgroundColor: z.color }]} />
