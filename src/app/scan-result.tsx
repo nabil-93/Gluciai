@@ -27,7 +27,7 @@ import { MealEditModal } from '@/components/MealEditModal';
 import { MealGradeBar } from '@/components/MealGradeBar';
 import { MEAL_TYPES, MealTypeModal } from '@/components/MealTypeModal';
 import { SaveConfirmModal } from '@/components/SaveConfirmModal';
-import { savedStateKey, saveMeal, updateMealType } from '@/services/data';
+import { savedStateKey, saveMeal, updateMealResult, updateMealType } from '@/services/data';
 import { aggregateItems } from '@/services/nutrition/engine';
 /* ONE import path for every interpretation this screen renders (Phase 2/3).
    The screen used to own a private `glBand` and its own copy of the load
@@ -416,6 +416,12 @@ export default function ScanResultScreen() {
   // page), start as "saved" so it can't be re-saved and the day isn't double
   // counted; a fresh scan starts unsaved as before.
   const [saved, setSaved] = useState(() => pending?.alreadySaved ?? false);
+  /** The journal row this plate already lives in, once there is one — the
+   *  reviewed meal, or the one this screen just saved. A later save UPDATES it
+   *  instead of writing a second meal (store audit F-03). */
+  const [savedRowId, setSavedRowId] = useState<string | null>(
+    () => pending?.savedMeal?.id ?? null
+  );
   /** i18n key for what the save actually achieved (DATA-1). */
   const [saveState, setSaveState] = useState<string | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -973,9 +979,18 @@ export default function ScanResultScreen() {
 
   const persist = async (meal: MealType) => {
     if (saved) return;
+    // Already in the journal (edited after saving, or a reviewed meal):
+    // replace that row's plate — same id, same original time.
+    if (savedRowId) {
+      const row = await updateMealResult(savedRowId, result, meal);
+      setSaveState(savedStateKey(row));
+      setSaved(true);
+      return;
+    }
     // The confirmation window says the plate is in the journal; the row says
     // whether the server actually has it (DATA-1). Both are now shown.
     const row = await saveMeal(result, imageUri, imageBase64, undefined, meal);
+    setSavedRowId(row.id);
     setSaveState(savedStateKey(row));
     setSaved(true);
   };

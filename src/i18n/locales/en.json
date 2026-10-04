@@ -345,7 +345,8 @@
     "bolusStepHint": "Set up your rapid insulin fully first (name, per-meal ratios, correction factor). Your long insulin comes right after.",
     "basalStepTitle": "Your long insulin",
     "basalStepSub": "Its name, dose and time of injection.",
-    "skipUnknown": "I don't know them yet"
+    "skipUnknown": "I don't know them yet",
+    "promoQueued": "Code saved — it will be applied as soon as your account is created."
   },
   "home": {
     "goodMorning": "Good morning",
@@ -914,7 +915,11 @@
     "unitOutOfRange": "Value outside the expected mg/dL range (20–900). Please check what you entered.",
     "unitAmbiguous": "This value is not in mg/dL. Which unit does your meter show?",
     "unitPickGl": "{{mgdl}} mg/dL (it was g/L)",
-    "unitPickMmol": "{{mgdl}} mg/dL (it was mmol/L)"
+    "unitPickMmol": "{{mgdl}} mg/dL (it was mmol/L)",
+    "bigDoseTitle": "Check the dose",
+    "bigDoseBody": "You entered {{dose}} U. Is that really the dose you injected?",
+    "bigDoseConfirm": "Yes, that's right",
+    "doseTooHigh": "A dose above {{max}} U cannot be logged — check the decimal point."
   },
   "tabs": {
     "home": "Home",

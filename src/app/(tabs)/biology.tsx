@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BevelCard, ChevronRight, PlusGlyph, Spinner } from '@/components/ui';
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
+import { confirmDelete } from '@/lib/confirm';
 import { parseDecimal, sanitizeDecimal } from '@/lib/num';
 import { deleteMeasure, saveMeasure } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
@@ -274,7 +275,9 @@ export default function BiologyScreen() {
                         })}
                       </Text>
                       <Pressable
-                        onPress={() => deleteMeasure(m.id)}
+                        onPress={async () => {
+                          if (await confirmDelete(t)) deleteMeasure(m.id);
+                        }}
                         hitSlop={8}
                       >
                         <Text style={styles.historyDelete}>✕</Text>
@@ -285,7 +288,9 @@ export default function BiologyScreen() {
               ) : null}
               {latest ? (
                 <Pressable
-                  onPress={() => deleteMeasure(latest.id)}
+                  onPress={async () => {
+                    if (await confirmDelete(t)) deleteMeasure(latest.id);
+                  }}
                   style={styles.deleteLatest}
                   hitSlop={6}
                 >

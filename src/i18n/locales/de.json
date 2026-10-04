@@ -345,7 +345,8 @@
     "bolusStepHint": "Richten Sie zuerst Ihr schnelles Insulin vollständig ein (Name, Verhältnisse pro Mahlzeit, Korrekturfaktor). Das lange Insulin folgt direkt danach.",
     "basalStepTitle": "Ihr langes Insulin",
     "basalStepSub": "Name, Dosis und Zeitpunkt der Injektion.",
-    "skipUnknown": "Ich kenne sie noch nicht"
+    "skipUnknown": "Ich kenne sie noch nicht",
+    "promoQueued": "Code gespeichert – er wird angewendet, sobald dein Konto erstellt ist."
   },
   "home": {
     "goodMorning": "Guten Morgen",
@@ -914,7 +915,11 @@
     "unitOutOfRange": "Wert außerhalb des erwarteten mg/dL-Bereichs (20–900). Bitte überprüfe die Eingabe.",
     "unitAmbiguous": "Dieser Wert ist nicht in mg/dL. In welcher Einheit zeigt dein Messgerät ihn an?",
     "unitPickGl": "{{mgdl}} mg/dL (war in g/L)",
-    "unitPickMmol": "{{mgdl}} mg/dL (war in mmol/L)"
+    "unitPickMmol": "{{mgdl}} mg/dL (war in mmol/L)",
+    "bigDoseTitle": "Dosis prüfen",
+    "bigDoseBody": "Du hast {{dose}} E eingegeben. Ist das wirklich die gespritzte Dosis?",
+    "bigDoseConfirm": "Ja, stimmt",
+    "doseTooHigh": "Eine Dosis über {{max}} E kann nicht gespeichert werden – prüfe das Komma."
   },
   "tabs": {
     "home": "Start",

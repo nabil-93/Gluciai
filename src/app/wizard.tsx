@@ -423,7 +423,9 @@ export default function WizardScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   /* Doctor promo code (optional): links the patient to their doctor + discount */
   const [promoCode, setPromoCode] = useState('');
-  const [promoState, setPromoState] = useState<'idle' | 'checking' | 'ok' | 'bad'>('idle');
+  /* 'queued' = accepted for a registration that does not exist yet; it is
+     redeemed right after the account is created (store audit F-01). */
+  const [promoState, setPromoState] = useState<'idle' | 'checking' | 'ok' | 'bad' | 'queued'>('idle');
   const [promoInfo, setPromoInfo] = useState<{ doctor: string; discount: number } | null>(null);
 
   const applyPromo = async () => {
@@ -442,6 +444,16 @@ export default function WizardScreen() {
       cancelLabel: t('profile.cancel'),
     });
     if (!agreed) return;
+    /* NO ACCOUNT YET (store audit F-01). Registration is deferred to the last
+       step, so at this point there is no session — and `redeem_promo_code`
+       needs one (it reads auth.uid(); anon may not call it). The code used to
+       be sent anyway and every new patient was told "invalid". It is now held
+       and redeemed right after sign-up, with the consent just given. */
+    if (getPendingRegistration()) {
+      setPromoState('queued');
+      setPromoInfo(null);
+      return;
+    }
     setPromoState('checking');
     try {
       const { data, error } = await supabase.rpc('redeem_promo_code', { p_code: code });
@@ -570,6 +582,16 @@ export default function WizardScreen() {
             }
           } catch {
             // Non-fatal: the account exists and onboarding must complete.
+          }
+        }
+        // The doctor's code the patient entered (and consented to) before the
+        // account existed. Best-effort: a code that fails here can still be
+        // added later from Profile → Doctor.
+        if (promoState === 'queued' && promoCode.trim()) {
+          try {
+            await supabase.rpc('redeem_promo_code', { p_code: promoCode.trim() });
+          } catch {
+            // non-fatal
           }
         }
         clearPendingRegistration();
@@ -1142,7 +1164,12 @@ export default function WizardScreen() {
                     <Text style={styles.promoTitle}>{t('wizard.promoTitle')}</Text>
                   </View>
                   <Text style={styles.promoSub}>{t('wizard.promoSub')}</Text>
-                  {promoState === 'ok' && promoInfo ? (
+                  {promoState === 'queued' ? (
+                    <View style={styles.promoOkBox}>
+                      <Text style={{ fontSize: 15 }}>✅</Text>
+                      <Text style={styles.promoOkText}>{t('wizard.promoQueued')}</Text>
+                    </View>
+                  ) : promoState === 'ok' && promoInfo ? (
                     <View style={styles.promoOkBox}>
                       <Text style={{ fontSize: 15 }}>✅</Text>
                       <Text style={styles.promoOkText}>

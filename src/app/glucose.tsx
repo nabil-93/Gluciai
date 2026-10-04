@@ -37,6 +37,7 @@ import { CoachChatModal } from '@/components/CoachChatModal';
 import { DayPickerSheet } from '@/components/calendar/DayPickerSheet';
 import type { DayRing } from '@/components/calendar/RingCalendar';
 import { nowMs } from '@/lib/clock';
+import { confirmDelete } from '@/lib/confirm';
 import { deleteGlucose } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import { shadows } from '@/theme';
@@ -1085,7 +1086,15 @@ export default function GlucoseScreen() {
                       <Text style={{ color: z.color }}>{t(z.labelKey)}</Text>
                     </Text>
                   </View>
-                  <Pressable onPress={() => deleteGlucose(g.id)} hitSlop={6} style={styles.measureDelBtn}>
+                  <Pressable
+                    onPress={async () => {
+                      if (await confirmDelete(t)) deleteGlucose(g.id);
+                    }}
+                    hitSlop={6}
+                    style={styles.measureDelBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('journalV2.delete')}
+                  >
                     <Text style={styles.measureDelX}>✕</Text>
                   </Pressable>
                 </View>

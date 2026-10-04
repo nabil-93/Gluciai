@@ -576,6 +576,50 @@ export function updateMealType(rowId: string, mealType: MealType) {
     );
 }
 
+/**
+ * Replace the plate of a meal ALREADY in the journal (store audit F-03).
+ *
+ * Correcting the foods after saving — or correcting yesterday's meal from the
+ * Nutrition page — used to go through `saveMeal` again, which wrote a SECOND
+ * meal: the day's carbohydrate doubled, and a past meal re-appeared at "now".
+ * The row keeps its id and its original timestamp; only the plate (and the
+ * slot, when given) change. The returned row says whether the server took it.
+ */
+export async function updateMealResult(
+  rowId: string,
+  result: NutritionResult,
+  mealType?: MealType
+): Promise<MealScan | null> {
+  useAppStore
+    .getState()
+    .updateMeal(rowId, { result, ...(mealType ? { meal_type: mealType } : {}) });
+  const updated = useAppStore.getState().meals.find((m) => m.id === rowId) ?? null;
+  if (!updated) return null;
+  if (isDemoMode || !supabase || !UUID_RE.test(rowId)) return updated;
+  try {
+    const { error } = await supabase
+      .from('meal_scans')
+      .update({
+        result,
+        // Same mirror rule as `saveMeal`: a value that is not known is null.
+        calories: mirror(result, 'calories', result.calories),
+        carbs: result.carbs_known === false ? null : result.carbohydrates,
+        sugar: mirror(result, 'sugar', result.sugar),
+        protein: mirror(result, 'protein', result.protein),
+        fat: mirror(result, 'fat', result.fat),
+        fiber: mirror(result, 'fiber', result.fiber),
+        glycemic_index: result.glycemic_index,
+        confidence: result.confidence,
+        ...(mealType ? { meal_type: mealType } : {}),
+      })
+      .eq('id', rowId);
+    if (error) return { ...updated, pending_sync: true, sync_state: 'failed' };
+    return updated;
+  } catch {
+    return { ...updated, pending_sync: true, sync_state: 'failed' };
+  }
+}
+
 export function deleteLabReport(rowId: string) {
   useAppStore.getState().removeLabReport(rowId);
   remoteDelete('lab_reports', rowId);

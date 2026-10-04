@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 
 import { ActionGlyph, FadeInView, HeroScreen, HERO_INK, HERO_MUTED, Spinner } from '@/components/ui';
+import { confirmAsync } from '@/lib/confirm';
 import { guessMealTime } from '@/services/bolusEngine';
 import { saveInsulin } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
@@ -26,6 +27,16 @@ const MEALS: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 /** A pen doses in half units — so does this. */
 const STEP = 0.5;
+
+/*
+ * TYPO GUARDS (store audit C-11). A logged dose feeds insulin-on-board, so a
+ * "250" meant as "25,0" would tell the calculator 250 U are still active for
+ * four hours. Above MAX the entry is refused (the same 100 U bound the
+ * assistant's logger applies); above the per-type CONFIRM threshold the
+ * patient is asked once to confirm the figure.
+ */
+const MAX_LOGGED_DOSE = 100;
+const CONFIRM_ABOVE: Record<InsulinType, number> = { rapid: 25, long: 60, mixed: 60 };
 
 export default function LogInsulinScreen() {
   const router = useRouter();
@@ -71,8 +82,19 @@ export default function LogInsulinScreen() {
     else router.replace('/(tabs)');
   };
 
+  const tooHigh = Number.isFinite(num) && num > MAX_LOGGED_DOSE;
+
   const save = async () => {
-    if (!num || num <= 0) return;
+    if (!num || num <= 0 || tooHigh) return;
+    if (num > CONFIRM_ABOVE[type]) {
+      const ok = await confirmAsync({
+        title: t('log.bigDoseTitle'),
+        message: t('log.bigDoseBody', { dose: num }),
+        confirmLabel: t('log.bigDoseConfirm'),
+        cancelLabel: t('common.cancel'),
+      });
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       await saveInsulin(num, type, notes || undefined, undefined, meal);
@@ -205,7 +227,10 @@ export default function LogInsulinScreen() {
 
       {/* ── Save ── */}
       <FadeInView delay={230}>
-        <Pressable onPress={save} disabled={!num || saving} style={{ marginTop: 22 }}>
+        {tooHigh ? (
+          <Text style={styles.tooHigh}>{t('log.doseTooHigh', { max: MAX_LOGGED_DOSE })}</Text>
+        ) : null}
+        <Pressable onPress={save} disabled={!num || saving || tooHigh} style={{ marginTop: 22 }}>
           <LinearGradient
             colors={!num ? ['#D8DEEC', '#D8DEEC'] : [active.color, shade(active.color)]}
             start={{ x: 0, y: 0 }}
@@ -236,6 +261,14 @@ function shade(hex: string): string {
 }
 
 const styles = StyleSheet.create({
+  tooHigh: {
+    marginTop: 14,
+    fontFamily: F600,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#B42318',
+    textAlign: 'center',
+  },
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 26,

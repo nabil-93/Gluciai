@@ -49,3 +49,19 @@ export function notify(title: string, message?: string) {
   }
   Alert.alert(title, message);
 }
+
+/**
+ * "Delete this entry?" — the one confirmation every logged health entry goes
+ * through before it is removed (store audit F-06). Glucose, activity and body
+ * measures used to vanish on a single tap or a hidden long-press, with no undo;
+ * a deleted insulin or glucose row also changes what the dose calculator sees.
+ */
+export function confirmDelete(t: (key: string) => string): Promise<boolean> {
+  return confirmAsync({
+    title: t('journalV2.deleteConfirmT'),
+    message: t('journalV2.deleteConfirmM'),
+    confirmLabel: t('journalV2.delete'),
+    cancelLabel: t('common.cancel'),
+    destructive: true,
+  });
+}

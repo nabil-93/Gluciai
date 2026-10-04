@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PremiumEmptyState, PressableScale, Spinner } from '@/components/ui';
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
 import { nowMs } from '@/lib/clock';
+import { confirmDelete } from '@/lib/confirm';
 import { deleteActivity, saveActivity } from '@/services/data';
 import { useAppStore } from '@/store/useAppStore';
 import type { ActivityIntensity, ActivityKind } from '@/types';
@@ -297,7 +298,9 @@ export default function ActivityScreen() {
               <Pressable
                 key={a.id}
                 style={styles.row}
-                onLongPress={() => deleteActivity(a.id)}
+                onLongPress={async () => {
+                  if (await confirmDelete(t)) deleteActivity(a.id);
+                }}
               >
                 <View style={styles.rowIcon}>
                   <Text style={{ fontSize: 17 }}>{KIND_EMOJI[a.kind]}</Text>

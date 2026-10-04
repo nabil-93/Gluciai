@@ -345,7 +345,8 @@
     "bolusStepHint": "Renseignez d’abord votre insuline rapide en entier (nom, ratios par repas, facteur de correction). L’insuline lente viendra juste après.",
     "basalStepTitle": "Votre insuline lente",
     "basalStepSub": "Le nom, la dose et le moment de l’injection.",
-    "skipUnknown": "Je ne les connais pas encore"
+    "skipUnknown": "Je ne les connais pas encore",
+    "promoQueued": "Code enregistré — il sera validé dès la création de ton compte."
   },
   "home": {
     "goodMorning": "Bonjour",
@@ -914,7 +915,11 @@
     "unitOutOfRange": "Valeur hors de la plage attendue en mg/dL (20–900). Vérifiez la valeur saisie.",
     "unitAmbiguous": "Cette valeur n'est pas en mg/dL. Dans quelle unité ton lecteur l'affiche-t-il ?",
     "unitPickGl": "{{mgdl}} mg/dL (c'était en g/L)",
-    "unitPickMmol": "{{mgdl}} mg/dL (c'était en mmol/L)"
+    "unitPickMmol": "{{mgdl}} mg/dL (c'était en mmol/L)",
+    "bigDoseTitle": "Vérifie la dose",
+    "bigDoseBody": "Tu as saisi {{dose}} U. C'est bien la dose injectée ?",
+    "bigDoseConfirm": "Oui, c'est bien ça",
+    "doseTooHigh": "Une dose au-delà de {{max}} U ne peut pas être enregistrée — vérifie la virgule."
   },
   "tabs": {
     "home": "Accueil",
