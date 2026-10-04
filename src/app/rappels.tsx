@@ -58,7 +58,7 @@ export default function RappelsScreen() {
     setActivating(true);
     setDenied(false);
     try {
-      const result = await refreshSmartReminders();
+      const result = await refreshSmartReminders({ ask: true });
       if (result === 'scheduled') setActivated(true);
       else if (result === 'denied') setDenied(true);
       else notify(t('rappelsPage.title'), t('rappelsPage.unavailable'));

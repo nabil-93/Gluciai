@@ -1,0 +1,8 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "GluciAI",
+    "NSCameraUsageDescription": "يستخدم GluciAI الكاميرا لتحليل وجباتك ومسح الرموز الشريطية وتصوير نتائج تحاليلك.",
+    "NSPhotoLibraryUsageDescription": "يتيح لك GluciAI استيراد صورة وجبة أو تحليل مخبري من مكتبة الصور.",
+    "NSMicrophoneUsageDescription": "يستخدم GluciAI الميكروفون لتتحدث مع المساعد الذكي وتسجّل وجباتك وسكر الدم والأنسولين بالصوت."
+  }
+}

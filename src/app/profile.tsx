@@ -152,6 +152,12 @@ function RowIcon({ name, color }: { name: string; color: string }) {
         stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
       />
     ),
+    lock: (
+      <>
+        <Rect x={4} y={11} width={16} height={10} rx={2.5} stroke={color} strokeWidth={2} />
+        <Path d="M8 11V7a4 4 0 0 1 8 0v4" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      </>
+    ),
     globe: (
       <>
         <Circle cx={12} cy={12} r={10} stroke={color} strokeWidth={2} />
@@ -571,6 +577,16 @@ export default function ProfileScreen() {
             title={t('profile.sectionSupport')}
             sub={t('profile.subSupport')}
             onPress={() => router.push('/support' as never)}
+          />
+          <Divider />
+          {/* Privacy policy, consents and account deletion (store audit B-05) */}
+          <Row
+            icon="lock"
+            tint="#EEF0FB"
+            color="#5B5FC7"
+            title={t('profile.privacyRowTitle')}
+            sub={t('profile.privacyRowSub')}
+            onPress={() => router.push('/privacy' as never)}
           />
           <Divider />
           <Row

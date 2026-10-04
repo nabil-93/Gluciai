@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   },
   value: {
     ...typography.title,
-    fontWeight: '750' as any,
+    fontWeight: '800' as any,
   },
   label: {
     fontSize: 16,

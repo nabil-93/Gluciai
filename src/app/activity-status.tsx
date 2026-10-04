@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headTitle: { fontSize: 19, fontWeight: '750' as any, color: colors.text },
+  headTitle: { fontSize: 19, fontWeight: '800' as any, color: colors.text },
   iconsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  centerTitle: { textAlign: 'center', fontSize: 19, fontWeight: '750' as any, color: colors.text },
+  centerTitle: { textAlign: 'center', fontSize: 19, fontWeight: '800' as any, color: colors.text },
   centerBody: {
     marginTop: 10,
     textAlign: 'center',
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  optionLabel: { fontSize: 16, fontWeight: '650' as any, color: colors.text },
+  optionLabel: { fontSize: 16, fontWeight: '700' as any, color: colors.text },
   optionDesc: { marginTop: 2, fontSize: 13.5, color: colors.textSecondary },
   radio: {
     width: 22,

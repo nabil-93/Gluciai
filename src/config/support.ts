@@ -12,7 +12,7 @@
 export const SUPPORT_WHATSAPP = '491637606478';
 
 /** Prefilled first message, so the user does not start from a blank chat. */
-export const SUPPORT_WHATSAPP_GREETING = 'Bonjour, j’ai besoin d’aide avec GlucoAI.';
+export const SUPPORT_WHATSAPP_GREETING = 'Bonjour, j’ai besoin d’aide avec GluciAI.';
 
 export const hasWhatsappSupport = () => SUPPORT_WHATSAPP.trim().length > 0;
 

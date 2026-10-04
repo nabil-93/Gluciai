@@ -192,7 +192,19 @@ export type ReminderScheduleResult = 'scheduled' | 'denied' | 'unavailable';
  * tell the truth. The two fire-and-forget callers in `(tabs)/_layout.tsx`
  * ignore the value, which is why this stays a return rather than a throw.
  */
-export async function refreshSmartReminders(): Promise<ReminderScheduleResult> {
+export async function refreshSmartReminders(
+  /**
+   * Show the OS permission prompt if it has not been answered yet.
+   *
+   * Store audit F-15: the prompt used to fire the moment the dashboard
+   * opened, before the patient knew what reminders were — Apple asks that a
+   * permission be requested in context, and a reflexive "Don't allow" there
+   * is final on iOS. Only the Rappels screen, where the patient taps
+   * "activate" after reading what the reminders are, passes true. The
+   * background refreshes just reschedule when permission already exists.
+   */
+  opts: { ask?: boolean } = {}
+): Promise<ReminderScheduleResult> {
   if (Platform.OS === 'web') return 'unavailable';
 
   try {
@@ -210,6 +222,7 @@ export async function refreshSmartReminders(): Promise<ReminderScheduleResult> {
 
     const perms = await Notifications.getPermissionsAsync();
     if (!perms.granted) {
+      if (!opts.ask) return 'denied';
       const req = await Notifications.requestPermissionsAsync();
       // The patient said no (or the OS will no longer ask). Nothing is
       // scheduled — the caller must NOT report success.

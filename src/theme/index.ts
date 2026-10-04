@@ -162,7 +162,7 @@ export const typography = {
   metric: {
     fontFamily,
     fontSize: 30,
-    fontWeight: '750' as any,
+    fontWeight: '800' as any,
     letterSpacing: -0.5,
     color: colors.text,
   },

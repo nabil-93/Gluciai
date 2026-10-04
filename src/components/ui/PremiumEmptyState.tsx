@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   emoji: { fontSize: 34 },
-  title: { fontSize: 18, fontWeight: '750' as any, color: '#9B9BA1' },
+  title: { fontSize: 18, fontWeight: '800' as any, color: '#9B9BA1' },
   message: {
     fontSize: 15,
     lineHeight: 21,

@@ -1,0 +1,8 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "GluciAI",
+    "NSCameraUsageDescription": "GluciAI uses the camera to analyse your meals, scan barcodes and photograph your lab reports.",
+    "NSPhotoLibraryUsageDescription": "GluciAI lets you import a meal or lab report photo from your library.",
+    "NSMicrophoneUsageDescription": "GluciAI uses the microphone so you can talk to the AI assistant and log your meals, glucose and insulin by voice."
+  }
+}

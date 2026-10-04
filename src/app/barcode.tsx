@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  headTitle: { fontSize: 19, fontWeight: '750' as any, color: colors.text },
+  headTitle: { fontSize: 19, fontWeight: '800' as any, color: colors.text },
   cameraWrap: {
     height: 260,
     borderRadius: 24,
@@ -752,7 +752,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  productName: { fontSize: 16.5, fontWeight: '750' as any, color: colors.text },
+  productName: { fontSize: 16.5, fontWeight: '800' as any, color: colors.text },
   nameInput: {
     fontSize: 16.5,
     fontWeight: '700',
@@ -793,7 +793,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: 'center',
   },
-  portionTitle: { fontSize: 15, fontWeight: '650' as any, color: colors.text },
+  portionTitle: { fontSize: 15, fontWeight: '700' as any, color: colors.text },
   portionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   pChip: {
     paddingVertical: 9,
@@ -819,7 +819,7 @@ const styles = StyleSheet.create({
   verdictScore: { fontSize: 15, fontWeight: '800' },
   /** Whose indicator the figure below is (Phase 2 interim name). */
   verdictTitle: { fontSize: 10, fontWeight: '600', color: colors.textSecondary, marginBottom: 2 },
-  verdictQ: { marginTop: 8, fontSize: 16, fontWeight: '750' as any, color: colors.text },
+  verdictQ: { marginTop: 8, fontSize: 16, fontWeight: '800' as any, color: colors.text },
   verdictA: { marginTop: 4, fontSize: 14.5, lineHeight: 20, color: '#3E3E44' },
   verdictReason: { marginTop: 4, fontSize: 13, lineHeight: 18, color: colors.textSecondary },
 });

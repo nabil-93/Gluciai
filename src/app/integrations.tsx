@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  headTitle: { fontSize: 19, fontWeight: '750' as any, color: colors.text },
+  headTitle: { fontSize: 19, fontWeight: '800' as any, color: colors.text },
   subtitle: {
     fontSize: 14,
     lineHeight: 20,
@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
   card: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  name: { fontSize: 16, fontWeight: '750' as any, color: colors.text },
+  name: { fontSize: 16, fontWeight: '800' as any, color: colors.text },
   desc: { marginTop: 3, fontSize: 13, lineHeight: 18, color: colors.textSecondary },
   connectBtn: {
     backgroundColor: colors.ink,
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 14,
   },
-  soonText: { fontSize: 13, fontWeight: '650' as any, color: colors.textSecondary },
+  soonText: { fontSize: 13, fontWeight: '700' as any, color: colors.textSecondary },
   note: {
     marginTop: 18,
     fontSize: 12.5,

@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  headTitle: { fontSize: 19, fontWeight: '750' as any, color: colors.text },
+  headTitle: { fontSize: 19, fontWeight: '800' as any, color: colors.text },
   introCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 26,
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
   },
-  dishName: { fontSize: 16.5, fontWeight: '750' as any, color: colors.text },
+  dishName: { fontSize: 16.5, fontWeight: '800' as any, color: colors.text },
   dishPortion: { marginTop: 2, fontSize: 12.5, color: colors.textSecondary },
   scoreWrap: { alignItems: 'center' },
   scoreNum: { fontSize: 26, fontWeight: '800' },
@@ -365,5 +365,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
-  dishSaveText: { fontSize: 14, fontWeight: '650' as any, color: colors.ai },
+  dishSaveText: { fontSize: 14, fontWeight: '700' as any, color: colors.ai },
 });

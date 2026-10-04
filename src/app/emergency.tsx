@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   doctorNum: { fontSize: 15, fontWeight: '700', color: '#fff' },
 
   aidCard: { marginTop: 16 },
-  aidTitle: { fontSize: 17, fontWeight: '750' as any, color: colors.text, marginBottom: 10 },
+  aidTitle: { fontSize: 17, fontWeight: '800' as any, color: colors.text, marginBottom: 10 },
   aidRow: { flexDirection: 'row', gap: 12, marginTop: 10 },
   aidNum: {
     width: 24,

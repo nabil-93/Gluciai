@@ -1,0 +1,8 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "GluciAI",
+    "NSCameraUsageDescription": "GluciAI utilise l’appareil photo pour analyser tes repas, scanner les codes-barres et photographier tes analyses de laboratoire.",
+    "NSPhotoLibraryUsageDescription": "GluciAI te permet d’importer une photo de repas ou d’analyse de laboratoire depuis ta photothèque.",
+    "NSMicrophoneUsageDescription": "GluciAI utilise le micro pour que tu puisses parler à l’assistant IA et noter tes repas, ta glycémie et ton insuline à la voix."
+  }
+}

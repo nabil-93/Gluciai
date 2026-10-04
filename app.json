@@ -6,16 +6,18 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "glucoai",
-    "userInterfaceStyle": "dark",
-    "backgroundColor": "#101014",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#f8f9fc",
     "ios": {
       "icon": "./assets/images/icon.png",
       "supportsTablet": false,
       "bundleIdentifier": "com.nabil.glucoai",
       "infoPlist": {
-        "NSCameraUsageDescription": "GluciAI uses the camera to analyze your meals with AI.",
-        "NSPhotoLibraryUsageDescription": "GluciAI lets you import meal photos for AI analysis.",
-        "NSMicrophoneUsageDescription": "GluciAI uses the microphone so you can talk to the AI assistant and log your meals, glucose and insulin by voice."
+        "NSCameraUsageDescription": "GluciAI uses the camera to analyse your meals, scan barcodes and photograph your lab reports.",
+        "NSPhotoLibraryUsageDescription": "GluciAI lets you import a meal or lab report photo from your library.",
+        "NSMicrophoneUsageDescription": "GluciAI uses the microphone so you can talk to the AI assistant and log your meals, glucose and insulin by voice.",
+        "CFBundleAllowMixedLocalizations": true,
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -41,17 +43,22 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#101014",
+          "backgroundColor": "#ffffff",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 96
+          "imageWidth": 160
         }
       ],
-      "expo-localization",
+      [
+        "expo-localization",
+        {
+          "supportsRTL": true
+        }
+      ],
       "expo-secure-store",
       [
         "expo-camera",
         {
-          "cameraPermission": "GluciAI uses the camera to analyze your meals with AI."
+          "cameraPermission": "GluciAI uses the camera to analyse your meals, scan barcodes and photograph your lab reports."
         }
       ],
       "expo-font",
@@ -62,7 +69,14 @@
           "project": "glucoai-app"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#1fbc78"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -74,6 +88,12 @@
         "projectId": "f42952af-b211-45f4-bcc4-5194087ab3b5"
       }
     },
-    "owner": "tsuhel"
+    "owner": "tsuhel",
+    "locales": {
+      "fr": "./locales/fr.json",
+      "en": "./locales/en.json",
+      "de": "./locales/de.json",
+      "ar": "./locales/ar.json"
+    }
   }
 }

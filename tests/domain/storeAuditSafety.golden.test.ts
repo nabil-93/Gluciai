@@ -158,3 +158,84 @@ describe('D-05 · account deletion empties a bucket of any size', () => {
     expect(s).not.toContain('json({ error: String(error) }');
   });
 });
+
+describe('B-05 / B-10 · public privacy policy and account-deletion page', () => {
+  it('both routes exist and are linked from the profile', () => {
+    expect(src('src/app/privacy.tsx')).toContain('export default function PrivacyScreen');
+    expect(src('src/app/delete-account.tsx')).toContain('await deleteAccount()');
+    expect(src('src/app/profile.tsx')).toContain("router.push('/privacy' as never)");
+  });
+
+  it('the deletion page erases through the same edge function, after a confirm', () => {
+    const s = src('src/app/delete-account.tsx');
+    expect(s.indexOf('confirmAsync(')).toBeLessThan(s.indexOf('await deleteAccount()'));
+  });
+
+  it('the policy names every processor, in every language', () => {
+    for (const l of LOCALES) {
+      const p = locale(l).legal.processorsB as string;
+      for (const name of ['Supabase', 'Google', 'Gemini', 'Vercel']) {
+        expect(p, `${l} ${name}`).toContain(name);
+      }
+    }
+  });
+});
+
+describe('B-08 / B-09 · the AI consent tells the truth', () => {
+  it('names Google Gemini and no longer promises "never used for training" on Google’s behalf', () => {
+    for (const l of LOCALES) {
+      const c = locale(l).consent;
+      expect(c.aiDesc, l).toContain('Gemini');
+      expect(c.aiDetailIntro, l).toContain('Google');
+    }
+    expect(locale('fr').consent.aiS3B).not.toContain('Elles ne servent jamais');
+  });
+
+  it('only the first name is sent to the assistant', () => {
+    expect(src('src/services/ai.ts')).toContain("const firstName = p.name?.trim().split(/\\s+/)[0] || '?';");
+    expect(src('src/services/ai.ts')).not.toContain('`Profile: name ${p.name');
+  });
+});
+
+describe('U-01 / U-03 / K-03 / K-06 · native config', () => {
+  const app = () => JSON.parse(src('app.json')).expo;
+
+  it('the app is declared light, like every screen it draws', () => {
+    expect(app().userInterfaceStyle).toBe('light');
+  });
+
+  it('iOS permission texts exist in the four app languages', () => {
+    const e = app();
+    expect(Object.keys(e.locales).sort()).toEqual(['ar', 'de', 'en', 'fr']);
+    for (const l of LOCALES) {
+      const ios = JSON.parse(src(`locales/${l}.json`)).ios;
+      expect(ios.NSCameraUsageDescription, l).toBeTruthy();
+      expect(ios.NSPhotoLibraryUsageDescription, l).toBeTruthy();
+      expect(ios.NSMicrophoneUsageDescription, l).toBeTruthy();
+    }
+  });
+
+  it('declares no non-exempt encryption (no export question on every upload)', () => {
+    expect(app().ios.infoPlist.ITSAppUsesNonExemptEncryption).toBe(false);
+  });
+
+  it('Android notifications have a real monochrome icon', () => {
+    const plugin = app().plugins.find((p: unknown) => Array.isArray(p) && p[0] === 'expo-notifications');
+    expect(plugin?.[1].icon).toBe('./assets/images/notification-icon.png');
+  });
+
+  it('an Arabic phone starts right-to-left (F-12)', () => {
+    const plugin = app().plugins.find((p: unknown) => Array.isArray(p) && p[0] === 'expo-localization');
+    expect(plugin?.[1].supportsRTL).toBe(true);
+  });
+});
+
+describe('U-04 / U-09 / U-10 · polish', () => {
+  it('the welcome mock-up no longer shows a sleep feature the app does not have', () => {
+    expect(src('src/app/welcome.tsx')).not.toContain("t('welcome.sleep')");
+  });
+
+  it('the support greeting carries the current brand', () => {
+    expect(src('src/config/support.ts')).not.toContain('GlucoAI');
+  });
+});

@@ -1,0 +1,8 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "GluciAI",
+    "NSCameraUsageDescription": "GluciAI nutzt die Kamera, um deine Mahlzeiten zu analysieren, Barcodes zu scannen und Laborbefunde zu fotografieren.",
+    "NSPhotoLibraryUsageDescription": "GluciAI ermöglicht dir, ein Foto einer Mahlzeit oder eines Laborbefunds aus deiner Mediathek zu importieren.",
+    "NSMicrophoneUsageDescription": "GluciAI nutzt das Mikrofon, damit du mit dem KI-Assistenten sprechen und Mahlzeiten, Blutzucker und Insulin per Sprache erfassen kannst."
+  }
+}

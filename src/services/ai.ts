@@ -473,8 +473,11 @@ export function buildHealthContext(): string {
 
   if (profile) {
     const p = profile;
+    // First name only (store audit B-08 — data minimisation): the assistant
+    // greets the patient by it; a surname adds nothing and is not sent.
+    const firstName = p.name?.trim().split(/\s+/)[0] || '?';
     lines.push(
-      `Profile: name ${p.name || '?'}; diabetes ${p.diabetes_type}; ` +
+      `Profile: name ${firstName}; diabetes ${p.diabetes_type}; ` +
         `insulin types [${(p.insulin_types ?? []).join(', ') || 'none'}]; ` +
         `target ${p.target_low}-${p.target_high} mg/dL; ` +
         `carb ratio ${p.carb_ratio ?? '?'} g/U; correction ${p.correction_factor ?? '?'} mg/dL per U; ` +

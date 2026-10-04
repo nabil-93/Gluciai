@@ -298,5 +298,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     ...shadows.floating,
   },
-  todayBtnText: { fontSize: 16, fontWeight: '650' as any, color: colors.ai },
+  todayBtnText: { fontSize: 16, fontWeight: '700' as any, color: colors.ai },
 });

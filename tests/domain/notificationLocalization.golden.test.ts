@@ -206,9 +206,18 @@ describe('"reminders activated" means the OS really accepted them', () => {
   it('THE FIX: the service reports its outcome instead of returning void', () => {
     const s = service();
     expect(s).toContain('ReminderScheduleResult');
-    expect(s).toContain(
-      'export async function refreshSmartReminders(): Promise<ReminderScheduleResult>'
+    // Since store audit F-15 it also takes { ask } — see the next block.
+    expect(s).toMatch(
+      /export async function refreshSmartReminders\([\s\S]*?\): Promise<ReminderScheduleResult>/
     );
+  });
+
+  it('F-15: only an explicit activation shows the OS prompt', () => {
+    const s = service();
+    expect(s).toContain("if (!opts.ask) return 'denied';");
+    expect(screen()).toContain('refreshSmartReminders({ ask: true })');
+    // The background refreshes on the dashboard never ask.
+    expect(src('src/app/(tabs)/_layout.tsx')).not.toContain('ask: true');
   });
 
   it('a denied permission is reported as denied, not as success', () => {

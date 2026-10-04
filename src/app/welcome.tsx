@@ -470,7 +470,7 @@ export default function WelcomeScreen() {
               <View style={{ gap: 8 }}>
                 <ProgressRow label={t('welcome.nutrition')} value={85} color="#58c46e" />
                 <ProgressRow label={t('welcome.activity')} value={40} color="#4aa3e8" />
-                <ProgressRow label={t('welcome.sleep')} value={70} color="#f2c94c" />
+                <ProgressRow label={t('welcome.glucose')} value={70} color="#f2c94c" />
               </View>
             </Animated.View>
 
