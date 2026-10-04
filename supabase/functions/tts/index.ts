@@ -124,7 +124,8 @@ Deno.serve(async (req) => {
 
     return json({ result: { audio, sampleRate: rate } });
   } catch (error) {
-    return json({ error: String(error) }, 500);
+    console.error('[tts]', String(error));
+    return json({ error: 'internal_error' }, 500);
   }
 });
 

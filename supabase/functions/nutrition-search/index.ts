@@ -66,7 +66,8 @@ Deno.serve(async (req) => {
     return json({ hit });
   } catch (error) {
     // Never fail hard — the engine treats a null hit as "fall through".
-    return json({ hit: null, error: String(error) });
+    console.error('[nutrition-search]', String(error));
+    return json({ hit: null, error: 'internal_error' });
   }
 });
 

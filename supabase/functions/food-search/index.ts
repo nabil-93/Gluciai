@@ -132,7 +132,8 @@ Deno.serve(async (req) => {
     if (error instanceof AiUnavailableError) {
       return json(aiUnavailableBody(error), 503);
     }
-    return json({ error: String(error) }, 500);
+    console.error('[food-search]', String(error));
+    return json({ error: 'internal_error' }, 500);
   }
 });
 

@@ -83,14 +83,18 @@ Deno.serve(async (req) => {
       }
     );
     if (!r.ok) {
-      const detail = await r.text();
-      return json({ error: 'token provider error', detail }, 502);
+      console.error('[live-token] provider', r.status, (await r.text()).slice(0, 500));
+      return json(
+        { error: 'token provider error', code: r.status === 429 ? 'rate_limited' : 'provider_error' },
+        502
+      );
     }
     const data = await r.json();
     // data.name is the ephemeral token (format "auth_tokens/…")
     return json({ token: data.name });
   } catch (error) {
-    return json({ error: String(error) }, 500);
+    console.error('[live-token]', String(error));
+    return json({ error: 'internal_error' }, 500);
   }
 });
 

@@ -96,11 +96,16 @@ export async function asQuotaError(
     return new QuotaError(body as { feature: UsageFeature });
   }
   const ctx = (error as { context?: unknown } | null)?.context as
-    | { json?: () => Promise<unknown> }
+    | { json?: () => Promise<unknown>; clone?: () => { json: () => Promise<unknown> } }
     | undefined;
   if (ctx && typeof ctx.json === 'function') {
     try {
-      const parsed = (await ctx.json()) as {
+      // Read a CLONE. A Response body can be read once, and the callers read
+      // it again right after this check for the server's own error code
+      // ('ai_unavailable', 'rate_limited'). Reading the original here made
+      // that second read throw, so "the service is busy" was never shown.
+      const source = typeof ctx.clone === 'function' ? ctx.clone() : ctx;
+      const parsed = (await source.json!()) as {
         error?: string;
         feature?: UsageFeature;
         period?: UsagePeriod;

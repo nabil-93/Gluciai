@@ -439,7 +439,8 @@ Make it authentic and realistic; estimate nutrition PER SERVING; never zeros.`;
 
     return json({ error: `unknown action: ${action}` }, 400);
   } catch (error) {
-    return json({ error: String(error) }, 500);
+    console.error('[world-recipes]', String(error));
+    return json({ error: 'internal_error' }, 500);
   }
 });
 

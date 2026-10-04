@@ -64,7 +64,14 @@ export function scanErrorKey(
 ): 'scanner.rateLimited' | 'scanner.serviceBusy' | 'scanner.scanFailed' {
   const err = e as { message?: string; code?: string; context?: { status?: number } };
   const msg = String(err?.message ?? e);
-  if (/429|quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(msg)) return 'scanner.rateLimited';
+  // Since S-08 the function answers a CODE (and HTTP 429) instead of echoing
+  // the provider's text, so the code and the status are what is checked.
+  if (
+    err?.code === 'rate_limited' ||
+    err?.context?.status === 429 ||
+    /429|quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(msg)
+  )
+    return 'scanner.rateLimited';
   if (
     err?.code === 'ai_unavailable' ||
     /ai_unavailable/i.test(msg) ||

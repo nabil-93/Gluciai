@@ -118,7 +118,8 @@ describe('linked doctor — writes are NOT granted', () => {
   it('cannot UPDATE the patient clinical data', async () => {
     const { data, error } = await linkedDoctor.client
       .from('glucose_logs')
-      .update({ value: 999 })
+      // In range (0036 bounds glucose to 20..900), so only RLS can refuse it.
+      .update({ value: 400 })
       .eq('id', patientGlucoseId)
       .select();
     expect(error).toBeNull();

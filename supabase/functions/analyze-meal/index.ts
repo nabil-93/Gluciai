@@ -215,11 +215,23 @@ Deno.serve(async (req) => {
     if (error instanceof AiUnavailableError) {
       return json(aiUnavailableBody(error), 503);
     }
-    return json({ error: String(error) }, 500);
+    // A provider rate limit is not the patient's fault either — its own code.
+    if (error instanceof ProviderError && error.status === 429) {
+      return json({ error: 'rate_limited', code: 'rate_limited' }, 429);
+    }
+    console.error('[analyze-meal]', String(error));
+    return json({ error: 'internal_error' }, 500);
   }
 });
 
 /* ─────────────────────────────── GEMINI ─────────────────────────────── */
+
+/** A non-2xx answer from Gemini; only the status leaves the function. */
+class ProviderError extends Error {
+  constructor(readonly status: number) {
+    super(`provider ${status}`);
+  }
+}
 
 async function callGemini(
   prompt: string,
@@ -284,8 +296,9 @@ async function callGemini(
   });
 
   if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`Gemini error ${res.status}: ${detail}`);
+    // The provider body stays in the function log (store audit S-08).
+    console.error('[analyze-meal] gemini', res.status, (await res.text()).slice(0, 500));
+    throw new ProviderError(res.status);
   }
 
   const data = await res.json();

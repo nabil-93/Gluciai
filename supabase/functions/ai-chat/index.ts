@@ -187,8 +187,11 @@ BEFORE injecting this modified dose.`;
         }
       );
       if (!response.ok) {
-        const detail = await response.text();
-        return json({ error: 'AI provider error', detail }, 502);
+        console.error('[ai-chat] provider', response.status, (await response.text()).slice(0, 500));
+        return json(
+          { error: 'AI provider error', code: response.status === 429 ? 'rate_limited' : 'provider_error' },
+          502
+        );
       }
       const data = await response.json();
       const text = (data.candidates?.[0]?.content?.parts ?? [])
@@ -325,8 +328,11 @@ matters more than detail.`;
         }
       );
       if (!response.ok) {
-        const detail = await response.text();
-        return json({ error: 'AI provider error', detail }, 502);
+        console.error('[ai-chat] provider', response.status, (await response.text()).slice(0, 500));
+        return json(
+          { error: 'AI provider error', code: response.status === 429 ? 'rate_limited' : 'provider_error' },
+          502
+        );
       }
       const data = await response.json();
       const text = (data.candidates?.[0]?.content?.parts ?? [])
@@ -531,8 +537,11 @@ Rules:
         }
       );
       if (!response.ok) {
-        const detail = await response.text();
-        return json({ error: 'AI provider error', detail }, 502);
+        console.error('[ai-chat] provider', response.status, (await response.text()).slice(0, 500));
+        return json(
+          { error: 'AI provider error', code: response.status === 429 ? 'rate_limited' : 'provider_error' },
+          502
+        );
       }
       const data = await response.json();
       const text = (data.candidates?.[0]?.content?.parts ?? [])
@@ -715,8 +724,11 @@ Rules:
         }
       );
       if (!response.ok) {
-        const detail = await response.text();
-        return json({ error: 'AI provider error', detail }, 502);
+        console.error('[ai-chat] provider', response.status, (await response.text()).slice(0, 500));
+        return json(
+          { error: 'AI provider error', code: response.status === 429 ? 'rate_limited' : 'provider_error' },
+          502
+        );
       }
       const data = await response.json();
       const text = (data.candidates?.[0]?.content?.parts ?? [])
@@ -960,8 +972,11 @@ THREE STAGES — pick one per turn:
         }
       );
       if (!response.ok) {
-        const detail = await response.text();
-        return json({ error: 'AI provider error', detail }, 502);
+        console.error('[ai-chat] provider', response.status, (await response.text()).slice(0, 500));
+        return json(
+          { error: 'AI provider error', code: response.status === 429 ? 'rate_limited' : 'provider_error' },
+          502
+        );
       }
       const data = await response.json();
       const text = (data.candidates?.[0]?.content?.parts ?? [])
@@ -1144,8 +1159,11 @@ in their language. Empty array if none fit.`;
         }
       );
       if (!response.ok) {
-        const detail = await response.text();
-        return json({ error: 'AI provider error', detail }, 502);
+        console.error('[ai-chat] provider', response.status, (await response.text()).slice(0, 500));
+        return json(
+          { error: 'AI provider error', code: response.status === 429 ? 'rate_limited' : 'provider_error' },
+          502
+        );
       }
       const data = await response.json();
       const text = (data.candidates?.[0]?.content?.parts ?? [])
@@ -1392,8 +1410,11 @@ Rules:
     );
 
     if (!response.ok) {
-      const detail = await response.text();
-      return json({ error: 'AI provider error', detail }, 502);
+      console.error('[ai-chat] provider', response.status, (await response.text()).slice(0, 500));
+      return json(
+        { error: 'AI provider error', code: response.status === 429 ? 'rate_limited' : 'provider_error' },
+        502
+      );
     }
 
     const data = await response.json();
@@ -1444,7 +1465,8 @@ Rules:
     if (error instanceof AiUnavailableError) {
       return json(aiUnavailableBody(error), 503);
     }
-    return json({ error: String(error) }, 500);
+    console.error('[ai-chat]', String(error));
+    return json({ error: 'internal_error' }, 500);
   }
 });
 
