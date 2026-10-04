@@ -420,3 +420,59 @@ describe('FIXED IN STEP 20B — N-13: the RPC fills gaps and cannot launder prov
     expect(data!.scan_count).toBe(1);
   });
 });
+
+describe('S-01 — no anonymous writes, and trust cannot be self-granted (migration 0035)', () => {
+  it('the anon key alone cannot call upsert_product', async () => {
+    const { createClient } = await import('@supabase/supabase-js');
+    const { ANON_KEY, SUPABASE_URL } = await import('../_env');
+    const anon = createClient(SUPABASE_URL, ANON_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const b = barcode();
+    created.push(b);
+    const { error } = await anon.rpc('upsert_product', {
+      p_barcode: b,
+      p_name: 'Anonymous poison',
+      p_carbs: 0,
+      p_source: 'openfoodfacts',
+    });
+    expect(error).not.toBeNull();
+
+    const { data } = await admin.from('product_catalog').select('barcode').eq('barcode', b);
+    expect(data).toEqual([]);
+  });
+
+  it('a patient inserting verified=true gets an UNVERIFIED row', async () => {
+    const b = barcode();
+    created.push(b);
+    const { error } = await userA.client
+      .from('product_catalog')
+      .insert({ barcode: b, name: 'Self-verified', contributed_by: userA.id, carbs: 5, verified: true });
+    expect(error).toBeNull();
+
+    const { data } = await admin.from('product_catalog').select('verified').eq('barcode', b).single();
+    expect(data!.verified).toBe(false);
+  });
+
+  it('a patient cannot flip verified on their own row', async () => {
+    const b = barcode();
+    created.push(b);
+    await userA.client
+      .from('product_catalog')
+      .insert({ barcode: b, name: 'Mine', contributed_by: userA.id, carbs: 5 });
+    await userA.client.from('product_catalog').update({ verified: true }).eq('barcode', b);
+
+    const { data } = await admin.from('product_catalog').select('verified').eq('barcode', b).single();
+    expect(data!.verified).toBe(false);
+  });
+
+  it('the service role can still verify a row', async () => {
+    const b = barcode();
+    created.push(b);
+    await admin.from('product_catalog').insert({ barcode: b, name: 'Vouched', carbs: 5 });
+    await admin.from('product_catalog').update({ verified: true }).eq('barcode', b);
+
+    const { data } = await admin.from('product_catalog').select('verified').eq('barcode', b).single();
+    expect(data!.verified).toBe(true);
+  });
+});

@@ -154,13 +154,14 @@ describe('isCatalogRowTrusted — who is allowed to be the authority', () => {
     expect(isCatalogRowTrusted('label-photo', true)).toBe(true);
   });
 
-  it('trusts an unverified row the APP wrote from an established provider', () => {
-    // These rows were written by `saveToCatalog` from a real API answer, so they
-    // are worth exactly what that provider is worth — which the provider chain
-    // already decides. Demoting them would cost coverage for no safety gain.
-    expect(isCatalogRowTrusted('openfoodfacts', false)).toBe(true);
-    expect(isCatalogRowTrusted('usda', false)).toBe(true);
-    expect(isCatalogRowTrusted('upcitemdb', false)).toBe(true);
+  it('does NOT trust an unverified row because it CLAIMS an upstream provider (S-01)', () => {
+    // `source` is whatever the writing client sent. Anyone able to call
+    // `upsert_product` could file invented carbohydrate as 'openfoodfacts', and
+    // the old rule then dosed from it. Only `verified` — a column the server
+    // owns (migration 0035) — makes a catalogue row authoritative.
+    expect(isCatalogRowTrusted('openfoodfacts', false)).toBe(false);
+    expect(isCatalogRowTrusted('usda', false)).toBe(false);
+    expect(isCatalogRowTrusted('upcitemdb', false)).toBe(false);
   });
 
   it('does NOT trust a patient contribution, nor silence', () => {
@@ -192,12 +193,12 @@ describe('findInCatalog — provenance travels with every row', () => {
     expect(p.per100g.carbs_known).toBe(true);
   });
 
-  it('an unverified UPSTREAM-provider row is trusted and dosable', async () => {
+  it('an unverified UPSTREAM-labelled row keeps its label but is NOT dosable (S-01)', async () => {
     const b = nextBarcode();
     catalogRows.push(row({ barcode: b, source: 'usda', carbs: 49 }));
     const p = (await findInCatalog(b))!;
-    expect(p.provenance).toMatchObject({ catalog_source: 'usda', trusted_for_dosing: true });
-    expect(p.per100g).toMatchObject({ carbs: 49, carbs_known: true });
+    expect(p.provenance).toMatchObject({ catalog_source: 'usda', trusted_for_dosing: false });
+    expect(p.per100g).toMatchObject({ carbs: 49, carbs_known: false });
   });
 
   it('an unverified USER row keeps its numbers but loses the dose', async () => {
@@ -228,7 +229,7 @@ describe('findInCatalog — provenance travels with every row', () => {
   it('a genuine 0 g stays a KNOWN zero on a trusted row', async () => {
     const b = nextBarcode();
     catalogRows.push(
-      row({ barcode: b, source: 'openfoodfacts', calories: 0, carbs: 0, sugar: 0 })
+      row({ barcode: b, source: 'openfoodfacts', verified: true, calories: 0, carbs: 0, sugar: 0 })
     );
     const p = (await findInCatalog(b))!;
     expect(p.per100g.carbs).toBe(0);
@@ -248,7 +249,7 @@ describe('findInCatalog — provenance travels with every row', () => {
 
   it('a null carbohydrate is unknown on a trusted row too, and never becomes a value', async () => {
     const b = nextBarcode();
-    catalogRows.push(row({ barcode: b, source: 'usda', carbs: null }));
+    catalogRows.push(row({ barcode: b, source: 'usda', verified: true, carbs: null }));
     const p = (await findInCatalog(b))!;
     expect(p.per100g.carbs).toBe(0); // placeholder…
     expect(p.per100g.carbs_known).toBe(false); // …and labelled as one
@@ -279,12 +280,16 @@ describe('lookupBarcodeMulti — a patient contribution is asked last (P2-003)',
     expect(rpcCalls.map((c) => c.name)).toContain('upsert_product'); // scan counted
   });
 
-  it('an unverified UPSTREAM row still short-circuits the chain', async () => {
+  it('an unverified UPSTREAM-labelled row no longer short-circuits the chain (S-01)', async () => {
+    // A forged 'openfoodfacts' row must not be served as authoritative: the
+    // live provider is asked, and its answer wins.
     const b = nextBarcode();
-    catalogRows.push(row({ barcode: b, name: 'OFF-sourced', source: 'openfoodfacts', carbs: 33 }));
+    catalogRows.push(row({ barcode: b, name: 'Forged', source: 'openfoodfacts', carbs: 0 }));
+    stubFetch([offRoute(b, 52, 'Real Product')]);
     const hit = (await lookupBarcodeMulti(b))!;
-    expect(hit.per100g).toMatchObject({ carbs: 33, carbs_known: true });
-    expect(requested).toHaveLength(0);
+    expect(hit.name).toBe('Real Product');
+    expect(hit.per100g).toMatchObject({ carbs: 52, carbs_known: true });
+    expect(requested.length).toBeGreaterThan(0);
   });
 
   it('a USER row is REPLACED when a public provider knows the product', async () => {
@@ -419,9 +424,9 @@ describe('the Step 11a bounds still fire on a catalogue row', () => {
     // source may be believed, Step 11a whether the number is possible. This is
     // the composition the barcode screen performs (`sanitizePer100g`).
     const b = nextBarcode();
-    catalogRows.push(row({ barcode: b, source: 'openfoodfacts', carbs: 9999 }));
+    catalogRows.push(row({ barcode: b, source: 'openfoodfacts', verified: true, carbs: 9999 }));
     const p = (await findInCatalog(b))!;
-    expect(p.per100g.carbs_known).toBe(true); // trusted source…
+    expect(p.per100g.carbs_known).toBe(true); // trusted (verified) row…
 
     const safe = sanitizePer100g(p.per100g);
     expect(safe.issues).toContain('carbs'); // …impossible figure
@@ -530,7 +535,9 @@ describe('findInCatalog memo — bounded, and refreshed by a write (NUTR-B5)', (
     );
     expect((await findInCatalog(b))!.name).toBe('Written');
 
-    catalogRows.push(row({ barcode: b, name: 'Server truth', source: 'usda', carbs: 7 }));
+    catalogRows.push(
+      row({ barcode: b, name: 'Server truth', source: 'usda', verified: true, carbs: 7 })
+    );
     vi.advanceTimersByTime(5 * 60 * 1000);
     const p = (await findInCatalog(b))!;
     expect(p.name).toBe('Server truth');

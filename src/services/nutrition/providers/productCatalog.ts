@@ -34,28 +34,28 @@ import { barcodeVariants } from './nutriments';
 export type { CatalogSource };
 
 /**
- * The catalogue sources that are a real upstream database the APP itself wrote,
- * rather than something a patient typed. A row from one of these is worth
- * exactly what that database is worth — which the provider chain already
- * decides — so it keeps the fast path.
- */
-const UPSTREAM_SOURCES: readonly string[] = ['openfoodfacts', 'usda', 'upcitemdb'];
-
-/**
  * May this row be treated as authoritative for a dose?
  *
- * Verified rows are (an admin vouched for them, and RLS freezes them). So are
- * rows written from an established upstream provider. Everything else — a
- * patient's typed label, a label photo, an unrecognized or absent `source` —
- * is not: the table's own default is `'user'`, so silence must read as
- * user-contributed, never as trusted.
+ * ONLY when it is verified (store audit S-01, migration 0035).
+ *
+ * `source` used to count too: a row labelled 'openfoodfacts', 'usda' or
+ * 'upcitemdb' was trusted as if that database stood behind it. But `source` is
+ * whatever the writing client sends — the server cannot check that a device
+ * really read those numbers from Open Food Facts — so anyone able to call
+ * `upsert_product` could file invented carbohydrate under a database's name and
+ * have it dosed from. `verified` is the one column the server owns: only an
+ * admin or the service role can set it (trigger `product_catalog_guard`).
+ *
+ * `source` is still carried as provenance for display. An unverified row is no
+ * longer a fast path: the barcode chain goes on to the live provider, and only
+ * falls back to the row — carbohydrate unknown until the patient checks the
+ * label — when nothing else answers.
  */
 export function isCatalogRowTrusted(
-  source: string | null | undefined,
+  _source: string | null | undefined,
   verified: boolean | null | undefined
 ): boolean {
-  if (verified === true) return true;
-  return UPSTREAM_SOURCES.includes(String(source ?? ''));
+  return verified === true;
 }
 
 interface CatalogRow {

@@ -369,7 +369,9 @@ describe('product catalogue — reading and writing provenance', () => {
       sodium: 0,
       serving_grams: null,
       source: 'openfoodfacts',
-      verified: false,
+      // Since S-01 (migration 0035) only `verified` makes a row authoritative —
+      // the source label alone is whatever the writing client claimed.
+      verified: true,
     });
     const p = await findInCatalog('222222222222');
     expect(p!.per100g.carbs).toBe(0);
