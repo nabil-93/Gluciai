@@ -1475,7 +1475,7 @@
   "labs": {
     "title": "Meine Analysen",
     "subtitle": "Blutwerte, analysiert von der KI",
-    "entrySub": "Fotografiere einen Laborbericht: Werte, Grafiken und gesprochene KI-Arzt-Erklärung",
+    "entrySub": "Fotografiere einen Laborbericht: Werte, Grafiken und gesprochene Erklärung des KI-Assistenten",
     "addCamera": "Foto aufnehmen",
     "addGallery": "Aus der Galerie",
     "extracting": "Bericht wird gelesen…",
@@ -1492,10 +1492,10 @@
     "normal": "normal",
     "watch": "zu beobachten",
     "critical": "kritisch",
-    "voiceTitle": "KI-Arzt-Erklärung",
+    "voiceTitle": "Erklärung des KI-Assistenten",
     "voiceSub": "Höre, wie die KI dir deine Werte laut erklärt",
     "voicePreparing": "Erklärung wird vorbereitet…",
-    "voiceSpeaking": "Der KI-Arzt spricht — tippe ■ zum Stoppen",
+    "voiceSpeaking": "Der KI-Assistent spricht — tippe ■ zum Stoppen",
     "tapHint": "Tippe auf einen Wert für die detaillierte Erklärung",
     "analyzingValue": "Medizinische Analyse läuft…",
     "distribution": "Werteverteilung",
@@ -2260,7 +2260,15 @@
     "closeDayAnyway": "Meinen Tag abschließen",
     "deleteAction": "Löschen",
     "generatingWeek": "Ich bereite deine Woche vor…",
-    "generatingDay": "Tag {{a}} von {{b}}"
+    "generatingDay": "Tag {{a}} von {{b}}",
+    "blocked_pregnancy_title": "Kein Programm während der Schwangerschaft",
+    "blocked_pregnancy_body": "In der Schwangerschaft ist ein von einer App berechneter Ernährungsplan nicht sicher: Dein Bedarf ändert sich jede Woche und darf nie ohne deine Ärztin, deinen Arzt oder deine Hebamme gesenkt werden. Erfasse Blutzucker und Mahlzeiten weiter in der App und lass deine Ernährung von deinem Behandlungsteam freigeben.",
+    "blocked_minor_title": "Programm nur für Erwachsene",
+    "blocked_minor_body": "Unter 18 Jahren hängt der Energiebedarf vom Wachstum ab: Ein Kalorienplan muss von einer Kinderärztin, einem Kinderarzt oder einer Ernährungsfachkraft festgelegt werden, nicht von einer App. Du kannst Mahlzeiten und Blutzucker wie gewohnt weiter erfassen.",
+    "blocked_age_title": "Dein Geburtsdatum wird benötigt",
+    "blocked_age_body": "Das Programm berechnet deinen Bedarf anhand deines Alters. Trage dein Geburtsdatum im Profil ein, um fortzufahren.",
+    "blocked_age_cta": "Profil vervollständigen",
+    "doctorAck": "Ich habe verstanden: Ich zeige diesen Plan vor dem Start meiner Ärztin oder meinem Arzt und passe meine Insulindosen nicht allein an."
   },
   "shopping": {
     "title": "Mein Einkauf",

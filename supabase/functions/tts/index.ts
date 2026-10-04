@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     // TTS models take a natural-language style instruction before the text;
     // the instruction shapes the delivery and is not spoken.
     const prompt =
-      `Read the following ${langName} text aloud like a warm, calm doctor ` +
+      `Read the following ${langName} text aloud like a warm, calm health coach ` +
       `speaking naturally and clearly to their patient — moderate pace, ` +
       `natural pauses, numbers and medical units read the natural spoken way. ` +
       `Read the text exactly as written, without adding or skipping anything:\n\n` +

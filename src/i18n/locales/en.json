@@ -1475,7 +1475,7 @@
   "labs": {
     "title": "My lab results",
     "subtitle": "Blood tests analyzed by the AI",
-    "entrySub": "Photograph a lab report: values, charts and a spoken AI-doctor explanation",
+    "entrySub": "Photograph a lab report: values, charts and a spoken explanation from the AI assistant",
     "addCamera": "Take a photo",
     "addGallery": "From gallery",
     "extracting": "Reading the report…",
@@ -1492,10 +1492,10 @@
     "normal": "normal",
     "watch": "to watch",
     "critical": "critical",
-    "voiceTitle": "AI doctor explanation",
+    "voiceTitle": "AI assistant explanation",
     "voiceSub": "Listen to the AI explain your results out loud",
     "voicePreparing": "Preparing the explanation…",
-    "voiceSpeaking": "The AI doctor is speaking — tap ■ to stop",
+    "voiceSpeaking": "The AI assistant is speaking — tap ■ to stop",
     "tapHint": "Tap a value for its detailed explanation",
     "analyzingValue": "Medical analysis in progress…",
     "distribution": "Value distribution",
@@ -2260,7 +2260,15 @@
     "closeDayAnyway": "Close my day",
     "deleteAction": "Delete",
     "generatingWeek": "Preparing your week…",
-    "generatingDay": "Day {{a}} of {{b}}"
+    "generatingDay": "Day {{a}} of {{b}}",
+    "blocked_pregnancy_title": "No programme during pregnancy",
+    "blocked_pregnancy_body": "During pregnancy, a diet computed by an app is not safe: your needs change every week and must never be reduced without your doctor or midwife. Keep tracking your glucose and meals in the app, and have your diet approved by your care team.",
+    "blocked_minor_title": "Programme for adults only",
+    "blocked_minor_body": "Under 18, energy needs depend on growth: a calorie plan must be set by a paediatrician or dietitian, not by an app. You can keep tracking your meals and glucose as usual.",
+    "blocked_age_title": "Your date of birth is needed",
+    "blocked_age_body": "The programme computes your needs from your age. Add your date of birth to your profile to continue.",
+    "blocked_age_cta": "Complete my profile",
+    "doctorAck": "I understand: I will show this plan to my doctor before starting, and I will not change my insulin doses on my own."
   },
   "shopping": {
     "title": "My shopping",

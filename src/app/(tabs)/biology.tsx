@@ -152,18 +152,12 @@ export default function BiologyScreen() {
           </BevelCard>
         ) : null}
 
-        {/* Health platform integrations */}
-        <BevelCard
-          style={styles.integrationsCard}
-          onPress={() => router.push('/integrations')}
-        >
-          <Text style={{ fontSize: 24 }}>⌚</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.integrationsTitle}>{t('biology.sensors')}</Text>
-            <Text style={styles.integrationsSub}>{t('biology.sensorsSub')}</Text>
-          </View>
-          <ChevronRight />
-        </BevelCard>
+        {/* The "Capteurs" entry (Apple Health / Google Fit / Libre / Dexcom)
+            is gone until an integration actually exists (store audit B-06):
+            every provider was a stub showing "Bientôt", which App Review
+            rejects as placeholder content — and naming Apple Health without
+            HealthKit is a rejection of its own. The /integrations screen is
+            kept for when a real bridge ships. */}
 
         {KINDS.map((k) => {
           const logs = byKind.get(k.key) ?? [];

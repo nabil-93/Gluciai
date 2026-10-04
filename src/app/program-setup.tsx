@@ -87,6 +87,9 @@ export default function ProgramSetupScreen() {
   );
   const [avoidText, setAvoidText] = useState('');
   const [saving, setSaving] = useState(false);
+  /* Ticked on the recap when the plan changes what an insulin dose should be
+     (or asks a low-BMI patient to lose weight) — see needsDoctorAck. */
+  const [doctorAck, setDoctorAck] = useState(false);
 
   const wantsWeight = goal === 'lose' || goal === 'gain';
 
@@ -129,8 +132,17 @@ export default function ProgramSetupScreen() {
   };
 
   /* A step may only be left once it has what the engine needs. */
+  /* Store audit C-12: a plan that lowers carbs for an insulin user (doses
+     must follow, or the patient goes hypo) or asks an already-lean patient to
+     lose weight is not started on a tap. The patient confirms they will see
+     their doctor first — the warning alone was optional reading. */
+  const needsDoctorAck = targets.warnings.some(
+    (w) => w === 'insulinDosesWillChange' || w === 'lowBmiLoss'
+  );
+
   const canContinue = (): boolean => {
     if (step === 'body') return (parseDecimal(weight) ?? 0) > 0;
+    if (step === 'recap' && needsDoctorAck && !doctorAck) return false;
     return true;
   };
 
@@ -211,6 +223,63 @@ export default function ProgramSetupScreen() {
     });
     router.replace({ pathname: '/program', params: { create: '1' } } as any);
   };
+
+  /*
+   * WHO MUST NOT GET A DIET PLAN FROM AN APP (store audit C-12).
+   *
+   * The programme computes calorie deficits. During pregnancy (gestational
+   * diabetes) a weight-loss plan is contraindicated, and for a minor energy
+   * needs are a paediatric decision. Both are now stopped here with a plain
+   * explanation instead of a plan. Age is only judged from a real birth date
+   * — the engine's 35-year fallback is not evidence of adulthood, so an
+   * unknown age is asked for rather than assumed.
+   */
+  const exactAge = (() => {
+    if (!profile?.birth_date) return null;
+    const b = new Date(profile.birth_date);
+    if (Number.isNaN(b.getTime())) return null;
+    const now = new Date();
+    let a = now.getFullYear() - b.getFullYear();
+    const m = now.getMonth() - b.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < b.getDate())) a--;
+    return a;
+  })();
+  const blockedReason: 'pregnancy' | 'minor' | 'age' | null =
+    profile?.diabetes_type === 'gestational'
+      ? 'pregnancy'
+      : exactAge === null
+        ? 'age'
+        : exactAge < 18
+          ? 'minor'
+          : null;
+
+  if (blockedReason) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top + 14, paddingHorizontal: 16 }]}>
+        <View style={styles.headRow}>
+          <Pressable onPress={close} style={styles.backBtn}>
+            <ChevronLeft size={16} />
+          </Pressable>
+          <Text style={styles.headTitle}>{t('program.setupTitle')}</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={styles.blockCard}>
+          <Text style={styles.blockEmoji}>{blockedReason === 'age' ? '🎂' : '🩺'}</Text>
+          <Text style={styles.blockTitle}>{t(`program.blocked_${blockedReason}_title`)}</Text>
+          <Text style={styles.blockBody}>{t(`program.blocked_${blockedReason}_body`)}</Text>
+          {blockedReason === 'age' ? (
+            <Pressable
+              onPress={() => router.push('/profile-edit?section=personal' as any)}
+              style={styles.blockBtn}
+              accessibilityRole="button"
+            >
+              <Text style={styles.blockBtnText}>{t('program.blocked_age_cta')}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -589,6 +658,20 @@ export default function ProgramSetupScreen() {
                 </View>
               ))}
 
+              {needsDoctorAck ? (
+                <Pressable
+                  onPress={() => setDoctorAck((v) => !v)}
+                  style={styles.ackRow}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: doctorAck }}
+                >
+                  <View style={[styles.ackBox, doctorAck && styles.ackBoxOn]}>
+                    {doctorAck ? <Text style={styles.ackTick}>✓</Text> : null}
+                  </View>
+                  <Text style={styles.ackText}>{t('program.doctorAck')}</Text>
+                </Pressable>
+              ) : null}
+
               <View style={styles.disclaimerBox}>
                 <Text style={styles.disclaimerText}>🛡️ {t('program.disclaimer')}</Text>
               </View>
@@ -630,6 +713,48 @@ export default function ProgramSetupScreen() {
 }
 
 const styles = StyleSheet.create({
+  blockCard: {
+    marginTop: 24,
+    backgroundColor: '#ffffff',
+    borderRadius: 22,
+    padding: 22,
+    alignItems: 'center',
+    gap: 10,
+    ...shadows.card,
+  },
+  blockEmoji: { fontSize: 36 },
+  blockTitle: { fontFamily: F800, fontSize: 18, color: INK, textAlign: 'center' },
+  blockBody: { fontFamily: F500, fontSize: 14.5, lineHeight: 21, color: '#4B5563', textAlign: 'center' },
+  blockBtn: {
+    marginTop: 8,
+    backgroundColor: GREEN,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+  },
+  blockBtnText: { fontFamily: F700, fontSize: 15, color: '#ffffff' },
+  ackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 14,
+    ...shadows.card,
+  },
+  ackBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#c5ccd6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ackBoxOn: { backgroundColor: GREEN, borderColor: GREEN },
+  ackTick: { fontFamily: F800, fontSize: 14, color: '#ffffff' },
+  ackText: { flex: 1, fontFamily: F600, fontSize: 13.5, lineHeight: 19, color: INK },
   root: { flex: 1, backgroundColor: '#f9fafe' },
   headRow: {
     flexDirection: 'row',

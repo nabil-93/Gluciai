@@ -1475,7 +1475,7 @@
   "labs": {
     "title": "Mes analyses",
     "subtitle": "Bilans sanguins analysés par l'IA",
-    "entrySub": "Photographiez un bilan : valeurs, graphiques et explication du docteur IA",
+    "entrySub": "Photographiez un bilan : valeurs, graphiques et explication de l'assistant IA",
     "addCamera": "Prendre en photo",
     "addGallery": "Depuis la galerie",
     "extracting": "Lecture du rapport…",
@@ -1492,10 +1492,10 @@
     "normal": "normales",
     "watch": "à surveiller",
     "critical": "critiques",
-    "voiceTitle": "Explication du docteur IA",
+    "voiceTitle": "Explication de l'assistant IA",
     "voiceSub": "Écoutez l'IA vous expliquer votre bilan à voix haute",
     "voicePreparing": "Préparation de l'explication…",
-    "voiceSpeaking": "Le docteur IA parle — touchez ■ pour arrêter",
+    "voiceSpeaking": "L'assistant IA parle — touchez ■ pour arrêter",
     "tapHint": "Touchez une valeur pour voir son explication détaillée",
     "analyzingValue": "Analyse médicale en cours…",
     "distribution": "Répartition des valeurs",
@@ -2260,7 +2260,15 @@
     "closeDayAnyway": "Clore ma journée",
     "deleteAction": "Supprimer",
     "generatingWeek": "Je prépare ta semaine…",
-    "generatingDay": "Jour {{a}} sur {{b}}"
+    "generatingDay": "Jour {{a}} sur {{b}}",
+    "blocked_pregnancy_title": "Pas de programme pendant la grossesse",
+    "blocked_pregnancy_body": "Pendant la grossesse, un régime calculé par une application n’est pas sûr : tes besoins changent chaque semaine et ne doivent jamais être réduits sans ton médecin ou ta sage-femme. Continue à suivre ta glycémie et tes repas dans l’app, et fais valider ton alimentation par ton équipe soignante.",
+    "blocked_minor_title": "Programme réservé aux adultes",
+    "blocked_minor_body": "Avant 18 ans, les besoins en énergie dépendent de la croissance : un plan calorique doit être fixé par un pédiatre ou un diététicien, pas par une application. Tu peux continuer à suivre tes repas et ta glycémie normalement.",
+    "blocked_age_title": "Ta date de naissance est nécessaire",
+    "blocked_age_body": "Le programme calcule tes besoins à partir de ton âge. Ajoute ta date de naissance dans ton profil pour continuer.",
+    "blocked_age_cta": "Compléter mon profil",
+    "doctorAck": "J’ai compris : je montre ce plan à mon médecin avant de commencer, et je n’adapte pas mes doses d’insuline seul(e)."
   },
   "shopping": {
     "title": "Mes courses",
