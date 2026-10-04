@@ -240,7 +240,12 @@
     "comingSoon": "Coming soon",
     "securityNote": "Your data is secure and protected.\nWe use state-of-the-art encryption.",
     "phone": "Phone number (WhatsApp)",
-    "slowServer": "The server is slow to answer… still trying."
+    "slowServer": "The server is slow to answer… still trying.",
+    "resetSubtitle": "Enter your e-mail: you'll receive a link to choose a new password.",
+    "sendResetLink": "Send the link",
+    "resetSentGeneric": "If an account exists for this e-mail, a reset link has just been sent. Check your spam folder too.",
+    "backToLogin": "Back to sign in",
+    "nameRequired": "Enter your name to create your account."
   },
   "wizard": {
     "progress": "Step {{current}} of {{total}}",
@@ -2406,5 +2411,14 @@
     "title": "Page not found",
     "body": "This link does not match any GluciAI screen. It may be outdated or incomplete.",
     "cta": "Back to home"
+  },
+  "reset": {
+    "title": "New password",
+    "subtitle": "Choose a new password for your GluciAI account.",
+    "newPassword": "New password",
+    "save": "Save the password",
+    "done": "Password changed. Sign in with your new password.",
+    "invalid": "This link is no longer valid (expired or already used). Request a new one from the sign-in screen.",
+    "requestNew": "Request a new link"
   }
 }

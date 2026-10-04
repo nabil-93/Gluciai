@@ -240,7 +240,12 @@
     "comingSoon": "Demnächst verfügbar",
     "securityNote": "Deine Daten sind sicher und geschützt.\nWir verwenden modernste Verschlüsselung.",
     "phone": "Telefonnummer (WhatsApp)",
-    "slowServer": "Der Server braucht lange… wir versuchen es weiter."
+    "slowServer": "Der Server braucht lange… wir versuchen es weiter.",
+    "resetSubtitle": "Gib deine E-Mail ein: Du erhältst einen Link, um ein neues Passwort zu wählen.",
+    "sendResetLink": "Link senden",
+    "resetSentGeneric": "Falls ein Konto mit dieser E-Mail existiert, wurde gerade ein Link gesendet. Prüfe auch deinen Spam-Ordner.",
+    "backToLogin": "Zurück zur Anmeldung",
+    "nameRequired": "Gib deinen Namen ein, um dein Konto zu erstellen."
   },
   "wizard": {
     "progress": "Schritt {{current}} von {{total}}",
@@ -2406,5 +2411,14 @@
     "title": "Seite nicht gefunden",
     "body": "Dieser Link führt zu keinem GluciAI-Bildschirm. Er ist möglicherweise veraltet oder unvollständig.",
     "cta": "Zurück zur Startseite"
+  },
+  "reset": {
+    "title": "Neues Passwort",
+    "subtitle": "Wähle ein neues Passwort für dein GluciAI-Konto.",
+    "newPassword": "Neues Passwort",
+    "save": "Passwort speichern",
+    "done": "Passwort geändert. Melde dich mit deinem neuen Passwort an.",
+    "invalid": "Dieser Link ist nicht mehr gültig (abgelaufen oder schon benutzt). Fordere auf dem Anmeldebildschirm einen neuen an.",
+    "requestNew": "Neuen Link anfordern"
   }
 }

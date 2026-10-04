@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Spinner } from '@/components/ui';
+import { PASSWORD_RESET_URL } from '@/config/links';
 import {
   isDemoMode,
   setCachedUserId,
@@ -48,7 +49,12 @@ const HERO_ACCOUNT = require('../assets/nfss/il_account.png');
 
 const GREEN = '#1fbc78';
 
-type Mode = 'login' | 'register';
+type Mode = 'login' | 'register' | 'forgot';
+
+/** Minimum password length — the Supabase project's own rule. */
+const MIN_PASSWORD = 6;
+/** Loose shape check: catches typos before a 12-step onboarding, nothing more. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /* ── Field icons (green stroke, from the design) ── */
 function UserIcon() {
@@ -149,8 +155,58 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [slow, setSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Set once a reset e-mail was requested — the form then just says so. */
+  const [resetSent, setResetSent] = useState(false);
 
   const isRegister = mode === 'register';
+  const isForgot = mode === 'forgot';
+
+  /*
+   * FORGOTTEN PASSWORD (store audit B-11).
+   *
+   * There was no way back into an account whose password was forgotten — the
+   * i18n key existed, the flow did not, and a patient's whole history was lost
+   * with it. Supabase e-mails a link to the web app's /reset-password page,
+   * which works from any phone's browser. The confirmation is the SAME whether
+   * or not the address has an account, so this cannot be used to probe who is
+   * registered.
+   */
+  const sendReset = async () => {
+    setError(null);
+    const address = email.trim();
+    if (!EMAIL_RE.test(address)) {
+      setError(t('authError.invalidEmail'));
+      return;
+    }
+    if (isDemoMode || !supabase) {
+      setResetSent(true);
+      return;
+    }
+    setLoading(true);
+    try {
+      const outcome = await withTimeout(
+        supabase.auth.resetPasswordForEmail(address, { redirectTo: PASSWORD_RESET_URL }),
+        SIGN_IN_TIMEOUT_MS,
+        null
+      );
+      if (!outcome) {
+        setError(t('authError.timeout'));
+        return;
+      }
+      // A rate limit is worth saying; any other error is not, for the same
+      // anti-enumeration reason as above.
+      if (outcome.error && authErrorKey(outcome.error) === 'authError.rateLimited') {
+        setError(t('authError.rateLimited'));
+        return;
+      }
+      setResetSent(true);
+    } catch (e: any) {
+      if (__DEV__) console.warn('[reset]', e?.message);
+      setError(t(authErrorKey(e)));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // New sign-ups fill their medical profile first; returning users who log
   // in already have one, so they skip straight to the dashboard. A returning
@@ -183,7 +239,22 @@ export default function AuthScreen() {
     // the backend hears about the patient only when there is a full profile to
     // store. Nothing reaches the server from this screen any more.
     if (isRegister) {
-      setPendingRegistration({ email, password, name, phone });
+      /* VALIDATE HERE, NOT AT THE END (store audit F-04). These used to be
+         discovered only by the sign-up call at the last of twelve steps —
+         and fixing them meant leaving the wizard and losing every answer. */
+      if (!name.trim()) {
+        setError(t('auth.nameRequired'));
+        return;
+      }
+      if (!EMAIL_RE.test(email.trim())) {
+        setError(t('authError.invalidEmail'));
+        return;
+      }
+      if (password.length < MIN_PASSWORD) {
+        setError(t('authError.weakPassword'));
+        return;
+      }
+      setPendingRegistration({ email: email.trim(), password, name: name.trim(), phone });
       goAfterAuth(false);
       return;
     }
@@ -251,6 +322,9 @@ export default function AuthScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        // iOS: lift the form above the keyboard so the fields and the button
+        // stay visible while typing (Android resizes the window itself).
+        automaticallyAdjustKeyboardInsets
         contentContainerStyle={{
           paddingTop: insets.top + 8,
           paddingHorizontal: 26,
@@ -267,10 +341,18 @@ export default function AuthScreen() {
         </View>
 
         <Text style={styles.title}>
-          {isRegister ? t('auth.createAccount') : t('auth.welcomeBack')}
+          {isForgot
+            ? t('auth.resetPassword')
+            : isRegister
+              ? t('auth.createAccount')
+              : t('auth.welcomeBack')}
         </Text>
         <Text style={styles.subtitle}>
-          {isRegister ? t('auth.registerSubtitle') : t('auth.loginSubtitle')}
+          {isForgot
+            ? t('auth.resetSubtitle')
+            : isRegister
+              ? t('auth.registerSubtitle')
+              : t('auth.loginSubtitle')}
         </Text>
 
         {/* Fields */}
@@ -285,6 +367,8 @@ export default function AuthScreen() {
                   placeholder={t('auth.name')}
                   placeholderTextColor="#98a1af"
                   autoCapitalize="words"
+                  textContentType="name"
+                  autoComplete="name"
                   style={styles.input}
                 />
               </View>
@@ -297,6 +381,8 @@ export default function AuthScreen() {
                   placeholderTextColor="#98a1af"
                   keyboardType="phone-pad"
                   autoCapitalize="none"
+                  textContentType="telephoneNumber"
+                  autoComplete="tel"
                   style={styles.input}
                 />
               </View>
@@ -311,9 +397,13 @@ export default function AuthScreen() {
               placeholderTextColor="#98a1af"
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="emailAddress"
+              autoComplete="email"
               style={styles.input}
             />
           </View>
+          {isForgot ? null : (
           <View style={styles.field}>
             <LockIcon />
             <TextInput
@@ -323,13 +413,41 @@ export default function AuthScreen() {
               placeholderTextColor="#98a1af"
               secureTextEntry={!showPw}
               autoCapitalize="none"
+              autoCorrect={false}
+              textContentType={isRegister ? 'newPassword' : 'password'}
+              autoComplete={isRegister ? 'new-password' : 'current-password'}
               style={styles.input}
             />
-            <Pressable onPress={() => setShowPw((v) => !v)} hitSlop={8}>
+            <Pressable
+              onPress={() => setShowPw((v) => !v)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('auth.password')}
+            >
               <EyeIcon />
             </Pressable>
           </View>
+          )}
         </View>
+
+        {/* "Forgot password?" under the login form only. */}
+        {mode === 'login' ? (
+          <Pressable
+            onPress={() => {
+              setError(null);
+              setResetSent(false);
+              setMode('forgot');
+            }}
+            hitSlop={8}
+            style={styles.forgotWrap}
+            accessibilityRole="button"
+          >
+            <Text style={styles.forgotText}>{t('auth.forgotPassword')}</Text>
+          </Pressable>
+        ) : null}
+        {isForgot && resetSent ? (
+          <Text style={styles.resetSent}>{t('auth.resetSentGeneric')}</Text>
+        ) : null}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {slow && !error ? (
@@ -347,7 +465,11 @@ export default function AuthScreen() {
         )}
 
         {/* CTA */}
-        <Pressable onPress={submit} disabled={loading}>
+        <Pressable
+          onPress={isForgot ? sendReset : submit}
+          disabled={loading || (isForgot && resetSent)}
+          accessibilityRole="button"
+        >
           <LinearGradient
             colors={['#2ec983', '#1fbc78']}
             start={{ x: 0, y: 0 }}
@@ -358,7 +480,11 @@ export default function AuthScreen() {
               <Spinner size={22} color="#ffffff" />
             ) : (
               <Text style={styles.ctaText}>
-                {isRegister ? t('auth.register') : t('auth.login')}
+                {isForgot
+                  ? t('auth.sendResetLink')
+                  : isRegister
+                    ? t('auth.register')
+                    : t('auth.login')}
               </Text>
             )}
           </LinearGradient>
@@ -366,15 +492,25 @@ export default function AuthScreen() {
 
         {/* Switch mode */}
         <Pressable
-          onPress={() => setMode(isRegister ? 'login' : 'register')}
+          onPress={() => {
+            setError(null);
+            setMode(isRegister || isForgot ? 'login' : 'register');
+          }}
           hitSlop={8}
+          accessibilityRole="button"
         >
-          <Text style={styles.switchText}>
-            {isRegister ? t('auth.haveAccount') : t('auth.noAccount')}{' '}
-            <Text style={styles.switchLink}>
-              {isRegister ? t('auth.login') : t('auth.register')}
+          {isForgot ? (
+            <Text style={styles.switchText}>
+              <Text style={styles.switchLink}>{t('auth.backToLogin')}</Text>
             </Text>
-          </Text>
+          ) : (
+            <Text style={styles.switchText}>
+              {isRegister ? t('auth.haveAccount') : t('auth.noAccount')}{' '}
+              <Text style={styles.switchLink}>
+                {isRegister ? t('auth.login') : t('auth.register')}
+              </Text>
+            </Text>
+          )}
         </Pressable>
 
         {/* Security note */}
@@ -477,6 +613,16 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   switchLink: { fontFamily: N800, color: '#2f7cf6' },
+  forgotWrap: { alignSelf: 'flex-end', marginTop: 10, marginEnd: 2 },
+  forgotText: { fontFamily: N700, fontSize: 14, color: '#2f7cf6' },
+  resetSent: {
+    fontFamily: N600,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#1f9c6a',
+    marginTop: 12,
+    marginHorizontal: 2,
+  },
   securityRow: {
     flexDirection: 'row',
     alignItems: 'center',

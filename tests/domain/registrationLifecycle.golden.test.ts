@@ -151,7 +151,11 @@ describe('auth.tsx no longer creates the account', () => {
   const auth = () => src('src/app/auth.tsx');
 
   it('THE FIX: registering only holds the form and enters onboarding', () => {
-    expect(auth()).toContain('setPendingRegistration({ email, password, name, phone })');
+    // Since store audit F-04 the form is validated (and trimmed) before it is
+    // held — still nothing reaches the server from this screen.
+    expect(auth()).toContain(
+      'setPendingRegistration({ email: email.trim(), password, name: name.trim(), phone })'
+    );
   });
 
   it('the screen contains NO signUp call at all', () => {
