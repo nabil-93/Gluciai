@@ -103,6 +103,98 @@ function withId(row: { id: string }): { id?: string } {
 const desc = (a: { created_at: string }, b: { created_at: string }) =>
   b.created_at < a.created_at ? -1 : 1;
 
+/** PostgREST's max-rows cap on this project — one response never holds more. */
+const PAGE = 1000;
+
+/**
+ * A user's rows, newest first, PAGED (store audit D-02).
+ *
+ * `.limit(5000)` looked like five thousand readings but the server answers
+ * at most PAGE rows per request, so a patient with more than ~1000 glucose
+ * readings silently lost everything older from the phone at the next sync.
+ * Pages are ordered by (created_at, id) so a page boundary that falls inside
+ * a run of equal timestamps neither repeats nor skips a row.
+ */
+async function fetchPaged(
+  table: string,
+  cols: string,
+  uid: string,
+  cap: number
+): Promise<{ data: any[] | null; error: unknown }> {
+  if (!supabase) return { data: null, error: new Error('offline') };
+  const out: any[] = [];
+  for (let from = 0; from < cap; from += PAGE) {
+    const to = Math.min(from + PAGE, cap) - 1;
+    const { data, error } = await supabase
+      .from(table)
+      .select(cols)
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, to);
+    if (error) return { data: null, error };
+    out.push(...(data ?? []));
+    if (!data || data.length < to - from + 1) break;
+  }
+  return { data: out, error: null };
+}
+
+/** Tables a tombstone may name — it comes back from device storage. */
+const DELETABLE = new Set([
+  'glucose_logs',
+  'insulin_logs',
+  'meal_scans',
+  'activity_logs',
+  'measure_logs',
+  'event_logs',
+  'lab_reports',
+]);
+
+/**
+ * Replay the deletes this device could not confirm (store audit F-07). A
+ * delete of a row that is already gone succeeds too, so every confirmed
+ * tombstone is cleared; one that still fails stays for the next sync.
+ */
+async function replayPendingDeletes(): Promise<void> {
+  const client = supabase;
+  if (!client) return;
+  const pending = useAppStore.getState().pendingDeletes ?? [];
+  await Promise.all(
+    pending.map(async (d) => {
+      if (!DELETABLE.has(d.table)) {
+        useAppStore.getState().clearPendingDelete(d.id);
+        return;
+      }
+      try {
+        const { error } = await client.from(d.table).delete().eq('id', d.id);
+        if (!error) useAppStore.getState().clearPendingDelete(d.id);
+      } catch {
+        /* offline — kept for the next sync */
+      }
+    })
+  );
+}
+
+/**
+ * Rows the patient added WHILE the sync was in flight (store audit D-01).
+ *
+ * The snapshot replaces the lists, and the offline push above only knows the
+ * rows that existed when the sync started. A reading saved during the pull
+ * was in neither — and was wiped by the replace (for good, if it was saved
+ * offline). Anything now on the device that was not there at the start and
+ * did not come back from the server is kept.
+ */
+function addedDuringSync<T extends { id: string }>(
+  current: T[],
+  atStart: T[],
+  fromServer: { id: string }[]
+): T[] {
+  const seen = new Set<string>();
+  for (const r of atStart) seen.add(r.id);
+  for (const r of fromServer) seen.add(r.id);
+  return current.filter((r) => !seen.has(r.id));
+}
+
 /**
  * Insert offline-created rows (their original timestamps preserved) and return
  * the server copies so the caller can merge them into the pull.
@@ -301,39 +393,18 @@ async function runHydrate(): Promise<boolean> {
   // account's parcours must be gone before anything renders, not after.
   useProgramStore.getState().adoptUser(uid);
 
+  // Another account's tombstones were wiped by claimAccount; this account's
+  // unconfirmed deletes go first, so the pull below already reflects them.
+  if (!switched) await replayPendingDeletes();
+
   try {
     const [prof, glu, ins, meals, act, meas, chat, rem, evts, labs] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
-      supabase
-        .from('glucose_logs')
-        .select(GLUCOSE_COLS)
-        .eq('user_id', uid)
-        .order('created_at', { ascending: false })
-        .limit(5000),
-      supabase
-        .from('insulin_logs')
-        .select(INSULIN_COLS)
-        .eq('user_id', uid)
-        .order('created_at', { ascending: false })
-        .limit(5000),
-      supabase
-        .from('meal_scans')
-        .select(MEAL_COLS)
-        .eq('user_id', uid)
-        .order('created_at', { ascending: false })
-        .limit(2000),
-      supabase
-        .from('activity_logs')
-        .select(ACTIVITY_COLS)
-        .eq('user_id', uid)
-        .order('created_at', { ascending: false })
-        .limit(2000),
-      supabase
-        .from('measure_logs')
-        .select(MEASURE_COLS)
-        .eq('user_id', uid)
-        .order('created_at', { ascending: false })
-        .limit(2000),
+      fetchPaged('glucose_logs', GLUCOSE_COLS, uid, 5000),
+      fetchPaged('insulin_logs', INSULIN_COLS, uid, 5000),
+      fetchPaged('meal_scans', MEAL_COLS, uid, 2000),
+      fetchPaged('activity_logs', ACTIVITY_COLS, uid, 2000),
+      fetchPaged('measure_logs', MEASURE_COLS, uid, 2000),
       supabase
         .from('chat_history')
         .select('id,role,message,created_at')
@@ -346,12 +417,7 @@ async function runHydrate(): Promise<boolean> {
         .eq('user_id', uid)
         .order('due_at', { ascending: false })
         .limit(200),
-      supabase
-        .from('event_logs')
-        .select(EVENT_COLS)
-        .eq('user_id', uid)
-        .order('created_at', { ascending: false })
-        .limit(1000),
+      fetchPaged('event_logs', EVENT_COLS, uid, 1000),
       supabase
         .from('lab_reports')
         .select(LAB_COLS)
@@ -377,14 +443,20 @@ async function runHydrate(): Promise<boolean> {
       return false;
     }
 
-    let glucoseRows = glu.data ?? [];
-    let insulinRows = ins.data ?? [];
-    let mealRows = meals.data ?? [];
-    let activityRows = act.data ?? [];
-    let measureRows = meas.data ?? [];
+    // A row deleted here whose server delete is still unconfirmed must not
+    // come back with the snapshot (F-07).
+    const tomb = new Set((useAppStore.getState().pendingDeletes ?? []).map((d) => d.id));
+    const live = <R extends { id: string }>(rows: R[] | null): R[] =>
+      (rows ?? []).filter((r) => !tomb.has(r.id));
+
+    let glucoseRows = live(glu.data);
+    let insulinRows = live(ins.data);
+    let mealRows = live(meals.data);
+    let activityRows = live(act.data);
+    let measureRows = live(meas.data);
     let reminderRows = rem.data ?? [];
-    let eventRows = evts.data ?? [];
-    let labRows = labs.data ?? [];
+    let eventRows = live(evts.data);
+    let labRows = live(labs.data);
 
     // Offline saves from THIS account get pushed before the store is
     // replaced (another account's leftovers are wiped, never re-pushed).
@@ -420,6 +492,9 @@ async function runHydrate(): Promise<boolean> {
             user_id: uid,
             insulin_type: i.insulin_type,
             dose: i.dose,
+            // Which meal the dose covered — the per-meal views key off it and
+            // the offline path used to drop it (store audit D-04).
+            meal_type: i.meal_type ?? null,
             notes: i.notes ?? null,
             created_at: i.created_at,
           })),
@@ -552,6 +627,17 @@ async function runHydrate(): Promise<boolean> {
     }
 
     const state = useAppStore.getState();
+    // D-01 — keep what was saved while this sync was running (and is not a
+    // row that was deleted meanwhile).
+    const during = <T extends { id: string; created_at: string }>(
+      current: T[],
+      atStart: T[],
+      mapped: T[]
+    ): T[] => {
+      if (switched) return mapped;
+      const extra = addedDuringSync(current, atStart, mapped).filter((r) => !tomb.has(r.id));
+      return extra.length ? [...extra, ...mapped].sort(desc) : mapped;
+    };
     state.hydrateServer(
       {
         accountUserId: uid,
@@ -562,14 +648,18 @@ async function runHydrate(): Promise<boolean> {
           : switched
             ? null
             : state.profile,
-        glucoseLogs: glucoseRows.map(mapGlucose),
-        insulinLogs: insulinRows.map(mapInsulin),
-        meals: mealRows.map(mapMeal),
-        activityLogs: activityRows.map(mapActivity),
-        measureLogs: measureRows.map(mapMeasure),
+        glucoseLogs: during(state.glucoseLogs, prevState.glucoseLogs, glucoseRows.map(mapGlucose)),
+        insulinLogs: during(state.insulinLogs, prevState.insulinLogs, insulinRows.map(mapInsulin)),
+        meals: during(state.meals, prevState.meals, mealRows.map(mapMeal)),
+        activityLogs: during(
+          state.activityLogs,
+          prevState.activityLogs,
+          activityRows.map(mapActivity)
+        ),
+        measureLogs: during(state.measureLogs, prevState.measureLogs, measureRows.map(mapMeasure)),
         aiReminders: reminderRows.map(mapReminder),
-        eventLogs: eventRows.map(mapEvent),
-        labReports: labRows.map(mapLabReport),
+        eventLogs: during(state.eventLogs, prevState.eventLogs, eventRows.map(mapEvent)),
+        labReports: during(state.labReports, prevState.labReports, labRows.map(mapLabReport)),
         chatMessages: (chat.data ?? [])
           .reverse()
           .map(

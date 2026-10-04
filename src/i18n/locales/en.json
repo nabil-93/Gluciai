@@ -630,7 +630,8 @@
     "serviceBusy": "The analysis service is very busy right now. This is not your connection — try again in a moment.",
     "stillTrying": "The service is busy — retrying…",
     "openSettings": "Open settings",
-    "permissionBlocked": "Camera access was denied. Enable it in your phone settings to scan your meals."
+    "permissionBlocked": "Camera access was denied. Enable it in your phone settings to scan your meals.",
+    "aiShort": "AI"
   },
   "result": {
     "title": "Meal analysis",
@@ -924,7 +925,13 @@
     "bigDoseTitle": "Check the dose",
     "bigDoseBody": "You entered {{dose}} U. Is that really the dose you injected?",
     "bigDoseConfirm": "Yes, that's right",
-    "doseTooHigh": "A dose above {{max}} U cannot be logged — check the decimal point."
+    "doseTooHigh": "A dose above {{max}} U cannot be logged — check the decimal point.",
+    "whenLabel": "Time",
+    "whenNow": "Now",
+    "whenYesterday": "Yesterday",
+    "whenEarlier": "Earlier",
+    "whenLater": "Later",
+    "whenBackToNow": "Back to now"
   },
   "tabs": {
     "home": "Home",

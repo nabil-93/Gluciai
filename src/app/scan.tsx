@@ -279,18 +279,46 @@ function ScanScreen() {
       await analyze(prepared.base64, uri, { width: prepared.width, height: prepared.height });
     } else if (rawBase64) {
       await analyze(rawBase64, uri);
+    } else {
+      // Nothing usable came back (native capture no longer carries a raw
+      // copy) — say so instead of leaving a frozen frame on screen.
+      setError(t('scanner.scanFailed'));
+      setCaptured(null);
     }
+  };
+
+  /*
+   * STORE AUDIT F-11. The capture used to ask for the full-resolution photo as
+   * base64 at quality 1 — a 12 MP frame held as a ~10 MB string in JS memory
+   * on top of the bitmap, which is how a low-end Android phone gets killed
+   * mid-scan. On native only the file is taken; prepareImageForVision reads
+   * it back already shrunk to 1024 px. The web keeps the inline copy, as its
+   * capture path is the fallback there. A thrown camera / picker error now
+   * reaches the patient instead of an unhandled rejection.
+   */
+  const RAW_BASE64 = isWeb;
+  const captureFailed = (e: unknown) => {
+    if (__DEV__) console.warn('[scan] capture failed', e);
+    setError(t('scanner.scanFailed'));
+    setCaptured(null);
   };
 
   // Native live camera → snap a frame.
   const capture = async () => {
     if (!cameraRef.current || analyzing) return;
-    const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 1 });
-    if (!photo?.uri) return;
-    // The photo is the ground truth about the frame's shape — if the preview
-    // box guessed wrong, the next one is already right.
-    applyAspect(photo.width, photo.height, true);
-    await runOn(photo.uri, photo.base64);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: RAW_BASE64,
+        quality: RAW_BASE64 ? 1 : 0.9,
+      });
+      if (!photo?.uri) return;
+      // The photo is the ground truth about the frame's shape — if the preview
+      // box guessed wrong, the next one is already right.
+      applyAspect(photo.width, photo.height, true);
+      await runOn(photo.uri, photo.base64);
+    } catch (e) {
+      captureFailed(e);
+    }
   };
 
   // Fallback when no live preview is possible (permission denied, mount
@@ -299,7 +327,11 @@ function ScanScreen() {
   const captureViaSystem = async () => {
     if (analyzing) return;
     try {
-      const shot = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], base64: true, quality: 1 });
+      const shot = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        base64: RAW_BASE64,
+        quality: RAW_BASE64 ? 1 : 0.9,
+      });
       const asset = shot.assets?.[0];
       if (asset?.uri) {
         await runOn(asset.uri, asset.base64 ?? undefined);
@@ -313,10 +345,18 @@ function ScanScreen() {
 
   const pickImage = async () => {
     if (analyzing) return;
-    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], base64: true, quality: 1 });
-    const asset = picked.assets?.[0];
-    if (!asset?.uri) return;
-    await runOn(asset.uri, asset.base64 ?? undefined);
+    try {
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        base64: RAW_BASE64,
+        quality: RAW_BASE64 ? 1 : 0.9,
+      });
+      const asset = picked.assets?.[0];
+      if (!asset?.uri) return;
+      await runOn(asset.uri, asset.base64 ?? undefined);
+    } catch (e) {
+      captureFailed(e);
+    }
   };
 
   const close = () => {
@@ -531,7 +571,7 @@ function ScanScreen() {
           <Glass style={styles.pill} radius={999}>
             <Ionicons name="sparkles" size={14} color={ACCENT} style={styles.sparkGlow} />
             <Text style={styles.pillText}>
-              <Text style={styles.pillStrong}>IA</Text> {t('scanner.realtime')}
+              <Text style={styles.pillStrong}>{t('scanner.aiShort')}</Text> {t('scanner.realtime')}
             </Text>
           </Glass>
 

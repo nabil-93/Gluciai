@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
+  AppState,
   Easing,
   Image,
   NativeScrollEvent,
@@ -1214,6 +1215,39 @@ export default function HomeScreen() {
   // so tapping any past date time-travels the entire home screen there.
   const [selectedDate, setSelectedDate] = React.useState(() => new Date());
   const [calendarOpen, setCalendarOpen] = React.useState(false);
+
+  /*
+   * "TODAY" MUST ROLL OVER (store audit F-14). The selected day was fixed when
+   * the screen mounted, so a phone left on the app overnight — or reopened
+   * from the background the next morning — kept showing yesterday as if it
+   * were today: yesterday's insulin total, yesterday's meals, under a
+   * "today" heading. While the patient is following today (they have not
+   * picked a past day), the selection now moves to the new day on focus, on
+   * return to the foreground, and on a once-a-minute tick.
+   */
+  const followTodayRef = useRef(true);
+  const pickDate = React.useCallback((d: Date) => {
+    followTodayRef.current = d.toDateString() === new Date().toDateString();
+    setSelectedDate(d);
+  }, []);
+  const rollToToday = React.useCallback(() => {
+    if (!followTodayRef.current) return;
+    // Same day → same object, so React skips the re-render.
+    setSelectedDate((prev) =>
+      prev.toDateString() === new Date().toDateString() ? prev : new Date()
+    );
+  }, []);
+  useFocusEffect(rollToToday);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') rollToToday();
+    });
+    const tick = setInterval(rollToToday, 60_000);
+    return () => {
+      sub.remove();
+      clearInterval(tick);
+    };
+  }, [rollToToday]);
   const isViewingToday = selectedDate.toDateString() === new Date().toDateString();
 
   const dayGlucose = useMemo(
@@ -1850,7 +1884,7 @@ export default function HomeScreen() {
             calendar icon jumps far back in history ── */}
         <WeekStrip
           selected={selectedDate}
-          onSelect={setSelectedDate}
+          onSelect={pickDate}
           mealsByDay={mealsByDay}
           locale={i18n.language}
           label={selectedDateLabel}
@@ -1860,7 +1894,7 @@ export default function HomeScreen() {
         {!isViewingToday ? (
           <Pressable
             style={styles.historyBanner}
-            onPress={() => setSelectedDate(new Date())}
+            onPress={() => pickDate(new Date())}
           >
             <Text style={styles.historyBannerText} numberOfLines={1}>
               {t('home.viewingHistory', {
@@ -2188,7 +2222,7 @@ export default function HomeScreen() {
             {calendarOpen ? (
               <CalendarPopup
                 selected={selectedDate}
-                onSelect={setSelectedDate}
+                onSelect={pickDate}
                 onClose={() => setCalendarOpen(false)}
                 mealsByDay={mealsByDay}
                 locale={i18n.language}
@@ -2203,7 +2237,7 @@ export default function HomeScreen() {
         {!isViewingToday ? (
           <PastDayNote
             date={selectedDate}
-            onToday={() => setSelectedDate(new Date())}
+            onToday={() => pickDate(new Date())}
             style={{ marginBottom: 10 }}
           />
         ) : null}

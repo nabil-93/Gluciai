@@ -160,15 +160,22 @@ export function savedStateKey(row: PendingSync | null | undefined): string {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Best-effort server delete — only rows that actually live there (uuid). */
+/**
+ * Server delete for a row that may live there (uuid). It is recorded as a
+ * tombstone FIRST and cleared only once the server confirms — offline, the
+ * tombstone survives and hydrateFromServer replays it (store audit F-07).
+ */
 function remoteDelete(table: string, rowId: string) {
   if (isDemoMode || !supabase || !UUID_RE.test(rowId)) return;
+  useAppStore.getState().addPendingDelete(table, rowId);
   supabase
     .from(table)
     .delete()
     .eq('id', rowId)
     .then(
-      () => {},
+      ({ error }) => {
+        if (!error) useAppStore.getState().clearPendingDelete(rowId);
+      },
       () => {}
     );
 }
@@ -628,8 +635,8 @@ export function deleteLabReport(rowId: string) {
 /* ─────────────────────────── DELETES ───────────────────────────
  * Removing an entry must also remove it on the server, otherwise the
  * next sync would resurrect it (and the doctor dashboard would keep
- * showing it). Local removal is instant; the server delete is
- * fire-and-forget. */
+ * showing it). Local removal is instant; the server delete is queued as a
+ * tombstone until confirmed (see remoteDelete). */
 
 export function deleteGlucose(rowId: string) {
   useAppStore.getState().removeGlucoseLog(rowId);

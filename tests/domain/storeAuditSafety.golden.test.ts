@@ -91,3 +91,70 @@ describe('C-13 · the AI never presents itself as a doctor', () => {
     expect(src('supabase/functions/tts/index.ts')).not.toContain('calm doctor');
   });
 });
+
+describe('F-08 · manual entries carry the time they happened', () => {
+  it('glucose and insulin pass the chosen time to the save', () => {
+    expect(src('src/app/log-glucose.tsx')).toContain(
+      'takenAt != null ? new Date(takenAt).toISOString() : undefined'
+    );
+    expect(src('src/app/log-insulin.tsx')).toContain(
+      'givenAt != null ? new Date(givenAt).toISOString() : undefined'
+    );
+  });
+
+  it('the picker never goes into the future nor past 24 h', () => {
+    const s = src('src/components/EntryTimePicker.tsx');
+    expect(s).toContain('if (next >= now) return onChange(null);');
+    expect(s).toContain('Math.max(now - MAX_BACK, next)');
+  });
+});
+
+describe('F-09 · a barcode product is filed under a meal', () => {
+  it('the save asks for the meal and passes it on', () => {
+    const s = src('src/app/barcode.tsx');
+    expect(s).toContain('<MealTypeModal');
+    expect(s).toContain('saveMeal(result, product.imageUrl, undefined, undefined, mealType)');
+  });
+});
+
+describe('F-11 · the native scanner never holds a full-resolution base64 photo', () => {
+  it('raw base64 is requested on the web only', () => {
+    const s = src('src/app/scan.tsx');
+    expect(s).toContain('const RAW_BASE64 = isWeb;');
+    expect(s).not.toContain('base64: true');
+  });
+
+  it('a camera or picker failure reaches the patient', () => {
+    expect(src('src/app/scan.tsx').match(/captureFailed\(e\)/g)?.length).toBe(2);
+  });
+});
+
+describe('F-14 · the home screen follows the calendar day', () => {
+  it('rolls over on focus, on foreground and every minute', () => {
+    const s = src('src/app/(tabs)/index.tsx');
+    expect(s).toContain('useFocusEffect(rollToToday);');
+    expect(s).toContain("if (s === 'active') rollToToday();");
+    expect(s).toContain('setInterval(rollToToday, 60_000)');
+  });
+});
+
+describe('F-16 · no hardcoded "IA" on the scanner', () => {
+  it('the label is translated', () => {
+    expect(src('src/app/scan.tsx')).not.toContain('>IA<');
+    for (const l of LOCALES) expect(locale(l).scanner.aiShort).toBeTruthy();
+  });
+});
+
+describe('D-05 · account deletion empties a bucket of any size', () => {
+  it('lists and removes until nothing is left', () => {
+    const s = src('supabase/functions/delete-account/index.ts');
+    expect(s).toContain('for (let pass = 0; pass < MAX_PASSES; pass++)');
+    expect(s).toContain('emptied = true;');
+  });
+
+  it('internal error detail stays in the log (S-08)', () => {
+    const s = src('supabase/functions/delete-account/index.ts');
+    expect(s).not.toContain('detail: storageErrors');
+    expect(s).not.toContain('json({ error: String(error) }');
+  });
+});

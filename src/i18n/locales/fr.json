@@ -630,7 +630,8 @@
     "serviceBusy": "Le service d'analyse est très sollicité en ce moment. Ce n'est pas votre connexion — réessayez dans quelques instants.",
     "stillTrying": "Le service est occupé — nouvelle tentative en cours…",
     "openSettings": "Ouvrir les réglages",
-    "permissionBlocked": "L'accès à la caméra a été refusé. Activez-le dans les réglages de votre téléphone pour scanner vos repas."
+    "permissionBlocked": "L'accès à la caméra a été refusé. Activez-le dans les réglages de votre téléphone pour scanner vos repas.",
+    "aiShort": "IA"
   },
   "result": {
     "title": "Analyse du repas",
@@ -924,7 +925,13 @@
     "bigDoseTitle": "Vérifie la dose",
     "bigDoseBody": "Tu as saisi {{dose}} U. C'est bien la dose injectée ?",
     "bigDoseConfirm": "Oui, c'est bien ça",
-    "doseTooHigh": "Une dose au-delà de {{max}} U ne peut pas être enregistrée — vérifie la virgule."
+    "doseTooHigh": "Une dose au-delà de {{max}} U ne peut pas être enregistrée — vérifie la virgule.",
+    "whenLabel": "Heure",
+    "whenNow": "Maintenant",
+    "whenYesterday": "Hier",
+    "whenEarlier": "Plus tôt",
+    "whenLater": "Plus tard",
+    "whenBackToNow": "Revenir à maintenant"
   },
   "tabs": {
     "home": "Accueil",

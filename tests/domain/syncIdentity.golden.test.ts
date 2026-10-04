@@ -66,6 +66,8 @@ function makeQuery(table: string) {
     eq: () => q,
     order: () => q,
     limit: answer,
+    // Since store audit D-02 the history tables are read in pages.
+    range: answer,
     maybeSingle: async () => ({ data: null, error: null }),
     insert: (payload: any[]) => {
       inserts.push({ table, rows: payload });
@@ -125,6 +127,7 @@ vi.mock('@/store/useAppStore', () => ({
         aiReminders: [],
         eventLogs: [],
         labReports: [],
+        pendingDeletes: [],
         chatMessages: [],
       }),
   },

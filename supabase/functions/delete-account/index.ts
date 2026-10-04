@@ -67,20 +67,40 @@ Deno.serve(async (req) => {
     // Order matters. Removing the objects first means a failure leaves the
     // account intact and the operation can simply be retried; deleting the
     // user first would strand the files with no uid left to find them by.
+    //
+    // A listing returns at most LIST_PAGE objects (store audit D-05): a patient
+    // with more meal photos than that kept the rest on the server while being
+    // told everything was erased. Each pass removes what it listed, so the
+    // next listing from offset 0 holds whatever is left; it stops when a pass
+    // comes back empty, or fails loudly after MAX_PASSES.
+    const LIST_PAGE = 1000;
+    const MAX_PASSES = 50;
     const storageErrors: string[] = [];
     for (const bucket of ['profile-images', 'meal-images', 'medical-reports']) {
       try {
-        const { data: files, error: listErr } = await admin.storage
-          .from(bucket)
-          .list(uid, { limit: 1000 });
-        if (listErr) {
-          storageErrors.push(`${bucket}: ${listErr.message}`);
-          continue;
+        let emptied = false;
+        for (let pass = 0; pass < MAX_PASSES; pass++) {
+          const { data: files, error: listErr } = await admin.storage
+            .from(bucket)
+            .list(uid, { limit: LIST_PAGE });
+          if (listErr) {
+            storageErrors.push(`${bucket}: ${listErr.message}`);
+            break;
+          }
+          if (!files || files.length === 0) {
+            emptied = true;
+            break;
+          }
+          const paths = files.map((f) => `${uid}/${f.name}`);
+          const { error: rmErr } = await admin.storage.from(bucket).remove(paths);
+          if (rmErr) {
+            storageErrors.push(`${bucket}: ${rmErr.message}`);
+            break;
+          }
         }
-        if (!files || files.length === 0) continue;
-        const paths = files.map((f) => `${uid}/${f.name}`);
-        const { error: rmErr } = await admin.storage.from(bucket).remove(paths);
-        if (rmErr) storageErrors.push(`${bucket}: ${rmErr.message}`);
+        if (!emptied && !storageErrors.some((e) => e.startsWith(`${bucket}:`))) {
+          storageErrors.push(`${bucket}: not empty after ${MAX_PASSES} passes`);
+        }
       } catch (e) {
         storageErrors.push(`${bucket}: ${String(e)}`);
       }
@@ -90,20 +110,24 @@ Deno.serve(async (req) => {
     // Failing here leaves the account usable so the patient can retry, which
     // is the honest outcome — the alternative is deleting their login and
     // telling them their data is gone while their photos are still served.
+    //
+    // Internal detail stays in the function log, not in the response (S-08).
     if (storageErrors.length > 0) {
-      return json(
-        { error: 'Could not delete stored files', detail: storageErrors },
-        500
-      );
+      console.error('[delete-account] storage', storageErrors);
+      return json({ error: 'storage_delete_failed' }, 500);
     }
 
     // ── 2. The account itself; public.* cascades from here ─────────────────
     const { error: delErr } = await admin.auth.admin.deleteUser(uid);
-    if (delErr) return json({ error: delErr.message }, 500);
+    if (delErr) {
+      console.error('[delete-account] deleteUser', delErr.message);
+      return json({ error: 'account_delete_failed' }, 500);
+    }
 
     return json({ ok: true });
   } catch (error) {
-    return json({ error: String(error) }, 500);
+    console.error('[delete-account]', String(error));
+    return json({ error: 'internal_error' }, 500);
   }
 });
 

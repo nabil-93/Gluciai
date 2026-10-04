@@ -12,6 +12,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
+import { MealTypeModal } from '@/components/MealTypeModal';
 import { AppButton, BevelCard, HeroScreen, Spinner } from '@/components/ui';
 import { permissionAction, requestOrOpenSettings } from '@/lib/permissions';
 import {
@@ -28,7 +29,7 @@ import {
   type BarcodeResult,
 } from '@/services/nutrition/providers/barcodeLookup';
 import { colors, shadows } from '@/theme';
-import type { NutritionResult, ProductProvenance } from '@/types';
+import type { MealType, NutritionResult, ProductProvenance } from '@/types';
 
 const PORTIONS = [30, 50, 100, 150, 250];
 
@@ -46,6 +47,11 @@ export default function BarcodeScreen() {
   const [product, setProduct] = useState<BarcodeResult | null>(null);
   const [grams, setGrams] = useState(100);
   const [saved, setSaved] = useState(false);
+  /* Store audit F-09: a packaged product is filed under a meal like a scanned
+     plate — the journal, the per-meal totals and the per-meal insulin ratio
+     all key off it. The same picker the scanner uses asks before saving. */
+  const [mealAskOpen, setMealAskOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   // When a barcode is found but has NO nutrition anywhere, we still show the
@@ -196,8 +202,8 @@ export default function BarcodeScreen() {
       carbs_known: safe ? safe.per100g.carbs_known !== false : undefined,
     });
 
-  const save = async () => {
-    if (!product || !scaled || !safe) return;
+  const save = async (mealType: MealType) => {
+    if (!product || !scaled || !safe || saving) return;
     const result: NutritionResult = {
       food_name: product.brand
         ? `${product.name} (${product.brand})`
@@ -250,9 +256,15 @@ export default function BarcodeScreen() {
       saveToCatalog(product, 'user', true);
     }
 
-    await saveMeal(result, product.imageUrl);
-    setSaved(true);
-    setTimeout(close, 800);
+    setSaving(true);
+    try {
+      await saveMeal(result, product.imageUrl, undefined, undefined, mealType);
+      setSaved(true);
+      setTimeout(close, 800);
+    } finally {
+      setSaving(false);
+      setMealAskOpen(false);
+    }
   };
 
   /** Unknown barcode → the patient becomes the source. Opens the same product
@@ -568,8 +580,8 @@ export default function BarcodeScreen() {
             <View style={{ gap: 10, marginTop: 14 }}>
               <AppButton
                 label={saved ? t('barcodePage.saved') : t('barcodePage.save')}
-                onPress={save}
-                disabled={saved}
+                onPress={() => setMealAskOpen(true)}
+                disabled={saved || saving}
               />
               <AppButton
                 label={t('barcodePage.scanAnother')}
@@ -584,6 +596,13 @@ export default function BarcodeScreen() {
             </View>
           </>
         )}
+
+      <MealTypeModal
+        open={mealAskOpen}
+        saving={saving}
+        onCancel={() => setMealAskOpen(false)}
+        onConfirm={(m) => void save(m)}
+      />
     </HeroScreen>
   );
 }

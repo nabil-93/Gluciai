@@ -37,6 +37,12 @@ export function titleFromMessages(messages: ChatMessage[]): string {
   return clean.length > 40 ? clean.slice(0, 40) + '…' : clean;
 }
 
+/** A server row deleted on this device whose server delete is not confirmed. */
+export interface PendingDelete {
+  table: string;
+  id: string;
+}
+
 /** Everything hydrateFromServer() pulls back for the signed-in account. */
 export interface ServerSnapshot {
   accountUserId: string;
@@ -70,6 +76,14 @@ interface AppState {
   meals: MealScan[];
   activityLogs: ActivityLog[];
   measureLogs: MeasureLog[];
+  /**
+   * Server deletes not yet confirmed (store audit F-07). A delete made offline
+   * used to be fire-and-forget: the row came straight back with the next
+   * sync — a deleted insulin dose back in insulin-on-board. Each entry is
+   * replayed by hydrateFromServer and keeps the row out of the pulled
+   * snapshot until the server has really dropped it.
+   */
+  pendingDeletes: PendingDelete[];
   /** Chat threads, newest first; the active one is shown in the chat screen */
   conversations: Conversation[];
   activeConversationId: string | null;
@@ -118,6 +132,8 @@ interface AppState {
   setProfile: (profile: Profile) => void;
   setActivityStatus: (status: ActivityStatus) => void;
 
+  addPendingDelete: (table: string, id: string) => void;
+  clearPendingDelete: (id: string) => void;
   addGlucoseLog: (log: GlucoseLog) => void;
   removeGlucoseLog: (id: string) => void;
   addInsulinLog: (log: InsulinLog) => void;
@@ -189,6 +205,7 @@ const initialData = {
   meals: [] as MealScan[],
   activityLogs: [] as ActivityLog[],
   measureLogs: [] as MeasureLog[],
+  pendingDeletes: [] as PendingDelete[],
   conversations: [] as Conversation[],
   activeConversationId: null as string | null,
   corrections: [] as FoodCorrection[],
@@ -225,6 +242,14 @@ export const useAppStore = create<AppState>()(
       setProfile: (profile) => set({ profile }),
       setActivityStatus: (activityStatus) => set({ activityStatus }),
 
+      addPendingDelete: (table, id) =>
+        set((s) =>
+          s.pendingDeletes.some((d) => d.id === id)
+            ? s
+            : { pendingDeletes: [...s.pendingDeletes, { table, id }] }
+        ),
+      clearPendingDelete: (id) =>
+        set((s) => ({ pendingDeletes: s.pendingDeletes.filter((d) => d.id !== id) })),
       addGlucoseLog: (log) =>
         set((s) => ({ glucoseLogs: [log, ...s.glucoseLogs] })),
       removeGlucoseLog: (id) =>
@@ -415,6 +440,7 @@ export const useAppStore = create<AppState>()(
                 usage: [],
                 activityStatus: 'active' as ActivityStatus,
                 planWelcomeShown: false,
+                pendingDeletes: [],
               }
             : rest;
           // Seed conversations from the server's flat history only when we

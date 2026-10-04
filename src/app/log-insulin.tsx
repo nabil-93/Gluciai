@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 
 import { ActionGlyph, FadeInView, HeroScreen, HERO_INK, HERO_MUTED, Spinner } from '@/components/ui';
+import { EntryTimePicker } from '@/components/EntryTimePicker';
 import { confirmAsync } from '@/lib/confirm';
 import { guessMealTime } from '@/services/bolusEngine';
 import { saveInsulin } from '@/services/data';
@@ -49,6 +50,10 @@ export default function LogInsulinScreen() {
   const [meal, setMeal] = useState<MealType>(() => guessMealTime(new Date()));
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  /** When the injection was given — null = now (see EntryTimePicker). Matters
+   *  for insulin-on-board: a dose logged late but stamped "now" stays active
+   *  in every later calculation for hours longer than it really is. */
+  const [givenAt, setGivenAt] = useState<number | null>(null);
 
   // Accept a decimal dose typed with a comma OR a dot (e.g. "4,5" / "4.5"),
   // keeping at most one digit after the separator (0.1 U precision).
@@ -97,7 +102,13 @@ export default function LogInsulinScreen() {
     }
     setSaving(true);
     try {
-      await saveInsulin(num, type, notes || undefined, undefined, meal);
+      await saveInsulin(
+        num,
+        type,
+        notes || undefined,
+        givenAt != null ? new Date(givenAt).toISOString() : undefined,
+        meal
+      );
       close();
     } finally {
       setSaving(false);
@@ -223,6 +234,10 @@ export default function LogInsulinScreen() {
           placeholderTextColor="#AFBAB3"
           style={styles.notesInput}
         />
+      </FadeInView>
+
+      <FadeInView delay={190}>
+        <EntryTimePicker value={givenAt} onChange={setGivenAt} />
       </FadeInView>
 
       {/* ── Save ── */}

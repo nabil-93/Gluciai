@@ -630,7 +630,8 @@
     "serviceBusy": "Der Analysedienst ist gerade stark ausgelastet. Es liegt nicht an deiner Verbindung — versuche es gleich noch einmal.",
     "stillTrying": "Der Dienst ist ausgelastet — neuer Versuch läuft…",
     "openSettings": "Einstellungen öffnen",
-    "permissionBlocked": "Der Kamerazugriff wurde verweigert. Aktivieren Sie ihn in den Telefoneinstellungen, um Ihre Mahlzeiten zu scannen."
+    "permissionBlocked": "Der Kamerazugriff wurde verweigert. Aktivieren Sie ihn in den Telefoneinstellungen, um Ihre Mahlzeiten zu scannen.",
+    "aiShort": "KI"
   },
   "result": {
     "title": "Mahlzeiten-Analyse",
@@ -924,7 +925,13 @@
     "bigDoseTitle": "Dosis prüfen",
     "bigDoseBody": "Du hast {{dose}} E eingegeben. Ist das wirklich die gespritzte Dosis?",
     "bigDoseConfirm": "Ja, stimmt",
-    "doseTooHigh": "Eine Dosis über {{max}} E kann nicht gespeichert werden – prüfe das Komma."
+    "doseTooHigh": "Eine Dosis über {{max}} E kann nicht gespeichert werden – prüfe das Komma.",
+    "whenLabel": "Uhrzeit",
+    "whenNow": "Jetzt",
+    "whenYesterday": "Gestern",
+    "whenEarlier": "Früher",
+    "whenLater": "Später",
+    "whenBackToNow": "Zurück zu jetzt"
   },
   "tabs": {
     "home": "Start",

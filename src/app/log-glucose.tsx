@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 
 import { ActionGlyph, FadeInView, HeroScreen, HERO_INK, HERO_MUTED, Spinner } from '@/components/ui';
+import { EntryTimePicker } from '@/components/EntryTimePicker';
 import { nowMs } from '@/lib/clock';
 import { parseDecimal, sanitizeDecimal } from '@/lib/num';
 import { GlucoseUnitHelp } from '@/components/GlucoseUnitHelp';
@@ -41,6 +42,8 @@ export default function LogGlucoseScreen() {
   const [value, setValue] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  /** When the reading was taken — null = now (see EntryTimePicker). */
+  const [takenAt, setTakenAt] = useState<number | null>(null);
 
   const num = parseDecimal(value) ?? 0;
   const z = zone(num, low, high);
@@ -77,7 +80,11 @@ export default function LogGlucoseScreen() {
     if (!isPlausibleTypedMgdl(num)) return;
     setSaving(true);
     try {
-      await saveGlucose(num, notes || undefined);
+      await saveGlucose(
+        num,
+        notes || undefined,
+        takenAt != null ? new Date(takenAt).toISOString() : undefined
+      );
       close();
     } finally {
       setSaving(false);
@@ -203,6 +210,10 @@ export default function LogGlucoseScreen() {
             {t('log.lastReading', { value: last.value, when: lastLabel })}
           </Text>
         ) : null}
+      </FadeInView>
+
+      <FadeInView delay={170}>
+        <EntryTimePicker value={takenAt} onChange={setTakenAt} />
       </FadeInView>
 
       {/* ── Save ── */}
