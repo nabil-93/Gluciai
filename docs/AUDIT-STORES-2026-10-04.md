@@ -201,7 +201,7 @@ Build EAS production → TestFlight + test fermé Play (12 testeurs / 14 jours) 
 
 ## 3bis. Avancement des corrections (mis à jour le 2026-10-05)
 
-Commits sur `main` : `ce9797a` → `142c492` (8 commits). Tests : 67 fichiers, 1590 tests verts ;
+Commits sur `main` : `ce9797a` → `c82cc02` et suivants. Tests : 69 fichiers, 1618 tests verts ;
 typecheck, lint-ratchet et `check:edge` verts à chaque commit. Chaque correction est épinglée par un test
 (`tests/domain/storeAuditSafety.golden.test.ts`, `syncDurability`, `errorBodyOnce`, …).
 
@@ -209,12 +209,12 @@ typecheck, lint-ratchet et `check:edge` verts à chaque commit. Chaque correctio
 
 | Domaine | IDs |
 |---|---|
-| Bloquants stores | B-02 (l'IA ne calcule plus de dose), B-05 (politique `/privacy` publique + Profil → Confidentialité), B-06 (entrée « Capteurs » retirée), B-08 (consentement nomme Google Gemini, prénom seulement envoyé), B-09 (promesse « jamais d'entraînement » retirée), B-10 (page publique `/delete-account`), B-11 (mot de passe oublié + `/reset-password`) |
+| Bloquants stores | B-01 (interrupteur `EXPO_PUBLIC_BOLUS_CALCULATOR=off` : retire toutes les entrées du calculateur si Apple refuse), B-02 (l'IA ne calcule plus de dose), B-05 (politique `/privacy` publique + Profil → Confidentialité), B-06 (entrée « Capteurs » retirée), B-08 (consentement nomme Google Gemini, prénom seulement envoyé), B-09 (promesse « jamais d'entraînement » retirée), B-10 (page publique `/delete-account`), B-11 (mot de passe oublié + `/reset-password`) |
 | Sécurité clinique | C-01, C-02, C-03, C-04, C-05, C-06, C-07, C-08, C-09, C-10, C-11 (app ; contrainte DB dans 0036), C-12 (programme bloqué grossesse / < 18 ans / âge inconnu, case « mon médecin » si les doses changent), C-13 |
-| Backend | S-01 (code ; DB dans 0035), S-07 (dans 0036), S-08 (erreurs génériques, détail dans les logs) |
+| Backend | S-01 (code ; DB dans 0035), S-05 + F-02 (inscription compatible « Confirm email » : réponses gardées sur le téléphone puis envoyées à la 1re connexion, page `/email-confirmed`, renvoi de l'e-mail), S-06 (consentement « code médecin » liste tout ce que le médecin voit), S-07 (dans 0036), S-08 (erreurs génériques, détail dans les logs), S-11 (build de production sans config serveur = écran d'erreur, plus de mode démo silencieux) |
 | Bugs | F-01, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11, F-12 (téléphone en arabe = RTL dès le 1er lancement), F-14, F-15, F-16 ; + bug trouvé en route : le message « service occupé » du scanner ne s'affichait jamais (corps de réponse lu deux fois) |
-| Données | D-01, D-02, D-04, D-05 |
-| Finitions / natif | U-01, U-03, U-04, U-05, U-07, U-09, U-10, U-12, K-03, K-06 |
+| Données | D-01, D-02, D-03 (store découpé en plusieurs clés sur mobile, historique récent seulement sur l'appareil, version 1), D-04, D-05 ; S-09 (session dans le Keychain / Keystore, déplacée automatiquement) |
+| Finitions / natif | U-01, U-03, U-04, U-05, U-07, U-09, U-10, U-12, K-01/K-02 (Expo 57.0.26, RN 0.86.3 : expo-doctor 21/21), K-03, K-04 (privacy manifest iOS), K-06 |
 
 **⏳ Écrit, en attente d'une action du propriétaire**
 
@@ -222,6 +222,7 @@ typecheck, lint-ratchet et `check:edge` verts à chaque commit. Chaque correctio
 |---|---|
 | `npx supabase --workdir glucoai db push` | applique **0035** (S-01 catalogue, taille/type des fichiers) et **0036** (bornes dose/glycémie, S-07) — refusé à l'agent (déploiement production) |
 | Supabase → Auth → URL Configuration → Redirect URLs : ajouter `https://gluciai.vercel.app/reset-password` | sinon le lien de l'e-mail « mot de passe oublié » est refusé |
+| Supabase → Auth → Redirect URLs : ajouter aussi `https://gluciai.vercel.app/email-confirmed`, puis (recommandé) activer **Confirm email** | l'app gère maintenant les deux modes (S-05) |
 | Remplir `LEGAL_OWNER` + `LEGAL_CONTACT_EMAIL` dans `src/config/links.ts` | la politique doit nommer le responsable et un e-mail de contact (en attendant : « GluciAI » + support WhatsApp) |
 | Vérifier que la clé Gemini est sur un projet Google Cloud **avec facturation** | conditions de l'API payante (B-09) |
 
@@ -229,10 +230,9 @@ typecheck, lint-ratchet et `check:edge` verts à chaque commit. Chaque correctio
 
 - **Phase paiement (B-03/B-04)** : In-App Purchase Apple + Google Play Billing (RevenueCat), retirer le déblocage WhatsApp du build store, compte démo reviewer.
 - **Phase voix native (B-07)** : appel / notes vocales sur iPhone et Android (expo-audio + Gemini Live natif) ; d'ici là, cacher les entrées sur natif.
-- **Bolus (B-01)** : interrupteur de build pour retirer le calculateur si Apple refuse (1.4.1) ; C-14/C-15 relecture clinicien.
-- **Backend** : S-02 (buckets privés + URLs signées), S-03/S-04 (quotas et limites côté serveur), S-05 + F-02 (confirmation e-mail), S-06 (consentement « code médecin »), S-09 (session dans SecureStore), S-11 (pas de mode démo silencieux en production), S-12 (régénérer la clé USDA), S-13 (perf RLS).
-- **Données** : D-03 (version + bornes du store persistant).
-- **Finitions** : U-02 (accessibilité), U-06 (PDF médecin multilingue), U-08, U-11, F-13 (redémarrage auto après passage à l'arabe), K-01/K-02 (mise à jour Expo 57.0.x), K-04 (privacy manifest), K-05, K-07 (Sentry), K-08 (images).
+- **Clinique** : C-14/C-15 relecture par un clinicien (premiers secours hypo en ar/de/en, paramètres du moteur bolus).
+- **Backend** : S-02 (buckets privés + URLs signées), S-03/S-04 (quotas et limites côté serveur), S-12 (régénérer la clé USDA — propriétaire), S-13 (perf RLS).
+- **Finitions** : U-02 (accessibilité), U-06 (PDF médecin multilingue), U-08, U-11, F-13 (redémarrage auto après passage à l'arabe), K-05, K-07 (Sentry — DSN à fournir), K-08 (images).
 
 ---
 

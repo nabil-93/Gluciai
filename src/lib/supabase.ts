@@ -2,6 +2,8 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, Platform } from 'react-native';
 
+import { secureAuthStorage } from './secureAuthStorage';
+
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
@@ -46,7 +48,8 @@ export const supabase: SupabaseClient | null = isDemoMode
   ? null
   : createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        storage: Platform.OS === 'web' ? undefined : AsyncStorage,
+        // Native: Keychain / Keystore (store audit S-09). Web: localStorage.
+        storage: Platform.OS === 'web' ? undefined : secureAuthStorage,
         storageKey: AUTH_STORAGE_KEY,
         autoRefreshToken: true,
         persistSession: true,
@@ -209,6 +212,9 @@ export async function clearAuthStorage(): Promise<void> {
       );
       for (const k of all) localStorage.removeItem(k);
     } else {
+      // The secure store (and its pieces) AND the old location, in case the
+      // session never moved or fell back there.
+      for (const k of keys) await secureAuthStorage.removeItem(k);
       await AsyncStorage.multiRemove(keys);
     }
   } catch {

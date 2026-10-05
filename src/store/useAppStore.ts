@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { chunkedStorage, persistedSlice } from './persistence';
+
 import type { HealthyFood } from '@/data/healthyFoods';
 import type {
   ActivityLog,
@@ -511,7 +513,18 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'glucoai.store',
-      storage: createJSONStorage(() => AsyncStorage),
+      // Native: split across keys so no SQLite row nears Android's 2 MB
+      // CursorWindow. Web: localStorage has no row limit — plain value.
+      storage: createJSONStorage(() =>
+        typeof document !== 'undefined' ? AsyncStorage : chunkedStorage(AsyncStorage)
+      ),
+      // Recent history only on the device; the server holds the rest and the
+      // next sync brings it back into memory (store audit D-03).
+      partialize: (state) => persistedSlice(state, Date.now()),
+      // v0 → v1 changed what is written, not its shape: nothing to migrate.
+      // The number exists so a future shape change has a place to do it.
+      version: 1,
+      migrate: (persisted) => persisted as AppState,
     }
   )
 );
