@@ -9,12 +9,13 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, type ErrorBoundaryProps } from 'expo-router';
+import { Redirect, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedRobot, ChevronLeft, FadeInView, Spinner } from '@/components/ui';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
+import { BOLUS_CALCULATOR_ENABLED } from '@/config/features';
 import { ComposerHero } from '@/components/bolus/ComposerHero';
 import { GlucoseUnitHelp } from '@/components/GlucoseUnitHelp';
 import { DoseHero } from '@/components/bolus/DoseHero';
@@ -98,7 +99,14 @@ function isMealType(v: unknown): v is MealType {
 
 type Phase = 'input' | 'loading' | 'report';
 
-export default function BolusScreen() {
+/** Store audit B-01: with the calculator switched off, the route itself
+ *  refuses to open — a deep link or a stale link lands on insulin logging. */
+export default function BolusRoute() {
+  if (!BOLUS_CALCULATOR_ENABLED) return <Redirect href="/log-insulin" />;
+  return <BolusScreen />;
+}
+
+function BolusScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();

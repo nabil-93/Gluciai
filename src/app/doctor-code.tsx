@@ -47,6 +47,25 @@ function StethoscopeIcon({ color = '#4f46e5' }: { color?: string }) {
  * links the account to that doctor (who then sees them in the dashboard)
  * and applies the subscription discount.
  */
+/**
+ * Everything a linked doctor can read (store audit S-06). The RLS policies give
+ * a linked doctor read access to the patient's profile, logs, lab reports,
+ * programme and assistant conversations — this list used to name only meals,
+ * glucose, insulin and the daily report, so the patient consented to less
+ * than was shared. The list now matches what the database allows.
+ */
+const SEE_KEYS = [
+  'seeProfile',
+  'seeMeals',
+  'seeGlucose',
+  'seeInsulin',
+  'seeActivity',
+  'seeLabs',
+  'seeProgram',
+  'seeChat',
+  'seeReport',
+] as const;
+
 export default function DoctorCodeScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -187,7 +206,7 @@ export default function DoctorCodeScreen() {
         {/* What the doctor can see */}
         <View style={styles.noteCard}>
           <Text style={styles.noteTitle}>{t('coupon.seeTitle')}</Text>
-          {['seeMeals', 'seeGlucose', 'seeInsulin', 'seeReport'].map((k) => (
+          {SEE_KEYS.map((k) => (
             <View key={k} style={styles.noteRow}>
               <View style={styles.noteDot} />
               <Text style={styles.noteText}>{t(`coupon.${k}`)}</Text>

@@ -168,7 +168,9 @@
     "close": "Schließen",
     "viewPhoto": "Foto ansehen",
     "restartTitle": "App neu starten",
-    "restartBody": "Die Sprache wurde geändert. Schließen Sie GluciAI vollständig und öffnen Sie die App erneut, damit das Layout in der richtigen Richtung angezeigt wird."
+    "restartBody": "Die Sprache wurde geändert. Schließen Sie GluciAI vollständig und öffnen Sie die App erneut, damit das Layout in der richtigen Richtung angezeigt wird.",
+    "configMissingTitle": "App nicht konfiguriert",
+    "configMissingBody": "Diese GluciAI-Version findet ihren Server nicht und kann deine Daten daher nicht sicher speichern. Bitte aktualisiere die App oder kontaktiere den Support."
   },
   "language": {
     "title": "Wähle deine Sprache",
@@ -245,7 +247,10 @@
     "sendResetLink": "Link senden",
     "resetSentGeneric": "Falls ein Konto mit dieser E-Mail existiert, wurde gerade ein Link gesendet. Prüfe auch deinen Spam-Ordner.",
     "backToLogin": "Zurück zur Anmeldung",
-    "nameRequired": "Gib deinen Namen ein, um dein Konto zu erstellen."
+    "nameRequired": "Gib deinen Namen ein, um dein Konto zu erstellen.",
+    "confirmSent": "Konto erstellt ✓ Wir haben eine Bestätigungs-E-Mail an {{email}} gesendet. Öffne sie, tippe auf den Link und melde dich dann hier an — deine Antworten bleiben auf diesem Telefon gespeichert.",
+    "resendConfirmation": "Bestätigungs-E-Mail erneut senden",
+    "confirmResent": "E-Mail erneut gesendet. Sieh auch im Spam-Ordner nach."
   },
   "wizard": {
     "progress": "Schritt {{current}} von {{total}}",
@@ -1467,7 +1472,7 @@
     "invalid": "Ungültiger oder abgelaufener Code.",
     "success": "Du bist jetzt mit deinem Arzt verbunden ✓",
     "consentTitle": "Betreuung durch deinen Arzt",
-    "consentBody": "Mit der Bestätigung dieses Codes stimmst du zu, dass dein Arzt deine Gesundheitsdaten (Mahlzeiten, Blutzucker, Insulin, Tagesbericht) einsieht, um dich besser zu begleiten. Du kannst dies jederzeit widerrufen.",
+    "consentBody": "Mit diesem Code kann dein Arzt deine GluciAI-Akte einsehen: medizinisches Profil, Mahlzeiten, Blutzucker, Insulin, Aktivitäten und Messwerte, Laborbefunde, Programm und Gespräche mit dem KI-Assistenten. Er kann nichts ändern, und du kannst die Verknüpfung jederzeit entfernen (Profil → Mein Arzt).",
     "consentAccept": "Ich stimme zu",
     "seeTitle": "Was dein Arzt sehen kann",
     "seeMeals": "Deine Mahlzeiten und Scans",
@@ -1479,7 +1484,12 @@
     "unlinkTitle": "Arzt entfernen?",
     "unlinkBody": "Dein Arzt hat dann keinen Zugriff mehr auf deine Gesundheitsdaten. Der Rabatt aus seinem Code entfällt ebenfalls. Du kannst ihn jederzeit wieder mit seinem Code verknüpfen.",
     "unlinkConfirm": "Entfernen",
-    "unlinkFailed": "Verknüpfung konnte nicht entfernt werden. Bitte erneut versuchen."
+    "unlinkFailed": "Verknüpfung konnte nicht entfernt werden. Bitte erneut versuchen.",
+    "seeProfile": "Dein medizinisches Profil (Behandlung, Faktoren, Zielwerte)",
+    "seeActivity": "Deine Aktivitäten und Messwerte (Gewicht, Blutdruck …)",
+    "seeLabs": "Deine Laborbefunde",
+    "seeProgram": "Dein Programm",
+    "seeChat": "Deine Gespräche mit dem KI-Assistenten"
   },
   "labs": {
     "title": "Meine Analysen",
@@ -2488,5 +2498,12 @@
     "noAccessB": "Nutze „Passwort vergessen“ auf dem Anmeldebildschirm oder schreib uns von der E-Mail-Adresse deines Kontos: Wir löschen das Konto und alle Daten innerhalb von 30 Tagen.",
     "privacyLink": "Datenschutzerklärung",
     "contactLabel": "Kontakt:"
+  },
+  "emailConfirmed": {
+    "title": "Adresse bestätigt",
+    "body": "Deine E-Mail-Adresse ist bestätigt. Kehre zur GluciAI-App zurück und melde dich mit E-Mail und Passwort an.",
+    "failedTitle": "Link abgelaufen",
+    "failedBody": "Dieser Link ist abgelaufen oder wurde bereits verwendet. Melde dich an: Ist deine Adresse noch nicht bestätigt, kannst du eine neue E-Mail anfordern.",
+    "signIn": "Anmelden"
   }
 }

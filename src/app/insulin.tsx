@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { BOLUS_CALCULATOR_ENABLED } from '@/config/features';
 import {
   Image,
   Modal,
@@ -707,6 +708,7 @@ export default function InsulinScreen() {
         </FadeInView>
 
         {/* ── Calculer un bolus ── */}
+        {BOLUS_CALCULATOR_ENABLED ? (
         <FadeInView delay={250} style={{ paddingHorizontal: 20, marginTop: 16 }}>
           <Pressable style={styles.bolusCard} onPress={() => router.push('/bolus')}>
             <View style={styles.bolusChip}>
@@ -721,6 +723,7 @@ export default function InsulinScreen() {
             </View>
           </Pressable>
         </FadeInView>
+        ) : null}
       </ScrollView>
 
       {/* ── FAB ── */}

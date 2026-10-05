@@ -42,6 +42,7 @@ import {
   useReduceMotion,
 } from '@/components/ui';
 import { LastMealCard } from '@/components/LastMealCard';
+import { BOLUS_CALCULATOR_ENABLED } from '@/config/features';
 import { DayRingGlyph, RingCalendar, type DayRing } from '@/components/calendar/RingCalendar';
 import { useTabBarScroll } from '@/components/ui/TabBarVisibility';
 import { getDailyInsight, type Insight } from '@/services/insights';
@@ -1847,21 +1848,23 @@ export default function HomeScreen() {
             </View>
             <ChevDown />
           </PressableScale>
-          <PressableScale
-            containerStyle={styles.chipWrap}
-            style={styles.chipCard}
-            onPress={() => router.push('/bolus')}
-            accessibilityLabel={t('home.bolus')}
-          >
-            <BolusBadge size={38} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.chipTitle}>{t('home.bolus')}</Text>
-              <Text style={styles.chipSub} numberOfLines={1}>
-                {t('home.bolusQuick')}
-              </Text>
-            </View>
-            <ArrowRight />
-          </PressableScale>
+          {BOLUS_CALCULATOR_ENABLED ? (
+            <PressableScale
+              containerStyle={styles.chipWrap}
+              style={styles.chipCard}
+              onPress={() => router.push('/bolus')}
+              accessibilityLabel={t('home.bolus')}
+            >
+              <BolusBadge size={38} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.chipTitle}>{t('home.bolus')}</Text>
+                <Text style={styles.chipSub} numberOfLines={1}>
+                  {t('home.bolusQuick')}
+                </Text>
+              </View>
+              <ArrowRight />
+            </PressableScale>
+          ) : null}
         </View>
 
         {/* ── Alert banner (today only — logging always writes "now") ── */}

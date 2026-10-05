@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -28,7 +28,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Sentry from '@sentry/react-native';
 
 import { InstallPrompt } from '@/components/InstallPrompt';
-import { initI18n } from '@/i18n';
+import i18n, { initI18n } from '@/i18n';
+import { missingProductionConfig } from '@/lib/supabase';
 import { observabilityOptions } from '@/lib/observability';
 import { useNotificationRouting } from '@/services/notificationRouting';
 import { colors } from '@/theme';
@@ -93,6 +94,16 @@ function RootLayout() {
 
   if (!ready || !fontsLoaded) {
     return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+  }
+
+  // Store audit S-11 — see missingProductionConfig.
+  if (missingProductionConfig) {
+    return (
+      <View style={styles.configMissing}>
+        <Text style={styles.configTitle}>{i18n.t('common.configMissingTitle')}</Text>
+        <Text style={styles.configBody}>{i18n.t('common.configMissingBody')}</Text>
+      </View>
+    );
   }
 
   return (
@@ -202,6 +213,16 @@ function RootLayout() {
 export default Sentry.wrap(RootLayout);
 
 const styles = StyleSheet.create({
+  configMissing: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 10,
+    backgroundColor: colors.background,
+  },
+  configTitle: { fontSize: 18, fontWeight: '800', color: '#101828', textAlign: 'center' },
+  configBody: { fontSize: 14.5, lineHeight: 21, color: '#5f6b7a', textAlign: 'center' },
   root: {
     flex: 1,
     backgroundColor: colors.background,

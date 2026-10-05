@@ -37,6 +37,13 @@ export function titleFromMessages(messages: ChatMessage[]): string {
   return clean.length > 40 ? clean.slice(0, 40) + '…' : clean;
 }
 
+/** What the first authenticated sync must push for a just-confirmed account. */
+export interface PendingProfilePush {
+  phone: string;
+  /** Doctor code entered during onboarding, redeemed once signed in. */
+  promo: string | null;
+}
+
 /** A server row deleted on this device whose server delete is not confirmed. */
 export interface PendingDelete {
   table: string;
@@ -84,6 +91,15 @@ interface AppState {
    * snapshot until the server has really dropped it.
    */
   pendingDeletes: PendingDelete[];
+  /**
+   * The onboarding profile written on THIS phone before the account could
+   * be signed in (store audit S-05 / F-02). With e-mail confirmation on,
+   * sign-up returns no session, so nothing can reach the server yet. The
+   * answers stay here and the first authenticated sync pushes them — with
+   * the phone and the doctor code the registration captured — BEFORE it
+   * pulls, so the empty server row cannot overwrite them.
+   */
+  pendingProfilePush: PendingProfilePush | null;
   /** Chat threads, newest first; the active one is shown in the chat screen */
   conversations: Conversation[];
   activeConversationId: string | null;
@@ -132,6 +148,7 @@ interface AppState {
   setProfile: (profile: Profile) => void;
   setActivityStatus: (status: ActivityStatus) => void;
 
+  setPendingProfilePush: (p: PendingProfilePush | null) => void;
   addPendingDelete: (table: string, id: string) => void;
   clearPendingDelete: (id: string) => void;
   addGlucoseLog: (log: GlucoseLog) => void;
@@ -206,6 +223,7 @@ const initialData = {
   activityLogs: [] as ActivityLog[],
   measureLogs: [] as MeasureLog[],
   pendingDeletes: [] as PendingDelete[],
+  pendingProfilePush: null as PendingProfilePush | null,
   conversations: [] as Conversation[],
   activeConversationId: null as string | null,
   corrections: [] as FoodCorrection[],
@@ -242,6 +260,7 @@ export const useAppStore = create<AppState>()(
       setProfile: (profile) => set({ profile }),
       setActivityStatus: (activityStatus) => set({ activityStatus }),
 
+      setPendingProfilePush: (pendingProfilePush) => set({ pendingProfilePush }),
       addPendingDelete: (table, id) =>
         set((s) =>
           s.pendingDeletes.some((d) => d.id === id)

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { BOLUS_CALCULATOR_ENABLED } from '@/config/features';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -234,14 +235,16 @@ export default function FoodsScreen() {
                             : t('foodsPage.add')}
                         </Text>
                       </Pressable>
-                      <Pressable
-                        style={[styles.actionBtn, styles.actionSecondary]}
-                        onPress={() => add(f, true)}
-                      >
-                        <Text style={styles.actionSecondaryText} numberOfLines={1}>
-                          💉 Bolus
-                        </Text>
-                      </Pressable>
+                      {BOLUS_CALCULATOR_ENABLED ? (
+                        <Pressable
+                          style={[styles.actionBtn, styles.actionSecondary]}
+                          onPress={() => add(f, true)}
+                        >
+                          <Text style={styles.actionSecondaryText} numberOfLines={1}>
+                            💉 Bolus
+                          </Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   </View>
                 ) : null}

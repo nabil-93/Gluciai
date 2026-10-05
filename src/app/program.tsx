@@ -41,6 +41,7 @@ import {
   type WeekPlanProgress,
 } from '@/services/programShopping';
 import { setBolusHandoff } from '@/services/bolusHandoff';
+import { BOLUS_CALCULATOR_ENABLED } from '@/config/features';
 import { consumeProgramDraft, type ProgramSetupDraft } from '@/services/programDraft';
 import { MEAL_SLOTS, type ActivityLevel, type ProgramGoal } from '@/services/programEngine';
 import { useAppStore } from '@/store/useAppStore';
@@ -805,6 +806,7 @@ export default function ProgramScreen() {
                   <Pressable style={styles.primaryAction} onPress={() => setConfirming(nextMeal)}>
                     <Text style={styles.primaryActionText}>✓ {t('program.ateIt')}</Text>
                   </Pressable>
+                  {BOLUS_CALCULATOR_ENABLED ? (
                   <Pressable
                     style={styles.ghostAction}
                     onPress={() => {
@@ -818,6 +820,7 @@ export default function ProgramScreen() {
                   >
                     <Text style={styles.ghostActionText}>💉 {t('program.myDose')}</Text>
                   </Pressable>
+                  ) : null}
                 </View>
               </View>
             ) : (

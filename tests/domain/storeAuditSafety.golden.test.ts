@@ -239,3 +239,94 @@ describe('U-04 / U-09 / U-10 · polish', () => {
     expect(src('src/config/support.ts')).not.toContain('GlucoAI');
   });
 });
+
+describe('B-01 · the bolus calculator can be removed from a store build', () => {
+  it('the switch reads one build-time variable', () => {
+    expect(src('src/config/features.ts')).toContain(
+      "process.env.EXPO_PUBLIC_BOLUS_CALCULATOR !== 'off'"
+    );
+  });
+
+  it('the route itself refuses to open when switched off', () => {
+    expect(src('src/app/bolus.tsx')).toContain(
+      'if (!BOLUS_CALCULATOR_ENABLED) return <Redirect href="/log-insulin" />;'
+    );
+  });
+
+  it('every file that links to the calculator is gated by the switch', async () => {
+    const { readdirSync, statSync } = await import('node:fs');
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const p = `${dir}/${name}`;
+        return statSync(p).isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(name) ? [p] : [];
+      });
+    const linking = walk('src').filter(
+      (f) =>
+        // The calculator itself, and the hand-off module that only DEFINES setBolusHandoff.
+        f !== 'src/app/bolus.tsx' &&
+        f !== 'src/services/bolusHandoff.ts' &&
+        /['"]\/bolus['"]|setBolusHandoff\(|run\(true\)/.test(src(f))
+    );
+    expect(linking.length).toBeGreaterThan(5);
+    for (const f of linking) {
+      expect(src(f), f).toContain('BOLUS_CALCULATOR_ENABLED');
+    }
+  });
+});
+
+describe('S-11 · a release build without its server stops, it does not pretend', () => {
+  it('the guard needs a release build AND no explicit demo opt-in', () => {
+    const s = src('src/lib/supabase.ts');
+    expect(s).toContain('isDemoMode &&');
+    expect(s).toContain('!__DEV__ &&');
+    expect(s).toContain("process.env.EXPO_PUBLIC_ALLOW_DEMO !== '1'");
+  });
+
+  it('the root layout renders the configuration screen instead of the app', () => {
+    const s = src('src/app/_layout.tsx');
+    expect(s.indexOf('if (missingProductionConfig)')).toBeLessThan(s.indexOf('<Stack'));
+  });
+});
+
+describe('K-04 · iOS privacy manifest', () => {
+  it('declares no tracking and the data the app really collects', () => {
+    const pm = JSON.parse(src('app.json')).expo.ios.privacyManifests;
+    expect(pm.NSPrivacyTracking).toBe(false);
+    const types = pm.NSPrivacyCollectedDataTypes.map(
+      (d: { NSPrivacyCollectedDataType: string }) => d.NSPrivacyCollectedDataType
+    );
+    expect(types).toContain('NSPrivacyCollectedDataTypeHealth');
+    for (const d of pm.NSPrivacyCollectedDataTypes) {
+      expect(d.NSPrivacyCollectedDataTypeTracking).toBe(false);
+    }
+  });
+});
+
+describe('S-05 / F-02 · sign-up works with e-mail confirmation on', () => {
+  const wiz = () => src('src/app/wizard.tsx');
+
+  it('no session after sign-up = awaiting confirmation, never a silent demo user', () => {
+    expect(wiz()).toContain('if (!signUpData.session && signUpData.user?.id) {');
+    expect(wiz()).toContain("let uid = awaitingConfirmation?.uid ?? 'demo-user';");
+  });
+
+  it('an address that already has an account is reported, not waited on', () => {
+    expect(wiz()).toContain('signUpData.user?.identities?.length === 0');
+  });
+
+  it('the answers are kept for the first sync and the patient is sent to sign in', () => {
+    const s = wiz();
+    const branch = s.slice(s.indexOf('if (awaitingConfirmation) {'));
+    const end = branch.indexOf('return;');
+    const body = branch.slice(0, end);
+    expect(body).toContain('store.setPendingProfilePush(');
+    expect(body).toContain("params: { mode: 'login', confirm: awaitingConfirmation.email }");
+    // Not "done": with no session there is no account to show yet.
+    expect(body).not.toContain('setWizardDone()');
+  });
+
+  it('the confirmation link has a landing page and can be re-sent', () => {
+    expect(src('src/app/email-confirmed.tsx')).toContain('export default function EmailConfirmedScreen');
+    expect(src('src/app/auth.tsx')).toContain("type: 'signup'");
+  });
+});

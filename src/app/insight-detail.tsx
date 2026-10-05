@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { BOLUS_CALCULATOR_ENABLED } from '@/config/features';
 import {
   Pressable,
   ScrollView,
@@ -106,13 +107,15 @@ function buildReport(kind: Kind, tone: AIJournalEntry['tone']): Report {
         ],
         advices: [
           "Buvez de l'eau — l'hydratation aide à faire baisser la glycémie",
-          'Utilisez le calculateur de bolus pour estimer la correction',
+          ...(BOLUS_CALCULATOR_ENABLED
+            ? ['Utilisez le calculateur de bolus pour estimer la correction']
+            : []),
           '10–15 min de marche douce peuvent baisser le pic',
           'Re-mesurez dans 2 h pour vérifier la tendance',
           'Ne « sur-corrigez » pas : attendez l\'effet de la première dose (3-4 h)',
         ],
         actions: [
-          { href: '/bolus' },
+          { href: BOLUS_CALCULATOR_ENABLED ? '/bolus' : '/glucose' },
           { href: '/log-glucose' },
         ],
       };

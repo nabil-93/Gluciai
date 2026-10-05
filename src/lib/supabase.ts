@@ -11,6 +11,23 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
  */
 export const isDemoMode = !supabaseUrl || !supabaseAnonKey;
 
+/**
+ * A RELEASE BUILD WITHOUT ITS SERVER IS BROKEN, NOT A DEMO (store audit S-11).
+ *
+ * Demo mode switches on by itself whenever the two variables are missing. That
+ * is right for a local preview, and wrong for a store build: an EAS build made
+ * without its environment would have run fully "working" on local mock data —
+ * a patient's readings never leaving the phone, no account, no error shown.
+ * A release build in that state now stops on a configuration screen instead.
+ * `EXPO_PUBLIC_ALLOW_DEMO=1` is the explicit way to publish a demo on purpose.
+ * (`typeof` guard: the unit-test runner has no `__DEV__`.)
+ */
+export const missingProductionConfig =
+  isDemoMode &&
+  typeof __DEV__ !== 'undefined' &&
+  !__DEV__ &&
+  process.env.EXPO_PUBLIC_ALLOW_DEMO !== '1';
+
 /** `ftqyzpkzqeudzfztataz` out of `https://ftqyzpkzqeudzfztataz.supabase.co`. */
 const projectRef = supabaseUrl.match(/^https?:\/\/([^.]+)\./)?.[1] ?? 'local';
 

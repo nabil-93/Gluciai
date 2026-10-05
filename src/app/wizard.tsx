@@ -21,6 +21,7 @@ import { isRTL } from '@/i18n';
 import { useFrameDimensions } from '@/lib/appFrame';
 import { confirmAsync } from '@/lib/confirm';
 import { parseDecimal, parsePositive, sanitizeDecimal } from '@/lib/num';
+import { WEB_APP_URL } from '@/config/links';
 import { currentUser, isDemoMode, supabase } from '@/lib/supabase';
 import { authErrorKey } from '@/services/authErrors';
 import { saveProfile } from '@/services/data';
@@ -554,14 +555,41 @@ export default function WizardScreen() {
      * confirmed success.
      */
     const pending = getPendingRegistration();
+    /** Set when the project requires e-mail confirmation (store audit S-05):
+     *  the account exists, but there is no session to save anything with. */
+    let awaitingConfirmation: { uid: string; email: string } | null = null;
     if (pending && !isDemoMode && supabase) {
       try {
-        const { error: signUpErr } = await supabase.auth.signUp({
+        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
           email: pending.email,
           password: pending.password,
-          options: { data: { name: pending.name, phone: pending.phone } },
+          options: {
+            data: { name: pending.name, phone: pending.phone },
+            // Where the confirmation link lands (allow-listed in Supabase Auth).
+            emailRedirectTo: `${WEB_APP_URL}/email-confirmed`,
+          },
         });
         if (signUpErr) throw signUpErr;
+        // With confirmation on, an address that already has an account comes
+        // back as a user with no identities and no error (Supabase's
+        // anti-enumeration answer). Say so now, instead of having the patient
+        // wait for an e-mail that will never come.
+        if (!signUpData.session && signUpData.user?.identities?.length === 0) {
+          throw { code: 'user_already_exists', message: 'User already registered' };
+        }
+        if (!signUpData.session && signUpData.user?.id) {
+          awaitingConfirmation = { uid: signUpData.user.id, email: pending.email };
+        }
+      } catch (e: any) {
+        if (__DEV__) console.warn('[wizard signUp]', e?.code ?? e?.status ?? '', e?.message);
+        // No account, no profile, no navigation — and the answers stay put.
+        setSubmitError(t(authErrorKey(e)));
+        setSaving(false);
+        return;
+      }
+    }
+    if (pending && !isDemoMode && supabase && !awaitingConfirmation) {
+      try {
         // The `handle_new_user` trigger inserts only user_id/email/role — it
         // does NOT copy the phone out of the sign-up metadata, and
         // `saveProfile` below has no phone field either. `auth.tsx` used to
@@ -608,14 +636,14 @@ export default function WizardScreen() {
     // (saveProfile skips the server upsert for 'demo-user'). Without this the
     // whole wizard — targets, insulin, emergency contact, doctor, address —
     // stayed in memory only and vanished on the next hydrate.
-    let uid = 'demo-user';
+    let uid = awaitingConfirmation?.uid ?? 'demo-user';
     // Keep the name captured at sign-up: the wizard never asks for it, and an
     // empty value here would otherwise overwrite it on the server.
     // The wizard never asks for a name, so it comes from the registration form
     // — now held in `pending` rather than already written to the server.
     let existingName =
       useAppStore.getState().profile?.name || pending?.name?.trim() || '';
-    if (!isDemoMode && supabase) {
+    if (!isDemoMode && supabase && !awaitingConfirmation) {
       try {
         const u = await currentUser();
         uid = u?.id ?? 'demo-user';
@@ -660,6 +688,35 @@ export default function WizardScreen() {
       doctor_name: doctorName || undefined,
       doctor_phone: doctorPhone || undefined,
     };
+    /*
+     * E-MAIL CONFIRMATION REQUIRED (store audit S-05 / F-02).
+     *
+     * There is an account but no session, so the profile cannot be written to
+     * the server yet. It used to be saved under 'demo-user' — local only, never
+     * synced, and the patient was let into the app as if all was well. Now the
+     * answers are kept on this phone under the new account's id, flagged for
+     * the first authenticated sync, and the patient is sent to sign in once
+     * they have clicked the link. `wizardDone` stays false on purpose: until
+     * they sign in, the app has no account to show.
+     */
+    if (awaitingConfirmation) {
+      const store = useAppStore.getState();
+      store.claimAccount(awaitingConfirmation.uid);
+      store.setProfile(profile);
+      store.setPendingProfilePush({
+        phone: pending?.phone.trim() ?? '',
+        promo: promoState === 'queued' && promoCode.trim() ? promoCode.trim() : null,
+      });
+      clearPendingRegistration();
+      setConsentAccepted();
+      setSaving(false);
+      router.replace({
+        pathname: '/auth',
+        params: { mode: 'login', confirm: awaitingConfirmation.email },
+      } as never);
+      return;
+    }
+
     try {
       // saveProfile already updates the local store; a failed server upsert
       // returns { ok:false } (never throws), so onboarding always completes

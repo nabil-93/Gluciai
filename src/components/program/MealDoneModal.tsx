@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useTranslation } from 'react-i18next';
 
 import { Spinner } from '@/components/ui';
+import { BOLUS_CALCULATOR_ENABLED } from '@/config/features';
 import { carbFigureOf, carbStatus } from '@/services/nutrition/interpret';
 import { formatPortion } from '@/services/nutrition/portionUnit';
 import { plannedMealResult, type PlannedMeal } from '@/services/program';
@@ -155,15 +156,17 @@ export function MealDoneModal({
               )}
             </Pressable>
 
-            <Pressable onPress={() => run(true)} disabled={!!busy} style={styles.secondary}>
-              {busy === 'dose' ? (
-                <Spinner size={20} color={INK} />
-              ) : (
-                <Text style={styles.secondaryText}>
-                  💉 {t('program.confirmAndDose', { carbs: Math.round(result.carbohydrates) })}
-                </Text>
-              )}
-            </Pressable>
+            {BOLUS_CALCULATOR_ENABLED ? (
+              <Pressable onPress={() => run(true)} disabled={!!busy} style={styles.secondary}>
+                {busy === 'dose' ? (
+                  <Spinner size={20} color={INK} />
+                ) : (
+                  <Text style={styles.secondaryText}>
+                    💉 {t('program.confirmAndDose', { carbs: Math.round(result.carbohydrates) })}
+                  </Text>
+                )}
+              </Pressable>
+            ) : null}
 
             <Pressable onPress={onClose} disabled={!!busy} style={styles.cancel}>
               <Text style={styles.cancelText}>{t('common.cancel')}</Text>

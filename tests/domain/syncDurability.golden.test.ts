@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   duringFetch: null as null | (() => void),
   state: {} as Record<string, any>,
   snapshot: null as null | Record<string, any>,
+  profileUpsertFails: false,
+  rpcs: [] as { fn: string; args: unknown }[],
 }));
 
 function makeQuery(table: string) {
@@ -41,7 +43,7 @@ function makeQuery(table: string) {
       data: rows().slice(from, Math.min(to + 1, from + PG_MAX_ROWS)),
       error: null,
     }),
-    maybeSingle: async () => ({ data: null, error: null }),
+    maybeSingle: async () => ({ data: (h.server.profiles ?? [])[0] ?? null, error: null }),
     delete: () => ({
       eq: async (_col: string, id: string) => {
         if (h.deleteFails) return { error: { message: 'Failed to fetch' } };
@@ -50,11 +52,13 @@ function makeQuery(table: string) {
         return { error: null };
       },
     }),
-    upsert: (payload: any[]) => {
-      h.upserts.push({ table, rows: payload });
+    upsert: (payload: any) => {
+      h.upserts.push({ table, rows: Array.isArray(payload) ? payload : [payload] });
       return {
+        // Awaited directly by the profile push (no .select()).
+        error: table === 'profiles' && h.profileUpsertFails ? { message: 'refused' } : null,
         select: async () => ({
-          data: payload.map((r, i) => ({
+          data: (payload as any[]).map((r: any, i: number) => ({
             ...r,
             id: r.id ?? `00000000-0000-4000-8000-00000000000${i}`,
           })),
@@ -69,7 +73,14 @@ function makeQuery(table: string) {
 vi.mock('@/lib/supabase', () => ({
   isDemoMode: false,
   currentUserId: async () => UID,
-  supabase: { auth: {}, from: (table: string) => makeQuery(table) },
+  supabase: {
+    auth: {},
+    from: (table: string) => makeQuery(table),
+    rpc: async (fn: string, args: unknown) => {
+      h.rpcs.push({ fn, args });
+      return { data: null, error: null };
+    },
+  },
 }));
 
 vi.mock('@/store/useAppStore', () => ({
@@ -84,6 +95,9 @@ vi.mock('@/store/useAppStore', () => ({
       },
       hydrateServer: (snap: Record<string, any>) => {
         h.snapshot = snap;
+      },
+      setPendingProfilePush: (p: unknown) => {
+        h.state = { ...h.state, pendingProfilePush: p };
       },
     }),
   },
@@ -113,6 +127,8 @@ beforeEach(() => {
   h.upserts = [];
   h.duringFetch = null;
   h.snapshot = null;
+  h.profileUpsertFails = false;
+  h.rpcs = [];
   h.state = {
     accountUserId: UID,
     profile: null,
@@ -125,6 +141,7 @@ beforeEach(() => {
     eventLogs: [],
     labReports: [],
     pendingDeletes: [],
+    pendingProfilePush: null,
   };
 });
 
@@ -205,5 +222,48 @@ describe('D-04 · an offline insulin dose keeps its meal', () => {
     await hydrateFromServer();
     const push = h.upserts.find((u) => u.table === 'insulin_logs');
     expect(push?.rows[0].meal_type).toBe('lunch');
+  });
+});
+
+describe('S-05 / F-02 · onboarding answers survive e-mail confirmation', () => {
+  const wizardProfile = {
+    user_id: UID,
+    name: 'Salma',
+    diabetes_type: 'type1',
+    insulin_types: ['rapid', 'long'],
+    target_low: 80,
+    target_high: 160,
+    correction_factor: 40,
+  };
+  // The row the sign-up trigger creates: identity only, no answers.
+  const emptyServerRow = { user_id: UID, email: 'salma@example.com', role: 'patient' };
+
+  it('the first authenticated sync pushes them BEFORE it pulls', async () => {
+    h.server.profiles = [emptyServerRow];
+    h.state.profile = wizardProfile;
+    h.state.pendingProfilePush = { phone: '+212600000000', promo: 'DOC123' };
+    await hydrateFromServer();
+    const push = h.upserts.find((u) => u.table === 'profiles');
+    expect(push?.rows[0]).toMatchObject({ ...wizardProfile, phone: '+212600000000' });
+    expect(h.rpcs).toEqual([{ fn: 'redeem_promo_code', args: { p_code: 'DOC123' } }]);
+    expect(h.state.pendingProfilePush).toBeNull();
+  });
+
+  it('a refused push keeps the flag AND the answers — the empty row never wins', async () => {
+    h.profileUpsertFails = true;
+    h.server.profiles = [emptyServerRow];
+    h.state.profile = wizardProfile;
+    h.state.pendingProfilePush = { phone: '', promo: null };
+    await hydrateFromServer();
+    expect(h.state.pendingProfilePush).not.toBeNull();
+    expect(h.snapshot!.profile).toBe(wizardProfile);
+  });
+
+  it('nothing pending → the server profile is taken as before', async () => {
+    h.server.profiles = [{ ...emptyServerRow, diabetes_type: 'type2' }];
+    h.state.profile = wizardProfile;
+    await hydrateFromServer();
+    expect(h.upserts.find((u) => u.table === 'profiles')).toBeUndefined();
+    expect(h.snapshot!.profile.diabetes_type).toBe('type2');
   });
 });

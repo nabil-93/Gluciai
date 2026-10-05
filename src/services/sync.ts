@@ -176,6 +176,38 @@ async function replayPendingDeletes(): Promise<void> {
 }
 
 /**
+ * The onboarding profile kept on the phone while the account awaited e-mail
+ * confirmation (store audit S-05 / F-02) — pushed by the first authenticated
+ * sync, before the pull, so the empty row the sign-up trigger created cannot
+ * overwrite the patient's answers. A failure leaves the flag set: the next
+ * sync tries again, and meanwhile the local profile is kept (see runHydrate).
+ */
+async function pushPendingProfile(uid: string): Promise<void> {
+  const client = supabase;
+  const state = useAppStore.getState();
+  const pending = state.pendingProfilePush;
+  if (!client || !pending || !state.profile || state.profile.user_id !== uid) return;
+  try {
+    const { error } = await client.from('profiles').upsert({
+      ...state.profile,
+      ...(pending.phone ? { phone: pending.phone } : {}),
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return;
+    if (pending.promo) {
+      try {
+        await client.rpc('redeem_promo_code', { p_code: pending.promo });
+      } catch {
+        // Non-fatal: the code can still be entered from Profile → Doctor.
+      }
+    }
+    useAppStore.getState().setPendingProfilePush(null);
+  } catch {
+    /* offline — kept for the next sync */
+  }
+}
+
+/**
  * Rows the patient added WHILE the sync was in flight (store audit D-01).
  *
  * The snapshot replaces the lists, and the offline push above only knows the
@@ -396,6 +428,9 @@ async function runHydrate(): Promise<boolean> {
   // Another account's tombstones were wiped by claimAccount; this account's
   // unconfirmed deletes go first, so the pull below already reflects them.
   if (!switched) await replayPendingDeletes();
+  if (!switched) await pushPendingProfile(uid);
+  // Still unpushed → the server only has the empty sign-up row; keep ours.
+  const keepLocalProfile = !switched && !!useAppStore.getState().pendingProfilePush;
 
   try {
     const [prof, glu, ins, meals, act, meas, chat, rem, evts, labs] = await Promise.all([
@@ -643,11 +678,13 @@ async function runHydrate(): Promise<boolean> {
         accountUserId: uid,
         // A brand-new account may not have finished the wizard yet — keep
         // whatever profile the wizard is building rather than nulling it.
-        profile: prof.data
-          ? mapProfile(prof.data)
-          : switched
-            ? null
-            : state.profile,
+        profile: keepLocalProfile
+          ? state.profile
+          : prof.data
+            ? mapProfile(prof.data)
+            : switched
+              ? null
+              : state.profile,
         glucoseLogs: during(state.glucoseLogs, prevState.glucoseLogs, glucoseRows.map(mapGlucose)),
         insulinLogs: during(state.insulinLogs, prevState.insulinLogs, insulinRows.map(mapInsulin)),
         meals: during(state.meals, prevState.meals, mealRows.map(mapMeal)),

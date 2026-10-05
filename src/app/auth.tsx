@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Spinner } from '@/components/ui';
-import { PASSWORD_RESET_URL } from '@/config/links';
+import { PASSWORD_RESET_URL, WEB_APP_URL } from '@/config/links';
 import {
   isDemoMode,
   setCachedUserId,
@@ -125,7 +125,12 @@ export default function AuthScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
+  // `confirm` = the address a confirmation e-mail was just sent to (store
+  // audit S-05): the wizard lands here when sign-up returned no session.
+  const { mode: modeParam, confirm: confirmParam } = useLocalSearchParams<{
+    mode?: string;
+    confirm?: string;
+  }>();
   const setWizardDone = useAppStore((s) => s.setWizardDone);
   const setLanguageChosen = useAppStore((s) => s.setLanguageChosen);
   const setOnboardingDone = useAppStore((s) => s.setOnboardingDone);
@@ -149,7 +154,9 @@ export default function AuthScreen() {
   }, []);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() =>
+    typeof confirmParam === 'string' ? confirmParam : ''
+  );
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -157,6 +164,37 @@ export default function AuthScreen() {
   const [error, setError] = useState<string | null>(null);
   /** Set once a reset e-mail was requested — the form then just says so. */
   const [resetSent, setResetSent] = useState(false);
+  /** Sign-in refused because the address is not confirmed yet (S-05). */
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [confirmResent, setConfirmResent] = useState(false);
+
+  /** Send the sign-up confirmation e-mail again — links expire. */
+  const resendConfirmation = async () => {
+    if (!supabase || loading) return;
+    setLoading(true);
+    try {
+      const outcome = await withTimeout(
+        supabase.auth.resend({
+          type: 'signup',
+          email: email.trim(),
+          options: { emailRedirectTo: `${WEB_APP_URL}/email-confirmed` },
+        }),
+        SIGN_IN_TIMEOUT_MS,
+        null
+      );
+      if (!outcome) {
+        setError(t('authError.timeout'));
+        return;
+      }
+      if (outcome.error) {
+        setError(t(authErrorKey(outcome.error)));
+        return;
+      }
+      setConfirmResent(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const isRegister = mode === 'register';
   const isForgot = mode === 'forgot';
@@ -309,7 +347,10 @@ export default function AuthScreen() {
       // The condition is mapped to a vetted i18n key and translated in the
       // language that is actually active; the original is kept for the log.
       if (__DEV__) console.warn('[auth]', e?.code ?? e?.status ?? '', e?.message);
-      setError(t(authErrorKey(e)));
+      const key = authErrorKey(e);
+      setUnconfirmed(key === 'authError.emailNotConfirmed');
+      setConfirmResent(false);
+      setError(t(key));
     } finally {
       clearTimeout(slowTimer);
       setLoading(false);
@@ -448,8 +489,25 @@ export default function AuthScreen() {
         {isForgot && resetSent ? (
           <Text style={styles.resetSent}>{t('auth.resetSentGeneric')}</Text>
         ) : null}
+        {mode === 'login' && typeof confirmParam === 'string' && confirmParam ? (
+          <Text style={styles.resetSent}>{t('auth.confirmSent', { email: confirmParam })}</Text>
+        ) : null}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
+        {mode === 'login' && unconfirmed ? (
+          confirmResent ? (
+            <Text style={styles.resetSent}>{t('auth.confirmResent')}</Text>
+          ) : (
+            <Pressable
+              onPress={resendConfirmation}
+              hitSlop={8}
+              style={styles.forgotWrap}
+              accessibilityRole="button"
+            >
+              <Text style={styles.forgotText}>{t('auth.resendConfirmation')}</Text>
+            </Pressable>
+          )
+        ) : null}
         {slow && !error ? (
           <Text style={styles.slowNote}>{t('auth.slowServer')}</Text>
         ) : null}

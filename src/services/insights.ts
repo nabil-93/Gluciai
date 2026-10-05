@@ -6,6 +6,7 @@ import type {
   InsightKind,
   Profile,
 } from '@/types';
+import { BOLUS_CALCULATOR_ENABLED } from '@/config/features';
 
 /** Minimal translate signature (i18next TFunction), avoids a hard import here. */
 type TFn = (key: string, opts?: Record<string, unknown>) => string;
@@ -80,7 +81,7 @@ export function getDailyInsight(
         params: { value: last.value },
         title: t('insights.hyperTitle'),
         body: t('insights.hyperBody', { value: last.value }),
-        href: '/bolus',
+        href: BOLUS_CALCULATOR_ENABLED ? '/bolus' : '/glucose',
         tone: 'warning',
       };
     }

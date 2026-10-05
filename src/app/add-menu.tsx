@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { BOLUS_CALCULATOR_ENABLED } from '@/config/features';
 import {
   Animated,
   Easing,
@@ -50,7 +51,9 @@ interface Entry {
 const LOGS: Entry[] = [
   { labelKey: 'glucose', href: '/log-glucose', tint: colors.glucoseInRange, glyph: 'glucose' },
   { labelKey: 'insulin', href: '/log-insulin', tint: colors.ai, glyph: 'insulin' },
-  { labelKey: 'bolus', href: '/bolus', tint: colors.carbs, glyph: 'bolus' },
+  ...(BOLUS_CALCULATOR_ENABLED
+    ? [{ labelKey: 'bolus', href: '/bolus', tint: colors.carbs, glyph: 'bolus' } as Entry]
+    : []),
 ];
 
 /** Everything else, in one calm grid. */
