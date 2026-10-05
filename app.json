@@ -174,7 +174,10 @@
           "icon": "./assets/images/notification-icon.png",
           "color": "#1fbc78"
         }
-      ]
+      ],
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
